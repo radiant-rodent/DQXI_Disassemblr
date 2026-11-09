@@ -33,7 +33,11 @@ from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-WORKSPACE = Path(os.environ.get("DQXI_WORKSPACE", r"."))
+# the live workspace is the sibling folder of this clone (no absolute path in the repo)
+WORKSPACE = Path(os.environ.get("DQXI_WORKSPACE", REPO.parent / "DQXI_Disassemblr"))
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scrub import leaks, scrub_bytes  # noqa: E402  (aborts if backup/private.local.json is missing)
 
 HOLD_SECONDS = 120
 MAX_FILE_BYTES = 45 * 1024 * 1024        # GitHub warns at 50 MB, refuses at 100 MB
@@ -218,7 +222,8 @@ def main() -> int:
     held_list = []
     for r, src in sorted(files.items()):
         dst = REPO / r
-        if dst.exists() and dst.stat().st_size == src.stat().st_size and sha(dst) == sha(src):
+        data = scrub_bytes(src.read_bytes())   # private paths/names removed on the way in
+        if dst.exists() and dst.read_bytes() == data:
             continue
         if now - src.stat().st_mtime < HOLD_SECONDS or (src.suffix in (".json", ".jsonl") and not json_ok(src)):
             held += 1
@@ -231,7 +236,7 @@ def main() -> int:
         if not args.dry_run:
             dst.parent.mkdir(parents=True, exist_ok=True)
             tmp = dst.with_name(dst.name + ".synctmp")
-            shutil.copy2(src, tmp)
+            tmp.write_bytes(data)
             os.replace(tmp, dst)
 
     # mirror deletions inside the managed paths only
@@ -254,6 +259,15 @@ def main() -> int:
         print(f"  [held: being written or invalid JSON] {r}")
     if args.dry_run:
         return 0
+
+    # last line of defence: nothing private may remain anywhere in what git would commit
+    listing = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").stdout.split("\0")
+    leaked = [r for r in listing if r and (REPO / r).is_file() and leaks((REPO / r).read_bytes())]
+    if leaked:
+        print("ABORT: private data still present (nothing committed):")
+        for r in leaked[:30]:
+            print("  ", r)
+        return 4
 
     git("add", "-A")
     if not git("status", "--porcelain").stdout.strip():

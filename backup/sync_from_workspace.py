@@ -91,6 +91,7 @@ EXCLUDE_GLOBS = [
     "orchestration/naming/refine/index.json",    # regenerable
     "progress/map.html", "progress/tasks.html",  # multi-MB generated pages
     "third_party/SPICA/*.dll", "third_party/SPICA/*.zip",  # upstream binaries, not needed
+    "*.log",
 ]
 
 # --- hard guards (abort the run) ---------------------------------------------------

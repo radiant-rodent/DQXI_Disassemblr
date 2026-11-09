@@ -1,0 +1,734 @@
+[
+ {
+  "address": "0x00118BAC",
+  "name": "Snd_SetUnitActive",
+  "signature": "u32 Snd_SetUnitActive(ChannelBuffer* context, int unit, u16 active)",
+  "params": {
+   "param_1": "context",
+   "param_2": "unit",
+   "param_3": "active"
+  },
+  "summary": "Publishes the per-unit enable flag of the current sound channel: stores `active` in the halfword at channel+0x28+unit*2 and sets dirty bit 0x100 (unit 0) or 0x200 (unit 1) so the driver re-reads it. Returns 0 when the driver lock is not held.",
+  "confidence": 0.6,
+  "evidence": "NEW: both named callers publish exactly this flag - Sound_Channel_SetActive (0x5185E4) writes the per-slot active byte at self+slot+0x30 and then calls this with the same slot, and Sound_Channel_SetDecodeHook (0x518550) calls it with 0 or 1 depending on whether a hook is installed; Snd_InitChannelState (0x112A9C) replays the saved per-unit bytes state[0x30]/state[0x31]. The old 'SetChannelHalfword' only described the store.",
+  "previous_name": "maybe_Snd_SetChannelHalfword",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118B58",
+  "name": "maybe_Snd_SetChannelLevel",
+  "signature": "void maybe_Snd_SetChannelLevel(ChannelBuffer* context, u16 level)",
+  "params": {
+   "param_1": "context",
+   "param_2": "level"
+  },
+  "summary": "Stores a 16-bit value in the channel block's field at +0xBC and sets bit 0x10000 of the second dirty word at +0xC0. The field is channel-wide (no unit index) and sits right after the two per-unit records; its meaning is still unknown, so the 'level' reading stays a guess.",
+  "confidence": 0.4,
+  "evidence": "NEW: the disassembly is `strh r5,[r0,#0xbc]` - a halfword, not the 32-bit word the old summary claimed - and there is no unit index, so 'SetUnitLevel' named the wrong scope. The dirty bit 0x10000 lives in the +0xC0 word that also carries the per-unit record bits 0x400/0x800/0x1000/0x2000 (0x118E58, 0x118FD4), while the other setters use the +0 word. Callers pass the saved state byte +3.",
+  "previous_name": "maybe_Snd_SetUnitLevel",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118CA0",
+  "name": "maybe_Snd_SetChannelFormat",
+  "signature": "u32 maybe_Snd_SetChannelFormat(ChannelBuffer* context, u16 format)",
+  "params": {
+   "param_1": "context",
+   "param_2": "format"
+  },
+  "summary": "Stores a 16-bit value in the channel block's field at +0x18 and sets dirty bit 0x8000000. Snd_InitChannelState publishes 1 here and the restore path replays the saved state byte +1, so it is one of the channel-state fields; that the field is a sample format is still an inference.",
+  "confidence": 0.45,
+  "evidence": "NEW: Snd_InitChannelState (0x112A9C) sets state[1] = 1 and publishes it through this setter, and maybe_Snd_RestoreChannelState (0x112CAC) replays state+1 - so the field is confirmed to be a saved channel-state byte, but nothing in the code names it a format. Kept below 0.5.",
+  "previous_name": "maybe_Snd_SetChannelFormat",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118D00",
+  "name": "maybe_Snd_SetChannelGain",
+  "signature": "void maybe_Snd_SetChannelGain(ChannelBuffer* context, float gain)",
+  "params": {
+   "param_1": "context",
+   "param_2": "gain"
+  },
+  "summary": "Stores a float in the channel block's field at +0x04 and sets dirty bit 0x10000. The value is a VFP single (Ghidra dropped it as in_s0); Snd_InitChannelState publishes 1.0f, so it is a gain-like scalar rather than an address.",
+  "confidence": 0.45,
+  "evidence": "NEW: the disassembly is `vmov.f32 s16,s0` + `vstr s16,[r0,#4]` - a float store - and Snd_InitChannelState (0x112A9C) publishes 0x3F800000 (= 1.0f) through it. 'SetChannelDataAddress' is therefore impossible: a data address is never a 1.0f VFP value. Gain vs playback-rate is still open, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetChannelDataAddress",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118DCC",
+  "name": "maybe_Snd_SetChannelAdpcmState",
+  "signature": "u32 maybe_Snd_SetChannelAdpcmState(ChannelBuffer* context, int unit, u16 value)",
+  "params": {
+   "param_1": "context",
+   "param_2": "unit",
+   "param_3": "value"
+  },
+  "summary": "Stores a 16-bit value in the per-unit halfword at channel+0x24+unit*2 and sets dirty bit 0x40 (unit 0) or 0x80 (unit 1); any other unit index writes the field without a dirty bit. Returns 0 when the driver lock is not held.",
+  "confidence": 0.45,
+  "evidence": "NEW: maybe_Snd_RestoreChannelState (0x112CAC) replays the two saved bytes state[0x24]/state[0x25] through it one per unit, and Snd_InitChannelState clears both, so the two-slot shape is confirmed; the 'ADPCM decoder state' reading still rests only on the 0x40/0x80 bit pair, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetChannelAdpcmState",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118F5C",
+  "name": "maybe_Snd_SetUnitGain",
+  "signature": "void maybe_Snd_SetUnitGain(ChannelBuffer* context, int unit, float gain)",
+  "params": {
+   "param_1": "context",
+   "param_2": "unit",
+   "param_3": "gain"
+  },
+  "summary": "Stores a float in the per-unit field at channel+0x08+unit*4 and sets dirty bit 0x1000000 (unit 0) or 0x2000000 (unit 1). Snd_InitChannelState publishes 1.0f for both units, so these are per-unit gain scalars, not loop information.",
+  "confidence": 0.45,
+  "evidence": "NEW: the disassembly is `vmov.f32 s16,s0` + `vstr s16,[r1,#4]` with r1 = block+4+unit*4, i.e. a float store at +0x08/+0x0C, and Snd_InitChannelState (0x112A9C) publishes 0x3F800000 (= 1.0f) for both units. 'Loop info' cannot be a 1.0f VFP value; the two units are the channel's main/aux wave buffers (Sound_Channel_SetWaveBufferMain/Aux).",
+  "previous_name": "maybe_Snd_SetUnitLoopInfo",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001191A0",
+  "name": "maybe_Snd_SetChannelVolume",
+  "signature": "void maybe_Snd_SetChannelVolume(ChannelBuffer* context, u16 volume)",
+  "params": {
+   "param_1": "context",
+   "param_2": "volume"
+  },
+  "summary": "Stores a 16-bit value in the channel block's field at +0x10 and sets dirty bit 0x8000. Snd_InitChannelState publishes 2 here and the restore path replays the saved state word f_32, so it is a channel-state field; the volume reading is still an inference.",
+  "confidence": 0.45,
+  "evidence": "NEW: Snd_InitChannelState (0x112A9C) sets state[0x32] = 2 and publishes it, and maybe_Snd_RestoreChannelState (0x112CAC) replays state->f_32 through it last before the unit level - so the field is confirmed to be saved channel state, but a default of 2 does not prove it is a volume. Kept below 0.5.",
+  "previous_name": "maybe_Snd_SetChannelVolume",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003DCB24",
+  "name": "maybe_Container_RbTree_Dtor",
+  "signature": "void maybe_Container_RbTree_Dtor(ContainerNode* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Destructor of a container that owns a red-black tree plus a fixed 0x21-entry table: destroys the 0x10-stride table, erases every tree node through the successor helpers, unlinks the object from its sibling list and frees it.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now named - std_RbTree_EraseNode (0x10EC14), std__Rb_tree_rebalance (0x115290), std_destroy_range (0x100BE0) and Pack_ReleaseHandle (0x12416C) - which confirms a std::map/std::set member rather than the intrusive list the first pass described. The owning class is still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Container_RbTree_Dtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00120408",
+  "name": "maybe_Pack_ReleaseMemberHandles4",
+  "signature": "void* maybe_Pack_ReleaseMemberHandles4(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the four generation-tagged handle members at +4, +0xC, +0x14 and +0x1C of the object whose base is self-0x1C, then returns that base. A destructor body for a class with four handle members.",
+  "confidence": 0.4,
+  "evidence": "NEW: Pack_ReleaseHandle (0x12416C) is now named and returns its own argument, so the four calls are sibling members at fixed offsets, not a chain: self, self-8, self-16, self-24, base = self-0x1C. 'Chain4' described a linked list that does not exist.",
+  "previous_name": "maybe_Pack_ReleaseHandleChain4",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00120454",
+  "name": "maybe_Pack_ReleaseMemberHandles1",
+  "signature": "void* maybe_Pack_ReleaseMemberHandles1(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the single generation-tagged handle member at +4 of the object whose base is self-4 and returns that base. The one-handle variant of 0x00120408.",
+  "confidence": 0.4,
+  "evidence": "NEW: Pack_ReleaseHandle (0x12416C) returns its argument, so this is 'release the handle at self, return self-4' - one member of a class whose base is 4 bytes before it, not a chain. No caller names the class, so maybe_ stays.",
+  "previous_name": "maybe_Pack_ReleaseHandleChain1",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002BC73C",
+  "name": "maybe_Ui_DetachAndReleaseMembers",
+  "signature": "int maybe_Ui_DetachAndReleaseMembers(void* self, u32 value, DetachTarget* target)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value",
+   "param_3": "target"
+  },
+  "summary": "Stores value into target+8 and then releases the three generation-tagged handle members at self+4, +0xC and +0x14, returning self. Called from Ui_Layout_UpdateScreenBuffers and maybe_Ui_MapWindow_ResolveTouchTarget, i.e. from UI layout code.",
+  "confidence": 0.4,
+  "evidence": "NEW: Pack_ReleaseHandle (0x12416C) is named and returns its argument, so the three calls are sibling members at +4/+0xC/+0x14 and the return value is self - the 'detach' wording is still an inference from the target+8 store. Both callers are UI layout functions, which supports the Ui_ prefix.",
+  "previous_name": "maybe_Ui_DetachAndReleaseMembers",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002F6870",
+  "name": "maybe_Ui_ItemInfoWindow_SubDtor",
+  "signature": "void maybe_Ui_ItemInfoWindow_SubDtor(UiItemInfoWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a sub-object of the item-info window family (vtable 0x761E58): deletes the owned object at +0x13C through its vtable, releases the handle at +0x138, tears down the 0x128-byte embedded sub-object and frees the block.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are named - Pack_ReleaseHandle (0x12416C) and the 0x128-byte sub-object destructor 0x0021DD60 - but the class is still only placed by its vtable 0x761E58, which is not the item-info window's own table (0x771428, Ui_ItemInfoWindow_Dtor at 0x0045287C). Kept below 0.5.",
+  "previous_name": "maybe_Ui_ItemInfoWindow_SubDtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003DB460",
+  "name": "maybe_Pack_ReleaseMemberHandles2",
+  "signature": "void* maybe_Pack_ReleaseMemberHandles2(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the two generation-tagged handle members at +4 and +0xC of the object whose base is self-0xC and returns that base. Reached only through a data pointer, never called directly.",
+  "confidence": 0.35,
+  "evidence": "NEW: Pack_ReleaseHandle (0x12416C) returns its argument, so the two calls release the members at self and self-8 and the result is the base self-0xC. 'ResolveOwner' claimed an owner lookup the body does not perform.",
+  "previous_name": "maybe_Handle_ResolveOwner",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005F951C",
+  "name": "Fs_Resource_Dtor",
+  "signature": "void* Fs_Resource_Dtor(u32* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Non-freeing destructor of Fs_Resource: installs the incoming vtable, releases the pack handle held at +0x3C and returns the object base. The free is left to the caller's deleting thunk.",
+  "confidence": 0.5,
+  "evidence": "NEW: the +0x3C handle slot is the one the named Fs_Resource_Release (0x005F9138) and Fs_Resource_Reset (0x005F9428) release, and the `*self = arg2` + return-base shape is the engine's D1 destructor pattern (compare Gfx_SceneSpritePool_Dtor 0x00620A78, which inlines the same tail). 'ResourceHandle_Init' described a constructor, but a constructor does not release a live handle.",
+  "previous_name": "maybe_Fs_ResourceHandle_Init",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0061D288",
+  "name": "maybe_Fs_Resource_DerivedDtor",
+  "signature": "void* maybe_Fs_Resource_DerivedDtor(u32* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Non-freeing destructor of a class derived from Fs_Resource: installs the derived vtable, releases the three extra handle members at +0x48, +0x54 and +0x58, switches to the base vtable 0x0077F6C4 and releases the base handle at +0x3C, returning the base.",
+  "confidence": 0.4,
+  "evidence": "NEW: the tail is byte-identical to the one inlined into the named Gfx_SceneSpritePool_Dtor (0x00620A78) - same four releases, same base-vtable restore to 0x0077F6C4, same `return base` - so this is the out-of-line D1 of an Fs_Resource-derived class, not a 'resource chain'. The derived class itself is still unnamed.",
+  "previous_name": "maybe_Pack_ResourceChain_Dtor",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00146D34",
+  "name": "Ui_MessageWindow_Command",
+  "signature": "void Ui_MessageWindow_Command(int mode)",
+  "params": {
+   "param_1": "mode"
+  },
+  "summary": "Message-window control entry point: mode 0 clears the text, mode 1 ends the message when the owning panel's +0x60 flag is set (otherwise clears), mode 2 calls the force-end helper. The window is fetched from the UI core (ctx+0x10 -> +0x98).",
+  "confidence": 0.5,
+  "evidence": "NEW: every callee is now named - Ui_GetCore (0x6F229C), Ui_MessageWindow_SetTextFromWork (0x1C54EC), Os_GetGameWork (0x6F1EEC) - and the window lookup is the same Ui_GetCore(...)->+0x10->+0x98 chain the other message natives use. It has no direct callers and sits in the 0x146xxx Squirrel native block (between CameraZoom 0x146CA0 and GetActorID 0x146DCC), i.e. it is reached from script.",
+  "previous_name": "maybe_Ui_MessageWindow_Command",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001E7784",
+  "name": "maybe_Event_ActivateFlagAndClearSlot",
+  "signature": "void maybe_Event_ActivateFlagAndClearSlot(void* idSet, u32 id)",
+  "params": {
+   "param_1": "idSet",
+   "param_2": "id"
+  },
+  "summary": "Puts flag `id` into state 2 of the quest/event id set and, when the data-manager record for that id has type 3 or 8, clears the associated bag slot through the save work's vtable+8.",
+  "confidence": 0.35,
+  "evidence": "NEW: Event_UpdateIdSet (0x001E7660) is now named and its body shows it is a quest/event flag setter (it appends the id to a sorted byte vector for modes 2..6, removes it otherwise, and notifies Event_OnQuestFlagChange), so the first argument is the id set and the third is the flag state - there is no UI list here. The record lookup is Game_GetDataManager + func_0063D338.",
+  "previous_name": "maybe_Ui_List_SetObjectSlot",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001E7AE8",
+  "name": "maybe_Event_UnlockFlag39IfProgress",
+  "signature": "void maybe_Event_UnlockFlag39IfProgress(void* idSet, u32 learnedId, u32 arg3, u32 context)",
+  "params": {
+   "param_1": "idSet",
+   "param_2": "learnedId",
+   "param_3": "arg3",
+   "param_4": "context"
+  },
+  "summary": "Sets quest/event flag 0x39 to state 1 when it is still unset (0 or 0xFF), the learned id is 0x1AB, the bag word at +0x31C4 is not 0x278 and the bag byte 0x1E is above 10. Called from Party_Member_LearnSkillOrSpell.",
+  "confidence": 0.45,
+  "evidence": "NEW: Event_UpdateIdSet (0x001E7660) is named and its body proves the third argument is a flag state and the first is the id set, and the notifier it calls is Event_OnQuestFlagChange - so 'story flag' is better read as a quest/event flag. The caller Party_Member_LearnSkillOrSpell (0x00192280) shows the second argument is the id just learned. The meaning of bag+0x31C4 and bag[0x1E] is still unknown.",
+  "previous_name": "maybe_Event_UnlockStoryFlag39IfProgress",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001E7B70",
+  "name": "maybe_Event_UnlockFlag39IfMemberHasId",
+  "signature": "void maybe_Event_UnlockFlag39IfMemberHasId(void* idSet, u32 arg2, u32 arg3, u32 context)",
+  "params": {
+   "param_1": "idSet",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "context"
+  },
+  "summary": "Sets quest/event flag 0x39 to state 1 when it is still unset and party member record 7 carries id 0x1AB in its 60-entry u16 id list at +0x122. The only caller is the script native CheckSkillPanelOpenedQ590.",
+  "confidence": 0.45,
+  "evidence": "NEW: the disassembly of func_00629988 (0x00629988) is a linear scan of the u16 array member+0x122..+0x19A (60 entries) for the id, returning 1 when found and 0 when the id is >= 0x1B6 - so the condition is 'member 7 has this id', not the 'scenario value' the first pass guessed. Event_UpdateIdSet (0x001E7660) confirms the third argument is a flag state.",
+  "previous_name": "maybe_Event_UnlockStoryFlag39IfScenario",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0014A8A4",
+  "name": "maybe_Event_SetFlagState",
+  "signature": "void maybe_Event_SetFlagState(int flagId, int state)",
+  "params": {
+   "param_1": "flagId",
+   "param_2": "state"
+  },
+  "summary": "Sets quest/event flag `flagId` to `state` on the id set held at work+8->+0x90; state 2 takes the special path that also clears the associated bag slot (0x001E7784).",
+  "confidence": 0.45,
+  "evidence": "NEW: Event_UpdateIdSet (0x001E7660) is named and its body shows (object, id, state) - so the two arguments here are a flag id and a flag state, and the object is the id set at work+8->+0x90. 'Ui_List_SetItemEnabled' claimed a UI list and an item, neither of which appears in the body.",
+  "previous_name": "maybe_Ui_List_SetItemEnabled",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001E7ED8",
+  "name": "maybe_Event_AdvanceFlagState7To8",
+  "signature": "void maybe_Event_AdvanceFlagState7To8(void* idSet, u32 flagId, int arg3, int context)",
+  "params": {
+   "param_1": "idSet",
+   "param_2": "flagId",
+   "param_3": "arg3",
+   "param_4": "context"
+  },
+  "summary": "State rule: when quest/event flag `flagId` is in state 7, move it to state 8 through Event_UpdateIdSet. Called from Field_InitSceneObjects and maybe_Ui_List_RemoveEntryById.",
+  "confidence": 0.3,
+  "evidence": "NEW: Event_UpdateIdSet (0x001E7660) is named, so the call is 'set flag id to state 8' and the guard reads the same flag's current state through func_0066AF08 - a flag-state transition, not a UI list advance. The callers are field/UI code that do not name the flag, so maybe_ stays.",
+  "previous_name": "maybe_Ui_List_AdvanceState",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0070F58C",
+  "name": "maybe_std_String_AppendRange",
+  "signature": "void maybe_std_String_AppendRange(std_String* str, const char* end)",
+  "params": {
+   "param_1": "str",
+   "param_2": "end"
+  },
+  "summary": "Out-of-line std::string growth/append path: given the string's begin/end/capacity triple it either overwrites in place or grows and copies the byte range. Used by Event_UpdateIdSet's sorted id vector and by Text_LayoutColumns.",
+  "confidence": 0.45,
+  "evidence": "NEW: both callers are now named - Event_UpdateIdSet (0x001E7660), which appends one byte to its sorted id vector, and Text_LayoutColumns (0x0039CD34) - so the 'append a byte range to a std::string' reading holds. The body is still damaged (std_memmove is mis-marked noreturn and the copy loop is lost), so it stays below 0.5.",
+  "previous_name": "maybe_std_String_AppendRange",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00160D54",
+  "name": "maybe_Data_BuildTaggedRecord44",
+  "signature": "void maybe_Data_BuildTaggedRecord44(u32* out, u32 first, u32 second)",
+  "params": {
+   "param_1": "out",
+   "param_2": "first",
+   "param_3": "second"
+  },
+  "summary": "Builds a 0x44-byte record: calls 0x006F0C10 with the global at 0x0072D74C+4 and the two arguments, then copies the 17-word result into `out` behind the type-descriptor word 0x00782780. Used by the battle model-resource binding routines.",
+  "confidence": 0.32,
+  "evidence": "NEW: all three callers are named and are battle model-resource routines (BattleScene_BindUnitModelResources 0x004BA3F0, Battle_Ui_LoadPartyModelResources 0x004BB154, BattleScene_SyncUnitRenderResources 0x00602098), which confirms the 'resource request record' role but not the payload type. The callee 0x006F0C10 sits next to maybe_std_String_FormatCtorH (0x006F0BD8) and is still unnamed.",
+  "previous_name": "maybe_Data_BuildTaggedRecord44",
+  "previous_confidence": 0.32,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00161270",
+  "name": "maybe_Save_IncrementCounter",
+  "signature": "void maybe_Save_IncrementCounter(u32 index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Increments the per-index u32 counter at (work+0x24A98)+0x2998+index*4, unless the event-mode bit 0x80 is set in work+0x2A474 and the current map id is below 0xE. The callers are the casino slot/jackpot screens and two party-panel helpers.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callers are now named and are casino/UI code (Ui_JackpotScreen_EndPayout 0x002C7B58, Casino_Slot_CalcPatternPayout 0x00326B8C, Casino_Slot_StopReel 0x00327A76, maybe_PartyPanel_SelectCurrentSlot, maybe_Ui_PanelRow_ResetAnimationStateB, maybe_Ui_JackpotScreen_HandleInput), so 'Field_' named the wrong subsystem; the counter table lives in the save work. The guard is a 'do not count during the intro' check.",
+  "previous_name": "maybe_Field_IncrementCounter",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003017E0",
+  "name": "Field_Action_StepBegin",
+  "signature": "void Field_Action_StepBegin(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Start hook of the field step action: calls Field_Actor_BeginStep (turns the movement visuals on and records the facing), invalidates the current step SE id (f_80 = 0xFFFF) and releases the previous voice handle f_74 so Field_Action_PlayStepSound starts a fresh footstep.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callee Field_Actor_BeginStep (0x001E1634) is now named, and vtable 0x762924 places this slot immediately before maybe_Field_Action_StepEnd and the confident Field_Action_PlayStepSound - the begin half of the step action. Nothing in the body stops movement, which is what the first pass's 'StopMove' claimed.",
+  "previous_name": "maybe_Field_Action_StepBegin",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00163650",
+  "name": "maybe_Sound_LookupGainFromTable",
+  "signature": "void maybe_Sound_LookupGainFromTable(u32 id, u32 count, u32 payload)",
+  "params": {
+   "param_1": "id",
+   "param_2": "count",
+   "param_3": "payload"
+  },
+  "summary": "Looks a value up in a caller-supplied table (base + (id>>1) + index*4), bounds-checks the index against count>>2 and applies the result as a voice gain through Sound_SetVoiceGainByHandle. The readable body is damaged Thumb code.",
+  "confidence": 0.3,
+  "evidence": "NEW: nothing - the body is still damaged Thumb (unaff_r4/r5/r6, in_CY) and the callee list is polluted by unrelated functions (Ui_TalkWindow_ReleaseResources, Gfx_CharShadowPass_BuildCommands), so no new evidence supports the gain-table reading. Kept at 0.3.",
+  "previous_name": "maybe_Sound_LookupGainFromTable",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00174464",
+  "name": "maybe_Battle_ClearActionSlots",
+  "signature": "void maybe_Battle_ClearActionSlots(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the four 0x58-byte slot records at self+0x150 (zeroing the id/flag words and clearing the 0x38-byte tail) and then refills one slot per active party member through Battle_Monster_UpdateConditionSlots.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is the named Battle_FinishCommandPhase (0x00174324) and the fill callee is Battle_Monster_UpdateConditionSlots (0x00495F10), so the 'reset the slots at the end of the command phase' role holds; whether the records are command slots or unit-condition slots is still open, so maybe_ stays.",
+  "previous_name": "maybe_Battle_ClearActionSlots",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001EB180",
+  "name": "maybe_Ui_ShopWindow_DtorBody",
+  "signature": "void maybe_Ui_ShopWindow_DtorBody(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Complete-object (D1) destructor body of the shop window: reinstalls every sub-object table, re-links the list sentinels, tears down the embedded gold window, two-column list, three-row text and item rows, and finishes with the base destructor. The free is done by the thunk at 0x001EB16C.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now named and are exactly the shop window's parts - Ui_GoldWindow_Dtor (0x003B5A18), Ui_TwoColumnListWindow_Dtor (0x003B65D8), Ui_ThreeRowNullTextWindow_Dtor (0x003B57A4), Ui_ItemMenu_Row_Dtor (0x00365878) - and the block also holds Ui_ShopWindow_CreateSubObjects/InitPanes. It stays below 0.5 because a different, already-named Ui_ShopWindow_Dtor exists at 0x001C1B58, so which of the two shop classes this belongs to is unresolved.",
+  "previous_name": "maybe_Ui_ShopWindow_DtorBody",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002298F8",
+  "name": "Ui_RowList_Dtor",
+  "signature": "void Ui_RowList_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing destructor of the eleven-row list panel: clears the 11 x 0x148-byte row block, re-links the five intrusive list heads to empty and tears down the trailing embedded objects.",
+  "confidence": 0.5,
+  "evidence": "NEW: the deleting twin is now the confident Ui_RowList_DeletingDtor (0x002298E4), whose body calls this function's body at +4 (func_002298F4) after storing the vtable itself - the standard D0/D1 split, which pins both the class and the 'destructor body' role.",
+  "previous_name": "maybe_Ui_RowList_Dtor",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00194960",
+  "name": "maybe_Ui_CompositeWidget_Dtor",
+  "signature": "void maybe_Ui_CompositeWidget_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a composite UI widget: releases its three embedded layout/animation references, runs the base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are named (Ui_LayoutRef_Release 0x003E04BC, Ui_Object_DtorBase 0x001A6768) but no constructor, vtable slot or caller identifies the class, so the name stays descriptive.",
+  "previous_name": "maybe_Ui_CompositeWidget_Dtor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001CF798",
+  "name": "maybe_Ui_DungeonPlaceWindow_Dtor",
+  "signature": "void maybe_Ui_DungeonPlaceWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the dungeon-place window: releases the seven 0x50-byte layout parts and the node member, runs the base destructor and frees the window.",
+  "confidence": 0.45,
+  "evidence": "NEW: the 14-entry caller list is misleading - 13 of those callers tail-jump into the shared tail at 0x001CF7F4, a mid-function split inside this function (Battle2DUnit_DeleteDtor 0x005A18B8 calls func_001CF7F4, not 0x001CF798), so this is not a shared helper. The class is still only placed by its block (maybe_Ui_DungeonPlaceWindow_CreateBase 0x001CF72C before, Ui_DungeonPlaceWindow_Create 0x001CF8C0 after).",
+  "previous_name": "maybe_Ui_DungeonPlaceWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002131F0",
+  "name": "maybe_Ui_SingleLayoutObject_Dtor",
+  "signature": "void maybe_Ui_SingleLayoutObject_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small deleting destructor: releases the one embedded layout arena at +0x4C, runs the base destructor and frees the object. The body is identical to maybe_Ui_WidgetWithSubObject_DeletingDtor (0x002BD834), i.e. a template copy for a different class.",
+  "confidence": 0.35,
+  "evidence": "NEW: the body is byte-identical to the named-ctor pair at 0x002BD834/0x002BD858 (same self+0x13 release, same base destructor, same free), so it is a template copy and the class cannot be inferred from the shape. No caller, constructor or vtable slot names it.",
+  "previous_name": "maybe_Ui_SingleLayoutObject_Dtor",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00214EF0",
+  "name": "Ui_ItemSelectWindow_DeletingDtor",
+  "signature": "void Ui_ItemSelectWindow_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the item/tool selection window ('win_dougu_do_select'): releases the three layout arenas at +0xEC, +0x9C and +0x4C, destroys the sub-window and frees the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Menu_ItemSelect_CreateWindow (0x00214EAC, 0x44 bytes before this function) and it builds exactly the three layout arenas plus the sub-window that this releases; the caller Ui_ItemMenu_DestroyRoot (0x0019C164) deletes the same window. 'ThreeLayoutObject' only counted the members.",
+  "previous_name": "maybe_Ui_ThreeLayoutObject_DeletingDtor",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00214F24",
+  "name": "Ui_ItemSelectWindow_Dtor",
+  "signature": "void Ui_ItemSelectWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing destructor of the item/tool selection window: releases the three layout arenas at +0xEC, +0x9C and +0x4C and the trailing sub-window, leaving the allocation to the caller.",
+  "confidence": 0.5,
+  "evidence": "NEW: same class and same three-arena layout as the deleting twin 0x00214EF0, which follows the confident constructor Menu_ItemSelect_CreateWindow (0x00214EAC). 'ThreeLayoutObject' only counted the members.",
+  "previous_name": "maybe_Ui_ThreeLayoutObject_Dtor",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0021FD38",
+  "name": "maybe_Ui_ThreeLayoutWindow_Dtor",
+  "signature": "void maybe_Ui_ThreeLayoutWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a large window that owns three layout arenas at +0xEC, +0x9C and +0x4C plus a sub-window: releases them, runs the base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are named (Ui_LayoutRef_Release, Ui_Object_DtorBase) but the surrounding block only has Ui_SetupLoopOutParts (0x0021FCC0) and Ui_SetupStatusTextLayers (0x0021FF04), neither of which constructs this layout, so the class is still unknown.",
+  "previous_name": "maybe_Ui_ThreeLayoutWindow_Dtor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00220338",
+  "name": "maybe_Ui_TwoLayoutWindow_Dtor",
+  "signature": "void maybe_Ui_TwoLayoutWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a window owning two layout arenas at +0x9C and +0x4C plus one sub-window: releases them, runs the base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "NEW: same '+0x50 stride up the object' pattern as 0x0021FD38/0x00214EF0, but the status-window block around it (Ui_StatusWindow_SetOpen, Ui_SetupStatusTextLayers) never names a constructor for this two-arena layout.",
+  "previous_name": "maybe_Ui_TwoLayoutWindow_Dtor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0028A3FC",
+  "name": "maybe_Ui_CreditWindow_DeletingDtor",
+  "signature": "void maybe_Ui_CreditWindow_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the large credit-window variant: releases the long chain of layout references and embedded object bases and frees the window.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are named (Ui_LayoutRef_Release, Ui_Object_DtorBase) and the block holds Ui_CreditWindow_Create (0x00289BD8), but no constructor builds this exact eight-arena layout, so the class attribution stays below 0.5.",
+  "previous_name": "maybe_Ui_CreditWindow_DeletingDtor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002A5000",
+  "name": "Ui_LoadWindow_DeletingDtor",
+  "signature": "void Ui_LoadWindow_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the load/save list window: releases the six 0x50-byte panes, runs the base destructor and frees the object; identical to 0x002A504C plus the free.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_LoadWindow_CtorBase (0x002A4F80), which installs vtable 0x75E5CC and builds exactly these six 0x50-byte row sub-objects 0x80 bytes earlier, and 0x002A504C is the non-freeing twin.",
+  "previous_name": "maybe_Ui_LoadWindow_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002A504C",
+  "name": "Ui_LoadWindow_Dtor",
+  "signature": "void Ui_LoadWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing destructor of the load/save list window: releases the six 0x50-byte panes through their layout references and runs the base destructor.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_LoadWindow_CtorBase (0x002A4F80), which builds exactly these six panes 0xCC bytes before this function, and 0x002A5000 is the deleting twin.",
+  "previous_name": "maybe_Ui_LoadWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002BD834",
+  "name": "Ui_WidgetWithSubObject_DeletingDtor",
+  "signature": "void Ui_WidgetWithSubObject_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the small widget built by Ui_Widget_CtorWithSubObject: reinstalls its table, releases the one embedded layout/animation reference at +0x4C, runs the base destructor and frees the block.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_Widget_CtorWithSubObject (0x002BD810, vtable 0x75F9C4, one child at +0x4C) immediately before it, and 0x002BD858 is the non-freeing twin that destroys the same members.",
+  "previous_name": "maybe_Ui_WidgetWithSubObject_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002BD858",
+  "name": "Ui_WidgetWithSubObject_Dtor",
+  "signature": "void Ui_WidgetWithSubObject_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing complete-object destructor of the widget built by Ui_Widget_CtorWithSubObject: releases the embedded layout/animation reference and the base object, leaving the allocation to the caller.",
+  "confidence": 0.5,
+  "evidence": "NEW: same members and class table as the deleting twin 0x002BD834 and the confident constructor Ui_Widget_CtorWithSubObject (0x002BD810).",
+  "previous_name": "maybe_Ui_WidgetWithSubObject_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002C1B9C",
+  "name": "Ui_WidgetWithTwoPanes_Dtor",
+  "signature": "void Ui_WidgetWithTwoPanes_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing destructor of the two-pane widget built by Ui_Widget_CtorWithTwoPanes: reinstalls the table, destroys the two 0x50-byte containers at +0xA0 and +0x50 and the intrusive list at self+0.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_Widget_CtorWithTwoPanes (0x002C1B3C), which constructs exactly this pair of 0x50-byte children 0x60 bytes earlier.",
+  "previous_name": "maybe_Ui_WidgetWithTwoPanes_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00369060",
+  "name": "Ui_GuideWindow_DeletingDtor",
+  "signature": "void Ui_GuideWindow_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the guide window: resets the vtable, re-links its list head, destroys the four 0x260-byte member rows and frees the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_GuideWindow_CtorB (0x00368F90, vtable 0x765554, std_ConstructArray of four 0x260-byte rows at +0x11C) 0xD0 bytes earlier, and the vtable's slot-0 thunk at 0x00369058 jumps here.",
+  "previous_name": "maybe_Ui_GuideWindow_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003925FC",
+  "name": "maybe_Ui_Panel_Delete",
+  "signature": "void maybe_Ui_Panel_Delete(UiPanel* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Out-of-line release+delete of a panel: stores the passed vtable, releases the pack handle at +0x88, unlinks the child list, destroys the child with the base destructor and frees the panel.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are named (Pack_ReleaseHandle 0x12416C, Ui_Object_DtorBase 0x001A6768) but no caller, constructor or vtable slot identifies the class, so 'panel' stays generic.",
+  "previous_name": "maybe_Ui_Panel_Delete",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00399100",
+  "name": "Ui_DungeonListWindow_Dtor",
+  "signature": "void Ui_DungeonListWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the dungeon-list window: destroys the 0x18 x 0x10 entry grid, the embedded child list and the trailing widget, then frees the window.",
+  "confidence": 0.5,
+  "evidence": "NEW: the constructor is the confident Ui_DungeonListWindow_Ctor (0x00398F68, confidence 0.70) whose vtable 0x00766F3C stores the destructor slot at 0x003990FC - 4 bytes before this function, i.e. the D0 thunk that falls through into this D1 body.",
+  "previous_name": "maybe_Ui_DungeonListWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004DC924",
+  "name": "maybe_Ui_SmithMenu_DetailWindow_Dtor",
+  "signature": "void maybe_Ui_SmithMenu_DetailWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the smith menu's detail window (vtable 0x0077A32C): destroys the two 0x50-byte sub-objects at +0x4C, runs the base destructor and frees the window.",
+  "confidence": 0.45,
+  "evidence": "NEW: all four callers are now named and are smith-menu code - Ui_SmithMenu_DetailOpen (0x003EC550), Ui_SmithMenu_UpdateCategory (0x003ECC1C), maybe_Ui_SmithMenu_SelectCategoryPower, maybe_Ui_SmithMenu_SelectCategoryDetail - which replace the detail pane when the category changes. 'CursorSpriteWindow' came from a neighbouring cursor helper and is not supported by any caller.",
+  "previous_name": "maybe_Ui_CursorSpriteWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001775C0",
+  "name": "maybe_Field_NpcActionDestroyThunk",
+  "signature": "void maybe_Field_NpcActionDestroyThunk(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Two-call deleting thunk: destroys the embedded sub-object with the base destructor and frees the allocation.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are named (Ui_Object_DtorBase 0x001A6768, operator delete 0x0010F6CC) but vtable 0x00758538 has only generic scene/widget slots and no constructor in the block names the class, so the role (thunk) is right and the class is not.",
+  "previous_name": "maybe_Field_NpcActionDestroyThunk",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0017C8B4",
+  "name": "maybe_Ui_ObjectDestroyThunk2",
+  "signature": "void maybe_Ui_ObjectDestroyThunk2(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting thunk for a small UI object: destroys the embedded sub-object and frees the block.",
+  "confidence": 0.4,
+  "evidence": "NEW: the six callers are now named but belong to unrelated classes (Gfx_SpriteActor_ReleaseWithChildren, Ui_Marker_FollowActor, maybe_Field_UpdateLocationGrid, maybe_Ui_LayoutGroup_Build, maybe_Trail_UpdateNodeFromOwner, maybe_Ui_Pane_SetScrollRect), i.e. this is a shared 'destroy + free' tail rather than one class's destructor, so the descriptive name stays.",
+  "previous_name": "maybe_Ui_ObjectDestroyThunk2",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00212DD4",
+  "name": "Ui_TripleNullTextWindow_Dtor",
+  "signature": "void Ui_TripleNullTextWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the window that owns the three null-text layers: runs the UI base destructor and frees the window.",
+  "confidence": 0.5,
+  "evidence": "NEW: it is slot 0 of vtable 0x0075B8F0, whose named slots are Ui_Part_ConfirmWithSe1B (0x00212BFC) and Text_SetupTripleNullLayers (0x00212CF0) - the function that builds the three null_txt layers destroyed here.",
+  "previous_name": "maybe_Ui_TripleNullTextWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00241534",
+  "name": "Ui_AdventureLogWindow_Dtor",
+  "signature": "void Ui_AdventureLogWindow_Dtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the adventure-log window: releases the list label object, runs the base destructor and frees the window.",
+  "confidence": 0.5,
+  "evidence": "NEW: it is slot 1 of vtable 0x0075C87C, whose named slot is Ui_SetupAdventureLogWindow (0x0024107C) - the builder of this window.",
+  "previous_name": "maybe_Ui_AdventureLogWindow_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ }
+]

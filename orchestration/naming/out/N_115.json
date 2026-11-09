@@ -1,0 +1,1793 @@
+[
+ {
+  "address": "0x005055A0",
+  "name": "Svc_Object_ReleaseHandleSlot",
+  "signature": "int Svc_Object_ReleaseHandleSlot(int* self)",
+  "params": {
+   "self": "small object whose +0x04 word is an OS handle"
+  },
+  "summary": "Destructor-style helper: if the handle stored at self+4 is non-zero it calls svcCloseHandle (svc 0x23) and clears the slot, then returns self. Used to release a kernel handle owned by a small wrapper object.",
+  "confidence": 0.5,
+  "evidence": "asm 0x005055A0: ldr r0,[r0,#4]; beq; svc #0x23; str #0 into [r4]. Returns r0 = self (sub r0,r4,#4). Same close-and-null idiom as 0x00509B6C/0x00509BD4."
+ },
+ {
+  "address": "0x005059EC",
+  "name": "Svc_Ipc_Send080D0144",
+  "signature": "u32 Svc_Ipc_Send080D0144(u32* session, u32* unusedOut, u32 size, u32 offset, u32 zero, u32* outByte, int outSize, u32* buffer, int bufferSize)",
+  "params": {
+   "session": "fs:USER session handle",
+   "unusedOut": "unused second argument (kept by the calling convention)",
+   "size": "read size",
+   "offset": "file offset",
+   "zero": "always 0 (flags)",
+   "outByte": "1-byte reply buffer",
+   "outSize": "reply buffer size (1)",
+   "buffer": "destination buffer",
+   "bufferSize": "destination buffer size (1)"
+  },
+  "summary": "Raw fs:USER IPC request with header 0x080D0144 (command 0x080D = Read, 4 normal + 1 translate parameter) sent over svc 0x32; copies an unaligned output buffer and returns the IPC result. Caller 0x00503E84 passes a file handle, a buffer and a size/offset pair.",
+  "confidence": 0.55,
+  "evidence": "Header literal at 0x00505A54 = 0x080D0144; thread-local parameter block +0x80..+0xA4 then svc #0x32; descriptors 'outSize<<4|0xA' and 'bufferSize<<4|0xC'; sole caller 0x00503E84 which forwards (self->f_10, buffer, size, offset)."
+ },
+ {
+  "address": "0x00505AB0",
+  "name": "Svc_Ipc_Send08170000",
+  "signature": "int Svc_Ipc_Send08170000(u32* session, u8* outByte)",
+  "params": {
+   "session": "fs:USER (or sibling) session handle",
+   "outByte": "receives the 1-byte reply"
+  },
+  "summary": "Parameterless IPC request with header 0x08170000 (command 0x0817, no normal/translate parameters) that returns one status byte. Part of the fs:USER wrapper layer next to Svc_Ipc_Send080D0144.",
+  "confidence": 0.5,
+  "evidence": "Header literal at 0x00505AE4 = 0x08170000; reads TLS+0x88 as a byte after svc #0x32; no callers found in decomp/readable (likely invoked through a function table)."
+ },
+ {
+  "address": "0x00505AE8",
+  "name": "Svc_Ipc_Send08180000",
+  "signature": "int Svc_Ipc_Send08180000(u32* session, u8* outByte)",
+  "params": {
+   "session": "fs:USER (or sibling) session handle",
+   "outByte": "receives the 1-byte reply"
+  },
+  "summary": "Parameterless IPC request with header 0x08180000 (command 0x0818) that returns one status byte; twin of 0x00505AB0 and part of the same fs:USER wrapper table.",
+  "confidence": 0.5,
+  "evidence": "Header literal at 0x00505B1C = 0x08180000; same shape as 0x00505AB0 (TLS+0x80 header, svc #0x32, TLS+0x88 byte out)."
+ },
+ {
+  "address": "0x005064AC",
+  "name": "maybe_Gfx_CallGlobalCallbackSlot",
+  "signature": "int maybe_Gfx_CallGlobalCallbackSlot(int self, int arg2, int arg3)",
+  "params": {
+   "self": "object returned unchanged",
+   "arg2": "forwarded to callback",
+   "arg3": "forwarded to callback"
+  },
+  "summary": "Calls the global callback pointer at 0x007B2D1C if it is set (blx r2) and returns its first argument. Looks like a resource/stream 'notify listener' hook with a single global slot.",
+  "confidence": 0.35,
+  "evidence": "asm 0x005064AC: ldr r2,[pc,#0x18] (=0x007B2D18); ldr r2,[r2,#4]; cmp; blxne r2; mov r0,r4; pop. No callers in decomp/readable."
+ },
+ {
+  "address": "0x0050669A",
+  "name": "maybe_Thumb_BuildDescriptorList",
+  "signature": "u32 maybe_Thumb_BuildDescriptorList(u32 base, u32 unused, u32 kind)",
+  "params": {
+   "base": "destination buffer",
+   "unused": "unused",
+   "kind": "descriptor value written first"
+  },
+  "summary": "Thumb entry point that writes a small descriptor (kind word, optional zero word, constant from 0x00507284) into a caller buffer and returns the end pointer. Ghidra decompiled it unreliably (in_ZR / '&' expressions), so only the store pattern is trustworthy.",
+  "confidence": 0.2,
+  "evidence": "Batch lists mode=thumb, size 0x20E; readable C shows '*piVar2 = arg3; *result = 0; piVar2[2] = g_00507284' with g_00507284 = 0x0008025E. No ARM listing in asm/text, no callers found."
+ },
+ {
+  "address": "0x0050857C",
+  "name": "maybe_Gfx_VertexStream_WriteQuantizedColors",
+  "signature": "void maybe_Gfx_VertexStream_WriteQuantizedColors(int self, u32 channelShift, float* values, u32 flags)",
+  "params": {
+   "self": "vertex stream object (fields 0xA70-0xAF8)",
+   "channelShift": "byte lane (0..3) used for the packed channel",
+   "values": "2*0x80 float source values",
+   "flags": "written to self->f_A70 (OR 0x500)"
+  },
+  "summary": "Converts 256 float values into saturated 8-bit channel samples and packs them into two 0x82-word vertex blocks, shifting each sample into byte lane channelShift. Used to bake per-vertex colour/UV data into the GPU stream.",
+  "confidence": 0.45,
+  "evidence": "Saturation constants 1.0/255.0/2^7/2^8 at 0x00508714..0x0050872C, VectorFloatToUnsigned(...,3) with 0xFF masks, two 0x82-word iterations and 0x80 samples per block; called from 0x00508740."
+ },
+ {
+  "address": "0x00508740",
+  "name": "maybe_Gfx_VertexStream_BuildColorDeltas",
+  "signature": "void maybe_Gfx_VertexStream_BuildColorDeltas(u32 self, u32 channelShift, float* values, u32 flags)",
+  "params": {
+   "self": "vertex stream object",
+   "channelShift": "byte lane",
+   "values": "source float array",
+   "flags": "forwarded"
+  },
+  "summary": "Builds the difference table between consecutive float values (256 entries) on the stack, clears the low byte of the last word, and forwards the result to 0x0050857C for quantization/packing.",
+  "confidence": 0.45,
+  "evidence": "Loop with pfVar2 += 2 computing 'next - current' into local_420[254]; then g_005087D0 = 0 moved into local_24 (low byte clear) and tail call to 0x0050857C."
+ },
+ {
+  "address": "0x005088DC",
+  "name": "maybe_Gfx_BuildVertexFormatDescriptor",
+  "signature": "u32* maybe_Gfx_BuildVertexFormatDescriptor(void)",
+  "params": {},
+  "summary": "Allocates and initialises a large (0x??) vertex/attribute descriptor: header constants 0x000F0201/0x10062, zero-filled 0x98-byte block, 12 attribute entries, then two linked sub-descriptors. Return value points two words into the last allocation.",
+  "confidence": 0.3,
+  "evidence": "Calls 0x00508EE8 (alloc), 0x00116AE0 (memset 0x98), 0x00507F10/0x005095AC/0x00507CF4 (sub-object builders); literals g_005089B0=0x000F0201, g_005089C0=0x00010062 look like packed vertex-attribute format words; 12-iteration loop filling 6-word entries."
+ },
+ {
+  "address": "0x00509A80",
+  "name": "maybe_Fs_StartAsyncRead",
+  "signature": "u32 maybe_Fs_StartAsyncRead(int self, u32 handle, u32 length, u32 buffer, u32 flags)",
+  "params": {
+   "self": "request object (f_10 flag, f_14 handle, f_18 done)",
+   "handle": "file/session handle",
+   "length": "read length (must be 0x1000-aligned: (arg3 & 0xFFF)==0)",
+   "buffer": "destination",
+   "flags": "bit 1 selects the wait mode"
+  },
+  "summary": "Starts an asynchronous read on an already-open handle: stores the handle, sets a wait flag from bit 1 of arg5, issues an svc and marks the request done on success (otherwise forwards to the completion helper). Caller 0x0051C8B8.",
+  "confidence": 0.4,
+  "evidence": "Checks (arg3 & 0xfff)==0 and self->f_8==0, self->f_10 = ~(arg5>>1)&1, then software_interrupt(0x1F) and sets self->f_18=1; error path calls 0x001181A8(self, iVar1, arg5, arg4). Sole caller 0x0051C8B8 (which just tail-calls it)."
+ },
+ {
+  "address": "0x00509B6C",
+  "name": "maybe_Svc_Object_ReleaseHandles",
+  "signature": "u32* maybe_Svc_Object_ReleaseHandles(u32* self)",
+  "params": {
+   "self": "object with two handle slots (+0x04 and +0x08) and a byte flag at +0x08"
+  },
+  "summary": "Releases both kernel handles held by a small wrapper object (closing the second one only when its 'in use' byte is set) and resets the vtable pointer to 0x00741A74.",
+  "confidence": 0.45,
+  "evidence": "*arg1 = g_00509BC4 (0x00741A74, a vtable in .rodata); both releases are the svc #0x23 + store-zero idiom; returns self."
+ },
+ {
+  "address": "0x00509BD4",
+  "name": "Svc_HandleSlot_CloseA",
+  "signature": "int* Svc_HandleSlot_CloseA(int* slot)",
+  "params": {
+   "slot": "word holding a single OS handle"
+  },
+  "summary": "Closes the handle in *slot through svcCloseHandle (svc 0x23) and stores 0; returns the slot for chaining.",
+  "confidence": 0.5,
+  "evidence": "if (*arg1 != 0) { software_interrupt(0x23); *arg1 = 0; } return arg1; identical in shape to 0x00509BFC and 0x0050F1A0."
+ },
+ {
+  "address": "0x00509BFC",
+  "name": "Svc_HandleSlot_CloseB",
+  "signature": "int* Svc_HandleSlot_CloseB(int* slot)",
+  "params": {
+   "slot": "word holding a single OS handle"
+  },
+  "summary": "Second, byte-identical close-and-clear helper used for a different handle slot; kept separate by the original code layout.",
+  "confidence": 0.5,
+  "evidence": "Same 0x28-byte body as 0x00509BD4 (svc #0x23 + clear + return arg1); separate entry point at 0x00509BFC."
+ },
+ {
+  "address": "0x0050A548",
+  "name": "maybe_Fs_InvokeReadEntryPoint",
+  "signature": "int maybe_Fs_InvokeReadEntryPoint(int* self, u32 arg2, u32 arg3, int mode)",
+  "params": {
+   "self": "object whose first word is a vtable",
+   "arg2": "forwarded",
+   "arg3": "forwarded",
+   "mode": "selects between two call sites"
+  },
+  "summary": "Calls the vtable entry at +0x14 of the object and returns a negative result on failure, otherwise the constant at 0x0050A5D4. Both branches of the 'mode' test are identical in the decompiled output, so this is most likely a read/commit entry point of the icon-cache object.",
+  "confidence": 0.3,
+  "evidence": "Calls (**(code**)(*arg1 + 0x14))() in both branches; returns g_0050A5D4 on success; no callers in decomp/readable."
+ },
+ {
+  "address": "0x0050A700",
+  "name": "Ui_IconCache_CommitEntryThunk",
+  "signature": "void Ui_IconCache_CommitEntryThunk(void)",
+  "params": {},
+  "summary": "Tiny thunk that jumps straight to Ui_IconCache_CommitEntry (0x0050A714); exists only so a vtable/table slot can point at a distinct address.",
+  "confidence": 0.55,
+  "evidence": "Body is a single call to 0x0050A714, which N_007 named Ui_IconCache_CommitEntry."
+ },
+ {
+  "address": "0x0050B878",
+  "name": "maybe_Ui_IconCache_CountMatchingEntries",
+  "signature": "int maybe_Ui_IconCache_CountMatchingEntries(int* self, u32 flagMask)",
+  "params": {
+   "self": "icon-cache object (entry count at +0x18, entries at +0x1C)",
+   "flagMask": "bit mask tested against the entry flag byte"
+  },
+  "summary": "Iterates the icon-cache entries, reads each 0x60-byte record through the object's vtable (+0x34) and counts the entries whose flag byte matches flagMask (mask bit 0x80 ignored).",
+  "confidence": 0.45,
+  "evidence": "Loop 'i < arg1[6]' over arg1+i*4+7 calling 0x0050BBD8 (IconCache_ReadHeader) and (**(code**)(*arg1+0x34))(...,0x60,...); compares bStack_7C & arg2 & 0xFFFFFF7F; returns the count."
+ },
+ {
+  "address": "0x0050BAC4",
+  "name": "maybe_Ui_IconCache_StoreRecordByCommand",
+  "signature": "void maybe_Ui_IconCache_StoreRecordByCommand(int* self, int command, u8* data, u32 size)",
+  "params": {
+   "self": "cache object (record at +0x67, flags at +0x1DD..0x1DF, handle at +0x04)",
+   "command": "record id (0x8C..0x8F are flag bytes, 0x65..0xC7 are data writes)",
+   "data": "source bytes",
+   "size": "payload size (max 0x2800)"
+  },
+  "summary": "Handles a stored-record write: commands 0x8C..0x8F update three saved flag bytes, other commands 0x65..0xC7 write the caller's payload through the vtable, and the 0x60-byte header is always flushed back to the backing handle.",
+  "confidence": 0.4,
+  "evidence": "Bounds check '0x2800 < arg4' rejects oversize writes; writes self->f_77 / +0x1DD / +0x1DE / +0x1DF for 0x8C-0x8F; else (**(code**)(*arg1+0x30))(self,data,size,handle,arg2,0x14) or vtable+0x24; final flush of &f_67,0x60."
+ },
+ {
+  "address": "0x0050C6BC",
+  "name": "Svc_Cecd_GetCecInfoEventHandle",
+  "signature": "int Svc_Cecd_GetCecInfoEventHandle(u32* outHandle)",
+  "params": {
+   "outHandle": "receives the event handle"
+  },
+  "summary": "CECD request 0x000E (GetCecInfoEventHandle) on the primary cecd:u session (0x007B0058): sends a parameterless request and returns the event handle from the reply block.",
+  "confidence": 0.5,
+  "evidence": "Header 0x000E0000 built inline; session literal at 0x0050C6F4 = 0x007B0058 (same session as Svc_Cecd_OpenService in N_033); reply handle taken from TLS+0x88. CECD 0x000E and 0x000F are the two documented event-handle getters; which of the two is which follows libctru order (0x000E = CecInfo, 0x000F = ChangeState) and is NOT independently verified here."
+ },
+ {
+  "address": "0x0050C768",
+  "name": "Svc_Cecd_Cmd000D",
+  "signature": "u32 Svc_Cecd_Cmd000D(u32 value, u32 buffer, int size)",
+  "params": {
+   "value": "request value",
+   "buffer": "input buffer",
+   "size": "input buffer size"
+  },
+  "summary": "CECD command 0x000D with two normal and two translate parameters (header 0x000D0082). The descriptor 'size<<4|0xC' maps the caller buffer, so this is one of the buffer-taking raw-file commands.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050C7A8 = 0x000D0082, session g_0050C7AC = 0x007B0058, descriptors at +0x8C/+0x90, svc #0x32; sibling of the Cmd0003 wrappers named in N_033."
+ },
+ {
+  "address": "0x0050C888",
+  "name": "Svc_Cecd_GetChangeStateEventHandle",
+  "signature": "int Svc_Cecd_GetChangeStateEventHandle(u32* outHandle)",
+  "params": {
+   "outHandle": "receives the change-state event handle"
+  },
+  "summary": "CECD request 0x000F (GetChangeStateEventHandle) on the primary cecd:u session; returns the notification event handle used to detect message-box changes.",
+  "confidence": 0.5,
+  "evidence": "Header 0x000F0000; session g_0050C8C0 = 0x007B0058; reply handle read from TLS+0x8C; identical shape to the 0x000E wrapper at 0x0050C6BC. The 0x000E/0x000F assignment follows libctru order and is unverified; the wrapper shape (returns one event handle) is certain."
+ },
+ {
+  "address": "0x0050C8C4",
+  "name": "Svc_Cecd_Cmd0010",
+  "signature": "int Svc_Cecd_Cmd0010(u32* outHandle)",
+  "params": {
+   "outHandle": "receives the returned handle/value"
+  },
+  "summary": "CECD request 0x0010 on the primary session; parameterless and returns one handle-sized value (header 0x00100000).",
+  "confidence": 0.5,
+  "evidence": "Header 0x00100000; session g_0050C8FC = 0x007B0058; reads TLS+0x8C into *arg1."
+ },
+ {
+  "address": "0x0050C900",
+  "name": "Svc_Cecd_Cmd0001",
+  "signature": "int Svc_Cecd_Cmd0001(u32 a1, u32 a2, u32 a3, u32* out)",
+  "params": {
+   "a1": "request value 1",
+   "a2": "request value 2",
+   "a3": "request value 3",
+   "out": "receives the reply word"
+  },
+  "summary": "CECD command 0x0001 with two normal parameters and a 0x20-byte translate block (header 0x000100C2); the 0x20 constant is written to the descriptor word.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050C948 = 0x000100C2; session g_0050C94C = 0x007B0058; f_90 = 0x20 descriptor; reply word from TLS+0x88."
+ },
+ {
+  "address": "0x0050C950",
+  "name": "Svc_Cecd_Cmd000C",
+  "signature": "u32 Svc_Cecd_Cmd000C(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "CECD command 0x000C, one normal parameter (header 0x000C0040), on the primary session.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050C980 = 0x000C0040; session g_0050C984 = 0x007B0058."
+ },
+ {
+  "address": "0x0050C988",
+  "name": "Svc_Cecd_Cmd000B",
+  "signature": "u32 Svc_Cecd_Cmd000B(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "CECD command 0x000B, one normal parameter (header 0x000B0040), on the primary session.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050C9B8 = 0x000B0040; session g_0050C9BC = 0x007B0058."
+ },
+ {
+  "address": "0x0050CA1C",
+  "name": "Svc_Cecd_Cmd0009",
+  "signature": "u32 Svc_Cecd_Cmd0009(u32 value, u32 buffer, int size, u32 flags)",
+  "params": {
+   "value": "request value",
+   "buffer": "mapped buffer",
+   "size": "buffer size",
+   "flags": "extra parameter"
+  },
+  "summary": "CECD command 0x0009 with two normal and two translate parameters (header 0x000900C2): maps one caller buffer with descriptor 'size<<4|0xA'.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CA5C = 0x000900C2; session g_0050CA60 = 0x007B0058; f_90 = size<<4|10."
+ },
+ {
+  "address": "0x0050CBF4",
+  "name": "Svc_Cecd_Cmd000EB",
+  "signature": "int Svc_Cecd_Cmd000EB(u32* outHandle)",
+  "params": {
+   "outHandle": "receives the event handle"
+  },
+  "summary": "Same request as 0x0050C6BC (CECD 0x000E) but sent on the secondary cecd session at 0x007B005C; N_033 already named the other secondary-session wrappers with a 'B' suffix.",
+  "confidence": 0.5,
+  "evidence": "Header 0x000E0000; session literal g_0050CC2C = 0x007B005C; reads TLS+0x88 handle."
+ },
+ {
+  "address": "0x0050CCA0",
+  "name": "Svc_Cecd_Cmd000DB",
+  "signature": "u32 Svc_Cecd_Cmd000DB(u32 value, u32 buffer, int size)",
+  "params": {
+   "value": "request value",
+   "buffer": "input buffer",
+   "size": "buffer size"
+  },
+  "summary": "Secondary-session (0x007B005C) copy of CECD command 0x000D (header 0x000D0082).",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CCE0 = 0x000D0082; session g_0050CCE4 = 0x007B005C; identical body to 0x0050C768."
+ },
+ {
+  "address": "0x0050CDC0",
+  "name": "maybe_Svc_Cecd_Cmd0402",
+  "signature": "int maybe_Svc_Cecd_Cmd0402(u32* outValue)",
+  "params": {
+   "outValue": "receives the reply word"
+  },
+  "summary": "Request with header 0x04020002 on the secondary CECD session: unlike the other wrappers its command id is 0x0402, so it is probably a private/notification command rather than one of the documented 0x0001-0x0018 file/message commands.",
+  "confidence": 0.35,
+  "evidence": "Header literal g_0050CE00 = 0x04020002; session g_0050CE04 = 0x007B005C; f_84 preloaded with 0x20 as the descriptor; reads TLS+0x8C."
+ },
+ {
+  "address": "0x0050CE08",
+  "name": "Svc_Cecd_Cmd0010B",
+  "signature": "int Svc_Cecd_Cmd0010B(u32* outValue)",
+  "params": {
+   "outValue": "receives the reply word"
+  },
+  "summary": "Secondary-session copy of CECD command 0x0010 (header 0x00100000).",
+  "confidence": 0.5,
+  "evidence": "Header 0x00100000; session g_0050CE40 = 0x007B005C; reads TLS+0x8C."
+ },
+ {
+  "address": "0x0050CE44",
+  "name": "Svc_Cecd_Cmd0001B",
+  "signature": "int Svc_Cecd_Cmd0001B(u32 a1, u32 a2, u32 a3, u32* out)",
+  "params": {
+   "a1": "request value 1",
+   "a2": "request value 2",
+   "a3": "request value 3",
+   "out": "receives the reply word"
+  },
+  "summary": "Secondary-session copy of CECD command 0x0001 (header 0x000100C2, 0x20-byte block).",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CE8C = 0x000100C2; session g_0050CE90 = 0x007B005C."
+ },
+ {
+  "address": "0x0050CE94",
+  "name": "Svc_Cecd_Cmd000CB",
+  "signature": "u32 Svc_Cecd_Cmd000CB(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "Secondary-session copy of CECD command 0x000C (header 0x000C0040).",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CEC4 = 0x000C0040; session g_0050CEC8 = 0x007B005C."
+ },
+ {
+  "address": "0x0050CECC",
+  "name": "Svc_Cecd_Cmd000BB",
+  "signature": "u32 Svc_Cecd_Cmd000BB(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "Secondary-session copy of CECD command 0x000B (header 0x000B0040).",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CEFC = 0x000B0040; session g_0050CF00 = 0x007B005C."
+ },
+ {
+  "address": "0x0050CF60",
+  "name": "Svc_Cecd_Cmd0009B",
+  "signature": "u32 Svc_Cecd_Cmd0009B(u32 value, u32 buffer, int size, u32 flags)",
+  "params": {
+   "value": "request value",
+   "buffer": "mapped buffer",
+   "size": "buffer size",
+   "flags": "extra parameter"
+  },
+  "summary": "Secondary-session copy of CECD command 0x0009 (header 0x000900C2, one mapped buffer).",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0050CFA0 = 0x000900C2; session g_0050CFA4 = 0x007B005C."
+ },
+ {
+  "address": "0x0050D73C",
+  "name": "maybe_Font_MapCharToLanguageFallback",
+  "signature": "u32 maybe_Font_MapCharToLanguageFallback(u8* charPtr, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "charPtr": "pointer to the character code byte",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "high bits folded into the local copy"
+  },
+  "summary": "Looks up the system language (0..6) and uses per-language bit tables to decide whether a character code is available; when it is not, returns the language's fallback glyph slot (1, 6, 7 or 0xB). This is the region/language-dependent glyph selection step of the font code.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x001184F0(&byte,1,0x000A0002) -- an svcGetSystemInfo-style call -- then func_0050D9FC() (system language) and a 7-way jump table; cases test bits 0/6/7/11 and the masks at 0x0050D858/0x0050D85C; fallback constants 1/6/7/0xB. Manager word 0x0050D850 = 0x007418C4 sits next to the 'cecd:u' string but is a literal, not a service name."
+ },
+ {
+  "address": "0x0050D978",
+  "name": "maybe_Svc_Cfg_GetRegionInfo",
+  "signature": "int maybe_Svc_Cfg_GetRegionInfo(u32 value, u32* outPair)",
+  "params": {
+   "value": "request value",
+   "outPair": "receives a 64-bit result"
+  },
+  "summary": "Sends command 0x0003 (one normal parameter, one translate buffer) on the cfg-style session at 0x007AF0F8 and copies the 64-bit reply into outPair. Used by the language/region code that also drives the font tables.",
+  "confidence": 0.35,
+  "evidence": "Header literal g_0050D9B4 = 0x00030040; session g_0050D9B8 = 0x007AF0F8 (BSS, opened elsewhere); ldrd from TLS+0x88/0x8C into outPair."
+ },
+ {
+  "address": "0x0050D9BC",
+  "name": "maybe_Svc_Cfg_GetSystemLanguage",
+  "signature": "int maybe_Svc_Cfg_GetSystemLanguage(u8* outByte)",
+  "params": {
+   "outByte": "receives the language/region code (0..6)"
+  },
+  "summary": "Parameterless command 0x0002 on the cfg-style session 0x007AF0F8 returning a single byte. The only caller (0x0050D9FC) returns it as the value switched on by the font language tables, which is why it is read as a system language/region code.",
+  "confidence": 0.4,
+  "evidence": "Header 0x00020000 built inline; session literal g_0050D9F4 = 0x007AF0F8; reads TLS+0x88 byte. Caller 0x0050D9FC masks the result to 0xFF and 0x0050D73C switches over 0..6."
+ },
+ {
+  "address": "0x0050D9FC",
+  "name": "maybe_Text_GetSystemLanguage",
+  "signature": "u32 maybe_Text_GetSystemLanguage(void)",
+  "params": {},
+  "summary": "Convenience wrapper that asks 0x0050D9BC for the system language/region byte and returns it masked to 0..255; the font code uses it as the index of the per-language glyph tables.",
+  "confidence": 0.45,
+  "evidence": "Body: zero a stack byte, call 0x0050D9BC, return the byte & 0xFF; sole caller 0x0050D73C which switches over 0..6."
+ },
+ {
+  "address": "0x0050DA1C",
+  "name": "maybe_Svc_Cfg_ShutdownAndFree",
+  "signature": "u32 maybe_Svc_Cfg_ShutdownAndFree(u32 object, u32 arg2, u32 arg3, u32* callbackSlot)",
+  "params": {
+   "object": "object to free",
+   "arg2": "unused",
+   "arg3": "forwarded to the callback",
+   "callbackSlot": "global callback pointer (cleared before the call)"
+  },
+  "summary": "Runs the registered shutdown callback (if any) with the object, clears the callback slot, then releases the object and returns it. The decompiler loses most of the 0x294-byte body, so this is identified from the prologue/epilogue only.",
+  "confidence": 0.3,
+  "evidence": "asm 0x0050DA1C: ldr r3,[pc,#0x44] (=0x007AE9FC); ldr ip,[r3]; cmp/beq; str 0; stm sp; blx ip; then tail-call to 0x0011CC28 (free) with r0 = arg1; readable C shows software_interrupt(0x3C) because of the desync."
+ },
+ {
+  "address": "0x0050DEA6",
+  "name": "maybe_Str_TerminateConversionOutput",
+  "signature": "void maybe_Str_TerminateConversionOutput(void)",
+  "params": {},
+  "summary": "Two-instruction tail helper of the UTF-16/UTF-8 conversion code: on success it writes a NUL through both optional output pointers before restoring the callee-saved registers. Ghidra split it from the preceding Thumb/ARM boundary and reports bad data.",
+  "confidence": 0.3,
+  "evidence": "asm 0x0050DEA8: ands r2,r0,#0x80000000; bpl; cmp r1,#0; strne sb,[r1]; cmp r4,#0; strne sb,[r4]; pop {r4-r8,sb,sl,fp}; bx lr. Sits between Str_WriteLineBreakUtf8 (0x0050DDAC) and Str_Utf16ToUtf8 (0x0050DECC); entry at 0x0050DEA6 is two bytes before the ARM instruction boundary."
+ },
+ {
+  "address": "0x0050E60C",
+  "name": "maybe_Mem_BlockRegistry_CreateBlock",
+  "signature": "int maybe_Mem_BlockRegistry_CreateBlock(int self, u32 offset, int size)",
+  "params": {
+   "self": "registry/stream object (buffer at f_18, limit at f_1C)",
+   "offset": "start offset inside the buffer",
+   "size": "length in bytes (must be > 0x13 after alignment)"
+  },
+  "summary": "Aligns the requested window inside the object's buffer, writes a 16-byte block header (tag 0x5048, size, two zero words), links the block into the free-list at f_24/f_28 and resets the counters. Returns self on success, 0 when the window is too small.",
+  "confidence": 0.4,
+  "evidence": "Writes *(short*)p = (short)0x45585048 ('HP'), p[1]=0, *(u32*)(p+4) = limit-p-0x10, two zeros; then self->f_24=f_28=p, f_2c=f_30=0; guard 'uVar2 <= uVar5 && 0x13 < uVar2'. Uses the interval registry 0x0050E988/0x0050E7D8."
+ },
+ {
+  "address": "0x0050E7D8",
+  "name": "maybe_Mem_BlockRegistry_FindRange",
+  "signature": "int maybe_Mem_BlockRegistry_FindRange(u32 node, u32 address)",
+  "params": {
+   "node": "root of an interval tree (children at +0xC)",
+   "address": "address to look up"
+  },
+  "summary": "Recursively walks the interval tree and returns the node whose [f_18, f_1C) range contains address, or 0. Classic binary interval lookup used by the block registry.",
+  "confidence": 0.45,
+  "evidence": "func_0050E7D8(&node->f_c, address) recurses; compares arg2 < node->f_18 / node->f_1C <= arg2; pair with the insert/remove routines 0x0050E988/0x0050E914 which maintain the same f_18/f_1C plus linked-list fields."
+ },
+ {
+  "address": "0x0050E914",
+  "name": "maybe_Mem_BlockRegistry_RemoveRange",
+  "signature": "void maybe_Mem_BlockRegistry_RemoveRange(u32 address)",
+  "params": {
+   "address": "block address to unlink"
+  },
+  "summary": "Finds the block whose range contains the given address and unlinks it from both the sorted list and the per-range free list, then decrements the block counter at +0x10.",
+  "confidence": 0.45,
+  "evidence": "Looks up 0x0050E7D8(g_0050E984 + 0xC, address); then pointer surgery '*puVar6 = uVar2' / '*(u32*)(uVar4 + *piVar3 + 4) = uVar2' and '*(short*)(puVar6+2) -= 1'; root pointer g_0050E984 = 0x007F25C0."
+ },
+ {
+  "address": "0x0050E988",
+  "name": "maybe_Mem_BlockRegistry_InsertRange",
+  "signature": "void maybe_Mem_BlockRegistry_InsertRange(u32* node, u32 tag, u32 arg3, u32 arg4, u32 arg5)",
+  "params": {
+   "node": "block to register (4-word header)",
+   "tag": "value stored at +0",
+   "arg3": "stored at +0x18",
+   "arg4": "stored at +0x1C",
+   "arg5": "byte stored at +0x20"
+  },
+  "summary": "Initialises a block header and inserts it into the global interval registry: either prepends it to the free list or splices it after the last block, always bumping the count word. Companion of 0x0050E914.",
+  "confidence": 0.45,
+  "evidence": "Writes *arg1=arg2, arg1[8]=arg5&0xFF, arg1[6]=arg3, arg1[7]=arg4, calls 0x0050EA44(arg1+3,4), lazily initialises g_0050EA40, then does the same list insert as 0x0050E7D8/0x0050E914 with '*(short*)(puVar5+2) += 1'."
+ },
+ {
+  "address": "0x0050F1A0",
+  "name": "Svc_HandleSlot_CloseC",
+  "signature": "int* Svc_HandleSlot_CloseC(int* slot)",
+  "params": {
+   "slot": "word holding a single OS handle"
+  },
+  "summary": "Third instance of the close-handle-and-clear helper (svcCloseHandle + store 0); used for yet another handle slot.",
+  "confidence": 0.5,
+  "evidence": "if (*arg1 != 0) { software_interrupt(0x23); *arg1 = 0; } return arg1; identical to 0x00509BD4/0x00509BFC."
+ },
+ {
+  "address": "0x0050F1C8",
+  "name": "maybe_Svc_Ipc_Send0007",
+  "signature": "u32 maybe_Svc_Ipc_Send0007(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "Sends command 0x0007 (header 0x00070040, one normal parameter) on the third service session at 0x007B00E8 and returns the IPC result.",
+  "confidence": 0.4,
+  "evidence": "Header literal g_0050F1F8 = 0x00070040; session literal g_0050F1FC = 0x007B00E8 (BSS, a third session next to the cecd/cfg ones)."
+ },
+ {
+  "address": "0x0050F204",
+  "name": "maybe_Svc_Ipc_Send0001",
+  "signature": "u32 maybe_Svc_Ipc_Send0001(u32 value)",
+  "params": {
+   "value": "request value"
+  },
+  "summary": "Sends command 0x0001 (header 0x00010042, one normal parameter and a 0x20-byte descriptor) on the session at 0x007B00E8.",
+  "confidence": 0.4,
+  "evidence": "Header literal g_0050F23C = 0x00010042; session g_0050F240 = 0x007B00E8; f_88 = 0x20."
+ },
+ {
+  "address": "0x0050F248",
+  "name": "maybe_Svc_Ipc_Send0002",
+  "signature": "u32 maybe_Svc_Ipc_Send0002(void)",
+  "params": {},
+  "summary": "Sends parameterless command 0x0002 (header 0x00020002 with a 0x20-byte descriptor) on the session at 0x007B00E8.",
+  "confidence": 0.4,
+  "evidence": "Header literal g_0050F27C = 0x00020002; session g_0050F280 = 0x007B00E8; f_84 = 0x20."
+ },
+ {
+  "address": "0x0051045E",
+  "name": "maybe_Regex_MatchLoopEntryA",
+  "signature": "void maybe_Regex_MatchLoopEntryA(void)",
+  "params": {},
+  "summary": "Interior instruction of the regular-expression matcher at 0x005104xx that Ghidra wrongly recorded as an entry point (0x0051045E is not an instruction boundary). Listed here only so the batch is complete; there is no separate function.",
+  "confidence": 0.2,
+  "evidence": "asm/text_00500048.s lists 0x0051045C and 0x00510460 as instructions, i.e. 0x0051045E lies inside the 32-bit instruction at 0x0051045C; no prologue and no callers. Surrounding code compares halfwords against 0x7D and loops back to 0x00510420."
+ },
+ {
+  "address": "0x005104F2",
+  "name": "maybe_Regex_MatchLoopEntryB",
+  "signature": "void maybe_Regex_MatchLoopEntryB(void)",
+  "params": {},
+  "summary": "Second interior address of the same regular-expression matcher (mid-instruction), recorded as an entry point by error. Not a real function.",
+  "confidence": 0.2,
+  "evidence": "0x005104F0/0x005104F4 are the surrounding instructions; 0x005104F2 is inside the instruction at 0x005104F0; no prologue, no callers."
+ },
+ {
+  "address": "0x00510970",
+  "name": "maybe_Text_MatchCharAgainstClass",
+  "signature": "u32 maybe_Text_MatchCharAgainstClass(int* textRef, int* nodeRef, u32 start, int length)",
+  "params": {
+   "textRef": "pointer to the UTF-16 text pointer",
+   "nodeRef": "word holding the current regex/char-class node",
+   "start": "first index to test",
+   "length": "number of characters to test"
+  },
+  "summary": "Scans a run of UTF-16 characters and accepts the run when every character matches the current class node's up-to-three code values (0 terminates the list). Used by the text/regex matcher.",
+  "confidence": 0.45,
+  "evidence": "Compares *(short*)(*arg1 + i*2) with *(short*)(*arg2+10) and with node+2/+4/+6 while skipping zero entries; walks *arg2 = *(int*)(*arg2+4); returns 1 when the whole run matched. Callee 0x00513F78 resolves the class node."
+ },
+ {
+  "address": "0x005132E8",
+  "name": "maybe_Regex_MatchAlternation",
+  "signature": "u32 maybe_Regex_MatchAlternation(void)",
+  "params": {},
+  "summary": "Interior continuation of the regex matcher: calls 0x001009DC (a memory/stack helper), then 0x005127B0 with three register arguments and tests the returned pointer. Ghidra started the function in the middle of the original body, so the name only states the role.",
+  "confidence": 0.3,
+  "evidence": "0x005132E8: blx #0x001009DC; cmp r0,#0; beq 0x513368; mov r2,r8; mov r1,sb; mov r0,sp; bl #0x005127B0; ldr r0,[sp]. Uses r8/sb as live inputs, i.e. it is a branch target inside a larger matcher."
+ },
+ {
+  "address": "0x005160E4",
+  "name": "Svc_Snd_Cmd0003",
+  "signature": "u32 Svc_Snd_Cmd0003(u32 buffer, int size)",
+  "params": {
+   "buffer": "translated buffer",
+   "size": "buffer size"
+  },
+  "summary": "Sound service request 0x0003 with one normal and one translate parameter (descriptor 'size<<14|2') on the snd:u session at 0x007AEAB0.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_00516128 = 0x00030042; session g_0051612C = 0x007AEAB0 (also used by the other snd wrappers here); f_88 = size<<14|2."
+ },
+ {
+  "address": "0x00516134",
+  "name": "Svc_Snd_Cmd001D",
+  "signature": "int Svc_Snd_Cmd001D(u32* outValue)",
+  "params": {
+   "outValue": "receives the returned word"
+  },
+  "summary": "Parameterless sound service request 0x001D on the snd:u session; returns one word.",
+  "confidence": 0.5,
+  "evidence": "Header 0x001D0000 built inline; session g_0051616C = 0x007AEAB0; reads TLS+0x88 into *arg1."
+ },
+ {
+  "address": "0x00516170",
+  "name": "maybe_Svc_Snd_Cmd0004WithName",
+  "signature": "u32 maybe_Svc_Snd_Cmd0004WithName(char* name)",
+  "params": {
+   "name": "NUL-terminated name; its length+1 becomes the buffer size"
+  },
+  "summary": "Sound request 0x0004 that measures the supplied string (strlen+1) and sends it as the translate buffer; the name-based form used to load a sound archive/resource.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x0011CCA0 (strlen), adds 1, stores the size and the pointer, descriptor 'size<<14|2'; header g_005161D8 = 0x00040042; session g_005161DC = 0x007AEAB0."
+ },
+ {
+  "address": "0x00516194",
+  "name": "maybe_Svc_Snd_Cmd0004",
+  "signature": "u32 maybe_Svc_Snd_Cmd0004(u32 buffer, int size)",
+  "params": {
+   "buffer": "translated buffer",
+   "size": "buffer size"
+  },
+  "summary": "Sound request 0x0004 with an explicit buffer and size (same header as 0x00516170, without the strlen step).",
+  "confidence": 0.45,
+  "evidence": "Header g_005161D8 = 0x00040042; session g_005161DC = 0x007AEAB0; f_88 = size<<14|2."
+ },
+ {
+  "address": "0x005177E0",
+  "name": "maybe_Sound_GetSystemIfInitialized",
+  "signature": "u32 maybe_Sound_GetSystemIfInitialized(u8* stateWord)",
+  "params": {
+   "stateWord": "sound system state word (bit 0 = initialised)"
+  },
+  "summary": "Checks bit 0 of the global sound-system state and aborts (0x0010009C) when the system is not initialised, otherwise returns the global sound object at 0x00517878. This is the body of the sound singleton accessor.",
+  "confidence": 0.35,
+  "evidence": "if ((*arg1 & 1) == 0) func_0010009C(g_00517874) [no return]; return g_00517878. Called by the accessor at 0x005177DC which loads the global state pointer."
+ },
+ {
+  "address": "0x00517B54",
+  "name": "maybe_Sound_AttachStreamToSystem",
+  "signature": "void maybe_Sound_AttachStreamToSystem(int stream)",
+  "params": {
+   "stream": "stream object forwarded in r1"
+  },
+  "summary": "Fetches the sound-system singleton, moves the incoming stream pointer into r1 and continues into the channel-reset code. Ghidra split the original function at the ARM NOP boundary, so the tail is shared with 0x00517B6C.",
+  "confidence": 0.3,
+  "evidence": "0x00517B54: push {r4,lr}; mov r4,r0; bl #0x005177DC (sound singleton getter); mov r1,r4; pop {r4,lr}; then 0x00517B68 'mov r0,r0' padding followed by the next function."
+ },
+ {
+  "address": "0x0051821A",
+  "name": "maybe_Sound_DspWriteChannelConfig",
+  "signature": "u32 maybe_Sound_DspWriteChannelConfig(u32 value, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "value": "32-bit value split into bytes and forwarded",
+   "arg2": "forwarded",
+   "arg3": "forwarded",
+   "arg4": "forwarded"
+  },
+  "summary": "Writes the DSP channel configuration: selects the channel register through the table at 0x00518F0C, sets bit 0x10 (update flag) and forwards the byte-swapped value to the DSP command helper 0x0011E9A8. Ghidra lost the real frame pointer (unaff_r4/unaff_r5), so only the register-write pattern is certain.",
+  "confidence": 0.3,
+  "evidence": "Reads *(u16*)(g_00518F0C + unaff_r4) & 1 to choose a 0x60-byte channel slot, ORs 0x10 into the register word, then calls 0x0011E9A8 with the byte-swapped arg1 (bswap >> 4). No callers found in decomp/readable; sits among the sound/DSP functions 0x517xxx-0x51Axxx."
+ },
+ {
+  "address": "0x00518768",
+  "name": "maybe_Sound_ResetChannelState",
+  "signature": "void maybe_Sound_ResetChannelState(void)",
+  "params": {},
+  "summary": "Fetches the sound singleton, sets the 'active' byte at +0xF, initialises the list at +0x40 and walks the 0x1300-byte channel table. Again a split fragment sharing the singleton getter prologue.",
+  "confidence": 0.3,
+  "evidence": "0x00518768: bl #0x005177DC; ldr r5,[pc,#0xA0]; mov r4,r0; strb r0(=1),[r4,#0xF]; add r0,r4,#0x40; bl #0x00117B78 (list reset); ldr r1,[r4,#0x28]..."
+ },
+ {
+  "address": "0x005189A0",
+  "name": "maybe_Sound_CalcDspAdpcmStep",
+  "signature": "void maybe_Sound_CalcDspAdpcmStep(int self)",
+  "params": {
+   "self": "channel object (writes +0x08/+0x0A and the DSP block at f_68)"
+  },
+  "summary": "Fixed-point helper that converts the caller's float/scale in s0/s1 into two 16-bit DSP coefficients (with a square-root term) and stores them both in the object and in the DSP register block, marking the block dirty with flag 8.",
+  "confidence": 0.3,
+  "evidence": "Computes f = g_00518A10 - (u32->float)*in_s1, then sqrt(f*f - g_00518A14) - f, stores (f+g_00518A14)*g_00518A18 and -f*g_00518A18 as shorts at self+8/+10, copies them to f_68+0x10 and ORs 8 into f_68->f_6C. Callee 0x0051B6B0 = Math_WrapFloatToU16 neighbour (N_001 named 0x0051B6B8)."
+ },
+ {
+  "address": "0x00519448",
+  "name": "maybe_Sound_ReleaseStreamObject",
+  "signature": "int* maybe_Sound_ReleaseStreamObject(int* self)",
+  "params": {
+   "self": "stream object with two handles (+0x00/+0x04) and an index word (+0x10)"
+  },
+  "summary": "Destructor helper: sets the index at +0x10 to -1 and closes the two owned handles with svcCloseHandle, returning self.",
+  "confidence": 0.45,
+  "evidence": "arg1[4] = -1; then the two close-and-clear idioms (software_interrupt(0x23), store 0) on arg1[1] and arg1[0]."
+ },
+ {
+  "address": "0x00519544",
+  "name": "maybe_Sound_MixTwoChannels",
+  "signature": "void maybe_Sound_MixTwoChannels(int self, int* sourcePtrs)",
+  "params": {
+   "self": "mixer state (2 channels at +0x2C/+0x30, ring buffer at f_40, coefficients at +0x44/+0x48/+0x4C)",
+   "sourcePtrs": "two source pointers (4 entries read)"
+  },
+  "summary": "Mixes two 0xA0-sample channel blocks into the current ring-buffer slot using fixed-point coefficients and a wrap-around write index, then advances the slot counter modulo f_3C. This is the per-frame software mixer.",
+  "confidence": 0.45,
+  "evidence": "Two-channel loop (j<self->f_55), inner loop 0xA0 samples, 'iVar6 = abs(sample)*self->f_44>>7' with sign restore, then 'self->f_4C*prev + self->f_48*(src-sample)>>7'; slot index += 1 and wraps at self->f_3C."
+ },
+ {
+  "address": "0x0051978C",
+  "name": "maybe_Sound_MixFourChannels",
+  "signature": "void maybe_Sound_MixFourChannels(int self, u32* sourcePtrs)",
+  "params": {
+   "self": "mixer state (4 channels, tables at +0x3C/0x4C/0x60/0x7C, coefficients +0xA0..+0xCC)",
+   "sourcePtrs": "source pointer table"
+  },
+  "summary": "Wider version of 0x00519544: mixes four source streams into the ring buffer with per-channel fixed-point coefficients, deriving the fourth channel from the difference of two others.",
+  "confidence": 0.45,
+  "evidence": "Four channel bases (self+local_34*4 and self+local_34*8) walking f_3C/f_4C/f_60/f_7C/f_B4/f_B8; coefficients f_A0/f_A8/f_AC/f_B4..f_CC; same 'abs*coef>>7' fixed-point pattern as 0x00519544."
+ },
+ {
+  "address": "0x00519F3C",
+  "name": "maybe_Sound_SetChannelParamBlock",
+  "signature": "void maybe_Sound_SetChannelParamBlock(int self, u32 params)",
+  "params": {
+   "self": "channel object",
+   "params": "pointer to 0x20 bytes of parameters"
+  },
+  "summary": "Copies a 0x20-byte parameter block into the channel object at +0x7C and sets bit 0x40 of the channel flags, i.e. 'parameters changed, reconfigure on next tick'.",
+  "confidence": 0.4,
+  "evidence": "func_00116A14(&self->f_7C, params, 0x20) (memcpy) then self->f_6C |= 0x40."
+ },
+ {
+  "address": "0x0051A978",
+  "name": "maybe_Sound_CloseStream",
+  "signature": "void maybe_Sound_CloseStream(int* handle)",
+  "params": {
+   "handle": "stream handle slot"
+  },
+  "summary": "Closes an open sound stream: if the module is initialised it flushes the stream through the sound service (0x0051AE60), closes the handle and reports the result. Used on shutdown/error paths.",
+  "confidence": 0.4,
+  "evidence": "if (*g_0051A9B0 != 0) { func_0051AE60(); software_interrupt(0x23); if (*arg1 < 0) ... }; sole callee 0x0051AE60 (snd cmd 0x2C)."
+ },
+ {
+  "address": "0x0051AE60",
+  "name": "Svc_Snd_Cmd002C",
+  "signature": "u32 Svc_Snd_Cmd002C(void)",
+  "params": {},
+  "summary": "Parameterless sound service request 0x002C on the snd:u session (used to flush/close a stream).",
+  "confidence": 0.5,
+  "evidence": "Header 0x002C0000 built inline; session literal g_0051AE8C = 0x007AEAAC (the snd session also used by the 0x51Axxx/0x51Bxxx block)."
+ },
+ {
+  "address": "0x0051B5B8",
+  "name": "maybe_Sound_GetDefaultStreamState",
+  "signature": "u32 maybe_Sound_GetDefaultStreamState(u8* stateWord)",
+  "params": {
+   "stateWord": "initialisation flag word (bit 0)"
+  },
+  "summary": "Asserts that the sound module is initialised and then returns the constant/default stream state at 0x0051B630; the tail of the same singleton-accessor pattern as 0x005177E0.",
+  "confidence": 0.3,
+  "evidence": "if ((*arg1 & 1) == 0) func_0010009C(g_0051B624); return g_0051B630."
+ },
+ {
+  "address": "0x0051BD7C",
+  "name": "maybe_Sound_NotifyServiceThread",
+  "signature": "void maybe_Sound_NotifyServiceThread(u32 arg1, u32 arg2)",
+  "params": {
+   "arg1": "forwarded to the service request",
+   "arg2": "value taken from the global at 0x0051BDA8"
+  },
+  "summary": "Reads the current thread id (0x0011F730) and passes it together with the global sound context to the raw service request 0x0051BDAC.",
+  "confidence": 0.3,
+  "evidence": "uVar1 = func_0011F730() (thread id getter); then func_0051BDAC(uVar1, *g_0051BDA8, arg1, arg2)."
+ },
+ {
+  "address": "0x0051BDAC",
+  "name": "Svc_Snd_Cmd001F",
+  "signature": "u32 Svc_Snd_Cmd001F(u32* threadId, u32 context, u32 arg3, u32 arg4)",
+  "params": {
+   "threadId": "caller thread id",
+   "context": "sound context value",
+   "arg3": "request value",
+   "arg4": "request value"
+  },
+  "summary": "Raw sound service request 0x001F (header 0x001F0082: two normal parameters and two translate words) that associates the calling thread with the sound context.",
+  "confidence": 0.5,
+  "evidence": "Header literal g_0051BDE4 = 0x001F0082; f_90 = arg2, f_84 = arg3, ...; svc #0x32; sole caller 0x0051BD7C."
+ },
+ {
+  "address": "0x0051C5F0",
+  "name": "maybe_Gfx_Y2r_ConvertFrame",
+  "signature": "void maybe_Gfx_Y2r_ConvertFrame(int base, int* srcDesc, int* planeInfo)",
+  "params": {
+   "base": "destination offset",
+   "srcDesc": "source descriptor (pitch/format at +8/+0xC/+0x14)",
+   "planeInfo": "three-plane descriptor"
+  },
+  "summary": "Converts one 400x240 YUV frame into the three destination planes (Y/U/V) using the per-format row converters at g_0051C814/g_0051C818; the loop bounds 400 rows x 240 pixels match the 3DS top-screen movie surface.",
+  "confidence": 0.4,
+  "evidence": "Two nested loops: inner 0xF0 pixels in steps of 8, outer 400 rows; switch on pixel format 0..4 selecting converters g_0051C814/g_0051C818; three destinations (planeInfo->f_14+base, +8+base, f_C+base)."
+ },
+ {
+  "address": "0x0051C67C",
+  "name": "maybe_Gfx_Y2r_ConvertPlane",
+  "signature": "void maybe_Gfx_Y2r_ConvertPlane(int dst, int* descTable, int index, int secondPlane)",
+  "params": {
+   "dst": "destination buffer",
+   "descTable": "16-byte descriptor table",
+   "index": "descriptor index",
+   "secondPlane": "selects the second pointer of the descriptor"
+  },
+  "summary": "Single-plane variant of the YUV conversion: picks one 16-byte descriptor, chooses the row converter from its pixel format and converts 400x240 (or 320-wide) pixels into dst.",
+  "confidence": 0.4,
+  "evidence": "Same format switch and 0xF0/400 loop as 0x0051C5F0; row count constant 400 vs 0x140 selected by in_ZR; descriptor = descTable + index*0x10."
+ },
+ {
+  "address": "0x0051C8B8",
+  "name": "maybe_Fs_StartAsyncReadThunk",
+  "signature": "void maybe_Fs_StartAsyncReadThunk(void)",
+  "params": {},
+  "summary": "Tail-call thunk to 0x00509A80 (asynchronous read starter), keeping a distinct address for a function-table slot.",
+  "confidence": 0.45,
+  "evidence": "Body is a single call to 0x00509A80."
+ },
+ {
+  "address": "0x0051D5F0",
+  "name": "Fx_BuildParticleRenderQuad",
+  "signature": "void Fx_BuildParticleRenderQuad(int self, float* particle)",
+  "params": {
+   "self": "particle/emitter object (transform buffers at +0x28/+0x58, RNG state +0x8C, flags +0xCC)",
+   "particle": "destination particle record (position +0x0C, size +0x24, colour/flags)"
+  },
+  "summary": "Main per-particle render-data builder: advances the LCG at +0x8C, samples the RNG tables, decides whether the particle uses the object-local or the world transform, and writes the quad's position, size and colour fields. Called from every emission variant and from the emitter update paths.",
+  "confidence": 0.5,
+  "evidence": "Reads self+0x8C LCG (multiply by g_0051D920, add 0x3039), iVar14->f_2E0/f_314 scale terms, arg2[0x4F]/[0x50] point at +0x28/+0x58 or at transformed copies, RNG table g_0051D930 indexed by the u16 at self+0x8A. Four callers in this batch (0x51E834/0x51F5B8/0x51F93C/0x51FFE8) plus the 0x52xxxx update functions."
+ },
+ {
+  "address": "0x0051E834",
+  "name": "maybe_Fx_EmitParticlesFromGlobalVelocity",
+  "signature": "float maybe_Fx_EmitParticlesFromGlobalVelocity(float* emitter)",
+  "params": {
+   "emitter": "emitter object (arg1[7] = definition, arg1[0x37] = runtime, arg1[0x8C] = spawn accumulator)"
+  },
+  "summary": "Spawn loop variant that takes each particle's velocity straight from a global constant vector (g_0051EB18) instead of the emitter's random table, then calls the common render-quad builder.",
+  "confidence": 0.4,
+  "evidence": "arg2[0xC..0x14] = *g_0051EB18, g_0051EB18[1], g_0051EB18[2]; asserts g_0051EB14 bit 0 via func_0010009C; per-particle call at the end is func_0051D5F0; spawn count comes from arg1[0x8C] with the g_0051EB00/g_0051EB04 clamp constants."
+ },
+ {
+  "address": "0x0051EBBC",
+  "name": "maybe_Fx_BuildParticleRenderQuadAlt",
+  "signature": "void maybe_Fx_BuildParticleRenderQuadAlt(int self, float* particle)",
+  "params": {
+   "self": "particle object",
+   "particle": "destination particle record (stores the source at +0x150)"
+  },
+  "summary": "Second render-data builder, structurally identical to 0x0051D5F0 but adds the emitter's drift (f_2DC/f_2E4) to the particle's motion and stores the source pointer at particle+0x150.",
+  "confidence": 0.45,
+  "evidence": "arg2[0x54] = arg1; arg2[0x56] = 4.2e-45; uses iVar17->f_2DC/f_2E0/f_2E4/f_2E8/f_2EC and iVar18->f_25C/f_260/f_285, the same RNG table g_0051EFB0.. as 0x0051D5F0; four callers."
+ },
+ {
+  "address": "0x0051F5B8",
+  "name": "maybe_Fx_EmitParticlesRandomRadius",
+  "signature": "float maybe_Fx_EmitParticlesRandomRadius(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Emission variant that randomises the spawn radius (one RNG draw + square root of the squared radius) before delegating each particle to 0x0051D5F0.",
+  "confidence": 0.35,
+  "evidence": "Uses func_00125034 (random), one SQRT in the spawn loop, then func_0051D5F0 per particle; shares the arg1[0x8C]/arg1[0x37] spawn skeleton with 0x0051E834."
+ },
+ {
+  "address": "0x0051F93C",
+  "name": "maybe_Fx_EmitParticlesRandomOriented",
+  "signature": "float maybe_Fx_EmitParticlesRandomOriented(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Emission variant that draws three random angles and builds a rotation with 0x0012551C (matrix multiply) so each particle gets a random orientation.",
+  "confidence": 0.35,
+  "evidence": "Three func_00125034 random draws plus one func_0012551C matrix multiply and SQRT terms; per-particle call func_0051D5F0."
+ },
+ {
+  "address": "0x0051FFE8",
+  "name": "maybe_Fx_EmitParticlesRadialSpread",
+  "signature": "float maybe_Fx_EmitParticlesRadialSpread(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Emission variant that distributes particles on a radial spread (two square roots per particle) around the emitter axis, then builds the quad data.",
+  "confidence": 0.35,
+  "evidence": "Two SQRT terms in the spawn loop, no matrix multiply, per-particle func_0051D5F0; sibling of 0x00520F1C/0x0052060C which use the same 0x26C-based radius maths."
+ },
+ {
+  "address": "0x0052060C",
+  "name": "maybe_Fx_EmitParticlesRing",
+  "signature": "float maybe_Fx_EmitParticlesRing(float* emitter)",
+  "params": {
+   "emitter": "emitter object (radius field +0x26C, spawn count arg1[0x8C])"
+  },
+  "summary": "Ring/disc emission: takes a random radius factor, scales it by (1 - distance/radius) and a square root, orients the offset with the 16-byte RNG table at g_005209A8 and writes the quad.",
+  "confidence": 0.4,
+  "evidence": "'fVar17 = g_00520984 - *(float*)(fVar8 + 0x26C)' then 'sqrt(fVar14*fVar14 + fVar17*fVar17*(...))'; random table g_005209A8 (4 floats per entry) and LCG multiplier g_00520994 + 0x3039; per-particle func_0051D5F0."
+ },
+ {
+  "address": "0x005209DC",
+  "name": "Fx_UnlinkParticleFromLists",
+  "signature": "u32 Fx_UnlinkParticleFromLists(int particle)",
+  "params": {
+   "particle": "particle node (list links at +0x148/+0x14C, owning emitter at +0x150, mode at +0x158)"
+  },
+  "summary": "Removes a particle node from the emitter's active or pending doubly-linked list (selected by particle->f_158), decrements the list counter, clears the 'linked' word at +0x144 and releases the render data when +0x154 is set.",
+  "confidence": 0.5,
+  "evidence": "Pointer swaps on emitter->f_E0/f_E4/f_E8/f_EC and neighbours' +0x148/+0x14C; decrements f_10 or f_14; 'self->f_144 = 0'; if (f_154) func_0052F664(*self->f_150->f_1c). Six callers in this batch (all the list-update functions)."
+ },
+ {
+  "address": "0x00520B18",
+  "name": "maybe_Fx_EmitParticlesBox",
+  "signature": "float maybe_Fx_EmitParticlesBox(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Box/axis emission: splits the spawn count between the X and Z axes using the LCG, offsets each particle along the chosen axis and leaves the other component on the centre line (no square root).",
+  "confidence": 0.4,
+  "evidence": "Two branches on the LCG value (uVar6 < 0x7FFFFFFF) filling +0x0C or +0x14 with +/- the half-size, the other axis fixed; constants g_00520E44..g_00520E54; per-particle func_0051D5F0."
+ },
+ {
+  "address": "0x00520F1C",
+  "name": "maybe_Fx_EmitParticlesSphere",
+  "signature": "float maybe_Fx_EmitParticlesSphere(float* emitter)",
+  "params": {
+   "emitter": "emitter object (radius field +0x26C)"
+  },
+  "summary": "Spherical shell emission: computes a random radius with 'sqrt((1 - r) + r^2*(1 - r))' so particles land on the emitter's sphere surface, then builds the quad.",
+  "confidence": 0.4,
+  "evidence": "'fVar15 = fVar15*fVar13 + fVar17*fVar17*(fVar24 - fVar15*fVar13)' then 'if (fVar11 < fVar15) fVar3 = SQRT(fVar15)'; random table g_005212C0; same skeleton as 0x0052060C."
+ },
+ {
+  "address": "0x005212F0",
+  "name": "maybe_Fx_EmitParticlesOriented",
+  "signature": "float maybe_Fx_EmitParticlesOriented(float* emitter)",
+  "params": {
+   "emitter": "emitter object (Euler angles at +0x274/+0x278/+0x27C, radius +0x26C)"
+  },
+  "summary": "Full oriented emission: builds a 4x4 rotation matrix from the three stored angles, converts it to the quaternion-style local basis, optionally rotates the particle direction with 0x0012551C and writes the quad. Supports an alternate 'flip' path selected by the byte at +0x182.",
+  "confidence": 0.4,
+  "evidence": "Quaternion construction from f_274/f_278/f_27C around g_00521610..0x5219E4, call func_0012551C(&local_74,&local_b0,&local_80), flag byte f_182 chooses two different scale/rotation paths; largest emission variant (0x8F8 bytes)."
+ },
+ {
+  "address": "0x00521BE8",
+  "name": "maybe_Fx_EmitParticlesCone",
+  "signature": "float maybe_Fx_EmitParticlesCone(float* emitter)",
+  "params": {
+   "emitter": "emitter object (cone radius +0x26C)"
+  },
+  "summary": "Cone emission: the radial factor is 'r + (1-r)*(1 - distance^2)' producing a density that falls off towards the cone base, then the standard quad build.",
+  "confidence": 0.4,
+  "evidence": "'fVar18 = fVar18*fVar15 + fVar20*fVar20*(fVar26 - fVar18*fVar15)' followed by 'sqrt(fVar18)'; random table g_00521FCC; same 0x51Fxxx/0x520xxx emission skeleton."
+ },
+ {
+  "address": "0x00521FFC",
+  "name": "Fx_UpdateParticleTarget",
+  "signature": "float* Fx_UpdateParticleTarget(int self, int particle, float* keyframe)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record (velocity at +0x24..+0x2C, target at +0x0C..+0x14)",
+   "keyframe": "6-float keyframe block; returns the next block"
+  },
+  "summary": "Applies one keyframe of the particle's steering target: each enabled axis (mask in keyframe[4]) eases the velocity towards the target position, either in object space or (when the emitter has a transform at f_CC) in world space after matrix multiply/inverse.",
+  "confidence": 0.5,
+  "evidence": "Mask tests 'fVar1 & 1/2/4'; 'arg2->f_24 = arg2->f_24 + *arg3 * ((target - arg2->f_c) - arg2->f_24) * in_s0'; func_001252E8/func_0012551C used for the transformed branch; returns arg3+6. Five callers in this batch."
+ },
+ {
+  "address": "0x00522274",
+  "name": "Fx_AddParticleOffset",
+  "signature": "u32* Fx_AddParticleOffset(int self, int particle, u32* data)",
+  "params": {
+   "self": "emitter object (offset table index at +0x88)",
+   "particle": "particle record",
+   "data": "4-word block; returns the next block"
+  },
+  "summary": "Adds a table-driven offset to the particle's position: reads the next entry of the 12-byte offset table at g_005222FC (index at self+0x88) and scales it by the three values in the parameter block.",
+  "confidence": 0.5,
+  "evidence": "func_0011CD80 (a pointer/key test on arg2+4/*arg3); index 'f88 = self->f_88++' & 0xFFFF01FF into (g_005222FC + idx*0xC); arg2->f_24 += v0*arg3[1] etc.; returns arg3+4. Five callers in this batch."
+ },
+ {
+  "address": "0x00522300",
+  "name": "maybe_Fx_EmitParticlesArc",
+  "signature": "float maybe_Fx_EmitParticlesArc(float* emitter)",
+  "params": {
+   "emitter": "emitter object (spawn count arg1[0x8C])"
+  },
+  "summary": "Arc emission: spaces the particles evenly along an arc by stepping an angle with '1/(count-1)' and emits them along the rotating axis; a single particle falls back to the base angle.",
+  "confidence": 0.4,
+  "evidence": "'fVar13 = g_005225A4' for one particle else 'fVar24 / (iVar10 - 1)'; angle steps fVar15 += fVar13; only +0x14 is written (planar arc); table g_005225A8."
+ },
+ {
+  "address": "0x005225E8",
+  "name": "maybe_Fx_UpdateParticleScaleFromKeyframe",
+  "signature": "short* maybe_Fx_UpdateParticleScaleFromKeyframe(int self, u32* particle, short* keyframe)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record with orientation at +0x0C.. and scale/rotation at +0x24..",
+   "keyframe": "6-halfword keyframe; returns the next one"
+  },
+  "summary": "Keyframe player for a particle's scale/rotation: keeps the maximum value seen, and on the '1' key either negates a scale component or rebuilds the orientation by composing the keyframed rotation with the current basis.",
+  "confidence": 0.45,
+  "evidence": "(float)arg2[4] compared with the keyframe value, '*arg2 == 0/1' branches; func_0012551C/func_001252E8 matrix compose; writes arg2[9]/[10]/[0xB]; returns arg3+6."
+ },
+ {
+  "address": "0x005227C8",
+  "name": "maybe_Fx_EmitParticlesRandomB",
+  "signature": "float maybe_Fx_EmitParticlesRandomB(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Emission variant combining one RNG draw, a square root and the shared quad builder; differs from 0x0051F5B8 in the field set it initialises (uses the 0x005227C4 distance bias).",
+  "confidence": 0.3,
+  "evidence": "One func_00125034, one SQRT, per-particle func_0051D5F0; constant g_005227C4 used as an epsilon/bias; same arg1[0x8C] spawn loop as the other variants."
+ },
+ {
+  "address": "0x00522BA8",
+  "name": "maybe_Fx_EmitParticlesRandomOrientedB",
+  "signature": "float maybe_Fx_EmitParticlesRandomOrientedB(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Second random-orientation emission variant: one RNG draw plus a matrix multiply (0x0012551C) and two square roots; writes orientation-related fields on the particle.",
+  "confidence": 0.3,
+  "evidence": "func_00125034 (1 call), func_0012551C (1 call), two SQRT terms; per-particle func_0051D5F0."
+ },
+ {
+  "address": "0x00523184",
+  "name": "maybe_Fx_UpdateParticlePosition",
+  "signature": "int* maybe_Fx_UpdateParticlePosition(int self, int particle, int* keyframe)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record (position +0x0C..+0x14)",
+   "keyframe": "keyframe block; returns the next one"
+  },
+  "summary": "Keyframe-driven position update: for keyframe type 0 it eases the position towards the target with the frame delta, for other types it rebuilds the position through the object/world matrix.",
+  "confidence": 0.45,
+  "evidence": "'arg2->f_c = arg2->f_c + fVar1*((float)arg3[1]-arg2->f_c)*in_s0' when *arg3==0; func_001252E8/func_0012551C in the other branch; returns arg3+0x? (int*); four callers in this batch."
+ },
+ {
+  "address": "0x005232C8",
+  "name": "maybe_Fx_EmitParticlesRandomOrientedC",
+  "signature": "float maybe_Fx_EmitParticlesRandomOrientedC(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Third random-orientation emission variant (one RNG draw, one matrix multiply, two square roots); the 0x4FC-byte body differs from 0x00522BA8 in which particle fields it inherits from the emitter.",
+  "confidence": 0.3,
+  "evidence": "Same helper mix as 0x00522BA8 (func_00125034, func_0012551C, SQRT), 0x4FC bytes, per-particle func_0051D5F0."
+ },
+ {
+  "address": "0x005237C4",
+  "name": "maybe_Fx_UpdateParticleListA",
+  "signature": "void maybe_Fx_UpdateParticleListA(int self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Per-particle update used by one emitter type: looks up the emitter's transform/keyframes (0x5219E8, 0x521FFC, 0x5221BC) and integrates position, steering and scale for the particle.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0011CD80, 0x0011CFAC, 0x005219E8, 0x00521FFC, 0x005221BC; two callers (0x0052D010, 0x0052DF78) and shares the 0x521FFC/0x5221BC keyframe appliers with the other list updaters."
+ },
+ {
+  "address": "0x00523D0C",
+  "name": "maybe_Fx_UpdateParticleListB",
+  "signature": "void maybe_Fx_UpdateParticleListB(int self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Second per-particle update variant; drives the transform helpers directly without the 0x5219E8 setup step, used by two emitter types.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0011CD80 and 0x0011CFAC only; callers 0x0052BBC4 and 0x0052BE8C which are themselves list updaters."
+ },
+ {
+  "address": "0x0052413C",
+  "name": "maybe_Fx_UpdateParticleListC",
+  "signature": "void maybe_Fx_UpdateParticleListC(int self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record (transform cache at +0x140)"
+  },
+  "summary": "Per-particle update that first refreshes the cached transform via 0x005254FC and then applies the emitter's scale/rotation fields to the particle.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005254FC; reads arg2[0x50], self->f_DC and g_0052438C; callers 0x0052C58C and 0x0052C6AC."
+ },
+ {
+  "address": "0x00524390",
+  "name": "maybe_Fx_UpdateParticleListD",
+  "signature": "void maybe_Fx_UpdateParticleListD(int self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Per-particle update that combines the keyframe appliers (0x521FFC/0x5221BC) with the emitter-state helper 0x520EA0 and the transform refresh 0x5219E8.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0011CD80, 0x0011CFAC, 0x00520EA0, 0x005219E8, 0x00521FFC; callers 0x0052CD5C and 0x0052DC28."
+ },
+ {
+  "address": "0x005248B0",
+  "name": "maybe_Fx_UpdateParticleFlagsA",
+  "signature": "void maybe_Fx_UpdateParticleFlagsA(void)",
+  "params": {},
+  "summary": "Thin wrapper that invokes the particle state-applier 0x0052E08C with a single particle; exists so a function-table slot can pass one argument only.",
+  "confidence": 0.4,
+  "evidence": "Body is one call to 0x0052E08C; three wrappers in this batch (0x005248B0, 0x005248C0, 0x00524B14) call the same applier."
+ },
+ {
+  "address": "0x005248C0",
+  "name": "maybe_Fx_UpdateParticleFlagsB",
+  "signature": "void maybe_Fx_UpdateParticleFlagsB(void)",
+  "params": {},
+  "summary": "Second wrapper around the particle state-applier 0x0052E08C (0x40-byte body, adds one more argument).",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0052E08C; 0x40 bytes; pair of 0x005248B0."
+ },
+ {
+  "address": "0x00524900",
+  "name": "maybe_Fx_UpdateParticleColorA",
+  "signature": "void maybe_Fx_UpdateParticleColorA(int self)",
+  "params": {
+   "self": "particle record (colour words at +0x340/+0x342, cached transform at +0x144)"
+  },
+  "summary": "Recomputes the particle's packed colour from the emitter colour and the particle's alpha/lifetime fields, marking the render data dirty.",
+  "confidence": 0.35,
+  "evidence": "Reads self->f_144, f_340/f_342, uses func_0011CD80/func_0011CFAC pointer tests and int->float conversions; no callees besides those."
+ },
+ {
+  "address": "0x00524A10",
+  "name": "maybe_Fx_UpdateParticleColorB",
+  "signature": "void maybe_Fx_UpdateParticleColorB(int self)",
+  "params": {
+   "self": "particle record (same colour fields as 0x00524900)"
+  },
+  "summary": "Variant of 0x00524900 that scales the colour by the emitter's per-frame blend factor (in_s0) before writing the packed value.",
+  "confidence": 0.35,
+  "evidence": "Same f_340/f_342/f_144 field set plus 'self->f_80 + f374 * in_s0' arithmetic; pairs with 0x00524900."
+ },
+ {
+  "address": "0x00524B14",
+  "name": "maybe_Fx_SetParticleFlags",
+  "signature": "void maybe_Fx_SetParticleFlags(u32 particle)",
+  "params": {
+   "particle": "particle record"
+  },
+  "summary": "Applies both particle state groups by calling 0x0052E08C twice with mode 0 and 1.",
+  "confidence": 0.45,
+  "evidence": "Body: func_0052E08C(arg1, 0); func_0052E08C(arg1, 1);."
+ },
+ {
+  "address": "0x00524B74",
+  "name": "Fx_IntegrateParticleVelocity",
+  "signature": "void Fx_IntegrateParticleVelocity(int self)",
+  "params": {
+   "self": "particle record (position +0x48, velocity +0x54, then calls the state applier)"
+  },
+  "summary": "Simple Euler integration of the particle position from its velocity using the frame delta (float register s0), then applies the particle state flags.",
+  "confidence": 0.5,
+  "evidence": "self->f_48/4C/50 += self->f_54/58/5C * in_s0; then func_0052E08C(self, 1)."
+ },
+ {
+  "address": "0x00524C68",
+  "name": "maybe_Fx_CopyEmitterBaseTransform",
+  "signature": "void maybe_Fx_CopyEmitterBaseTransform(int self)",
+  "params": {
+   "self": "particle record (copies from the emitter at f_150 into f_E8..f_138)"
+  },
+  "summary": "Copies the emitter's base transform triplets (position/rotation/scale from f_150->f_34/44/54/74/84) into the particle's cached transform slots, after refreshing the source with 0x005254FC.",
+  "confidence": 0.45,
+  "evidence": "func_005254FC(); then self->f_118 = *(u32*)(f150+100); f_128 = f_74; f_138 = f_84; f_E8 = f_34; f_F8 = f_44; f_108 = f_54."
+ },
+ {
+  "address": "0x00524D20",
+  "name": "maybe_Fx_CopyEmitterBaseTransformScaled",
+  "signature": "void maybe_Fx_CopyEmitterBaseTransformScaled(int self)",
+  "params": {
+   "self": "particle record"
+  },
+  "summary": "Same copy as 0x00524C68 but first multiplies the particle's scale by the emitter's blend factor 'f_300 + (1 - f_300)*(1 - in_s0)', so a fading particle inherits a shrunken base transform.",
+  "confidence": 0.45,
+  "evidence": "'fVar2 = f_144->f_300; fVar2 = fVar2 + (g_00524DA8 - fVar2)*(g_00524DA8 - in_s0)'; self->f_24/28/2C *= fVar2; then the identical f_118..f_108 copy."
+ },
+ {
+  "address": "0x00524DAC",
+  "name": "maybe_Fx_EmitParticlesRadialC",
+  "signature": "u32 maybe_Fx_EmitParticlesRadialC(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Radial emission variant driven by the emitter's lifetime accumulator; computes a random radius and writes the particle quad (returns an integer status rather than a float).",
+  "confidence": 0.3,
+  "evidence": "Two SQRT terms, per-particle func_0051D5F0, arg1[0x8C] spawn accumulator; 0x434 bytes; sibling of 0x0052060C/0x00520F1C."
+ },
+ {
+  "address": "0x005251E0",
+  "name": "maybe_Fx_EmitParticlesRadialD",
+  "signature": "float maybe_Fx_EmitParticlesRadialD(float* emitter)",
+  "params": {
+   "emitter": "emitter object"
+  },
+  "summary": "Another radial emission variant; one square root per particle and a different RNG table, used by an emitter type whose distribution is a flat disc.",
+  "confidence": 0.3,
+  "evidence": "One SQRT, per-particle func_0051D5F0, 0x2B4 bytes; same field skeleton as the other 0x52xxxx emitters."
+ },
+ {
+  "address": "0x0052570C",
+  "name": "maybe_Fx_InitRandomState",
+  "signature": "int maybe_Fx_InitRandomState(int state)",
+  "params": {
+   "state": "RNG state object (words at +0x00/+0x04)"
+  },
+  "summary": "Initialises the emitter RNG state from the globals at 0x005257C0/0x005257C4 and reseeds when the object is not yet marked initialised.",
+  "confidence": 0.45,
+  "evidence": "g_005257C0/0x005257C4 are the two state globals; '*(int*)(arg1+4) = g_005257C0[2]; if (arg1->f_14 == 0) ...'; called from five list updaters."
+ },
+ {
+  "address": "0x005257E8",
+  "name": "maybe_Fx_UpdateParticleListE",
+  "signature": "void maybe_Fx_UpdateParticleListE(float* self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Per-particle update for one emitter type: refreshes the random state (0x0052570C), applies the keyframes/steering and integrates the particle.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0011CD80, 0x0011CFAC, 0x005219E8, 0x00521FFC, 0x005221BC; 0x688 bytes; sole caller 0x0052D010."
+ },
+ {
+  "address": "0x00525E70",
+  "name": "maybe_Fx_UpdateParticleListF",
+  "signature": "void maybe_Fx_UpdateParticleListF(float* self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Per-particle update that recomputes the particle's normal/colour through 0x0052B9D0 and then applies the state changes with 0x0052E4AC.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0052B9D0 and 0x0052E4AC; 0x6E4 bytes; sole caller 0x0052BBC4."
+ },
+ {
+  "address": "0x00526554",
+  "name": "maybe_Fx_UpdateParticleListG",
+  "signature": "void maybe_Fx_UpdateParticleListG(int self, float dt, float* particle, float scale)",
+  "params": {
+   "self": "emitter object",
+   "dt": "frame delta",
+   "particle": "particle record",
+   "scale": "extra scale"
+  },
+  "summary": "Per-particle update variant taking an explicit delta/scale pair: reseeds the RNG, applies keyframes and emitter state, and calls the state applier 0x0052E918.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x00125640, 0x00520EA0, 0x005219E8, 0x00521FFC, 0x005221BC, 0x0052E918; four callers in this batch."
+ },
+ {
+  "address": "0x00526814",
+  "name": "maybe_Fx_UpdateParticlesInline",
+  "signature": "void maybe_Fx_UpdateParticlesInline(void)",
+  "params": {},
+  "summary": "Interior of the particle update code at 0x5268xx that Ghidra recorded as a separate entry point; the instruction stream is valid ARM but starts after an MRC/VFP sequence it could not model, so the decompiled C is only 'coprocessor_movefromRt + halt_baddata'.",
+  "confidence": 0.25,
+  "evidence": "asm 0x00526814: ldr fp,[r2,#0x548]; vldmia sl,{s16,s17}; vmul.f32 ...; tst fp,#0x8000; beq 0x526984 -- normal VFP particle maths, so the entry is inside a real function (0x724 bytes attributed to it)."
+ },
+ {
+  "address": "0x00526F38",
+  "name": "maybe_Fx_UpdateParticleListH",
+  "signature": "void maybe_Fx_UpdateParticleListH(float* self, float* particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Per-particle update that applies the emitter state (0x520EA0), keyframes and the additional offset helper 0x522274.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x00520EA0, 0x005219E8, 0x00521FFC, 0x005221BC, 0x00522274; 0x820 bytes; sole caller 0x0052CD5C."
+ },
+ {
+  "address": "0x00527758",
+  "name": "maybe_Fx_SetParticleTransform",
+  "signature": "void maybe_Fx_SetParticleTransform(u32 unused, int* particleRef, u32* values)",
+  "params": {
+   "unused": "unused",
+   "particleRef": "word holding the particle record",
+   "values": "source transform triple"
+  },
+  "summary": "Writes a particle transform from a 3-word source: copies the position triple to +0x60/+0x64 and marks the particle for the batch counter update (0x52E35C/0x52E3C8).",
+  "confidence": 0.4,
+  "evidence": "iVar1 = *arg2; iVar1->f_60 = arg3[2]; *(u32*)(iVar1+0x64) = arg3[1]; calls 0x0052E35C and 0x0052E3C8; 0x8F8 bytes (the body is mostly the copy loop)."
+ },
+ {
+  "address": "0x00528050",
+  "name": "maybe_Fx_ResetParticleTransform",
+  "signature": "void maybe_Fx_ResetParticleTransform(u32 unused, u32 unused2, int* particleRef)",
+  "params": {
+   "unused": "unused",
+   "unused2": "unused",
+   "particleRef": "word holding the particle record"
+  },
+  "summary": "Clears the particle's transform-valid word at +0x6C and notifies the batch bookkeeping (0x52E3C8/0x52E35C).",
+  "confidence": 0.45,
+  "evidence": "*(u32*)(*arg3 + 0x6C) = 0; func_0052E3C8(); func_0052E35C()."
+ },
+ {
+  "address": "0x005280A8",
+  "name": "maybe_Fx_UpdateParticleListI",
+  "signature": "int maybe_Fx_UpdateParticleListI(int self, int particle, int keyframe, int flags)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record",
+   "keyframe": "keyframe data",
+   "flags": "update flags"
+  },
+  "summary": "Per-particle update that walks the particle's children, applies the keyframe/sprite helpers (0x005287F0, 0x0052943C) and updates the state through 0x0052E918.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x00125640, 0x005287F0, 0x0052943C, 0x0052E918, 0x0053075C; 0x6A8 bytes; sole caller 0x0052CD5C."
+ },
+ {
+  "address": "0x00528750",
+  "name": "maybe_Fx_SetParticleRotation",
+  "signature": "void maybe_Fx_SetParticleRotation(u32 unused, int* particleRef, u32* values)",
+  "params": {
+   "unused": "unused",
+   "particleRef": "word holding the particle record",
+   "values": "2-word rotation source"
+  },
+  "summary": "Writes the particle's rotation/counter fields (+0x68 and +0x60) from a two-word source and updates the batch counter.",
+  "confidence": 0.45,
+  "evidence": "iVar1->f_68 = *arg3; iVar1->f_60 = arg3[2]; calls 0x0052E3C8 and 0x0052E35C."
+ },
+ {
+  "address": "0x005287B4",
+  "name": "maybe_Fx_ApplyParticleRotation",
+  "signature": "void maybe_Fx_ApplyParticleRotation(int self)",
+  "params": {
+   "self": "particle record (source fields +0x3C/+0x40/+0x44)"
+  },
+  "summary": "Copies the particle's stored rotation into the shared transform object at 0x005287EC (+0x60/+0x64) and refreshes the batch state.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = *g_005287EC; iVar1->f_60 = self->f_44; *(u32*)(iVar1+0x64) = self->f_40; calls 0x0052E3C8 and 0x0052E784."
+ },
+ {
+  "address": "0x0052899C",
+  "name": "maybe_Fx_UpdateParticleListJ",
+  "signature": "float maybe_Fx_UpdateParticleListJ(int self, float dt, float* particle, float* extra)",
+  "params": {
+   "self": "emitter object",
+   "dt": "frame delta",
+   "particle": "particle record",
+   "extra": "additional scale/colour source"
+  },
+  "summary": "Largest per-particle update variant: integrates the particle, resolves the parent transform (0x0011CD80/0x00125640) and applies the sprite helpers 0x0052973C/0x0052E918.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x0011CD80, 0x00125640, 0x0052973C, 0x0052E918, 0x0053075C; 0xAA0 bytes; sole caller 0x0052CD5C."
+ },
+ {
+  "address": "0x0052943C",
+  "name": "maybe_Fx_UpdateParticleSprite",
+  "signature": "void maybe_Fx_UpdateParticleSprite(u32 self, u32* particle, int keyframe, float* colour, int a5, int a6, int a7)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record",
+   "keyframe": "keyframe index",
+   "colour": "colour source",
+   "a5": "flag",
+   "a6": "flag",
+   "a7": "flag"
+  },
+  "summary": "Sprite/particle animation update: looks the animation step up via 0x00659358 and writes the resulting UV/scale into the particle; called from the big list updater 0x005280A8.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x00659358 (outside this range, unnamed), reads f_150, float fields; seven parameters; sole caller 0x005280A8."
+ },
+ {
+  "address": "0x00529714",
+  "name": "maybe_Fx_ResetParticleSprite",
+  "signature": "void maybe_Fx_ResetParticleSprite(u32 unused, u32 unused2, int* particleRef)",
+  "params": {
+   "unused": "unused",
+   "unused2": "unused",
+   "particleRef": "word holding the particle record"
+  },
+  "summary": "Clears the particle's sprite-valid word at +0x6C and refreshes the batch bookkeeping (0x52E3C8/0x52E784).",
+  "confidence": 0.45,
+  "evidence": "*(u32*)(*arg3 + 0x6C) = 0; func_0052E3C8(); func_0052E784(arg1)."
+ },
+ {
+  "address": "0x0052973C",
+  "name": "maybe_Fx_UpdateParticleSpriteB",
+  "signature": "void maybe_Fx_UpdateParticleSpriteB(u32 self, u32* particle, int keyframe, float* colour, int a5, int a6, int a7)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record",
+   "keyframe": "keyframe index",
+   "colour": "colour source",
+   "a5": "flag",
+   "a6": "flag",
+   "a7": "flag"
+  },
+  "summary": "Second sprite/animation update path used by the largest list updater (0x0052899C); same seven-parameter shape as 0x0052943C and the same 0x00659358 lookup.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x00659358; sole caller 0x0052899C; 0x324 bytes."
+ },
+ {
+  "address": "0x00529A60",
+  "name": "maybe_Fx_SetParticleSpriteFromNode",
+  "signature": "void maybe_Fx_SetParticleSpriteFromNode(int self)",
+  "params": {
+   "self": "particle record (fields +0x3C/+0x40/+0x44)"
+  },
+  "summary": "Copies the particle's sprite/rotation triple into the shared node at 0x00529AA0 and refreshes the batch state.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = *g_00529AA0; iVar1->f_68 = self->f_3C; iVar1->f_60 = self->f_44; calls 0x0052E3C8/0x0052E784."
+ },
+ {
+  "address": "0x0052B9D0",
+  "name": "maybe_Fx_ComputeParticleNormal",
+  "signature": "void maybe_Fx_ComputeParticleNormal(float* emitter, float* particle, int a3, int a4)",
+  "params": {
+   "emitter": "emitter object",
+   "particle": "particle record",
+   "a3": "forwarded",
+   "a4": "forwarded"
+  },
+  "summary": "Computes the particle's facing normal from its position relative to the emitter (pointer test via 0x0011CD80/0x0011CFAC and a normalisation), used by the billboard/quad writers.",
+  "confidence": 0.45,
+  "evidence": "Uses func_0011CD80/func_0011CFAC on the first two words; float maths on the emitter fields; three callers (0x00525E70, 0x00526554, 0x00526F38)."
+ },
+ {
+  "address": "0x0052BBC4",
+  "name": "maybe_Fx_UpdateParticleListL",
+  "signature": "u32 maybe_Fx_UpdateParticleListL(int self, u32 arg2, int particle, int a4, u32 a5)",
+  "params": {
+   "self": "emitter object",
+   "arg2": "unused/forwarded",
+   "particle": "particle record",
+   "a4": "forwarded",
+   "a5": "forwarded"
+  },
+  "summary": "List updater for one emitter type: clears the '+0x284' counter, calls the per-particle normal/state helpers and walks the active list.",
+  "confidence": 0.4,
+  "evidence": "arg3->f_284 = 0; func_00527738(arg1+4); iterates arg3->f_E0 calling 0x00523D0C, 0x0052570C, 0x00525E70, 0x00526554 and finishing with 0x005209DC; no callers in decomp/readable."
+ },
+ {
+  "address": "0x0052BE8C",
+  "name": "maybe_Fx_UpdateParticleListM",
+  "signature": "void maybe_Fx_UpdateParticleListM(u32 self, int particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Simplified list updater: walks the active list and applies 0x00523D0C, stopping early when the emitter flag 0x400 is set; decrements the list counters with 0x005209DC.",
+  "confidence": 0.4,
+  "evidence": "if ((*(u16*)(arg2->f_DC+4) & 0x400) == 0) while (iVar1) { if (*(int*)(iVar1+4) < *(int*)(iVar1+8)) func_00523D0C(...); }; calls 0x005209DC."
+ },
+ {
+  "address": "0x0052C58C",
+  "name": "maybe_Fx_UpdateParticleListN",
+  "signature": "u32 maybe_Fx_UpdateParticleListN(int self, u32 arg2, int particle, int a4, u32 a5)",
+  "params": {
+   "self": "emitter object",
+   "arg2": "unused/forwarded",
+   "particle": "particle record",
+   "a4": "forwarded",
+   "a5": "forwarded"
+  },
+  "summary": "List updater variant that combines the 0x0052413C/0x0052570C per-particle helpers with 0x00526B98 and the 0x00526554 emitter update.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005209DC, 0x0052413C, 0x0052570C, 0x00526554, 0x00526B98; clears arg3->f_284; no callers in decomp/readable."
+ },
+ {
+  "address": "0x0052C6AC",
+  "name": "maybe_Fx_UpdateParticleListO",
+  "signature": "void maybe_Fx_UpdateParticleListO(u32 self, int particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Minimal list updater: walks the active list calling 0x0052413C for each eligible particle and counts the processed entries in +0x284.",
+  "confidence": 0.4,
+  "evidence": "arg2->f_284 = 0; while (iVar1) { if (*(int*)(iVar1+4) < *(int*)(iVar1+8)) { func_0052413C(arg2,iVar1); arg2->f_284++; } }; final 0x005209DC."
+ },
+ {
+  "address": "0x0052C728",
+  "name": "maybe_Fx_UpdateParticleListP",
+  "signature": "void maybe_Fx_UpdateParticleListP(int self, float* particle, int arg3)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record",
+   "arg3": "update mode"
+  },
+  "summary": "Heavyweight list update used by the two main emitter tick paths: allocates/updates particles via 0x0052D1E0, reseeds the RNG (0x001252C8, 0x0051B244) and notifies 0x006731EC on error.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x0010009C, 0x001252C8, 0x0051B244, 0x0052D1E0, 0x006731EC; 0x634 bytes; callers 0x0052CD5C and 0x0052DC28."
+ },
+ {
+  "address": "0x0052CD5C",
+  "name": "maybe_Fx_UpdateParticleListQ",
+  "signature": "u32 maybe_Fx_UpdateParticleListQ(int self, u32 arg2, int particle, int a4, u32 a5)",
+  "params": {
+   "self": "emitter object",
+   "arg2": "unused/forwarded",
+   "particle": "particle record",
+   "a4": "forwarded",
+   "a5": "forwarded"
+  },
+  "summary": "Dispatcher-style list updater: selects one of the per-particle helpers by the particle's type/subtype and drives the main update (0x0052C728); the common entry used by several emitter types.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005209DC, 0x00524390, 0x0052570C, 0x00526554, 0x00526F38, 0x005280A8, 0x0052899C and 0x0052C728; the only function in the batch that reaches all of them."
+ },
+ {
+  "address": "0x0052D010",
+  "name": "maybe_Fx_UpdateParticleListR",
+  "signature": "u32 maybe_Fx_UpdateParticleListR(int self, u32 arg2, int particle, int a4, u32 a5)",
+  "params": {
+   "self": "emitter object",
+   "arg2": "unused/forwarded",
+   "particle": "particle record",
+   "a4": "forwarded",
+   "a5": "forwarded"
+  },
+  "summary": "List updater built around 0x005257E8 and 0x005237C4; drives the transform/keyframe path for its emitter type.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005237C4, 0x0052570C, 0x005257E8, 0x00526554, 0x00527738; clears f_284; no callers in decomp/readable."
+ },
+ {
+  "address": "0x0052D1E0",
+  "name": "maybe_Fx_UpdateParticleListS",
+  "signature": "void maybe_Fx_UpdateParticleListS(float dt, int particle)",
+  "params": {
+   "dt": "frame delta (register s0)",
+   "particle": "particle record"
+  },
+  "summary": "Largest list update (0xA48 bytes): walks the particle's children, advances the sprite animation and integrates each child with the frame delta; aborts through 0x0010009C on corrupt data.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0010009C, 0x0011CD80, 0x0051D5A8, 0x00530798; sole caller 0x0052C728; 26 references to '0x16' field offsets = many particle sub-records."
+ },
+ {
+  "address": "0x0052DC28",
+  "name": "maybe_Fx_UpdateParticleListT",
+  "signature": "void maybe_Fx_UpdateParticleListT(u32 self, int particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "List update that reuses the main updater 0x0052C728 for each particle and re-applies 0x00524390; also reached from 0x0052CD5C.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005209DC, 0x00524390, 0x0052C728; no callers in decomp/readable but part of the same dispatcher family."
+ },
+ {
+  "address": "0x0052DF78",
+  "name": "maybe_Fx_UpdateParticleListU",
+  "signature": "void maybe_Fx_UpdateParticleListU(u32 self, int particle)",
+  "params": {
+   "self": "emitter object",
+   "particle": "particle record"
+  },
+  "summary": "Small list update that only calls the per-particle helper 0x005237C4 for the active list; used when an emitter has no extra keyframe work.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x005237C4 only; 0x114 bytes; no callers in decomp/readable."
+ },
+ {
+  "address": "0x0052E08C",
+  "name": "maybe_Fx_ApplyParticleState",
+  "signature": "void maybe_Fx_ApplyParticleState(int particle, int mode)",
+  "params": {
+   "particle": "particle record",
+   "mode": "0 = visible/size state, 1 = colour/alpha state"
+  },
+  "summary": "Applies one group of particle render flags: refreshes the cached transform (0x0011CD80) and writes the packed state words selected by mode.",
+  "confidence": 0.4,
+  "evidence": "Two-mode switch inside the 0x2C0-byte body, calls 0x0011CD80 and reads f_144; four wrappers call it (0x005248B0, 0x005248C0, 0x00524B14, 0x00524B34)."
+ },
+ {
+  "address": "0x0052E35C",
+  "name": "Fx_AdvanceEmitterFrame",
+  "signature": "void Fx_AdvanceEmitterFrame(void)",
+  "params": {},
+  "summary": "Advances the global emitter frame counter at 0x0052E3C0 (increment, reset every 8 steps) and refreshes the shared transform cache.",
+  "confidence": 0.5,
+  "evidence": "piVar1 = g_0052E3C0; iVar2 = g_0052E3C0[1]; g_0052E3C0[1] = iVar2 + 1; if (iVar2 + 1 == 8) { iVar2 = *piVar1; ... }; calls 0x00125640."
+ },
+ {
+  "address": "0x0052E4AC",
+  "name": "maybe_Fx_ApplyParticleStateAlt",
+  "signature": "void maybe_Fx_ApplyParticleStateAlt(int particle, int mode)",
+  "params": {
+   "particle": "particle record",
+   "mode": "state group"
+  },
+  "summary": "Second copy of the particle state applier (same 0x2C0-byte shape as 0x0052E08C, different target fields); called by 0x00525E70/0x00526554/0x00526F38.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0011CD80; same mode dispatch and 4x '0x16' offsets as 0x0052E08C."
+ },
+ {
+  "address": "0x0052E76C",
+  "name": "maybe_Fx_BeginParticleBatch",
+  "signature": "void maybe_Fx_BeginParticleBatch(int self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "particle object",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Resets the global batch state at 0x0052E7E4 (counter word cleared) after refreshing the batch helper, i.e. starts a new particle batch.",
+  "confidence": 0.45,
+  "evidence": "func_0052E3C8(); piVar1 = g_0052E7E4; g_0052E7E4[1] = 0; if (piVar1[6] == 0) ...; 0x18 bytes, also reads self->f_814."
+ },
+ {
+  "address": "0x0052E784",
+  "name": "maybe_Fx_EndParticleBatch",
+  "signature": "void maybe_Fx_EndParticleBatch(int self)",
+  "params": {
+   "self": "particle object (f_150->f_F8)"
+  },
+  "summary": "Finishes the current particle batch: clears the global counter at 0x0052E7E4 and flushes the last batch entry through 0x00125640.",
+  "confidence": 0.45,
+  "evidence": "piVar1 = g_0052E7E4; g_0052E7E4[1] = 0; if (piVar1[6] == 0) { iVar2 = self->f_150->f_F8; ... }; calls 0x00125640; three callers."
+ },
+ {
+  "address": "0x0052E918",
+  "name": "maybe_Fx_GetParticleListHead",
+  "signature": "int maybe_Fx_GetParticleListHead(int node, int arg2)",
+  "params": {
+   "node": "list node (+0x04 = next, +0x08 = value)",
+   "arg2": "search value"
+  },
+  "summary": "Returns the list node that owns the requested value: follows the +0x04 link when set, compares +0x08 and otherwise refreshes the batch helper and returns 0.",
+  "confidence": 0.45,
+  "evidence": "iVar2 = *(int*)(arg1+4); iVar1 = arg1; if (iVar2 != 0) iVar1 = *(int*)(arg1+8); if (iVar2 != 0 && iVar1 != 0) ...; calls 0x00125640; three callers."
+ },
+ {
+  "address": "0x0052F7C8",
+  "name": "maybe_Fx_ResetParticleList",
+  "signature": "void maybe_Fx_ResetParticleList(int self, int list)",
+  "params": {
+   "self": "emitter object",
+   "list": "list descriptor (+0x04 count, +0x08 capacity)"
+  },
+  "summary": "Clears a particle list: resets the entries up to the descriptor's count and notifies 0x005306CC/0x00529B50; called from the battle scene draw path (0x0055DC04).",
+  "confidence": 0.4,
+  "evidence": "if (*(int*)(arg2+4) < 1) return; loop 'i < *(int*)(arg2+8)'; calls 0x005209D8, 0x00529B50, 0x005306CC; sole caller 0x0055DC04 = maybe_Gfx_ModelInstance_ReleaseDrawNodesIfUnused (Battle)."
+ },
+ {
+  "address": "0x00530054",
+  "name": "maybe_Thumb_MisidentifiedEntry",
+  "signature": "void maybe_Thumb_MisidentifiedEntry(void)",
+  "params": {},
+  "summary": "Entry point inside a literal-pool/Thumb-data region: the first 0x10 bytes decode as a Thumb push followed by non-code halfwords and the listing only recovers ARM instructions from 0x00530064 on. Almost certainly not a function of its own.",
+  "confidence": 0.15,
+  "evidence": "asm 0x00530054: 'push {r0,r1,r4,r6,lr}' (Thumb) then .short 0xEBFF and two bogus halfwords, followed by '.arm' at 0x00530064; Ghidra reports bad instruction data for the whole 0x2E4 bytes."
+ },
+ {
+  "address": "0x00530338",
+  "name": "maybe_Fx_AllocParticleNode",
+  "signature": "u32* maybe_Fx_AllocParticleNode(int self, int arg2, u32 arg3)",
+  "params": {
+   "self": "particle pool",
+   "arg2": "requested size/type",
+   "arg3": "flags"
+  },
+  "summary": "Allocates one particle node from the pool at 0x0053045C, zero-initialises it and links it into the free/used list; aborts via 0x0010009C when the pool is exhausted.",
+  "confidence": 0.45,
+  "evidence": "iVar2 = g_0053045C; calls 0x0010009C on the error path; writes the returned node's link/type words; sole caller 0x0051D5F0 (the particle render builder)."
+ },
+ {
+  "address": "0x005329E0",
+  "name": "maybe_Fx_BeginBillboardBatch",
+  "signature": "int maybe_Fx_BeginBillboardBatch(u32* self)",
+  "params": {
+   "self": "batch object (cleared, then filled from 0x00532BA0)"
+  },
+  "summary": "Resets a billboard/particle batch object and seeds it from the global at 0x00532BA0, aborting through 0x0010009C if the pool is unavailable.",
+  "confidence": 0.4,
+  "evidence": "*self = 0; self[1] = 0; then reads g_00532BA0 and calls 0x001252C8/0x0051CF40; no callers in decomp/readable."
+ },
+ {
+  "address": "0x00532F44",
+  "name": "maybe_Fx_Billboard_EmitList",
+  "signature": "void maybe_Fx_Billboard_EmitList(int self, u32 count, u32 flags)",
+  "params": {
+   "self": "billboard batch (entry count at +0x08)",
+   "count": "max entries",
+   "flags": "0x70000 mask forwarded to the transform"
+  },
+  "summary": "Walks the batch's entry array and appends each transformed particle/billboard quad through 0x00533DCC; called from the scene draw path (Gfx_SceneObject_CullAndDrawParts, 0x0056572C).",
+  "confidence": 0.45,
+  "evidence": "Loop 'i < *(int*)(self+8)' calling 0x0012515C and 0x00533DCC; callers 0x0056572C (Gfx_SceneObject_CullAndDrawParts) and 0x0057A010."
+ },
+ {
+  "address": "0x0053390C",
+  "name": "Fx_Billboard_TransformPoint",
+  "signature": "void Fx_Billboard_TransformPoint(float* out, float* point, int matrix)",
+  "params": {
+   "out": "destination float triple",
+   "point": "source triple",
+   "matrix": "4x4 matrix (rows at +0x04/+0x14/+0x24)"
+  },
+  "summary": "Transforms one point by the matrix and writes the result into out[0..2] (plus a fourth component), using 0x0051B70C for the per-component multiply-add and 0x0053427C for the projection.",
+  "confidence": 0.5,
+  "evidence": "'local_24 = *arg2*fVar2 + arg2[1]*fVar3 + arg2[2]*fVar4' with fVar2/3/4 = matrix+4/+0x14/+0x24; calls 0x0051B70C and 0x0053427C."
+ },
+ {
+  "address": "0x00533AB4",
+  "name": "Fx_Billboard_TransformVector",
+  "signature": "void Fx_Billboard_TransformVector(float* out, float* vector, int matrix)",
+  "params": {
+   "out": "destination",
+   "vector": "direction",
+   "matrix": "4x4 matrix"
+  },
+  "summary": "Direction-only variant of 0x0053390C: same matrix multiply but the translation column is skipped, so it transforms a vector rather than a point.",
+  "confidence": 0.5,
+  "evidence": "Identical matrix field pattern (+0x04/+0x14/+0x24) as 0x0053390C; uses 0x0051B70C/0x0053427C; called only from 0x00533DCC."
+ },
+ {
+  "address": "0x00533C60",
+  "name": "Fx_Billboard_TransformNormal",
+  "signature": "void Fx_Billboard_TransformNormal(float* normal, int matrix)",
+  "params": {
+   "normal": "normal vector (in/out)",
+   "matrix": "4x4 matrix"
+  },
+  "summary": "Normal transformation for the billboard basis: negates the incoming normal, multiplies by the matrix's upper-left 3x3 and normalises so the sprite faces the camera.",
+  "confidence": 0.5,
+  "evidence": "'local_20 = -arg1[0xB]' plus matrix reads +0x04/+0x14; constant g_00533DC4; called only from 0x00533DCC."
+ },
+ {
+  "address": "0x00533DCC",
+  "name": "maybe_Fx_Billboard_BuildTransform",
+  "signature": "void maybe_Fx_Billboard_BuildTransform(u32 flags, float* out, float* scale, float* matrix, u32 arg5)",
+  "params": {
+   "flags": "0x70000-masked billboard mode",
+   "out": "output vertex data",
+   "scale": "scale triple",
+   "matrix": "source matrix",
+   "arg5": "unused/forwarded"
+  },
+  "summary": "Builds a camera-facing billboard matrix from the source matrix: normalises its three axes with square roots, applies the scale, and emits the transformed point/vector/normal through 0x0053390C/0x00533AB4/0x00533C60.",
+  "confidence": 0.45,
+  "evidence": "arg1 &= 0x70000; three SQRT normalisations of matrix columns (arg4[1]/[5]/[9], [0]/[4]/[8], [2]/[6]/[10]); writes arg2[3..] and calls the four transform helpers plus 0x0053389C/0x00533FE4; sole caller 0x00532F44."
+ },
+ {
+  "address": "0x00534084",
+  "name": "maybe_Fx_Billboard_TransformPointProjected",
+  "signature": "void maybe_Fx_Billboard_TransformPointProjected(float* out, float* point, int matrix)",
+  "params": {
+   "out": "destination",
+   "point": "source triple",
+   "matrix": "4x4 matrix"
+  },
+  "summary": "Point transform that also applies the projection row, producing the screen-space quad corner; same helper pair as 0x0053390C but with the extra perspective divide.",
+  "confidence": 0.45,
+  "evidence": "Same 'fVar2 = *(float*)(arg3+4); fVar3 = arg3->f_14; f24 = arg3->f_24' pattern as 0x0053390C plus the projection term; calls 0x0051B70C/0x0053427C; called only from 0x00533DCC."
+ },
+ {
+  "address": "0x005346B4",
+  "name": "maybe_Fx_Billboard_MeasureBatch",
+  "signature": "int maybe_Fx_Billboard_MeasureBatch(void)",
+  "params": {},
+  "summary": "Measures a batch by summing four 0x0051CF40 size queries (each call advances by +4) and subtracting the 0xC-byte header; result is the entry stride used by the billboard emitter.",
+  "confidence": 0.4,
+  "evidence": "Four chained 'iVar1 = func_0051CF40(iVar1 + 4)' calls then 'return iVar1 - 0xC'; same 0x0051CF40 helper used by 0x005329E0."
+ }
+]

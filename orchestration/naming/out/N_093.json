@@ -1,0 +1,1929 @@
+[
+ {
+  "address": "0x0055828C",
+  "name": "Gfx_CmdBuf_FlushAllState",
+  "signature": "unsigned int* Gfx_CmdBuf_FlushAllState(GfxCmdBuf* self, unsigned int* out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out"
+  },
+  "summary": "Flushes every pending PICA state group held by the command-buffer object: the fixed 9-slot block at +0x88, the 0x10-stride slot range at +0x1f8 and the 0x10-stride slot range at +0x3f8. It then appends a 20-word consecutive block (0x80000000 header, command word 0x000F0227, two count/index words and a 0x40-byte template copied from 0x0072F6A8) and returns the advanced output pointer.",
+  "confidence": 0.5,
+  "evidence": "No callers (called through function pointers); callees std_memcpy 0x00116C10 and FUN_00558210, the known PICA command-list writer. Literals 0x000F0227 and 0x0072F6A8 with a 0x40-byte memcpy. Cursors f_30 (9-slot block at +0x88), f_31/f_32 (slot range at +0x1f8, base command 0x20) and f_33/f_34 (slot range at +0x3f8, base command 0x40) are all reset after use; header uses the 0x80000000 consecutive-block flag."
+ },
+ {
+  "address": "0x005583F8",
+  "name": "Gfx_CmdBuf_FlushMatrixSlots",
+  "signature": "void Gfx_CmdBuf_FlushMatrixSlots(GfxCmdBuf* self, unsigned int* out, unsigned char count)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "count"
+  },
+  "summary": "Emits the pending slice of the 32-slot, 0x10-byte-stride state array at self+0x1f8 (from cursor f_32 up to f_31, base command index cursor+0x20) into the PICA command list, then sets both the start and write cursors to count so the array can be refilled.",
+  "confidence": 0.5,
+  "evidence": "Callee FUN_00558210 (PICA command-list writer) and same caller pair as 0x0055851C/0x00558548 (FUN_00539A2C, FUN_0053AD18). Body: func_00558210(self,out, self+f_32*0x10+0x1f8, f_32+0x20, f_31-f_32) then f_31=arg3, f_32=arg3. Array stride 0x10 (= 4 words) and base offset 0x1f8 match the slot writes seen in FUN_0055877C (slots 0x20-0x24)."
+ },
+ {
+  "address": "0x0055851C",
+  "name": "Gfx_CmdBuf_FlushSlotBlock",
+  "signature": "void Gfx_CmdBuf_FlushSlotBlock(GfxCmdBuf* self, unsigned int* out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out"
+  },
+  "summary": "Emits the fixed 9-slot state block at self+0x88 (base command index 9, count f_30) into the command list and clears the dirty-slot count f_30.",
+  "confidence": 0.55,
+  "evidence": "Callee FUN_00558210; call func_00558210(self,arg2,&self->f_88,9,self->f_30) followed by f_30=0. Same 9-slot block that FUN_0055828C flushes first (also with base index 9), and the same caller pair FUN_00539A2C/FUN_0053AD18 as the neighbouring range flushers."
+ },
+ {
+  "address": "0x00558548",
+  "name": "Gfx_CmdBuf_FlushUniformSlots",
+  "signature": "void Gfx_CmdBuf_FlushUniformSlots(GfxCmdBuf* self, unsigned int* out, unsigned char count)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "count"
+  },
+  "summary": "Emits the pending slice of the 64-slot, 0x10-byte-stride state array at self+0x3f8 (cursor f_34 up to f_33, base command index cursor+0x40) into the command list and rewinds both cursors to count.",
+  "confidence": 0.5,
+  "evidence": "Callee FUN_00558210; call func_00558210(self,arg2, self+f_34*0x10+0x3f8, f_34+0x40, f_33-f_34) then f_33=arg3, f_34=arg3. Parallel structure to 0x005583F8 but on the second, larger array (+0x3f8, base 0x40) that 0x0055828C also flushes; callers FUN_00539A2C/FUN_0053AD18."
+ },
+ {
+  "address": "0x00558584",
+  "name": "Gfx_CmdBuf_SetMatrixBlock",
+  "signature": "void Gfx_CmdBuf_SetMatrixBlock(GfxCmdBuf* self, unsigned int* out, const unsigned int* mtx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "mtx"
+  },
+  "summary": "Copies a 16-word (4x4 float, 0x40-byte) matrix from the source descriptor into the transform block at self+0x38..+0x77 and emits the whole 5-slot block (base command index 0) to the command list, so the transform becomes active.",
+  "confidence": 0.6,
+  "evidence": "Body copies arg3[0..0xf] into f_38..f_74 (16 words = 0x40 bytes, exactly the block FUN_0055877C also fills from puVar2[0..0xf]) then calls func_00558210(self,arg2,&self->f_38,0,5) = 5 slots * 0x10 bytes = 0x50 bytes ending at +0x88. Caller FUN_0053CE64 (80b) is itself a PTRREF vtable slot; callee FUN_00558210."
+ },
+ {
+  "address": "0x00558670",
+  "name": "maybe_Gfx_CopyBlock24",
+  "signature": "void* maybe_Gfx_CopyBlock24(const void* src, void* dst)",
+  "params": {
+   "param_1": "src",
+   "param_2": "dst"
+  },
+  "summary": "Copies a fixed 0x18-byte (24-byte, i.e. 6-word) record from src to dst and returns dst advanced past it; a small fixed-size record writer used when serialising state blocks into an output buffer.",
+  "confidence": 0.35,
+  "evidence": "Only callee is std_memcpy (0x00116C10) with size 0x18, return value is arg2+0x18. No callers and no literal references in the dossier, so the record type is unknown; the placement immediately after the command-buffer block writers (0x0055828C-0x00558584) and the identical structure of 0x00558698 (0x30 bytes) suggest fixed-size record copy helpers."
+ },
+ {
+  "address": "0x00558698",
+  "name": "maybe_Gfx_CopyBlock48",
+  "signature": "void* maybe_Gfx_CopyBlock48(const void* src, void* dst)",
+  "params": {
+   "param_1": "src",
+   "param_2": "dst"
+  },
+  "summary": "Copies a fixed 0x30-byte (48-byte, 12-word) record from src to dst and returns dst advanced past it; the 0x30 size matches the state templates copied from 0x0072F608/0x0072F638 elsewhere in this region.",
+  "confidence": 0.35,
+  "evidence": "Only callee is std_memcpy with size 0x30, returns arg2+0x30. No callers/REFs in the dossier. 0x30-byte blocks are used by 0x0055877C (template g_0072F608) and 0x00558DC0 (template g_0072F638), implying this is the generic copy helper for such 48-byte state records."
+ },
+ {
+  "address": "0x005586BC",
+  "name": "maybe_Gfx_CmdBuf_BuildRampParams",
+  "signature": "void maybe_Gfx_CmdBuf_BuildRampParams(unsigned int* out, unsigned int unused, unsigned int start, unsigned int end)",
+  "params": {
+   "param_1": "out",
+   "param_2": "unused",
+   "param_3": "start",
+   "param_4": "end"
+  },
+  "summary": "Builds a 3-word interpolation descriptor from two packed 8.24 fixed-point endpoints: it compares the 8-bit integer parts, clamps the extreme endpoint, computes 0xFF00/(delta+1) as a quantised step (right-shifted by 2, 3 or 4 and saturating at 0x1FE0), rewrites the start value's integer part and stores (start, end, shift-code | 0x40 when increasing).",
+  "confidence": 0.3,
+  "evidence": "Caller FUN_00539AC4 (same builder that calls the state-template writer 0x00558DC0). Body masks 0xff000000 from both inputs, replaces the exponent/integer byte with 0x08000000 or 0xf7000000 clamps, calls FUN_0011CFAC(0xff00, (delta>>24)+1) (division helper) against literal 0x00001FE0, and writes out[0]=start, out[1]=end, out[2]=shift(2/3/4)|0x40. Literal 0x00001FE0 is the only REF; the exact consumer of this ramp descriptor is unclear, hence maybe_."
+ },
+ {
+  "address": "0x0055877C",
+  "name": "Gfx_CmdBuf_EmitMaterialDraw",
+  "signature": "unsigned int* Gfx_CmdBuf_EmitMaterialDraw(GfxCmdBuf* self, unsigned int* out, int* desc)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "desc"
+  },
+  "summary": "Emits the complete PICA command sequence for drawing one material/pass pair: the 0x30-byte pipeline template (0x0072F548/0x0072F608), the 5-slot transform block, the 3+2 texture-matrix uniform slots at +0x1f8 (scale/offset/rotation derived from the instance fields f_28..f_34 and the short fields f_3c/f_3e), the shader/state blobs (desc->f_c with size f_14, or via 0x005575D0) and then repeats the stage for the second texture unit, returning the advanced output pointer.",
+  "confidence": 0.55,
+  "evidence": "PTRREF slot +0 in two tables (0x00781424 and 0x00781DA0, neighbours 0x005580AC, 0x00558E7C, 0x0053CE64, 0x0053CE08) i.e. a virtual 'emit' method. Literals 0x000200E0, 0x000F02B0, 0x7FFF0005, 0x000F00DB, 0x00200080, 0x7FFF0001, 0x7FFF0000, 0x000F02D6-adjacent templates 0x0072F548/0x0072F608 and float 0x3F800000/0x7FFF0005 flags; writes slots f_228..f_244 (slots 3-4 of the 0x1f8 array) after computing a texture matrix from f_28/f_2c/f_30/f_34 and sign-extended shorts f_3c/f_3e; callees FUN_00558210, FUN_005574F8, FUN_005575D0, FUN_00559B24, FUN_00559C54, std_memcpy."
+ },
+ {
+  "address": "0x00558DC0",
+  "name": "Gfx_CmdBuf_WriteStateTemplate",
+  "signature": "void Gfx_CmdBuf_WriteStateTemplate(unsigned int unused, unsigned int* out, unsigned int mode)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "out",
+   "param_3": "mode"
+  },
+  "summary": "Writes a 48-byte render-state template into the output block by copying the 0x30-byte constant template at 0x0072F638, then patches it for the requested mode (mode 2 clears word 5, mode 2 and 3 set word 6 to 0x0EEF0DFE and word 9 to 0x00010004) and, when bit 0x40 is set, replaces word 0 with 0x0EDE0EEE.",
+  "confidence": 0.5,
+  "evidence": "Caller FUN_00539AC4 (1716-byte draw-state builder, also caller of 0x005586BC). std_memcpy of 0x30 bytes from g_00558e30 (0x0072F638); REFs 0x0EEF0DFE, 0x00010004 and 0x0EDE0EEE; mode test (arg3 & 0xffffffbf) == 2 / == 3 and flag test (arg3 & 0x40). Param 1 is unused in the body."
+ },
+ {
+  "address": "0x00558E4C",
+  "name": "Gfx_CmdBuf_FlushStateBlock",
+  "signature": "int Gfx_CmdBuf_FlushStateBlock(GfxCmdBuf* self, unsigned int* out, unsigned int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "flags"
+  },
+  "summary": "Finishes a state block: if the pending counter f_30 is set it first flushes through 0x0053AD18, then clears the dirty counters (f_31..f_35) and, unless bit 0 is set in flags, copies the object's stored data block (pointer self->f_18, size f_1c) to the output and returns the 4-byte-aligned end pointer.",
+  "confidence": 0.5,
+  "evidence": "Callees std_memcpy and FUN_0053AD18 (the flush routine that in turn is a caller of 0x005583F8/0x0055851C/0x00558548). Body: if (self->f_30) out = FUN_0053AD18(); then f_35=f_31=f_32=f_33=f_34=0; if ((arg3&1)==0) memcpy(out,self->f_18,self->f_1c), out = (f_1c & ~3) + out. Field offsets match 0x00558E84, which is the same tail with the pending-state flush removed."
+ },
+ {
+  "address": "0x00558E84",
+  "name": "maybe_Gfx_CmdBuf_FlushStateBlockData",
+  "signature": "int maybe_Gfx_CmdBuf_FlushStateBlockData(unsigned int* out, unsigned int unused, unsigned int flags, GfxCmdBuf* self)",
+  "params": {
+   "param_1": "out",
+   "param_2": "unused",
+   "param_3": "flags",
+   "param_4": "self"
+  },
+  "summary": "Same tail as 0x00558E4C but without the 0x0053AD18 pending-state flush: it clears the dirty counters of the command-buffer object (passed as the 4th argument) and, unless bit 0 of flags is set, copies the stored data block (f_18, f_1c bytes) to the output, returning the aligned end pointer.",
+  "confidence": 0.45,
+  "evidence": "No callers/REFs. Identical instruction sequence to 0x00558E4C (f_35=f_31=f_32=f_33=f_34=0; memcpy(out, f_18, f_1c); out=(f_1c&~3)+out) but the object arrives in arg4 instead of arg1 and there is no f_30 check or FUN_0053AD18 call, so the register/argument layout differs; exact call-site convention is unclear (hence maybe_)."
+ },
+ {
+  "address": "0x00558EE8",
+  "name": "maybe_Gfx_CmdBuf_EmitStateBlob",
+  "signature": "unsigned int* maybe_Gfx_CmdBuf_EmitStateBlob(GfxCmdBuf* self, unsigned int* out, unsigned int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "flags"
+  },
+  "summary": "When bit 0 of flags is clear, writes an 8-word state header (zeros with command words 0x0002006F and 0x00200080, a 0x1000 field and a 0x00200080-0x150000 offset) and then copies the object's inline blob (pointer at self+8, size self->f_c) into the command stream; finally marks the shader/state flags f_35/f_36 as set and clears the four bytes at +0x5f8.",
+  "confidence": 0.45,
+  "evidence": "Caller FUN_0053CE08 (92b), itself a PTRREF vtable slot; PTRREF at 0x00781D98 has 0x00558EE8 at +0 next to 0x00558E7C (+4), 0x0055877C (+8) and 0x005580AC (+12), i.e. a sibling 'emit' method of the same state class. REFs 0x0002006F and 0x00200080 used as PICA command words; inline memcpy of self->f_c bytes from *(u32*)(self+8); f_35=1, f_36=1, f_5f8..f_5fb=0. What the blob encodes (texture data vs shader code) is not determinable, hence maybe_."
+ },
+ {
+  "address": "0x00558FF4",
+  "name": "Font_SetupTexture",
+  "signature": "void Font_SetupTexture(FontRes* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Re-initialises the font's embedded texture descriptor from the loaded resource: it takes the sub-resource at self[3]+0xc, queries a value through the object's vtable slot +0x7c, and passes the data address, format, width, height, size and flag into the texture-descriptor initialiser 0x0055A2BC.",
+  "confidence": 0.6,
+  "evidence": "Caller Font_LoadBffnt (0x00559D94) - authoritative name. Body: iVar2 = *(int*)(arg1[3]+0xc); uVar1 = (**(code**)(*arg1 + 0x7c))(); func_0055A2BC(arg1+4, 0, iVar2->f_14, *(u16*)(iVar2+10), iVar2->f_10, iVar2->f_12, uVar1, *(u32*)(iVar2+4), 1). Same vtable/dtor family as the Font object created by 0x00559144 (vtable 0x00781DB4)."
+ },
+ {
+  "address": "0x00559144",
+  "name": "Font_Create",
+  "signature": "Font* Font_Create(void)",
+  "params": {},
+  "summary": "Allocates a font object via 0x00559D4C, installs the base vtable 0x00781DB4, zeroes the resource pointers, initialises the embedded texture descriptor to the default (format 8) and stores the constant 0x00002206 in field 9; a conditional block afterwards re-derives the descriptor if a resource were already attached.",
+  "confidence": 0.55,
+  "evidence": "Caller FUN_0055A274 (which then overwrites the vtable) and called from Font_LoadResource; callees 0x00559D4C (object allocator, adjacent to Font_LoadBffnt 0x00559D94) and 0x0055A2BC (texture-descriptor init: func_0055A2BC(result+4,0,0,8,0,0,0,0,1)). PTRREF at 0x00781DB8 shows the vtable installed at 0x00781DB4 with RTTI pointers (0x00663874 typeinfo, 0x0066388C base) - a C++ class vtable. Literal 0x00002206 stored in result[9]."
+ },
+ {
+  "address": "0x00559220",
+  "name": "Font_DestructBase",
+  "signature": "Font* Font_DestructBase(Font* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Base-class destructor body: installs the base vtable 0x00781DB4 and resets the embedded texture descriptor to its empty default (format 8, no data), returning the object.",
+  "confidence": 0.55,
+  "evidence": "No callers listed (reached through function pointer / inlined into the derived destructor). Body: *arg1 = g_00559270 (0x00781DB4); func_0055A2BC(arg1+4,0,0,8,0,0,0,0,1). PTRREF at 0x00781DB8 (-4:0, +0:00559220, +8:0x00663874, +12:0x0066388C) confirms the vtable/RTTI pair of this class and that this function is the vtable's destructor slot."
+ },
+ {
+  "address": "0x0055935C",
+  "name": "maybe_Container_InitPairArray",
+  "signature": "void maybe_Container_InitPairArray(unsigned int* self, unsigned int owner, unsigned int value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "value"
+  },
+  "summary": "Initialises a small descriptor object: stores the two arguments (at +0 and +0xc), zeroes the other header words, then constructs an inline two-element array at +0x18 through std_ConstructArray with element size 4 and constructor 0x0051CF40.",
+  "confidence": 0.3,
+  "evidence": "Callers FUN_00557368 (100b) and FUN_005573E4 (44b) in the 0x00557xxx Gfx helper region (near the matrix/blob emitters 0x005574F8/0x005575D0). Callee std_ConstructArray (0x00100050) with literal ctor 0x0051CF40 and (4,2). Body only sets arg1[0]=arg2, arg1[1]=arg1[2]=arg1[4]=arg1[5]=0, arg1[3]=arg3; the owning class is not identifiable from the dossier (hence maybe_)."
+ },
+ {
+  "address": "0x005593B4",
+  "name": "maybe_Font_EnsureDisplayList",
+  "signature": "void maybe_Font_EnsureDisplayList(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazy one-shot initialiser: if the built-flag at object+0x28 is clear it runs the 2412-byte display-list builder 0x005593E4 and then sets +0x28 = 1 and +0x29 = 0, so the static glyph command list is generated only once.",
+  "confidence": 0.4,
+  "evidence": "Body: if (self->f_28 == 0) { func_005593E4(self); self->f_28 = 1; self->f_29 = 0; }. Caller FUN_00536568 (80b). The guarded builder 0x005593E4 produces a static PICA command list and sits directly after the Font ctor/dtor cluster (0x00559144/0x00559220/0x0055935C), which is why Font is assumed; no literal evidence ties it to fonts (hence maybe_)."
+ },
+ {
+  "address": "0x005593E4",
+  "name": "maybe_Font_BuildDisplayList",
+  "signature": "void maybe_Font_BuildDisplayList(int* self, unsigned int base, unsigned int res)",
+  "params": {
+   "param_1": "self",
+   "param_2": "base",
+   "param_3": "res"
+  },
+  "summary": "Builds a complete static GPU command list into the supplied buffer: it computes the total size from the resource's glyph/index counts, initialises two sub-streams (0x0051CFC4), fills a 0x8a0-byte ramp table (35 rows x 6 vec4 built from the table at 0x0072F8C0 and memset via 0x0051BD78), converts it with Os_VirtualToPhysical, emits the glyph quad commands (command words 0x0F02CC and 0x000F02D6), appends the per-character width/flag table and finishes by copying the constant templates 0x0072F930/0x0072F8D8/0x0072F570/0x0072F608/0x0072F668/0x0072F680.",
+  "confidence": 0.4,
+  "evidence": "Called only from 0x005593B4. Callees: Os_VirtualToPhysical (used on the 35-row ramp table), 0x0051CFC4/0x0051CF98/0x0051CFF0 (byte-stream init/append/align into a base address), 0x0051BD78, and std_ConstructArray; REFs 0x0072F8C0, 0x0072F6E8, 0x0072F530, 0x000F02D6, 0x0072F930, 0x0072F8D8, 0x1F1F1F1F, 0x0072F538, 0x00010700, 0x0072F570, 0x0072F608, 0x0072F668, 0x0072F680 plus the inline command word 0xf02cc, 0x140-byte and 0x94/0x98/0x30/0x18/0x28-byte template copies. The glyph table (u16 code/index/flags records, 7 char classes, 4 corner-colour flags) and the ramp table point at the text renderer, but the exact ownership (Font vs a generic UI renderer) is not proven, hence maybe_."
+ },
+ {
+  "address": "0x0055A274",
+  "name": "Font_CreateDerived",
+  "signature": "void Font_CreateDerived(void)",
+  "params": {},
+  "summary": "Creates the derived (resource-backed) font object: it calls the base constructor 0x00559144 and then overwrites the returned object's vtable with 0x00781F18, selecting the derived implementation; used by Font_LoadResource.",
+  "confidence": 0.5,
+  "evidence": "Caller Font_LoadResource (0x0053668C) - authoritative. Callee 0x00559144 (Font_Create); PTRREF at 0x0021FBC0 lists 0x0055A274 (+0) and REF literal 0x00781F18; body is just puVar1 = func_00559144(); *puVar1 = g_0055a288 (0x00781F18). The returned pointer is discarded, so the vtable assignment must target an object already registered inside 0x00559144."
+ },
+ {
+  "address": "0x0055A28C",
+  "name": "Font_DestructDerived",
+  "signature": "Font* Font_DestructDerived(Font* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Derived-class destructor: restores the derived vtable 0x00781F18, releases the attached resource through 0x00559118 when self[2] is set, then chains to the base vtable 0x00781DB4 and resets the embedded texture descriptor to empty.",
+  "confidence": 0.55,
+  "evidence": "Body: *arg1 = g_0055a2b8 (0x00781F18); if (arg1[2]) func_00559118(arg1); *arg1 = g_00559270 (0x00781DB4); func_0055A2BC(arg1+4,0,0,8,0,0,0,0,1). PTRREF at 0x00781F1C (-4:0, +0:0055A28C, +8:0x00663874, +12:0x0066388C) - vtable/RTTI pair; the two vtable literals match Font_Create (0x00781DB4) and Font_CreateDerived (0x00781F18), and the trailing texturing reset matches Font_DestructBase."
+ },
+ {
+  "address": "0x0055A2BC",
+  "name": "Gfx_Texture_InitDesc",
+  "signature": "void Gfx_Texture_InitDesc(unsigned int* desc, unsigned int cpuAddr, unsigned int vaddr, unsigned char format, unsigned short width, unsigned short height, unsigned short param7, unsigned int size, unsigned char flag)",
+  "params": {
+   "param_1": "desc",
+   "param_2": "cpuAddr",
+   "param_3": "vaddr",
+   "param_4": "format",
+   "param_5": "width",
+   "param_6": "height",
+   "param_7": "param7",
+   "param_8": "size",
+   "param_9": "flag"
+  },
+  "summary": "Fills a 0x14-byte texture/image descriptor: CPU pointer at +0, physical address (vaddr >> 3 after Os_VirtualToPhysical) at +4, width/height at +8/+0xa, a third u16 at +0xc, format byte at +0xe, flag byte at +0xf and size >> 3 at +0x10; vaddr 0 means 'no physical address'.",
+  "confidence": 0.55,
+  "evidence": "Called by 0x00558FF4, 0x00559144, 0x00559220 and 0x0055A28C. Only callee is Os_VirtualToPhysical (0x0012345C); body writes *desc=cpuAddr, desc[1]=phys>>3 (when vaddr!=0), *(u8*)(desc+0xe)=format, desc[4]=size>>3, *(u16*)(desc+0xa)=width, *(u16*)(desc+2)=height, *(u16*)(desc+3)=param7, *(u8*)(desc+0xf)=flag. Default call in the Font ctors is (0,0,8,0,0,0,0,1) = empty descriptor with format 8."
+ },
+ {
+  "address": "0x0055A500",
+  "name": "Gfx_ParseChipFile",
+  "signature": "unsigned int Gfx_ParseChipFile(GfxChipFile* self, const void* data, unsigned int heap)",
+  "params": {
+   "param_1": "self",
+   "param_2": "data",
+   "param_3": "heap"
+  },
+  "summary": "Parses a 'CHIP' 2D-background container (RomFS '2d/bg/<map>/<map>.chp', 485 files): checks the magic/version template, reads the section count at +0xC and the section-table offset at +0xE, resolves the seven named sections (Header, Areas, AnimRGBA, AnimData, CharacterDepth, Name, BlockData00), stores their pointers in self (+0xC..+0x24), derives the pixel/aspect ratios with 0x0055A2BC and Mem_AllocAligned-allocates one 0x14-byte record per entry.",
+  "confidence": 0.68,
+  "evidence": "Format confirmed against the shipped assets, not just the code: 485 files named game_data/packs/2d/bg/<map>/<map>.chp start with the same header - 'CHIP' (0x50494843) +0, fileSize +4 (b001_101a.chp: 0x19210 = 102,928 = exact file length), BOM 0xFEFF + version 0x0102 +8 (the same bytes the parser compares against, stored literally at 0x00564B38: 'CHIP\\0\\0\\0\\0' 02 01 00 00), u16 section count 7 at +0xC, u16 section-table offset 0x18 at +0xE, then seven absolute section offsets at +0x18 (0x6C, 0xE8, 0x170, 0x1A8, 0x210, 0x23C, 0x29C). Each section is a 0x28-byte header {u16 headerSize=0x28, u16 flags, u32 payloadSize, char name[0x20]} followed by its payload, e.g. 'Header' at 0x6C (payload 0x54), 'Areas' at 0xE8 (0x60), 'AnimRGBA' 0x170, 'AnimData' 0x1A8, 'CharacterDepth' 0x210 (flags 3), 'Name' 0x23C (flags 1), 'BlockData00' 0x29C (0x18F4C bytes) - which matches the chain walk cur + u16@0 + u32@4 + u16@2 used in the body. Caller 0x002BD558 passes the loaded RomFS file plus a per-resource offset. Return 1 on success, 0 on bad magic/version."
+ },
+ {
+  "address": "0x0055AAAC",
+  "name": "Gfx_Material_ResolveTextures",
+  "signature": "void Gfx_Material_ResolveTextures(GfxMaterial* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resolves the material's texture indices into real texture objects: after resetting the sub-object at self+8, it looks up the three u8 indices at desc+0x1f..0x21 in the descriptor's pointer table and binds them at self+0x58/+0x5c/+0x60, plus the base/animated texture indices into self+0x1c/+0x40/+0x4c according to the mode byte at self+0x64 (0, 1 or 2 textures).",
+  "confidence": 0.5,
+  "evidence": "Callers FUN_0049D84C, FUN_004E2A70, FUN_005A8000 (shared scene/battle/UI draw paths). Callees FUN_005644E0 (arg1+8 reset), FUN_00712BBC (388b) and FUN_00712FEC/FUN_0071312C - three setters taking a resolved resource pointer plus a destination field; index table is *(u32*)(*(int*)(*(int*)(arg1+4)+0xc) + idx*4) with 0xff meaning 'none'; destinations 0x1c, 0x40, 0x4c, 0x58, 0x5c, 0x60 and mode switch on the byte at arg1+100 (0x64)."
+ },
+ {
+  "address": "0x0055AC74",
+  "name": "maybe_Container_InitListObject",
+  "signature": "void maybe_Container_InitListObject(unsigned int* self, unsigned int owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner"
+  },
+  "summary": "Constructor of a small list/array container: installs vtable 0x00782080, initialises a self-referential two-node link structure (+4/+0x10 point back to self, +0x14/+0x18 to self+4), stores owner twice at +8/+0xc, zeroes six u16 counters at +0x1c..+0x27 and constructs the inline 4-byte-element array at +0x28.",
+  "confidence": 0.35,
+  "evidence": "No callers/REFs besides the vtable literal g_0055acf8 = 0x00782080 and the array constructor literal g_0055acfc = 0x00146A44 passed to std_ConstructArray(arg1+10, 0x00146A44, 4). Written fields: arg1[1]=arg1, arg1[4]=arg1, arg1[5]=arg1+4, arg1[6]=arg1+4, arg1[2]=arg1[3]=arg2, u16 zeros at 0x1c,0x1e,0x20,0x22,0x24,0x26; the element type and owner class cannot be determined (hence maybe_)."
+ },
+ {
+  "address": "0x0055AEB8",
+  "name": "Gfx_Overlay_AddQuad",
+  "signature": "void Gfx_Overlay_AddQuad(GfxOverlay* self, const void* quad, int scale)",
+  "params": {
+   "param_1": "self",
+   "param_2": "quad",
+   "param_3": "scale"
+  },
+  "summary": "Appends one screen-space quad to the global 2D batch: after a one-time init of the singleton at 0x008384A0 (memset 0x140, vtable 0x00782AFC), it converts the descriptor's pixel rect and UVs into normalised coordinates using the screen mode (320x240 for mode 2, 400x480 otherwise), picks a palette colour when the descriptor's colour index is >= 0, and writes the 0x48-byte (18-word) vertex record (pos, size, uv, 8 colour words, 3 table colours, flag) at buffer[count*0x48], incrementing the count.",
+  "confidence": 0.5,
+  "evidence": "Callers FUN_002D3C1C (maybe_Gfx_Overlay_DrawFourQuads) and FUN_002D4604 - the 2D overlay drawing paths, same pair that calls 0x0055CB58/0x0055CCB4. Body: singleton flag *g_007BE38C, buffer base from literal 0x008384A0, memset 0x140 via FUN_00116AE0, vtable 0x00782AFC, std_ConstructArray(puVar5+10, 0x0051CF40, 4); screen-size selection self->f_24==2 -> 0x140/0xf0 else 400/0x1e0; UV/rect fields read from arg2->f_1c..f_30, colours from f_32..f_3b and palette index f_3c (table entry bytes +0x74/0x75/0x76 scaled by 0x3B808081), current colour from g_007E2030, target record stride 0x48 with the write cursor piVar6[2]."
+ },
+ {
+  "address": "0x0055B370",
+  "name": "Gfx_CharShadowPass_Create",
+  "signature": "unsigned int Gfx_CharShadowPass_Create(GfxCharShadowPass* self, unsigned int ctx, unsigned int heap)",
+  "params": {
+   "param_1": "self",
+   "param_2": "ctx",
+   "param_3": "heap"
+  },
+  "summary": "Allocates the character-shadow-pass resources: it builds five resource descriptors (slots 0-5 with sizes 0xec0/0xc00 and formats 3/1) and registers them through 0x0055F8B8 on the current command list, then allocates a 0x1800-byte block (128 objects of 0x30 bytes) with Mem_AllocAligned and constructs it with 0x0055B980, clearing the cursor at self[7].",
+  "confidence": 0.6,
+  "evidence": "Caller Gfx_CharShadowPass_Init (0x002D4F28) - authoritative name. Callees maybe_Gfx_CmdList_GetSingleton (0x006F2394), maybe_Gfx_ResourceTable_InsertRange (0x0055F8B8), Mem_AllocAligned (size 0x1800, align 4) and std_ConstructArray with ctor 0x0055B980, element size 0x30, count 0x80 (0x80*0x30 = 0x1800). Stack descriptors: {0,1,0xec0,3}, {2,-1,0xc00,1}, {3,-1,0xc00,1}, {4,-1,0xc00,1}, {5,-1,0xc00,1}; REF literal 0x0055B980; returns 1."
+ },
+ {
+  "address": "0x0055CAD4",
+  "name": "Gfx_CmdList_BindTexture",
+  "signature": "void Gfx_CmdList_BindTexture(unsigned int* table, unsigned int unit, int index, unsigned int ctx)",
+  "params": {
+   "param_1": "table",
+   "param_2": "unit",
+   "param_3": "index",
+   "param_4": "ctx"
+  },
+  "summary": "Binds one texture object from a per-pass resource table into the current PICA command list: it obtains the singleton command list for ctx and passes the resource at table[index+1] (offset table+4+index*4) plus the target unit to 0x0055FC5C.",
+  "confidence": 0.5,
+  "evidence": "Called from 20+ known Gfx_ModelInstance_Draw*Pass functions (e.g. Gfx_ModelInstance_DrawWithGxState, maybe_Gfx_ModelInstance_DrawShadowPass, ...DrawFinalPass) plus FUN_002D4604/FUN_00563DB0/FUN_00578868 - i.e. every model/material pass binds its texture. Callees maybe_Gfx_CmdList_GetSingleton (0x006F2394) and FUN_0055FC5C (476b, the command-list texture setter); resource lookup *(u32*)(arg1 + arg3*4 + 4) with arg3 = index, arg4 forwarded to the singleton getter as a stack copy."
+ },
+ {
+  "address": "0x0055CB58",
+  "name": "Gfx_State_SetAlphaBlend",
+  "signature": "void Gfx_State_SetAlphaBlend(unsigned int unused, GfxState* state, char blendEnable)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "state",
+   "param_3": "blendEnable"
+  },
+  "summary": "Configures the packed alpha-blend state of the overlay state object: it starts from a default descriptor produced by 0x0050971C and, when blending is enabled, selects blend factors (4/3/0x0e/0x0f) and encodes the alpha byte from the float argument passed in s0 (value * 255), then applies the descriptor to state[1] via 0x00658050.",
+  "confidence": 0.5,
+  "evidence": "Callers FUN_002D3C1C (maybe_Gfx_Overlay_DrawFourQuads) and FUN_002D4604 - the overlay drawing pair; callees FUN_0050971C (builds the 0x28-byte default descriptor at &local_b0) and FUN_00658050(&local_b0, oldWord) whose result is stored at *(u32*)(arg2+4). Font/style: float in s0 multiplied by 0x437F0000 (255.0f) then VectorFloatToUnsigned into local_9b; the two branches differ exactly by blend enable (arg3 == 0 sets factors to 0/1/3, else 4/3/0xe/0xf). Param 1 is unused in the body."
+ },
+ {
+  "address": "0x0055CCB4",
+  "name": "Gfx_Overlay_FlushQuads",
+  "signature": "void Gfx_Overlay_FlushQuads(GfxOverlay* self, unsigned int cmd, int* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "params"
+  },
+  "summary": "Flushes the accumulated overlay quads: it resets the vertex-buffer write cursor, expands the compact 0x30-byte quad records at self+0x1c (count self->f_20) into 0x48-byte GPU vertex records (position/uv/colours, padding the 0.0 and 1.0 components), advances the buffer count, then issues the draw (0x006F19A8) and the finaliser 0x0055CE34.",
+  "confidence": 0.5,
+  "evidence": "Callers FUN_002D3C1C / FUN_002D4604 (the same overlay pair as 0x0055AEB8/0x0055CB58). Body: early-out if self->f_20 < 1; iVar1 = self->f_18 + self->f_18->f_18*0xc and *(iVar1+4)=*(iVar1+8) (cursor reset); params->f_8/f_10 forwarded through FUN_0056C738 and FUN_006F19A8(arg2,&local_40); loop copies src words [0..0xb] into the 0x48-byte record with 0x00000000 padding and 0x3F800000 fillers (literals 0x0055CE2C/0x0055CE30), then piVar8[2] += f_20 and func_0055CE34(self,arg2). Sibling of 0x0055AEB8 which writes single quads directly."
+ },
+ {
+  "address": "0x0055CE34",
+  "name": "maybe_Gfx_CmdBuf_ValidateSlot",
+  "signature": "void maybe_Gfx_CmdBuf_ValidateSlot(GfxCmdBuf* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Reads the current command-buffer slot (self->f_18 indexed by self->f_18->f_18 with stride 0xc) and computes a base+index*0x48 entry address; if the slot's end index and write index disagree it falls into a 12 x 0x70-byte construct-array path. Most of the 540-byte body was lost by Ghidra, so only the slot bookkeeping is provable.",
+  "confidence": 0.3,
+  "evidence": "Callers 0x002D3C1C maybe_Gfx_Overlay_DrawFourQuads and 0x0055CCB4 (quad builder, itself a caller of 0x0056C738). Body: piVar1 = self->f_18 + self->f_18->f_18 * 0xc; local_34 = *piVar1 + piVar1[1]*0x48; if (piVar1[2] != piVar1[1]) func_00100050(local_670, 0x005094D8, 0x70, 0xc). Same slot layout (+4 write ptr, +8 reset value) is reset in 0x0055D428, i.e. self->f_18 is a chunked cmd-buffer."
+ },
+ {
+  "address": "0x0055D168",
+  "name": "Gfx_CmdBuf_WriteScreenProjection",
+  "signature": "void Gfx_CmdBuf_WriteScreenProjection(void* state, GfxCmdBuf* cmdbuf, int screen, unsigned int reserved)",
+  "params": {
+   "param_1": "state",
+   "param_2": "cmdbuf",
+   "param_3": "screen",
+   "param_4": "reserved"
+  },
+  "summary": "Builds an orthographic pixel-to-clip matrix for the given screen (400x240 top or 320x240 bottom) and emits it plus the associated PICA state words into the command buffer, tagging the state object with the screen index. Ghidra's 4th argument is dead (it is only overwritten with 0x1e0/0xf0), so it is treated as scratch.",
+  "confidence": 0.5,
+  "evidence": "arg1->f_24 = arg3; screen==2 selects width 0x140/height 0xf0 else 400/0x1e0. Matrix math from 1.0f (0x3F800000) and 2.0f (0x40000000): local_4a4 = (1.0/-h)*2.0, local_49c = -(h*(1.0/-h)), local_498 = -((1.0/w)*2.0) -> textbook ortho. Emits puVar4[0]=0x8000005A with cmd 0x000F02C0 and data block 0x00BF02C1, then puVar4[0x10]=0x80000056 with 0x000F02C0/0x00FF02C1 (two 8-word matrix blocks), then a 0x000100E0 state word. Callers 0x002D3C1C maybe_Gfx_Overlay_DrawFourQuads and 0x002D4604; f_24 is then read by 0x0055D428 to pick 0xf0/0x1e0."
+ },
+ {
+  "address": "0x0055D428",
+  "name": "maybe_Gfx_Overlay_BeginBatch",
+  "signature": "void maybe_Gfx_Overlay_BeginBatch(void* state, GfxCmdBuf* cmdbuf, int* node, int* quadDesc, unsigned int limit)",
+  "params": {
+   "param_1": "state",
+   "param_2": "cmdbuf",
+   "param_3": "node",
+   "param_4": "quadDesc",
+   "param_5": "limit"
+  },
+  "summary": "Resets the current command-buffer slot to its saved mark, then emits the per-screen state/texture block for an overlay quad (screen size taken from state->f_24, texture dims decoded from quadDesc via 0x0056C738). Could equally be the 'start overlay batch' or 'draw one overlay quad' entry; the slot reset points at batch setup.",
+  "confidence": 0.42,
+  "evidence": "Early-outs unless quadDesc[0], quadDesc[6] and (*arg3)[2]->f_32 are all non-null. Slot reset: iVar3 = arg1->f_18 + arg1->f_18->f_18*0xc; *(iVar3+4) = *(iVar3+8). state->f_24==2 ? 0xf0 : 0x1e0 for func_0011CFAC (returns short into local_50). func_0056C738(local_dc, local_d8, iVar6) decodes dims, func_0056C738 called again later. State writer chain func_0056B24 / 0x0065654C / 0x00656ACC with bytes {1,0,5} and {0}. Ends in std_ConstructArray(local_100, 0x0055D860, 4). Callers 0x002D3C1C and 0x002D4604, same as 0x0055D168."
+ },
+ {
+  "address": "0x0055DBB8",
+  "name": "maybe_Gfx_BindResourceSlot",
+  "signature": "void maybe_Gfx_BindResourceSlot(void* self, void* resource, int slot, unsigned int context)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resource",
+   "param_3": "slot",
+   "param_4": "context"
+  },
+  "summary": "Slot swap helper: if the pointer table at self+4 -> +0xc already holds a resource at index slot it releases it (0x0052F6D0), then, when a new resource is supplied, binds it (0x0052F71C) using self+4/self+8. The two callees at 0x0052F6D0/0x0052F71C are not identified in the dossiers, so the subsystem is a guess.",
+  "confidence": 0.3,
+  "evidence": "No callers. Body: if (*(int*)(*(int*)(*(int*)(arg1+4)+0xc)+arg3*4) != 0) func_0052F6D0(*(int*)(arg1+4),0,arg3,arg4,arg4); if (arg2 != 0) func_0052F71C(*(u32*)(arg1+4),*(u32*)(arg1+8),*(u32*)(arg2+4),arg3,0). Table-of-pointers + index + null check is a resource/state slot binder, but 0x0052xxxx is outside the verified Gfx range."
+ },
+ {
+  "address": "0x0055EA5C",
+  "name": "maybe_Gfx_InitMatrixSlotSet",
+  "signature": "unsigned int maybe_Gfx_InitMatrixSlotSet(void* self, void* owner, unsigned short index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "index"
+  },
+  "summary": "Initialises four 0x30-strided transform blocks to identity (diagonal 1.0, off-diagonal 0.0), stores an owner pointer and a slot index, writes 0xff000000 into owner->table[index] at offset 0x234 (stride 0x278) and calls 0x0055F410. Returns 1, i.e. a successful init.",
+  "confidence": 0.4,
+  "evidence": "Literals 0x00000000 / 0x3F800000 only. *(u32*)(arg1+4)=arg2; *(u16*)(arg1+200)=arg3; arg1->f_ca=0. Loop i<4 over arg1+i*0x30 writing 0 to +8 and 0/1 to +0xc..+0x34 (identity 3x4 affine). *(u32*)(**(int**)(arg1+4) + arg3*0x278 + 0x234) = 0xff000000. Caller 0x0057DD40; callee 0x0055F410."
+ },
+ {
+  "address": "0x0055F5B4",
+  "name": "maybe_Gfx_ConstructMatrixSlotArray",
+  "signature": "void maybe_Gfx_ConstructMatrixSlotArray(unsigned int* self, unsigned int owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner"
+  },
+  "summary": "Constructor-style initialiser: stores the owner/type word at self[0], clears the count at self[1], then constructs an inline array of 4 elements of 0x30 bytes at self+2 (same 0x30-stride, 4-element shape that 0x0055EA5C fills with identity matrices).",
+  "confidence": 0.35,
+  "evidence": "No callers. Body: *arg1 = arg2; arg1[1] = 0; func_00100050(arg1+2, 0x0055F4A0, 0x30, 4) i.e. construct 4 x 0x30 at +8. 0x0055EA5C uses the same 4 x 0x30 identity-matrix layout; the 0x0055F4A0 type word is itself a function address (construct/destruct slot)."
+ },
+ {
+  "address": "0x0055FC5C",
+  "name": "Gfx_StateCache_EmitStateBlock",
+  "signature": "GfxCmdBuf* Gfx_StateCache_EmitStateBlock(void* self, GfxCmdBuf* cmdbuf, unsigned int key, unsigned int stateBlock)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "key",
+   "param_4": "stateBlock"
+  },
+  "summary": "Looks a state up in a balanced tree keyed by an integer, and only when the found node differs from the last applied state does it reserve space in the command buffer and copy that node's data block (two variants selected by node->f_30 == self->f_2c), then records the new offsets/cache pointers. Returns the command buffer.",
+  "confidence": 0.55,
+  "evidence": "Caller 0x0055CAD4 (48b) - the same helper that all pass functions call as func_0055CAD4(state, cmdbuf, 2|3). Tree walk: while ((char)piVar1[4] != 0) { if (piVar1[5] < arg3) piVar1 = piVar1[3]; else {piVar1 = piVar1[2]; piVar5 = piVar1;} } and later 'arg3 < piVar5[5]' - an ordered map lower_bound on key arg3. Dedup via self->f_30/self->f_2c. Emit: func_00508B9C(writePtr, (writePtr-arg2->f_c & ~3)+0x18) then func_00508BE8(space,&local_20,iVar7,iVar6<<2) - the same alloc+copy pair used for command blocks in 0x005659E8; records arg2->f_c/f_10/f_14."
+ },
+ {
+  "address": "0x0055FEF4",
+  "name": "maybe_Model_SecondaryMotion_BuildChains",
+  "signature": "unsigned int maybe_Model_SecondaryMotion_BuildChains(void* self, unsigned int allocTag, void* model)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "model"
+  },
+  "summary": "Rebuilds a per-node position/rotation chain table for a model: it clears the previous data with 0x0056310C, walks model->f_28->f_70 nodes and their f_60 attribute arrays, matches 6-byte attribute names against the table g_005602f4 (type byte + element count, cases 0..6), packs node transforms into local arrays, then allocates iVar1*0x110 and constructs 0x88-byte entries. Called from field environment init/update.",
+  "confidence": 0.4,
+  "evidence": "Callers 0x0030A0E0 maybe_Field_RunwayEnv_Init, 0x0030A698 maybe_Field_RunwayEnv_Update. Starts with if (*(int*)(arg1+4) != 0) func_0056310C(arg1) - i.e. it owns the buffers freed by 0x0056310C, whose class destructor 0x005631D8 sits in the vtable next to Model_UpdateSecondaryMotion (PTRREF 0x00782200). Name table g_005602f4 indexed iVar16*3 (stride 0xc) with type byte + count, string compare func_0010540C(*piVar10+6, g_005602f4[i*3]) and 6-byte compares func_00123660(p, name, 6); g_005602f0 = -1.0f; per-node 6-float position blocks (local_3a8/local_39c/auStack_390/afStack_384, g_005602f4[2] entries) then Mem_AllocAligned(iVar1*0x110, arg2, 4) + func_00100050(...,0x005609A0,0x88, iVar1*2). Returns 0/1."
+ },
+ {
+  "address": "0x0056310C",
+  "name": "Model_SecondaryMotion_Clear",
+  "signature": "void Model_SecondaryMotion_Clear(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the three owned buffers (self+4, self+8, self+0xc) with the free routine and nulls them along with three flag bytes, i.e. the clear method of the model secondary-motion data class.",
+  "confidence": 0.5,
+  "evidence": "Callers 0x0055FEF4 (before rebuilding) and 0x005631D8 (its own destructor). Body frees *(self+4), *(self+8), self->f_c via 0x0010F69C and zeroes them plus bytes at 0x1c/0x1d/0x1e. Class identity from PTRREF 0x00782200: +0 = 0x005631D8 (destructor), +4 = Model_UpdateSecondaryMotion."
+ },
+ {
+  "address": "0x005631D8",
+  "name": "Model_SecondaryMotion_Destroy",
+  "signature": "void Model_SecondaryMotion_Destroy(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor: installs the class vtable word, calls Model_SecondaryMotion_Clear to free its buffers and then frees the object itself.",
+  "confidence": 0.7,
+  "evidence": "*arg1 = g_005631fc (0x007821FC); func_0056310C(arg1); func_0010F6CC(arg1) (object free). PTRREF at 0x00782200 places this exact address in slot +0 with Model_UpdateSecondaryMotion at +4 - a two-slot class vtable."
+ },
+ {
+  "address": "0x005635AC",
+  "name": "Gfx_CharShadowPass_BuildCommands",
+  "signature": "void Gfx_CharShadowPass_BuildCommands(void* self, unsigned int allocTag, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "mode"
+  },
+  "summary": "Builds the character-shadow pass command list at init time: fills a 0x50-byte 0/1 sign matrix, allocates a 0xc80-byte command buffer, chains the PICA state builders, uploads texture-unit state, and for the curve/fade variant precomputes 64-entry cubic and linear falloff tables (64 * (i/128)^3 and 1 - i/128) before writing the packed 16-bit fixed-point shadow parameters. Stores the list and its length in self->f_7a0/f_7a4.",
+  "confidence": 0.6,
+  "evidence": "Caller 0x002D4F28 Gfx_CharShadowPass_Init. Mem_AllocAligned(0x50,tag,4) then writes 0/1.0 matrix fields f_c..f_4c depending on arg3. Alloc 0xc80 then chain 0x0053380C -> 0x006566F8 -> 0x0065660C -> 0x00656688 -> 0x00656BCC -> 0x006564C0 -> 0x00656B24 -> 0x0065654C -> 0x00656ACC -> 0x00656918. Falloff loop iVar6=0x40: (i*0.0078125)^3 into local_250 and 1.0-(i*0.0078125) into local_650 (constants 0x3C000000, 0x3F800000); descriptor setters 0x005084F8/0x00508538/0x00508730/0x005081C0/0x005081A0/0x005081B0; floats packed via mantissa>>13 with bias 0x70 (16-bit fixed point), plus 0xE5A477A0/0x801F00AC/0x802F00A9 words. Ends self->f_7a0 = iVar1; self->f_7a4 = iVar3 - iVar1."
+ },
+ {
+  "address": "0x00563DB0",
+  "name": "Gfx_CmdBuf_AppendCommandList",
+  "signature": "void Gfx_CmdBuf_AppendCommandList(void* self, GfxCmdBuf* cmdbuf, unsigned int state)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state"
+  },
+  "summary": "Replays the pre-built command list cached in self->f_7a0 (length self->f_7a4) into the command buffer at its current write pointer, advancing the pointer with 4-byte alignment after setting the block type via 0x0055CAD4.",
+  "confidence": 0.6,
+  "evidence": "Caller 0x002D2A54 maybe_Gfx_Overlay_DrawScreenQuad. Body: func_0055CAD4(arg3,arg2,3); iVar2 = *(int*)(arg2+4); f7a4 = self->f_7a4; func_00116C10(iVar2, self->f_7a0, f7a4) (std_memcpy); *(u32*)(arg2+4) = (f7a4 & 0xfffffffc) + iVar2. f_7a0/f_7a4 are exactly the buffer/length pair produced by 0x005635AC."
+ },
+ {
+  "address": "0x00563F34",
+  "name": "maybe_Gfx_Overlay_WriteQuadState",
+  "signature": "void maybe_Gfx_Overlay_WriteQuadState(int self, GfxCmdBuf* cmdbuf, void* quad, float* offset)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "quad",
+   "param_4": "offset"
+  },
+  "summary": "Emits one screen-quad state block: packs the quad colour with alpha = quad->f_40*255, copies the 3x4 part of the quad transform with a translation offset subtracted (quad->f_1c/f_2c/f_3c minus offset[0..2]), then writes the matrix via 0x0012558C and 0x00657258 from the engine state at self+0x790.",
+  "confidence": 0.45,
+  "evidence": "Caller 0x002D2A54 maybe_Gfx_Overlay_DrawScreenQuad. Reads quad fields 0x10/0x14/0x18, 0x20/0x24/0x28, 0x30/0x34/0x38 plus floats 0x1c/0x2c/0x3c/0x40; local_ec = f_1c - *arg4 etc.; colour word from 0x007AE6E4 and alpha VectorFloatToUnsigned(f_40 * 255.0f) (0x437F0000). Writes puVar3[0]=colour|alpha<<24, puVar3[1]=local_b2+3|0xf0000, puVar3[2]=0x80000000, puVar3[3]=0x000F02C0, data block 0x00BF02C1, then func_00657258(arg1, puVar3+0x12, arg1+0x790)."
+ },
+ {
+  "address": "0x00564354",
+  "name": "Gfx_CharShadow_InitVertexLayout",
+  "signature": "unsigned int Gfx_CharShadow_InitVertexLayout(unsigned int* self, unsigned int allocTag, int count, unsigned int indexCount)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "count",
+   "param_4": "indexCount"
+  },
+  "summary": "Allocates count*0x90 of vertex data and an index/offset table of indexCount words, pre-filling the table with 0,1,2,3,... pairs, then installs the vertex attribute descriptors (byte pairs 0..4, 5/0xf/7, and pointers into self) used later to build the shadow geometry. Returns 1 on success.",
+  "confidence": 0.5,
+  "evidence": "Caller 0x002D4F28 Gfx_CharShadowPass_Init. self[8]=arg3; self[9]=arg4; func_0010F6EC(arg3*0x90,arg2,4); self[3]=arg3*0x48; psVar3 = func_0010F6EC(arg4<<1,arg2,4); self[7]=psVar3 then the fill loop writing uVar1, uVar1+1, uVar1+2 ... (index sequence). Descriptor bytes at 0x2a..0x57: (0,0),(1,1),(2,2),(3,3),(4,4), f_14=5, f_15=0xf, f_16=0xf, and stored back-pointers self[0x18..0x1c] = self+10/0xc/0xe/0x10/0x12."
+ },
+ {
+  "address": "0x00564828",
+  "name": "Script_LoadBytecodeOrText",
+  "signature": "unsigned int Script_LoadBytecodeOrText(unsigned int vm, unsigned int owner, int data, int size)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "owner",
+   "param_3": "data",
+   "param_4": "size"
+  },
+  "summary": "Loads a script from a memory buffer: rejects null data/size ('invalid argument'), detects compiled bytecode by the 0xFAFA magic (64250) and parses it, otherwise checks for a UTF-8 BOM (0xbbef 0xBF) and compiles the source text, returning an error object with a readable message when anything fails.",
+  "confidence": 0.65,
+  "evidence": "Caller 0x00579D20. Error strings reported through 0x006BD988: s_invalid_argument, s_cant_read_byte_code, s_io_error, s_Unrecognozed_ecoding, s_cannot_open_the_file. Stream helpers 0x0056EE88 (init), 0x0056ED30 (attach buffer), 0x0056EE08 (read, u16 read of 2 bytes), 0x0056EE58 (seek 0). Bytecode branch: value-64000 == 0xfa (=64250=0xFAFA magic) then func_006BCF6C(arg1, 0x0056B44C, auStack_44). Text branch: 0xbbef then byte must be 0xBF, then func_006BB360(arg1, SUB_00564a28, auStack_44, arg2, 1) - Script_CreateNativeInstance is a callee of the family."
+ },
+ {
+  "address": "0x00564B60",
+  "name": "Gfx_CharShadow_InitCurveParams",
+  "signature": "void Gfx_CharShadow_InitCurveParams(void* self, unsigned int allocTag)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag"
+  },
+  "summary": "Initialises the character-shadow curve/blend parameter block: runs the class constructor, copies a 0x1a-byte template, then fills ~0x100 bytes of thresholds and weights (luminance weights 0.299/0.587/0.114, 60.0, 0.1, 400.0/240.0 screen extents, defaults 0xffff/0xff/0xffffffff) used when generating the shadow fade curve table.",
+  "confidence": 0.6,
+  "evidence": "Caller 0x0057CA48 Gfx_CharShadow_BuildCurveTable. func_00113590(self,arg2,0x78AE0A13,0) constructor; func_00126250(&self->f_34,&local_58,0x1a) + memcpy(&self->f_18,src,0x1a). Constants 0x40800000=4.0, 0x42700000=60.0, 0x3DCCCCCD=0.1, 0xBF800000=-1.0, 0x40000000=2.0, 0x3E991687=0.299, 0x3F1645A2=0.587, 0x3DE978D5=0.114, 0x40400000=3.0, 0x43C80000=400.0, 0x43700000=240.0; fields f_fc=0.1, f_100=-1, f_250=0xff, f_254/f_256=0xffff."
+ },
+ {
+  "address": "0x00564E60",
+  "name": "maybe_Gfx_InitTextureSlotUV",
+  "signature": "void maybe_Gfx_InitTextureSlotUV(int self, int slot, int enabled)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot",
+   "param_3": "enabled"
+  },
+  "summary": "Per-slot setup: stores the enable flag, and when enabled reads two dimensions out of a tagged 0x82 descriptor record via 0x0056C738 and converts them to floats; afterwards resets the slot's UV rectangle to (0,0)-(1,1).",
+  "confidence": 0.4,
+  "evidence": "No callers. self += arg2*4; self->f_50 = arg3; if (arg3 != 0) { func_0056C738(local_10, local_c) with both inputs pre-set to 1; f_54 = float(local_10[0]); f_58 = float(local_c[0]); } then f_5c = f_60 = 0.0 (0x00000000) and self+100/f_68 = 1.0 (0x3F800000). 0x0056C738 is the descriptor scanner shared with Text_BuildGlyphQuads and the overlay quad builders."
+ },
+ {
+  "address": "0x005659E8",
+  "name": "Gfx_ModelInstance_WriteMeshCommands",
+  "signature": "void Gfx_ModelInstance_WriteMeshCommands(int self, GfxCmdBuf* cmdbuf, unsigned int state, unsigned short* meshDesc, unsigned int flags, unsigned int* drawState)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "meshDesc",
+   "param_5": "flags",
+   "param_6": "drawState"
+  },
+  "summary": "Emits the draw commands for all sub-meshes of a model instance: per material/pass entry (stride 0x2c, state block stride 0x158) it writes the state blocks, texture reference, and then per node (self->f_178, matrices at self->f_16c, stride 0x30) the 12-word node matrix plus the mesh's index/vertex block, restoring the buffer position at the end.",
+  "confidence": 0.5,
+  "evidence": "Only listed caller context is the PTRREF at 0x007822BC (slot +0), whose neighbours are 0x0057AB48, 0x0057AFD0, 0x0057C230, 0x0057BA58 (0x57xxxx = char-shadow/model region). Gate self->f_178 != 0. piVar15 = arg4->f_16->f_34 + *arg4*0x2c; pbVar17 = self->f_2c + *arg4*0x158. Writes 0x80000017 with four 0 words, then for i<self->f_178: matrix from self->f_16c+i*0x30 via 0x0012558C with 0x80000000|cmd and translation subtracted from arg6[2]. Index block: func_00508B9C(...,(ptr - arg2->f_c & ~3)+0x18) then func_00508BE8(...,iVar14->f_2c,iVar14->f_30<<2) with arg2->f_c/f_10/f_14 bookkeeping (same cmd-buffer protocol as 0x0055FC5C). Calls 0x0065A0B0/0x0065A3E4/0x00659B50/0x00659C24/0x0065D1E0 (material/shader writers), maybe_Gfx_ResourceTrie_Lookup, 0x006F2AAC."
+ },
+ {
+  "address": "0x00566030",
+  "name": "Model_Instance_BuildNodeBounds",
+  "signature": "unsigned int Model_Instance_BuildNodeBounds(int self, unsigned int allocTag, unsigned int reserved, void* mesh)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "reserved",
+   "param_4": "mesh"
+  },
+  "summary": "Builds per-node world-space AABBs for a model instance: it allocates node matrices (count*0x60 with the second half at +count*0x30), reads the mesh's 'aabbMin'/'aabbMax' attributes, and for every node transforms the box corners by the node's 3x4 matrix (abs-sum conservative extents) into 6-float min/max pairs. Returns 1.",
+  "confidence": 0.7,
+  "evidence": "Caller 0x005656D8 maybe_Model_SetupInstance. Attribute lookup by name hash: func_0011CCA0(s__aabbMin_0056646c) + maybe_Gfx_ResourceTrie_Lookup(self->f_28->f_94+4, s__aabbMin, hash), same for s__aabbMax_0056647c, accepting only type 1 with count 3 and reading 3 floats. self->f_168 = node array, self->f_174 = node count, self->f_16c = Mem_AllocAligned(count*0x60), self->f_170 = base + count*0x30. Per node math over pfVar7[0..0xb] with 8 corner sign combinations, func_0055A3C8(&local_a8) normalising the 6-float box, output written to self->f_194 + i*0x18 (6 floats). Uses 0x3F800000/-1.0/0.5 literals."
+ },
+ {
+  "address": "0x0056662C",
+  "name": "Gfx_CharShadow_InitPassState",
+  "signature": "unsigned int Gfx_CharShadow_InitPassState(unsigned int* self, unsigned int allocTag, unsigned int owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "owner"
+  },
+  "summary": "Allocates and fills the shadow-pass state object: a 0x40-byte 16-float projection/texel matrix built from 0.875 and 0.21875 coefficients, plus two 0x5000-byte buffers (command list and vertex/index area) that are double-buffered via self[1]/self[4]. Returns 1.",
+  "confidence": 0.55,
+  "evidence": "Caller 0x002D4F28 Gfx_CharShadowPass_Init. func_0010F6EC(0x40,arg2,4) then 16 float slots set to combinations of -1.0 (0xBF800000), 1.0 (0x3F800000), 0.0 and 0.875 (0x3F700000) / 0.21875 (0x3E600000) - classic shadow-map texel-offset matrix. Then func_0010F6EC(0x5000,arg2,4) twice: arg1[1]=uVar2, arg1[4]=uVar3, arg1[2]=0x5000, *arg1=uVar2, arg1[3]=uVar3, arg1[5]=0x5000, arg1[7]=0, arg1[8]=arg3."
+ },
+ {
+  "address": "0x00566EE4",
+  "name": "maybe_Gfx_DrawAlphaBlendQuad",
+  "signature": "void maybe_Gfx_DrawAlphaBlendQuad(unsigned int self, GfxCmdBuf* cmdbuf, unsigned int state, unsigned int texture, unsigned int arg5, unsigned short arg6)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "texture",
+   "param_5": "arg5",
+   "param_6": "arg6"
+  },
+  "summary": "Draws a textured alpha-blended quad: converts the incoming float parameter (passed in s0, not in the Ghidra signature) into an 8-bit alpha with 1.0/2.0 break points and a blend-mode switch, sets up texture/alpha state and a texture reference from the physical address of arg4, then submits through 0x00568BB4.",
+  "confidence": 0.4,
+  "evidence": "Caller 0x0056A3F0 maybe_Gfx_ModelInstance_DrawFogPass. uVar1 = Os_VirtualToPhysical(arg4); thresholds 0x3F800001/0x40000001/0x40800000 with 255.0 (0x437F8000), 127.5 (0x42FF8000), 0x3E000000; sets local_a1 = 0/1/2 (blend mode) and local_90/0x8c/0x89 constants, then func_0065654C -> 0x00658050 -> 0x00509638 -> 0x00657E28(&local_1e8,uVar2,1) with local_1e8 = physical texture and local_1e4/1e2 = arg6, finally func_005729A4 + 0x006F1144 + func_00568BB4(arg1,arg2,arg3,arg5)."
+ },
+ {
+  "address": "0x00568070",
+  "name": "maybe_Gfx_ModelInstance_DrawScreenSpacePass",
+  "signature": "void maybe_Gfx_ModelInstance_DrawScreenSpacePass(int self, GfxCmdBuf* cmdbuf, unsigned int state, int* passState, int* texState, int letterbox)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "passState",
+   "param_5": "texState",
+   "param_6": "letterbox"
+  },
+  "summary": "One of the model-instance pass emitters: allocates a 0x40-byte 4x4 matrix for a screen-aligned quad (width 320/400 with a centered 1/512-scale offset), sets the pass state and texture descriptor, and submits the draw. The specific pass identity (which effect it draws) is unclear.",
+  "confidence": 0.45,
+  "evidence": "Callers 0x00566728 maybe_Gfx_ModelInstance_DrawSubMeshes and 0x00566BA8 Gfx_ModelInstance_DrawAllPasses. puVar5 = func_006F2D98(self + self->f_18*0xc, 4) then 16 words written combining -1.0/1.0/0.5 (0x3F000000) with fVar9=(400-w)/2*0.001953125 and fVar8=(w+(400-w)/2)*0.001953125 (0x3B000000). If *passState != 2 -> func_0055CAD4(arg3,arg2,2). If *texState == 0x11 -> Gfx_GpuCmd_BuildDrawPacket. Blend state built from self->f_20->f_e9, texture @0x006579C8 Gfx_GpuCmd_WriteTextureDescriptor, then 0x0056D544(&local_1e8,...) with self->f_20->f_e4 and func_00568BB4(self,arg2,arg3,puVar5)."
+ },
+ {
+  "address": "0x00568360",
+  "name": "Gfx_ModelInstance_DrawScreenSprite",
+  "signature": "void Gfx_ModelInstance_DrawScreenSprite(int self, GfxCmdBuf* cmdbuf, unsigned int state, unsigned int* sprite, int* passState, int* texState, int arg7)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "sprite",
+   "param_5": "passState",
+   "param_6": "texState",
+   "param_7": "arg7"
+  },
+  "summary": "Blits a 2D sprite: scales the sprite rect (sprite[1]/sprite[2] size, sprite[4..6] sub-rect, sprite[7] alpha, sprite[8] flag) into the 320/400-wide screen, packs the alpha as 8-bit and the flag as a filter/format selector, writes the texture descriptor and submits the draw packet.",
+  "confidence": 0.5,
+  "evidence": "Callers 0x00566728 maybe_Gfx_ModelInstance_DrawSubMeshes and 0x00566BA8 Gfx_ModelInstance_DrawAllPasses. fVar9 = (w/arg4[1])*0.5, fVar8 = (240.0/arg4[2])*0.5 (0x43700000=240.0, 0x3F000000=0.5); fVar12 = arg4[4]/arg4[1], fVar13 = arg4[3]/arg4[2] with 0x006731EC (floor) for UV snapping; matrix written to the 0x40-byte block from func_006F2D98. local_cb = VectorFloatToUnsigned(arg4[7]*255.0) (0x437F0000); local_203 = 7 or 1 from arg4[8]; local_208 = *arg4 (texture); then 0x0056D544 + func_00568BB4."
+ },
+ {
+  "address": "0x00568BB4",
+  "name": "Gfx_ModelInstance_BindTextureAndDraw",
+  "signature": "void Gfx_ModelInstance_BindTextureAndDraw(int self, GfxCmdBuf* cmdbuf, void* resource, void* texture)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "resource",
+   "param_4": "texture"
+  },
+  "summary": "Common tail of every model-instance pass: converts the texture virtual addresses to physical, binds the texture set (0x00509328) with the packed texture-unit state block, and emits the final GPU packet for the accumulated quad via 0x006F11A8.",
+  "confidence": 0.6,
+  "evidence": "Called by 19 pass functions (Gfx_ModelInstance_DrawWithGxState, FUN_00566EE4, DrawTexCoordPass, DrawMultiStatePass, FUN_00568070, FUN_00568360, DrawSimplePass, DrawShadowPass, DrawEdgePass, DrawVertexColorPass, FUN_00569350, FUN_00569518, DrawTwoSidedPass, DrawProjectionPass, FUN_005698D4, DrawReflectionPass, FUN_0056A300, DrawFogPass, DrawFinalPass). if (arg4 == 0) arg4 = arg1->f_1c; writes state bytes to globals 0x007AE63C/0x007AE654/0x007AE658/0x007AE670 (2,7,7,1); uVar3 = Os_VirtualToPhysical(arg4); maybe_Gfx_BindTextureSet(auStack_7d0, 0x007AE654, uVar3); then local_38 = Os_VirtualToPhysical(arg3->f_18->f_1c), local_34 = 4, local_30 = 0 and func_006F11A8(arg2, &local_40)."
+ },
+ {
+  "address": "0x00569350",
+  "name": "maybe_Gfx_ModelInstance_DrawRectPass",
+  "signature": "void maybe_Gfx_ModelInstance_DrawRectPass(void)",
+  "params": {},
+  "summary": "Thumb-compiled, register-starved duplicate of the rect pass found inlined in 0x00569518: builds the draw packet, applies the colour state, submits via 0x00568BB4, sets the texture matrix, writes 7 texture units and finishes with the rect command. Parameters are only visible as call-clobbered registers.",
+  "confidence": 0.4,
+  "evidence": "No callers; mode=thumb and signature void FUN_00569350(void) with unaff_r5 / stack args. Same call sequence as the *arg5 == 6 branch of 0x00569518: Gfx_GpuCmd_BuildDrawPacket -> 0x006F18FC -> Os_VirtualToPhysical -> Gfx_ModelInstance_ApplyColorState -> FUN_00568BB4 -> Gfx_Context_SetTextureMatrix -> Gfx_GpuCmd_WriteTextureUnits(...,7,1) -> maybe_Gfx_GpuCmd_WriteRect."
+ },
+ {
+  "address": "0x00569518",
+  "name": "Gfx_ModelInstance_DrawFullscreenQuadPass",
+  "signature": "void Gfx_ModelInstance_DrawFullscreenQuadPass(int self, GfxCmdBuf* cmdbuf, unsigned int state, int* passState, unsigned int* texState)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "passState",
+   "param_5": "texState"
+  },
+  "summary": "Pass emitter for a screen-filling quad: writes a 4x4 transform made only of -1.0/1.0/0.0, then - when the pass state is 6 - applies colour state, binds the texture set, sets the texture matrix, writes 7 texture units and emits a rect covering 400x240. Otherwise it falls through to the matrix/state setup path.",
+  "confidence": 0.5,
+  "evidence": "Callers 0x00566728 maybe_Gfx_ModelInstance_DrawSubMeshes and 0x00566BA8 Gfx_ModelInstance_DrawAllPasses. puVar2 = func_006F2D98(arg1 + arg1->f_18*0xc, 4); 16 words from only 0xBF800000/0x3F800000/0x00000000. If *arg4 != 2 -> func_0055CAD4(arg3,arg2,2). *arg5 == 0x11 -> Gfx_GpuCmd_BuildDrawPacket. *arg5 == 6 branch: 0x006F18FC, Os_VirtualToPhysical, Gfx_ModelInstance_ApplyColorState, FUN_00568BB4, Gfx_Context_SetTextureMatrix, Gfx_GpuCmd_WriteTextureUnits(...,7,1), then rect 0x1e0 x 0x70 x 400 via maybe_Gfx_GpuCmd_WriteRect."
+ },
+ {
+  "address": "0x005698D4",
+  "name": "Gfx_ModelInstance_DrawScreenRectPass",
+  "signature": "void Gfx_ModelInstance_DrawScreenRectPass(int self, GfxCmdBuf* cmdbuf, unsigned int state, unsigned int* rect, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmdbuf",
+   "param_3": "state",
+   "param_4": "rect",
+   "param_5": "mode"
+  },
+  "summary": "Draws a textured rectangle described by integer fields: it maps rect[4..0xb] (position/size) and the 16-bit fields at 0xe/0xc into clip space for a 480x400 or 240x320 target and writes the resulting 4x4 matrix, then submits the packet for rect[0] and draws it.",
+  "confidence": 0.5,
+  "evidence": "No callers. mode==1 -> 0x1e0 (480) x 400 else 0xf0 (240) x 0x140 (320). Reads u16 at rect+0xe and rect+0xc (u16 at arg4+3), rect[4],[5],[6],[7],[8],[9],[10],[0xb]; builds pfVar1[0..0xf] with divisions by the rect dimensions and 1.0 (0x3F800000) offsets. Then func_0055CAD4(arg3,arg2,2), Gfx_GpuCmd_BuildDrawPacket, 0x006F18FC, 0x0056D544 with local_30 = *arg4 and bytes {1,3,2,2}, then FUN_00568BB4."
+ },
+ {
+  "address": "0x0056A300",
+  "name": "maybe_Gfx_ModelInstance_DrawRectMatrixPass",
+  "signature": "void maybe_Gfx_ModelInstance_DrawRectMatrixPass(void)",
+  "params": {},
+  "summary": "Thumb-compiled variant of 0x005698D4: builds the same rect matrix (all values come in on s1..s13), sets the pass state, writes the draw packet and submits with 0x00568BB4. Its parameters are only reconstructible from the call-clobbered registers, so the pass identity is uncertain.",
+  "confidence": 0.35,
+  "evidence": "No callers; mode=thumb, signature void FUN_0056A300(void), uses unaff_r4/unaff_r7 and in_s1..in_s13. Same tail as 0x005698D4: matrix writes to unaff_r4[0..0xf] (0.5/1.0 style divisions), func_0055CAD4(), Gfx_GpuCmd_BuildDrawPacket(), 0x006F18FC(), 0x0056D544(&stack0xfffffff0, *(u32*)(unaff_r7+4)), FUN_00568BB4()."
+ },
+ {
+  "address": "0x0056B458",
+  "name": "maybe_Model_BuildAimPartList",
+  "signature": "void maybe_Model_BuildAimPartList(unsigned int owner, unsigned int partA, unsigned int partB, unsigned int partC)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "partA",
+   "param_3": "partB",
+   "param_4": "partC"
+  },
+  "summary": "Small helper reached from model aim-part attachment: it stashes the four arguments on the stack and constructs a two-element array of 0x40-byte descriptors in a 428-byte local buffer; everything after that was unrecoverable, so what the descriptors are used for is unclear.",
+  "confidence": 0.4,
+  "evidence": "Caller 0x00222E90 Model_AttachAimParts. Sole callee std_ConstructArray via func_00100050(local_1e0, 0x0056B860, 0x40, 2) = 2 elements of 0x40 after local_34..local_28 = arg1..arg4. 1992-byte body of which only the construct call survived (Ghidra lost the rest)."
+ },
+ {
+  "address": "0x0056C738",
+  "name": "Gfx_Resource_FindSizeRecord",
+  "signature": "unsigned int Gfx_Resource_FindSizeRecord(unsigned short* width, unsigned short* height, unsigned int* desc, unsigned short tag)",
+  "params": {
+   "param_1": "width",
+   "param_2": "height",
+   "param_3": "desc",
+   "param_4": "tag"
+  },
+  "summary": "Walks a tagged descriptor/command stream, skipping records by their embedded length field, until it finds the record whose tag word is 0x82, then returns its two 11-bit fields (width and height style) through the out pointers. Returns 1 when found, 0 at end of stream.",
+  "confidence": 0.55,
+  "evidence": "Callers include Text_BuildGlyphQuads, maybe_Gfx_SubmitScreenQuad, FUN_0055CCB4, FUN_0055D428, FUN_00564E60, DrawEdgePass, FUN_00577E9C, FUN_0057895C. Body: puVar5 = (u16*)*arg3; puVar4 = puVar5 + arg3[1]*2; entry length = (*(u32*)(puVar5+2) & 0xfffffff) >> 0x14, advancing puVar3 by that many u16 pairs + 4; loop breaks when (*(u32*)(p+2) & 0xffff) == 0x82; then *arg1 = (*arg4 >> 0x10) & 0x7ff and *arg2 = *arg4 & 0x7ff. 11-bit wide/high fields on a descriptor record = dimensions, but the exact record layout is not documented in the dossier."
+ },
+ {
+  "address": "0x0056D544",
+  "name": "Gfx_GpuCmd_WriteTextureUnitBlock",
+  "signature": "unsigned int* Gfx_GpuCmd_WriteTextureUnitBlock(void* texState, unsigned int* cmd)",
+  "params": {
+   "param_1": "texState",
+   "param_2": "cmd"
+  },
+  "summary": "Emits one texture-unit command group: packs the format/mip flags into a state word, writes the 0x000F0083 PICA command, the format byte and the 0x000F008E block, then copies the descriptor's texel data into the command buffer and returns the advanced cursor.",
+  "confidence": 0.62,
+  "evidence": "Callers Gfx_ModelInstance_DrawWithGxState (0x005668A0), maybe_Gfx_ModelInstance_DrawTwoSidedPass (0x0056964C), maybe_Gfx_ModelInstance_DrawOverrideMaterialPass (0x00569D0C); callee std_memcpy; literal 0x000F0083 at 0x0056D5FC (PICA command word); word0 packs byte at state+5 (format 3/4/5), byte at +4, bytes +6/+7 and format==2/5 into bit 0x18; arg2[2] = byte at *(u32*)texState+0x18 (format, compared with 0x0C); memcpy length ((u32*)*(u32*)texState)[1]*4-8 from the descriptor data pointer."
+ },
+ {
+  "address": "0x0056D600",
+  "name": "maybe_Gfx_GpuCmd_WriteTextureUnitBlock2",
+  "signature": "unsigned int* maybe_Gfx_GpuCmd_WriteTextureUnitBlock2(void* texState, unsigned int* cmd)",
+  "params": {
+   "param_1": "texState",
+   "param_2": "cmd"
+  },
+  "summary": "Second texture-block emitter: same packed state word but with bit 0x10000000 set, and the 0x000F0093 / 0x000F0096 command pair followed by a data block taken from *(texState+8) with count at *(texState+0xC).",
+  "confidence": 0.45,
+  "evidence": "Callers Gfx_ModelInstance_DrawWithGxState and 0x0057895C (the transition sprite draw); literals 0x000F0093 and 0x000F0096 at 0x0056D6C0/0x0056D6C4 (vs 0x000F0083 in sibling 0x0056D544); status word ORs 0x10000000; source *(u32*)(*(u32*)texState+8), length *(int*)(*(u32*)texState+0xC)*4-8; callee std_memcpy. Which sub-block / texture layer this addresses is not decidable from the dossier, hence maybe_."
+ },
+ {
+  "address": "0x0056DE24",
+  "name": "maybe_Gfx_Resource_CreateFromDescriptor",
+  "signature": "unsigned int maybe_Gfx_Resource_CreateFromDescriptor(void* self, void* desc, void* allocator)",
+  "params": {
+   "param_1": "self",
+   "param_2": "desc",
+   "param_3": "allocator"
+  },
+  "summary": "Creates a GPU resource from a descriptor: sums four aligned sub-block sizes (0x10/0x80 boundaries), allocates through the caller's vtable allocator, validates the layout with func_00535168, stores the sub-block offsets and registers the resource in the engine list.",
+  "confidence": 0.48,
+  "evidence": "Caller maybe_Gfx_ResourceList_Attach (0x00193FA0); sizes derived from desc f_28/f_2C/f_30/f_3C aligned with +0xF/&~0xF and +0x7F/&~0x7F (note 0x80 is the PICA data alignment); vtable allocator (*piVar17)[0] with free slot +4; func_0010E780(handle,size,0x80,0) and func_00565684(handle,size,0); func_00535168 returns error bits tested with 0x80000000 (format/size validation, returns 0x80000020/0x80000040 flags); lazy global guard g_0056E824 with count literal 0x1348 and popcount masks 0x55555555/0x33333333/0x0F0F0F0F, funcs 0x007828EC/0x005329E0/0x00837148; self f_34..f_45 records of 0xC bytes at +0x48; registration call func_0057CCB8(0xE88 + f_EC0*0x1C, self). Texture vs other GPU resource is not proven, hence maybe_."
+ },
+ {
+  "address": "0x0056ED30",
+  "name": "maybe_Script_ByteStream_Init",
+  "signature": "unsigned int maybe_Script_ByteStream_Init(void* self, unsigned int base, unsigned int end)",
+  "params": {
+   "param_1": "self",
+   "param_2": "base",
+   "param_3": "end"
+  },
+  "summary": "Initialises a byte-stream object over a memory buffer: stores the base at +0x14 and the end at +0x1C, clears the position at +0x18 and resets the cursor through func_0051CD3C.",
+  "confidence": 0.48,
+  "evidence": "Only caller FUN_00564828 (0x00564828), the script file loader that reads a UTF-8 BOM (0xEF 0xBB 0xBF) and loads bytecode via func_006BCF6C with strings 'cannot open the file'/'io_error'/'Unrecognozed ecoding'; sibling func_0056ED64 sets the same f_14/f_18/f_1C triple; func_0056ED9C reads func_00116A14(dst, f_14 + f_20, f_1C - f_20) and advances with func_0051CD3C(&f_1C, n, 1), so these fields are base/end/position of a byte stream."
+ },
+ {
+  "address": "0x0056EE08",
+  "name": "Script_ByteStream_Read",
+  "signature": "int Script_ByteStream_Read(void* self, void* buf, unsigned int size, unsigned int count)",
+  "params": {
+   "param_1": "self",
+   "param_2": "buf",
+   "param_3": "size",
+   "param_4": "count"
+  },
+  "summary": "Reads count items of size bytes by calling the stream's virtual read slot (+0x24) once per item and returns the total byte count; the script loader calls it to pull the 2-byte and 1-byte pieces of the UTF-8 BOM.",
+  "confidence": 0.62,
+  "evidence": "Caller FUN_00564828 calls it as (stream, local_20, 1, 2) then tests local_20[0]==0xBBEF and reads (stream, local_1C, 1, 1) then tests local_1C[0]!=0xBF, i.e. the 3-byte BOM 0xEF 0xBB 0xBF; loop body calls (**(code**)(*arg1 + 0x24))(arg1, arg2 + result, arg3) and accumulates the returned lengths; sibling func_0056ED9C implements the memory-backed read of the same object."
+ },
+ {
+  "address": "0x0056F0A8",
+  "name": "Gfx_GpuCmd_WriteColorState",
+  "signature": "void Gfx_GpuCmd_WriteColorState(unsigned int* cmd, int useRgb, unsigned char* rgb, int useAlpha, unsigned char alpha)",
+  "params": {
+   "param_1": "cmd",
+   "param_2": "useRgb",
+   "param_3": "rgb",
+   "param_4": "useAlpha",
+   "param_5": "alpha"
+  },
+  "summary": "Appends two colour state descriptors to the command buffer: a 3-byte RGB group gated by useRgb and a separate 1-byte alpha group gated by useAlpha.",
+  "confidence": 0.55,
+  "evidence": "Callers FUN_005659E8, FUN_0057A26C and FUN_0057BA58 all pass command-buffer cursor pointers; the 0x0057A26C call is func_0056F0A8(cmd, (f_164 & 0xF)>>3, &self->f_74, (f_164 & 3)>>1, self->f_77) with f_74..f_77 = RGBA bytes; descriptor bytes use register ids 0xF and 0xE (local_34=0xF, local_38[0]=2, local_33=0xE, local_2B=0xF, local_2F=1, local_2A=0xE) and are built with func_00507E00 then appended through func_0065654C/func_00658194; callees func_0050971C and func_00656B24 initialise/emit the state blocks; cursor is *arg1."
+ },
+ {
+  "address": "0x0056FCE4",
+  "name": "maybe_Gfx_ResourcePool_Purge",
+  "signature": "void maybe_Gfx_ResourcePool_Purge(void* self, int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Frees the blocks held by one pool slot (or all slots when index<0): walks the slot's block list, unlinks each block's handle-table entry and releases it via func_00115358/func_00115390.",
+  "confidence": 0.45,
+  "evidence": "Loop over 20 (0x14) slots of 0x28 bytes with a vtable pointer at +0x34 and a flag test; caller FUN_0064553C builds a 16-entry bitmap from a byte index array and calls this only for slots no longer referenced (cache eviction); inner code compares *piVar1 with *piVar5 and then scans block->f_80 for the node whose key equals block->f_7C, exactly the list pattern used by FUN_0056FDD0 when it frees a block and sets state f_78 = 6/7; callees 0x00115358/0x00115390 are container erode/release helpers. Pool identity (texture vs generic resource cache) is unclear, hence maybe_."
+ },
+ {
+  "address": "0x00573B6C",
+  "name": "Math_ComputeRotatedAabb",
+  "signature": "float* Math_ComputeRotatedAabb(float* out, const void* transform)",
+  "params": {
+   "param_1": "out",
+   "param_2": "transform"
+  },
+  "summary": "Computes the axis-aligned bounds of an oriented box: takes the centre (+0x10) and half extents (+0x1C..+0x24), transforms four sign-flipped corners, keeps per-axis maxima of the absolute results and writes min xyz / max xyz as 6 floats.",
+  "confidence": 0.5,
+  "evidence": "Callee func_00574548 transforms a vector by the object's rotation/axes and func_00574484 combines vectors per component (max); literal 0.0f g_00573E00 used for the abs tests; corners built from f_1C/f_20/f_24 with negations; output *out = f_10 - extent, out[3] = f_10 + extent, same for Y/Z; callers maybe_Ui_Part_UpdateSlotTransforms (0x0021D09C), maybe_Ui_CompositeWindowCtor (0x0021DC44), FUN_00589DD4, FUN_00665A24."
+ },
+ {
+  "address": "0x00575E38",
+  "name": "Math_UnionAabb",
+  "signature": "void Math_UnionAabb(float* out, const float* a, const float* b)",
+  "params": {
+   "param_1": "out",
+   "param_2": "a",
+   "param_3": "b"
+  },
+  "summary": "Unions two 6-float AABBs: per-axis minimum of the min triples (sign test against 0.0f) and per-axis maximum of the max triples via func_00574484.",
+  "confidence": 0.55,
+  "evidence": "For each of the first 3 components: if (a[i] - b[i]) >= g_00575EC0 (0.0f) take b[i], i.e. min; then func_00574484(&local_28, a+3, b+3) produces the max triple, written to out[3..5]; the 6-float min/max layout matches the output of FUN_00573B6C; same callers FUN_00589DD4 and FUN_00665A24."
+ },
+ {
+  "address": "0x00576220",
+  "name": "Script_GetPlayerIdArg",
+  "signature": "unsigned char* Script_GetPlayerIdArg(unsigned char* out, void* vm, int stackIdx)",
+  "params": {
+   "param_1": "out",
+   "param_2": "vm",
+   "param_3": "stackIdx"
+  },
+  "summary": "Reads a PlayerID argument from a script VM stack slot; anything outside 0..0x1E (and not the 0xFF sentinel) is reported by building a type-mismatch message for the expected type 'xp::PlayerID'.",
+  "confidence": 0.55,
+  "evidence": "Literal pool entry 0x00576298 -> 0x007C07B4 str='xp::PlayerID'; value test `iVar3 != 0xFF && 0x1E < iVar3`; func_007078E4 converts a stack slot to an integer with type checks; on rejection it calls func_005766A4 + func_00576564 (the 'wrong type' formatter) and copies 0x80 bytes into the temp object; 15 callers (FUN_006F8CA8, FUN_006F9378, FUN_006FD674, FUN_0070348C ...) call it as (out, vm, 2) and feed the returned byte to a callback pointer."
+ },
+ {
+  "address": "0x0057629C",
+  "name": "Script_GetFloatArg",
+  "signature": "float* Script_GetFloatArg(float* out, void* vm, int stackIdx)",
+  "params": {
+   "param_1": "out",
+   "param_2": "vm",
+   "param_3": "stackIdx"
+  },
+  "summary": "Converts a script stack slot to a float, accepting integer, unsigned-integer and float object tags and reporting a 'float' type mismatch for anything else.",
+  "confidence": 0.65,
+  "evidence": "String literal 'float' at 0x007C019C; type dispatch on func_006BBD7C(vm, idx) against 0x1000008 with delta literal 0xFC000006 in g_0057637C; branches use func_006BB890 + VectorUnsignedToFloat, func_006BBA70 + VectorSignedToFloat, func_006BBA18 (float passthrough); error branch calls func_00576564 with 'float' and returns g_00576384 (0.0); 18 callers from FUN_006FDC44 to FUN_007073C8."
+ },
+ {
+  "address": "0x00576388",
+  "name": "maybe_Script_GetByteArg",
+  "signature": "unsigned char* maybe_Script_GetByteArg(unsigned char* out, void* vm, int stackIdx)",
+  "params": {
+   "param_1": "out",
+   "param_2": "vm",
+   "param_3": "stackIdx"
+  },
+  "summary": "Like Script_GetIntArg but truncates the converted value to one byte, used for byte-sized fields; reports an 'integer' type mismatch on bad input.",
+  "confidence": 0.48,
+  "evidence": "String literal 'integer' at 0x007C20C2; g_00576470 = 0xFC000006 delta; float branch uses VectorFloatToUnsigned(local_1C[0],3) and stores only (u8)vectorFloatToUnsigned; writes *out = local_24[0] (single byte) and 0 on error; callers FUN_006FE658, FUN_006FEA44, FUN_007043F0; sibling 0x00576478 returns the full 32-bit value from the same conversion, so the 8-bit truncation is the only distinguishing trait."
+ },
+ {
+  "address": "0x00576478",
+  "name": "Script_GetIntArg",
+  "signature": "unsigned int* Script_GetIntArg(unsigned int* out, void* vm, int stackIdx)",
+  "params": {
+   "param_1": "out",
+   "param_2": "vm",
+   "param_3": "stackIdx"
+  },
+  "summary": "Converts a script stack slot to a 32-bit integer, accepting integer, unsigned-integer and float tags and reporting an 'integer' type mismatch otherwise.",
+  "confidence": 0.62,
+  "evidence": "String literal 'integer' at 0x007C20D2; type dispatch on func_006BBD7C with g_0057655C = 0xFC000006; float branch VectorFloatToUnsigned(local_1C[0],3); error branch calls func_00576564 with 'integer' and returns 0; 28 callers (FUN_006F62E0, FUN_006F99E8, FUN_007077A4 ...)."
+ },
+ {
+  "address": "0x00576564",
+  "name": "Script_FormatTypeError",
+  "signature": "void Script_FormatTypeError(void* out, void* vm, int stackIdx, const char* expectedType)",
+  "params": {
+   "param_1": "out",
+   "param_2": "vm",
+   "param_3": "stackIdx",
+   "param_4": "expectedType"
+  },
+  "summary": "Formats the standard Squirrel argument type error 'wrong type (%s expected, got %s )' into an sq string, resolving the actual type name from the offending stack slot (or 'unknown' when it cannot be named).",
+  "confidence": 0.62,
+  "evidence": "Literals at 0x005765F4 'wrong type (%s expected, got %s )' and 0x005765F8 'wrong type (%s expected, got unknown )'; arg4 is the expected type name supplied by callers ('float', 'integer', 'xp::PlayerID'); uses func_006BDAF4 to fetch the stack slot, func_006BDA58/func_006BBD28 to read the type name, func_005B4C34(vm,1) to pop and func_00707A10 to printf into the output object (type tags g_005765F0/g_005766A0); called from the four typed getters and a large number of native bindings."
+ },
+ {
+  "address": "0x005765FC",
+  "name": "maybe_Script_FormatValueForError",
+  "signature": "void maybe_Script_FormatValueForError(void* out, void* value, void* vm)",
+  "params": {
+   "param_1": "out",
+   "param_2": "value",
+   "param_3": "vm"
+  },
+  "summary": "Fills an sq string used in error messages: when the value belongs to the given VM it copies the 0x80-byte value payload, otherwise it writes the value's type name taken from the type-name table; the object type tags are set and restored around the fill.",
+  "confidence": 0.45,
+  "evidence": "Writes tag g_00576698 to *out, then either func_0011CCA0 (strlen) + func_0011142C (memcpy) from the name table g_005766A0 (clamped to 0x7F), or memcpy(out+1, value+0xC, 0x80) when *(int*)(value+4) == vm, and finally stores tag g_0057669C; called from ~100 native bindings, e.g. 0x006F8CA8's error path func_005765FC(local_98, func_005766A4(), vm). The exact sq tag semantics are not proven, so the name stays generic."
+ },
+ {
+  "address": "0x00576768",
+  "name": "maybe_Script_InvokeCallbackPair",
+  "signature": "void maybe_Script_InvokeCallbackPair(unsigned int* out, void* callable, unsigned int arg)",
+  "params": {
+   "param_1": "out",
+   "param_2": "callable",
+   "param_3": "arg"
+  },
+  "summary": "Invokes a script callable with one extra argument: reads the callable's stored parameters through its vtable, calls it with Sq_Call, requires a boolean result, duplicates the resulting references and returns two managed ref pairs in out[1..4].",
+  "confidence": 0.45,
+  "evidence": "Callees Sq_VmGetStackSlot, Sq_VmReadStackSlot, Sq_PushRefValue, func_006BC724 (push ref), func_006BC7A0 (push arg), func_006BB664 (call with 0xfffffffe), func_006BBD7C type check accepting 0x8000100 or 0x8000200 (bool), func_005B4C34 pop, func_006BD10C/12C ref release; failure path zeroes out[0] and clears both refs; only caller FUN_00579B64."
+ },
+ {
+  "address": "0x00576EEC",
+  "name": "Gfx_SpriteSet_Init",
+  "signature": "unsigned int Gfx_SpriteSet_Init(void* self, unsigned int allocTag, void* bank)",
+  "params": {
+   "param_1": "self",
+   "param_2": "allocTag",
+   "param_3": "bank"
+  },
+  "summary": "Creates a sprite set over a texture/animation bank: allocates count*0x3C bytes for the sprite records (count at bank+100), constructs them with the 0x00576BA8 constructor, stores the bank and refreshes every record.",
+  "confidence": 0.55,
+  "evidence": "Callee Mem_AllocAligned(count*0x3C + 8, allocTag, 4) then std_ConstructArray(puVar1+2, 0x00576BA8, 0x3C, count) with header words 0x3C and count; self->f_1C = 0, self->f_20 = bank, then func_00577518(self) fills the records; count field bank+100 and 0x3C stride are shared with FUN_00577518, FUN_005774A8 and FUN_00577868; callers Model_AttachAnimationByHandle, Event_ActorModels_CreateSlotModel, Anim_ModelLoad_ByName, maybe_Gfx_Node_CreateChild."
+ },
+ {
+  "address": "0x00576F4C",
+  "name": "maybe_Gfx_SpriteSet_InitBaseFromBank",
+  "signature": "bool maybe_Gfx_SpriteSet_InitBaseFromBank(void* self, void* bank)",
+  "params": {
+   "param_1": "self",
+   "param_2": "bank"
+  },
+  "summary": "Binds a loaded sprite/animation bank to the object's inline base record: resolves entry 0, copies its 0x30 bytes of metadata, patches the name pointer and index and stores the bank handle at +0x60.",
+  "confidence": 0.48,
+  "evidence": "Callers FUN_004B8DEC and FUN_004B979C format a '<name>.ani'-style string, look the resource up with func_0062B004 and then call this; func_00665740(bank, 0) returns the entry name pointer and 0xFF when the entry is missing (cVar1 != -1 test); copies iVar3->f_C..f_3B into self->f_30..f_5F (i.e. the base record at self+0x24 with name at +0x30 / index at +0x34), then self->f_60 = bank; 0x00576BA8 is the record constructor used by FUN_00576EEC."
+ },
+ {
+  "address": "0x005774A8",
+  "name": "Gfx_SpriteSetList_Select",
+  "signature": "void Gfx_SpriteSetList_Select(void* self, unsigned int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Selects the active sprite set by index in the container's linked list, refreshes every record's name and index from the bank and marks the selection valid (or clears it when the index is out of range).",
+  "confidence": 0.5,
+  "evidence": "Range check with func_00579874 against self->f_98; on failure sets f_A4 = 0, f_A8 = 0xFFFFFFFF, f_AC = 0; otherwise walks self->f_9C index times, stores self->f_A4 = selected set, f_A8 = index, f_AC = 1; per-record loop uses bank+100 count, 0x3C stride, func_00665740 for the name and func_00576BA8 for the metadata; refreshes f_6E..f_71 when f_60 != 0; callers FUN_00421308, FUN_0047E500."
+ },
+ {
+  "address": "0x00577518",
+  "name": "Gfx_SpriteSet_Refresh",
+  "signature": "void Gfx_SpriteSet_Refresh(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Rebuilds every sprite record of the set from its bank: skips invalid entries, copies the 0x30-byte metadata, writes the name pointer and record index, then re-derives the per-record state and colour fields.",
+  "confidence": 0.55,
+  "evidence": "Loops func_00665740(self->f_20, i) skipping 0xFF entries, copying iVar2->f_C..f_3B into the 0x3C record and setting record->f_C = name, f_10 = i; stops at the record count (bank+100) or 300 entries; tail calls func_00577064 per record and copies f_5A..f_5D into f_6E..f_71 when self->f_60 != 0; only caller FUN_00576EEC."
+ },
+ {
+  "address": "0x00577868",
+  "name": "Gfx_Overlay_DrawSortedSpriteList",
+  "signature": "void Gfx_Overlay_DrawSortedSpriteList(unsigned int gfx, unsigned int cmd, unsigned int ctx, void* spriteSet)",
+  "params": {
+   "param_1": "gfx",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "spriteSet"
+  },
+  "summary": "Draws a sprite set in draw-priority order: inserts the set's records into a temporary list sorted by the u16 priority at +0x30, then emits each sprite through func_00577E9C sharing one cached texture/blend state.",
+  "confidence": 0.6,
+  "evidence": "Caller Gfx_Overlay_DrawSortedList (0x002D31B0) passes self->f_A4 as arg4; iterates the records at arg4->f_1C with count bank+100 and stride 0x3C; skips entries whose name is 0 or whose texture index f_20 equals the literal 0x0000FFFF (g_005779C4); insertion-sorts with func_001235A4 comparing *(u16*)(node+0xC) against record->f_30; per-sprite call func_00577E9C(gfx, cmd, ctx, set, record, bank, &cache, 0) with cache words initialised to 0xFFFFFFFF."
+ },
+ {
+  "address": "0x005779C8",
+  "name": "Gfx_Overlay_DrawSpriteListTransition",
+  "signature": "void Gfx_Overlay_DrawSpriteListTransition(unsigned int gfx, void* cmd, unsigned int ctx, void* list, unsigned int fade, float* color)",
+  "params": {
+   "param_1": "gfx",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "list",
+   "param_5": "fade",
+   "param_6": "color"
+  },
+  "summary": "Draws a sprite set in transition mode: per record it either uses the normal sprite path (alpha 1.0) or the interpolating path when the set carries a fade colour/alpha, and updates the shared blend/alpha command state when the mode changes.",
+  "confidence": 0.5,
+  "evidence": "Only caller FUN_002D4484; chooses the set as arg4->f_A4 or arg4+0x1C; compares arg4->f_B8 with 0x3F800000 and uses f_B0 (position offset), f_BC (sort/palette threshold), f_C0/f_C4 (fade colour and alpha, converted with VectorFloatToUnsigned(f_C4*0x437F0000)); dispatches to func_00577E9C (normal) or func_0057895C (transition) with &arg4->f_B0 as the from-position; literals 0x55555555/0x33333333/0x0F0F0F0F popcount trick plus 0x00108418/0x00834084 for a lazy 0x1F8/0x200-entry table."
+ },
+ {
+  "address": "0x00577E9C",
+  "name": "Gfx_Overlay_DrawSpriteQuad",
+  "signature": "void Gfx_Overlay_DrawSpriteQuad(void* gfx, void* cmd, unsigned int ctx, void* set, void* sprite, void* bank, unsigned int* texState, float* offset)",
+  "params": {
+   "param_1": "gfx",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "set",
+   "param_5": "sprite",
+   "param_6": "bank",
+   "param_7": "texState",
+   "param_8": "offset"
+  },
+  "summary": "Draws one sprite quad: fetches its frame rect from the texture bank, builds a rotated/scaled 4-corner quad in screen space, applies flips and modulate colour, emits the blend/alpha command state and the texture command block.",
+  "confidence": 0.6,
+  "evidence": "Callees func_00665714(bank, sprite->f_20) returning the u16 frame/size entry, func_0056C738 (texture size), func_00563200 (screen size), func_006F1B78 (packet), func_0056D544 (texture command block), func_001052C8 (render context), func_00507E00/func_006564C0/func_0065654C/func_00656ACC/func_00656918 (blend and alpha state); literals 0x3F800000, 0x3C8EFA35 (deg->rad), 0x40C90FDB/0x40490FDB (2pi/pi), 0x40800000/0x40000000; record fields f_14 rotation, f_18/f_1C scale, f_20 bank index, f_32/f_34 position, f_36..f_39 RGBA, f_3A blend bits, f_3B flip bits; callers FUN_00577868 and FUN_005779C8."
+ },
+ {
+  "address": "0x00578868",
+  "name": "maybe_Gfx_Overlay_DrawScreenTexture",
+  "signature": "void maybe_Gfx_Overlay_DrawScreenTexture(unsigned int gfx, void* cmd, void* tex)",
+  "params": {
+   "param_1": "gfx",
+   "param_2": "cmd",
+   "param_3": "tex"
+  },
+  "summary": "Binds the texture state for an overlay/screen texture and appends its GPU texture-descriptor command to the command buffer.",
+  "confidence": 0.45,
+  "evidence": "Callers maybe_Gfx_Overlay_DrawMainScreen (0x002D36C8) and maybe_Gfx_Overlay_DrawMainScreenB (0x002D3E1A); starts with func_0055CAD4(tex, cmd, 4) (handle-table fetch), then a full state chain func_00507E00/func_0065660C/func_00656688/func_00656BCC/func_00656B24/func_00656ACC + func_0053380C/func_00656918, and finishes with func_0050971C + func_00658050 + func_00509638 + Gfx_GpuCmd_WriteTextureDescriptor (0x006579C8); writes the cursor back to *(u32*)(cmd+4). Whether it draws a screen copy or an arbitrary texture is not certain, hence maybe_."
+ },
+ {
+  "address": "0x0057895C",
+  "name": "maybe_Gfx_Overlay_DrawSpriteTransition",
+  "signature": "void maybe_Gfx_Overlay_DrawSpriteTransition(void* gfx, void* cmd, unsigned int ctx, void* set, void* sprite, void* bank, unsigned int* texState, float* fromPos, unsigned int extraColor, unsigned int extraAlpha, float* toPos)",
+  "params": {
+   "param_1": "gfx",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "set",
+   "param_5": "sprite",
+   "param_6": "bank",
+   "param_7": "texState",
+   "param_8": "fromPos",
+   "param_9": "extraColor",
+   "param_10": "extraAlpha",
+   "param_11": "toPos"
+  },
+  "summary": "Transition variant of the sprite draw: interpolates position and colour by the factor passed in s0, optionally emits an extra tinted bar quad (command 0x80000008) and writes either the normal or the extra texture command block.",
+  "confidence": 0.45,
+  "evidence": "Only caller FUN_005779C8 (the transition sprite-list draw); uses in_s0 to lerp *arg8 with *arg11 and the colour channels; arg9/arg10 are used as `arg9 != 0 && arg10 < 0xff` and the bar colour byte `-1 - (char)arg10`; writes *puVar13 = 0x80000008 with g_005796C0 then func_0056D544 / func_0056D600; literals 0x3F000000 and 0x804F02C0; same 0x3C record layout as 0x00577E9C (f_14 rotation, f_18/f_1C scale, f_32/f_34 position, f_36..f_3B colour/blend)."
+ },
+ {
+  "address": "0x00579778",
+  "name": "maybe_std_StaticInitThunk",
+  "signature": "void maybe_std_StaticInitThunk(void)",
+  "params": {},
+  "summary": "Compiler-generated static initialiser thunk: it only tail-calls the standard array/static constructor helper, so it exists to initialise a global during module load; nothing else about the initialised data is recoverable from the stub.",
+  "confidence": 0.35,
+  "evidence": "28-byte function with no callers; the whole body is a noreturn call to func_00100050 (std_ConstructArray), the same helper used by the other lazy/static constructor sites in this region (e.g. 0x0056DE24's g_0056E844 table, 0x005779C8's 0x00108418 table); arguments are still in registers at the tail call so Ghidra shows none; the target global is not identifiable, hence the generic std_ name and low confidence."
+ },
+ {
+  "address": "0x005799F4",
+  "name": "maybe_Script_CallWithStackTop",
+  "signature": "void maybe_Script_CallWithStackTop(void* self, void* callback)",
+  "params": {
+   "param_1": "self",
+   "param_2": "callback"
+  },
+  "summary": "Invokes a supplied callback with the VM's top-of-stack value: pushes null, reads the stack top into a managed reference, calls callback(&value) and releases the reference afterwards.",
+  "confidence": 0.45,
+  "evidence": "Callers maybe_Script_SetEventParams (0x00253EA0) and maybe_Script_SetBookCommandParams (0x00255598); vm taken from arg1->f_24; tags g_00579A9C/g_00579AA0; callees func_006BD12C (ref init/clear), func_006BC798, func_006BBCEC (Sq_VmReadStackSlot at 0xffffffff), func_006BA690, func_005B4C34(vm,1), then the indirect call (*arg2)(&local_28); the local_18 flag drives the final ref release."
+ },
+ {
+  "address": "0x00579B64",
+  "name": "Script_InvokeScriptCallback",
+  "signature": "void Script_InvokeScriptCallback(unsigned int out, void* self, unsigned int arg, unsigned int ret)",
+  "params": {
+   "param_1": "out",
+   "param_2": "self",
+   "param_3": "arg",
+   "param_4": "ret"
+  },
+  "summary": "Calls a script-side callback from a native: takes the callable on the VM stack, calls it with one argument, reads the boolean result and forwards it through the two-value invocation helper func_00576768.",
+  "confidence": 0.5,
+  "evidence": "Callers Script_CallBookIdCommand, Script_Native_ATrgMapJumpEvent, Script_CallSelectRuraPattern, Script_CallOnCalcScenarioProgress, Script_CallSelectRiremitoUsable, Event_RunTriggerCommandCallbacks, maybe_Script_CallEventHandlers; tags g_00579D10/g_00579D14/g_00579D18 (0x01000001)/g_00579D1C; callees Sq_VmGetStackSlot, Sq_VmReadStackSlot, Sq_PushRefValue, func_006BC724, func_006BC7A0 (push arg3), func_006BB664 (call), func_00576768(out, &local_44, arg4) for the second stage; releases refs via func_006BD10C/12C."
+ },
+ {
+  "address": "0x00579D20",
+  "name": "Script_RunScriptFile",
+  "signature": "bool Script_RunScriptFile(void* self, unsigned int scriptRef, unsigned int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "scriptRef",
+   "param_3": "mode"
+  },
+  "summary": "Loads a script file through the bytecode loader and runs it: saves the VM stack top, calls the loader with the script name/arguments, then restores the stack and reports whether execution succeeded.",
+  "confidence": 0.6,
+  "evidence": "String literal s_scriptName at 0x00579D8C; callee FUN_00564828 (0x00564828) which reads the UTF-8 BOM, raises 'cannot open the file', 'io_error' and 'Unrecognozed ecoding' and loads bytecode with func_006BCF6C; the VM handle is self->f_24 and the stack top is saved with func_006BBD6C and restored with func_006BD830; result test func_006BB0F4(vm,1,0) >= 0; callers maybe_Script_LoadEventScript (0x0025330C) and Script_RunAttachedCnut (0x0028E03C)."
+ },
+ {
+  "address": "0x0057A26C",
+  "name": "maybe_Gfx_SceneObject_DrawParts",
+  "signature": "void maybe_Gfx_SceneObject_DrawParts(void* self, void* cmd, unsigned int ctx, unsigned short* partIndex, void* color, unsigned int* drawState)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "partIndex",
+   "param_5": "color",
+   "param_6": "drawState"
+  },
+  "summary": "Draws the parts of a sized scene/overlay object: selects the per-part state, binds texture state per part, writes three 16-word vertex-shader float-uniform blocks (object matrix, second matrix/colour, supplied colour) and emits the part quads honouring the object's clip/fade flags.",
+  "confidence": 0.45,
+  "evidence": "PTRREF table at 0x007828D8 with slots 0x0057AB48 / 0x0057AFD0 / 0x0057C230 / 0x0057A26C / 0 / 0x0057BA58, i.e. this is a vtable method (no direct callers); per-part state at self->f_2C + *partIndex*0x158 with flags at +0xEE/+0xEC, per-part records at partIndex->f_16->f_34 + *partIndex*0x2C, part flag bitmask at self+100 using index/32; writes PICA vertex-uniform commands 0x000F02C0/0x00BF02C1 and 0x80000017/0x80000000 blocks with 0x804F02C0, memcpy 0x40 bytes of self->f_78..f_A4 (3x4 matrix) and of the caller-supplied colour; uses func_0056F0A8 for the object colour, func_0051B5B4 for the shared matrix, and 0x0065A0B0/0x00659C24/0x0065A3E4/0x00659B50/0x0065C8D8/0x0065CCA0 for the quads. Whether this is the 2D overlay object or a field scene object is not fully resolved, hence maybe_."
+ },
+ {
+  "address": "0x0057B330",
+  "name": "Gfx_CharModel_Init",
+  "signature": "int Gfx_CharModel_Init(GfxCharModel* self, GfxAllocator* alloc, GfxAllocator* alloc2, GfxModelDesc* desc)",
+  "params": {
+   "param_1": "self",
+   "param_2": "alloc",
+   "param_3": "alloc2",
+   "param_4": "desc"
+  },
+  "summary": "Initialises a drawable character-model instance from a model resource: sizes and allocates the per-part/material buffers, counts normal vs outline parts, and builds the part index lists. Returns 1 on success and 0 when the resource header is missing or a sub-buffer fails.",
+  "confidence": 0.55,
+  "evidence": "Returns 0 immediately if self->f_28 (model resource) is 0; 0x0065AA28 computes the 5 sub-buffer sizes that are summed (local_cc+local_d8+local_e0+local_d4+local_d0) and passed to Mem_AllocAligned for self->f_fc/f_100; 0x0065B310/0x0065AC3C/0x0065AFBC/0x0065B4F8/0x0065B618 initialise self->f_2c, f_34, f_58, f_6c (assert-fail path sets self->f_28=0 and frees f_fc/f_100); walks self->f_28->f_48..f_4c in 0x38-byte records testing (*p & 0x70000) and comparing the name at +0x34 with '_Outline' (0x0057B960) via Gfx_ResourceTrie_Lookup, counting f_f0 (normal) and f_f2 (outline); looks up 'N_ALL' (0x0057B980) and 'OutlineCenter' (0x0057B970) via 0x0050DD5C/0x00659668; allocates f_e0/f_e4/f_e8/f_ec index arrays and copies desc[0]/desc[1] counts into f_154/f_15c with lists at f_150/f_158 (same fields later consumed by FUN_0057BFF4); f_164 bits 3/4 set from desc[5]&1 and desc[3]&1."
+ },
+ {
+  "address": "0x0057BA58",
+  "name": "Gfx_CharModel_DrawPart",
+  "signature": "void Gfx_CharModel_DrawPart(GfxCharModel* self, GfxCmdBuf* cmd, void* ctx, unsigned short* partRef, float* matrix, unsigned int* xform)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "ctx",
+   "param_4": "partRef",
+   "param_5": "matrix",
+   "param_6": "xform"
+  },
+  "summary": "Emits the PICA command stream for one model part: writes the palette/matrix command blocks, texture and material state, then the indexed draw call, choosing different paths for outline/1D/2D part modes.",
+  "confidence": 0.6,
+  "evidence": "PTRREF at 0x007822C4 and 0x007828E0 both list this function at slot +0 (emit slot) with neighbours 0x0057C230 and 0x005659E8/0x0057A26C; writes raw PICA command words from literals 0x804F02C0, 0x000F02C0 (0x000100E0/0x00000000 also used), builds 0x80000017 + 0x804F02C0 blocks with three consecutive 1.0f (0x0057BFA0) entries; uses GfxCmdBuf cursor at (arg2+4) exactly like the other 0x0065xxxx emitters here; part struct is pbVar14 = self->f_2c + *arg4*0x158 and material/part state comes from arg4->f_16->f_34 + *arg4*0x2c; callers of the 0x0065Cxxx helpers include Gfx_SceneObject_CullAndDrawParts; matrix for the object is self->f_78..f_a4 and is copied with 0x0012558C into 12-word blocks; self->f_dd selects the alternative transform path."
+ },
+ {
+  "address": "0x0057BFF4",
+  "name": "Gfx_CharModel_Update",
+  "signature": "void Gfx_CharModel_Update(GfxCharModel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of a character-model instance: re-evaluates the skeleton/animation into the node matrices, runs the registered part interfaces and per-part update callbacks, and marks the pose dirty.",
+  "confidence": 0.6,
+  "evidence": "PTRREF at 0x007822A4 and 0x007828C0 put this at slot +0 with maybe_Anim_UpdateBlendTracks at -4 and Gfx_SceneObject_CullAndDrawParts at +8 (same class family as FUN_0057B330/FUN_0057BA58, which share f_150/f_158); body calls the interface at self->f_144 slot +8, updates the poser (0x006E8888 on self->f_104 and self->f_34), calls 0x0055E5B8 for f_10c/f_110, iterates the two f_114 slots with 0x0055E560, calls self->f_146/f_14c interfaces, then walks the f_150/f_154 and f_158/f_15c arrays (0x007122E4 and 0x0065C210 with i->f_20/f_18); ends with self->f_164 |= 1."
+ },
+ {
+  "address": "0x0057C7E4",
+  "name": "Gfx_CharModel_Construct",
+  "signature": "void Gfx_CharModel_Construct(GfxCharModel* self, void* owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner"
+  },
+  "summary": "Constructor for the character-model instance: installs the vtable, zeroes the whole state block, loads the default transform matrices from a global table and constructs the embedded animation-blend array.",
+  "confidence": 0.6,
+  "evidence": "First statement stores *self = g_0057c964 = 0x007828B0, i.e. the vtable 0x30 bytes below the 0x007828E0 table that holds FUN_0057BA58; stores owner at self[2] and self[3]; copies 12 words from g_0057c968 = 0x007E7110 into self[0x1e..0x29] and again into self[0x2a..0x35] (two 4x3 default matrices/transform blocks); sets the 0/0xFFFF id pair at self[0x3d]/self[0x3e] from g_0057c96c/g_0057c970; sets byte at +0x77 = 0xFF and +0xdd = 0; finishes with std_ConstructArray(&self->f_4a, 0x0057B0D4, 0xc, 2) where 0x0057B0D4 is the destructor immediately before maybe_Anim_UpdateBlendTracks (0x0057B0EC)."
+ },
+ {
+  "address": "0x0057D32C",
+  "name": "maybe_Gfx_CmdBuf_WriteColorBlock",
+  "signature": "void maybe_Gfx_CmdBuf_WriteColorBlock(void* self, GfxCmdBuf* cmd, unsigned int listIndex, unsigned int entryIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "listIndex",
+   "param_4": "entryIndex"
+  },
+  "summary": "Writes one PICA command group for a single entry of a 0x218-byte record array: a flag word plus a 24-bit colour, a second command header, and (when the record is enabled) a 0x210-byte payload copy.",
+  "confidence": 0.4,
+  "evidence": "Command cursor is *(u32**)(cmd+4) (same layout as the other Gfx cmd-buffer writers); record pointer is *(int*)(self + listIndex*4 + 0xc) + entryIndex*0x218; literals 0x000500E0 and 0x000F00E1 are PICA command headers, the 0x000F00E1 group is followed by std_memcpy of 0x210 bytes from record+8 and the cursor advances to record+0x88; first word = (record[0]?5:0) | (record[1]!=0)<<16 and second data word = *(u32*)(record+2) & 0xFFFFFF (a 24-bit RGB value). Payload semantics and the meaning of listIndex are unclear, hence low confidence."
+ },
+ {
+  "address": "0x0057D8EC",
+  "name": "Gfx_CharModel_BindResources",
+  "signature": "void Gfx_CharModel_BindResources(GfxCharModel* self, GfxModelDesc* desc, GfxResourceTable* table, unsigned int variant)",
+  "params": {
+   "param_1": "self",
+   "param_2": "desc",
+   "param_3": "table",
+   "param_4": "variant"
+  },
+  "summary": "Resolves the model's material/shader names against the scene resource table and stores the resulting resource indices into the model's per-slot parameter blocks (3 blocks at +0x800 strided 0xcc, plus two slots at +0xd90).",
+  "confidence": 0.5,
+  "evidence": "Selects the destination base as self+200 or self+0x32c from arg4, then fills 0xcc-strided blocks at base+0x800 for up to 3 iterations, each reset by 0x0055F3C4 and filled by 0x0055F538(index, *(u32*)(table->f_30->f_3c + hit*4)); name lookups go through Gfx_ResourceTrie_Lookup (0x00659668) on table->f_30+0x40 and table->f_30+0x58 (results from f_30->f_54); the second loop stores up to 2 u32 at self + arg4*0xc + 0xd90 and sets f_d98=1, which is exactly the dirty flag/slots consumed by FUN_0057E5F8 (same +0xd90/f_d98 layout, entries resolved with 0x0065973C)."
+ },
+ {
+  "address": "0x0057DD40",
+  "name": "Gfx_CharShadow_AllocMeshes",
+  "signature": "int Gfx_CharShadow_AllocMeshes(GfxCharShadow* self, GfxAllocator* alloc)",
+  "params": {
+   "param_1": "self",
+   "param_2": "alloc"
+  },
+  "summary": "Allocates and initialises the two char-shadow mesh/curve sets: sizes them from a vertex-format descriptor, allocates the memory, then builds three curve strips into each set.",
+  "confidence": 0.55,
+  "evidence": "Only caller is Gfx_CharShadow_BuildCurveTable (0x0057CA48); builds a descriptor on the stack (local_4c=2, local_4a=3, local_48=4, local_46=1) and calls 0x0053295C for the size, Mem_AllocAligned(result, alloc, 0x10) into self->f_298, then 0x005324F4(self+4, i, &desc) and 0x0055EA5C(self + i*0xcc + 0x8c8, self+4, i) for i=0..2; repeats the same sequence for a second descriptor into self->f_29c, 0x005324F4(&self->f_e0,...) and three strips at self + i*0xcc + 0xb2c; returns 1 only if both allocations succeed."
+ },
+ {
+  "address": "0x0057E5F8",
+  "name": "maybe_Gfx_CharModel_UpdateProjMatrices",
+  "signature": "void maybe_Gfx_CharModel_UpdateProjMatrices(GfxCharModel* self, unsigned int slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot"
+  },
+  "summary": "When the per-slot dirty flag is set, computes the inverse of the slot's 4x4 transform matrix and pushes it (twice, once per bound resource) into the projection-texture matrix slots before rebuilding the render state.",
+  "confidence": 0.45,
+  "evidence": "Reads the dirty byte f_d98 of the block at self + slot*0xc and the two resource handles at +0xd90; for each non-null handle inverts the 4x4 matrix at (self + slot*0x7c)->f_784..f_7c0 (full adjugate/cofactor expansion, reciprocal via 1.0f literal 0x3F800000) and calls 0x0065973C(handle, (self+slot*0xdc)+4, index, &invMatrix); clears f_d98 at the end; then 0x006F2AAC/0x00665910(local_6c[0], self+4, 0) and *(u8*)(local_6c[0]+0x5f)=0 resets the render-state dirty flag. Which resource type the two slots represent (shadow/decal/projective texture) is not proven."
+ },
+ {
+  "address": "0x0057ECD8",
+  "name": "maybe_Gfx_CmdBuf_WriteColorCommands",
+  "signature": "void maybe_Gfx_CmdBuf_WriteColorCommands(void* self, int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Converts a float RGB triple (scaled by an incoming s3 factor) to 8-bit components and writes four 8-byte command records (value + 0xF0000-style PICA header) into the slot selected by index.",
+  "confidence": 0.4,
+  "evidence": "Uses VectorFloatToUnsigned(in_s0*in_s3, 3), (in_s1*in_s3,3) and (in_s2*in_s3,3) to produce the three bytes stored at (self + index*4)->f_28/f_29/f_2a; calls 0x0050971C on a stack buffer whose result feeds local_2a; then loops 4 times writing *(u32*)(self + i*8 + 8) = the 3 colour bytes and i->f_c = local_2a + 3 | 0xF0000, i.e. four fixed 8-byte command/header pairs built from one colour. The exact command id (0x000Fxxxx, inherited from the float args' caller) is not determinable from this dossier alone."
+ },
+ {
+  "address": "0x0057EE1C",
+  "name": "Gfx_Sprite_InitFromHandle",
+  "signature": "void Gfx_Sprite_InitFromHandle(GfxSprite* self, unsigned int handle, void* res, unsigned int matrixDst, float* srcMatrix, unsigned int owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handle",
+   "param_3": "res",
+   "param_4": "matrixDst",
+   "param_5": "srcMatrix",
+   "param_6": "owner"
+  },
+  "summary": "Initialises a sprite instance from a resource handle: stores the handle/resource/owner, computes the transformed bounding box, and copies the source 4x3 matrix into the destination while decomposing it into position/rotation fields.",
+  "confidence": 0.55,
+  "evidence": "Only caller is Gfx_Scene_CreateSpriteFromHandle (0x00589054); stores arg2 into f_c, arg3 into f_18, arg4 into f_14, arg6 into f_10; calls 0x00589DD4(stack, matrix, res+0x2c) (the bounds routine that writes 6/12 floats incl. min/max) and 0x0058D228(&self->f_24, stack); copies the 7 words of arg5 into self->f_14 and 0x00572EC4 decomposes them into 7 floats stored at f_1c..f_34 with f_38=0; the twin function FUN_005884A4 (0x005884A4) is identical and is called by Gfx_Scene_CreateNodeFromHandle."
+ },
+ {
+  "address": "0x0057EEC4",
+  "name": "Gfx_Sprite_SetTransform",
+  "signature": "void Gfx_Sprite_SetTransform(GfxSprite* self, float* matrix, float* extraMatrix)",
+  "params": {
+   "param_1": "self",
+   "param_2": "matrix",
+   "param_3": "extraMatrix"
+  },
+  "summary": "Overwrites a sprite's stored 4x3 matrix and its decomposed position/rotation block from the two supplied matrices, and recomputes the bounding box when the sprite has a resource attached.",
+  "confidence": 0.55,
+  "evidence": "Only caller is FUN_0058E5A0, which calls it after comparing the cached transform; copies 7 words of arg2 into *(self->f_14) and 7 words of arg3 into the same block at +0x1c, i.e. the same two matrix halves that FUN_0057EE1C fills (f_1c..f_34 via 0x00572EC4); if self->f_18 (resource) is set it calls 0x00589DD4(stack, arg2, res+0x2c) and 0x0058D228(&self->f_24, stack) to refresh the bounds; twin of FUN_0058854C used for scene nodes."
+ },
+ {
+  "address": "0x00587468",
+  "name": "Gfx_Sprite_BindResource",
+  "signature": "void Gfx_Sprite_BindResource(GfxSprite* self, GfxResEntry* res, unsigned int handle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "res",
+   "param_3": "handle"
+  },
+  "summary": "Binds a resource descriptor to a sprite without allocating working buffers: releases any previous allocation, copies the descriptor's counts/offsets and sub-matrices, and computes the name hash id.",
+  "confidence": 0.5,
+  "evidence": "Called from FUN_00588AB8 (the pool allocator) in the branch where no transform matrix is supplied, as the small alternative to FUN_0058765C; releases the old buffer through the allocator vtable slot +0x14 and zeroes f_7c..f_28; copies res->f_68 fields (f_2c..f_78, f_30..f_40, f_44..f_68) into self, uses 0x0058D328(*(res+100), res->f_68) to obtain the name string and hashes it with the 0x2B86E23D/0xA37964B9/0x162C202D/0x89705FD3/0xC465363F constants to produce f_90; 0x0058D354/0x0058D254/0x0058D2E8 fill f_20/f_24/f_28."
+ },
+ {
+  "address": "0x0058765C",
+  "name": "Gfx_Sprite_BuildBuffers",
+  "signature": "void Gfx_Sprite_BuildBuffers(GfxSprite* self, GfxAllocator* alloc, GfxResEntry* res, unsigned int handle, float* transform)",
+  "params": {
+   "param_1": "self",
+   "param_2": "alloc",
+   "param_3": "res",
+   "param_4": "handle",
+   "param_5": "transform"
+  },
+  "summary": "Allocates the sprite's working buffers from a resource descriptor and fills the three sub-arrays (0x14, 0x28 and 0x2c byte elements), either copying them verbatim or transforming them by a 4x4 matrix with quaternion maths when a transform is given.",
+  "confidence": 0.5,
+  "evidence": "Called from FUN_00588AB8 in the branch where a transform exists; computes element counts j=(res->f_68-*(res+100))/0x14, iVar8=(f_78-f_74)/0x28, iVar2=(f_88-f_84)/0x2c and allocates j*0x14 + iVar8*0x28 + iVar2*0x2c + 0x20 via the allocator vtable slot +0xc (same vtable as the +0x14 free used in FUN_00587468); stores the name at f_8c (0x00116A14 copy, 0x1f bytes) and hashes it into f_90 with the same 0x2B86E23D.. constant set as FUN_00587468; uses 0x00574044/0x005740D8/0x005744DC/0x005746FC (quaternion multiply, from-matrix, rotate) plus constants 0x3F800000/0x3F000000/0x3F7FFF58 to rebuild each element from arg5, writing position+quat+scale and the u16 at +0x1c of each record."
+ },
+ {
+  "address": "0x005884A4",
+  "name": "Gfx_SceneNode_InitFromHandle",
+  "signature": "void Gfx_SceneNode_InitFromHandle(GfxSceneNode* self, unsigned int handle, void* res, unsigned int matrixDst, float* srcMatrix, unsigned int owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handle",
+   "param_3": "res",
+   "param_4": "matrixDst",
+   "param_5": "srcMatrix",
+   "param_6": "owner"
+  },
+  "summary": "Initialises a scene-node instance from a resource handle: stores the handle/resource/owner, computes the transformed bounds and copies/decomposes the source 4x3 matrix.",
+  "confidence": 0.6,
+  "evidence": "Only caller is Gfx_Scene_CreateNodeFromHandle (0x005895BC); byte-for-byte identical in structure to FUN_0057EE1C but with the node vtable; stores arg2 at f_c, arg3 at f_18, arg4 at f_14, arg6 at f_10, calls 0x00589DD4(stack, matrix, res+0x2c) then 0x0058D228(&self->f_24, stack), copies 7 words of arg5 through f_14 and writes the 0x00572EC4 decomposition into f_1c..f_34, f_38=0."
+ },
+ {
+  "address": "0x0058854C",
+  "name": "Gfx_SceneNode_SetTransform",
+  "signature": "void Gfx_SceneNode_SetTransform(GfxSceneNode* self, float* matrix, float* extraMatrix)",
+  "params": {
+   "param_1": "self",
+   "param_2": "matrix",
+   "param_3": "extraMatrix"
+  },
+  "summary": "Sets a scene node's stored matrix plus its decomposed position/rotation block from the two supplied matrices and refreshes the bounding box when a resource is attached.",
+  "confidence": 0.55,
+  "evidence": "Only caller is FUN_0058E5A0, in the same branch that calls FUN_0057EEC4 but selected by the 0x8000000 node flag; copies 7 words of arg2 into *(self->f_14) and 7 words of arg3 into +0x1c, then, if self->f_18, calls 0x00589DD4(stack, arg2, res+0x2c) and 0x0058D228(&self->f_24, stack); same field layout as Gfx_SceneNode_InitFromHandle (FUN_005884A4)."
+ },
+ {
+  "address": "0x00588AB8",
+  "name": "maybe_Gfx_SceneNodePool_AllocFromResource",
+  "signature": "unsigned int maybe_Gfx_SceneNodePool_AllocFromResource(GfxNodePool* pool, GfxResEntry* res, unsigned int capacity, unsigned int arg4)",
+  "params": {
+   "param_1": "pool",
+   "param_2": "res",
+   "param_3": "capacity",
+   "param_4": "arg4"
+  },
+  "summary": "Allocates a free index from the pool's bitmask, builds the 0x2000000|index handle for it, and instantiates the sprite/node from the resource, returning the handle (0 on failure).",
+  "confidence": 0.45,
+  "evidence": "Validates either the resource (res[0]==0 path requires *(res+100) and res->f_68) or the pool (pool[0]); scans the bitmask at pool[0xd] over pool[0xe] bits using pool[0xf] as the used cursor, sets each free bit and increments pool[0xf]; computes iVar4 = index*0x9c + pool[0xc] and bails if 0; handle = computed index | 0x2000000; calls 0x005883A8(handle, pool[0xe], count, ...) then either FUN_0058765C(handle, pool[0], res, handle, 0) when res[0]!=0 or FUN_00587468(handle, res, handle); the 0x9c element size matches the entry pool built by FUN_0058B86C."
+ },
+ {
+  "address": "0x00589DD4",
+  "name": "Gfx_Bounds_CalcTransformedBox",
+  "signature": "void Gfx_Bounds_CalcTransformedBox(GfxBounds* out, float* matrix, GfxBoundsDef* def)",
+  "params": {
+   "param_1": "out",
+   "param_2": "matrix",
+   "param_3": "def"
+  },
+  "summary": "Computes the world-space bounding volume of a resource's local box under a 4x3 node matrix, writing a sphere (centre + radius) and two min/max corner sets into the output.",
+  "confidence": 0.6,
+  "evidence": "Called by all four handle constructors (FUN_0057EE1C, FUN_0057EEC4, FUN_005884A4, FUN_0058854C) as func(stack, matrix, res+0x2c); starts from 0x00574548 (matrix/vector init) and transforms with 0x00573B6C/0x00573E04/0x005744DC/0x00574484/0x00575E38; writes out[0..2]=transformed centre with w=def->f_c (radius) at out[3], the 3 min/max pair at out[4..9] and a second pair at out[0xa..0x13]; uses the min/max selects against g_0058a23c (0.0) and the 0.5f constant g_0058a244 on (def->f_10+f_1c)/2 style midpoint maths, clamping to the g_0058a240 default box."
+ },
+ {
+  "address": "0x0058B86C",
+  "name": "maybe_Gfx_SpritePool_Construct",
+  "signature": "void maybe_Gfx_SpritePool_Construct(GfxSpritePool* self, GfxAllocator* alloc, unsigned int nodeCount, unsigned int spriteCount)",
+  "params": {
+   "param_1": "self",
+   "param_2": "alloc",
+   "param_3": "nodeCount",
+   "param_4": "spriteCount"
+  },
+  "summary": "Builds the backing storage of a sprite/popup pool: a free-list-linked array of 0x9c-byte entries plus a second array of 200-byte entries that each hold two 6-element vector blocks.",
+  "confidence": 0.45,
+  "evidence": "Only caller is Battle_PopupPool_InitEntry (0x0058E264); frees the previous buffer through the allocator vtable slot +0x14 and stores the allocator at f_14; allocates arg4*0x9c + ((arg4+0x1f)>>5)*4 words via vtable slot +0xc and stores it at f_18, builds the bitmask at f_1c and links the entries through the u16 at +0x9a (psVar6[0x4e] with 0x9c stride); calls std_ConstructArray(entry, 0x0058BB98, 0x14, 6) on each 0x9c entry (6 sub-objects of 0x14, matching the 0x14-byte records of FUN_0058765C); allocates arg3*200 bytes at f_2c via f_18 = *(self+8) and calls std_ConstructArray(&entry->f_38, 0x0058BB9C, 0xc, 6), i.e. 6 vec3 at +0x38, exactly the region written by FUN_0058BBA0 at +0x80/+0x38."
+ },
+ {
+  "address": "0x0058BBA0",
+  "name": "maybe_Gfx_SpritePool_CommitTransform",
+  "signature": "void maybe_Gfx_SpritePool_CommitTransform(GfxSpritePool* self, GfxSceneNode* node, unsigned int mask)",
+  "params": {
+   "param_1": "self",
+   "param_2": "node",
+   "param_3": "mask"
+  },
+  "summary": "Pushes a node's current 3x2 transform block into its pooled 200-byte entry and marks the touched sub-slots dirty.",
+  "confidence": 0.45,
+  "evidence": "Only caller is FUN_0058E5A0 with self+0xa4 (the pool sub-object built by FUN_0058B86C) and the node's index taken from node->f_98; entry = self->f_2c + node->f_98*200; computes uVar1 = 0x0058D140(node, mask) as a 6-bit presence mask and ORs ((uVar1 | uVar1>>3) & 7) into entry->f_1c; then for j in 0..1 and i in 0..2 copies the 12-byte vector at node + i*0x28 + j*0x14 to entry + i*0x18 + j*0xc + 0x80, i.e. the second 6-vec3 block of the 0xc8 entry."
+ },
+ {
+  "address": "0x0058E5A0",
+  "name": "Gfx_Scene_SetNodeTransform",
+  "signature": "unsigned int Gfx_Scene_SetNodeTransform(GfxScene* self, unsigned int handleFlags, float* matrix)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handleFlags",
+   "param_3": "matrix"
+  },
+  "summary": "Applies a 4x4 transform to the sprite (flag 0x4000000) or scene node (flag 0x8000000) referenced by the handle, short-circuiting when the cached transform already matches, and marks the pooled entry dirty.",
+  "confidence": 0.5,
+  "evidence": "Dispatches on 0x4000000/0x8000000 bits: 0x4000000 resolves the node pool via 0x00588A54(self+0x2c) and compares 7 floats from 0x006659FC with arg3 before calling FUN_0057EEC4; 0x8000000 resolves via 0x0058912C and compares 0x00665A10 against arg3 before calling FUN_0058854C (the two SetTransform twins) with 0x00572EC4(arg3); then, if iVar1->f_20 is set, calls FUN_0058BBA0(self+0xa4, entry, &iVar1->f_34) and finally 0x005891A4(self+0x2c, iVar1->f_14); returns 1 on success and 0 when the flag or the pool lookup fails."
+ },
+ {
+  "address": "0x0058F9E4",
+  "name": "maybe_Ui_TextColor_Resolve",
+  "signature": "void maybe_Ui_TextColor_Resolve(unsigned int* out, unsigned int colorId)",
+  "params": {
+   "param_1": "out",
+   "param_2": "colorId"
+  },
+  "summary": "Looks up a UI colour/style record by id in a lazily built 192 KB global table and writes the resolved packed value (via a virtual getter and float conversion) to the output.",
+  "confidence": 0.45,
+  "evidence": "All nine callers are colour/status UI code: Ui_ApplyTextColor, Ui_ApplyTextColorAlt, Ui_StatusPanel_SetCharacter, Ui_PartySelectWindow_RefreshRows, maybe_Ui_PartyIconRow_Refresh, maybe_Ui_TwoColumnValueList_ApplyRowColours, maybe_Ui_TsuyosaWindow_RefreshMemberRows; one-shot global init guarded by the byte at 0x007BE31C builds a buffer of 0x0002FB28 bytes at 0x00804160 (0x0011CFAC aligned alloc) with std_ConstructArray(..., 0x0019244C, 0x000012EC, 0x1f) and stores it through 0x007BE320; then func_0035EB98(table, arg2) yields a record whose u16 at +0x14 is converted with VectorUnsignedToFloat (RGB565-style unpack), a virtual slot +8 supplies the second component, and func_003CEA1C() supplies the value finally copied into *out. Only one u32 is written, so the exact packing is unproven."
+ },
+ {
+  "address": "0x00591D98",
+  "name": "Field_Gimmick_SetDataRef",
+  "signature": "void Field_Gimmick_SetDataRef(FieldGimmick* self, unsigned int id, unsigned int unused, unsigned int key)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id",
+   "param_3": "unused",
+   "param_4": "key"
+  },
+  "summary": "Resolves a gimmick-related data reference through the game data manager and stores the resulting value/handle at offset 0x48 of the gimmick object.",
+  "confidence": 0.5,
+  "evidence": "Only caller is Field_Gimmick_InitFromRecord (0x002BE0E4); takes the address of arg4, calls maybe_Game_GetDataManager (0x0011CB38) on it, then 0x002D71AC(*dm, arg2) and stores the result at self->f_48; arg3 is unused; the same (dm, id) lookup pattern is used by 0x002D72F0 (maybe_Ui_LookupMapValueById) in the neighbouring text functions."
+ },
+ {
+  "address": "0x0059660C",
+  "name": "Text_Popup_SelectMessage",
+  "signature": "void Text_Popup_SelectMessage(unsigned int ctx, unsigned int messageType)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "messageType"
+  },
+  "summary": "Maps an actor-popup message type to one of the fixed message ids 0x50..0x58 and triggers the corresponding UI lookup with the 0xFFFF wildcard key.",
+  "confidence": 0.5,
+  "evidence": "Only caller is maybe_Text_Command26_SpawnActorPopup (0x00595754); switch on arg2 maps 0->0x51, {1,0xb}->0x52, {2,0xc}->0x53, {3,0xd,0x1b}->0x54, {4,0xe}->0x55, {5,0xf}->0x56, {6,0x10}->0x57, {7,0x11}->0x58 and default->0x50; each case calls maybe_Ui_LookupMapValueById(0x002D72F0)(*Game_GetDataManager(...), 0xFFFF, 0xFFFF, id, 0) using the literal 0x0000FFFF."
+ },
+ {
+  "address": "0x00596A78",
+  "name": "Text_Layout_ProcessCharEffect",
+  "signature": "void Text_Layout_ProcessCharEffect(void* layout, void* glyphCtx, unsigned char flag)",
+  "params": {
+   "param_1": "layout",
+   "param_2": "glyphCtx",
+   "param_3": "flag"
+  },
+  "summary": "Lays out one text character and, when the glyph type is resolved, queues a layout/effect command for it, including the special handling for glyph ids 0x94/0x96/0x97, then advances the layout cursor.",
+  "confidence": 0.5,
+  "evidence": "Callers are maybe_Text_TalkWindow_BuildLinesEx and Text_Layout_StepLine; resolves the character id from layout[0x5d7]+0xde via func_0063D018 (or uses the u16 at +0xd0 when the id byte is 0xFF), queries glyphCtx vtable +0xf8 and, on a miss, calls Text_QueueEffectCommand (0x001FE274) with layout[0x5d7]+0xda then layout vtable +0x128; on a hit builds a 6-field record (local_40/local_3c/local_3a/local_38/local_37/local_34 = arg3) and calls 0x003FBE4C(layout, &record, 1) after 0x002D72F0, adds 0x002798E0 for glyph ids 0x94/0x96/0x97, then layout vtable +0x124/+0x130 and sets byte +0x17f9 = 1; shares the g_00596c88=0xFFFF sentinel and g_00596c8c table with the two siblings."
+ },
+ {
+  "address": "0x00596D10",
+  "name": "Text_Layout_ProcessChar",
+  "signature": "void Text_Layout_ProcessChar(void* layout, void* glyphCtx, unsigned int flag)",
+  "params": {
+   "param_1": "layout",
+   "param_2": "glyphCtx",
+   "param_3": "flag"
+  },
+  "summary": "Simplified single-character layout step: resolves the glyph, queues the layout record for it (or the effect command when the glyph is not resolvable) and advances the layout cursor.",
+  "confidence": 0.55,
+  "evidence": "Same callers and prologue as FUN_00596A78 (Text_TalkWindow_BuildLinesEx / Text_Layout_StepLine, char id from layout[0x5d7]+0xde via 0x0063D018, glyphCtx vtable +0xf8 check, Text_QueueEffectCommand 0x001FE274, 0x002D72F0 + 0x003FBE4C(layout,&record,1), layout vtable +0x124/+0x130, byte +0x17f9=1) but without the glyph-type 0x94/0x96/0x97 special case and with only 6 record fields derived from glyphCtx vtable +0xe8/+0x104/+0xe4."
+ },
+ {
+  "address": "0x00596ECC",
+  "name": "Text_Layout_ProcessCharChecked",
+  "signature": "void Text_Layout_ProcessCharChecked(void* layout, void* unused, void* styleCtx, unsigned int flag)",
+  "params": {
+   "param_1": "layout",
+   "param_2": "unused",
+   "param_3": "styleCtx",
+   "param_4": "flag"
+  },
+  "summary": "Layout step guarded by a text-style compatibility test: only queues the character when the style accepts the glyph id, otherwise falls back to the plain effect-command path.",
+  "confidence": 0.5,
+  "evidence": "Callers are maybe_Text_TalkWindow_BuildLinesEx and Text_Layout_StepLine; resolves the glyph id exactly like its siblings (layout[0x5d7]+0xde via 0x0063D018, 0x0063E05C for the record) and then requires Ui_TextLayout_IsTypeAccepted (0x00639954)(arg3, glyphId) to succeed before building the 6-field record (f_4a of the style record + 0xFFFF sentinel) and calling 0x003FBE4C then layout vtable +0x124/+0x130; on rejection it calls Text_QueueEffectCommand (0x001FE274) with arg3/arg4 and layout vtable +0x128; arg2 is never read."
+ },
+ {
+  "address": "0x00597E50",
+  "name": "maybe_Field_Object_Release",
+  "signature": "void maybe_Field_Object_Release(unsigned int* self, unsigned int id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Stores an id in the object head, then tears down the embedded pack-backed sub-object at +0x1268 and frees the object; appears to be a small destructor/release helper.",
+  "confidence": 0.4,
+  "evidence": "40-byte body with no callers; *self = arg2; then func_00124154(self + 0x49a) is used to reach a sub-object at -0x1268 which is passed to 0x00200220, and it ends in 0x0010F6CC (destructor/free style) - the callee list includes Pack_Handle_Dtor (0x00124154), so the object owns a pack handle; whether this is a destructor or an id-setter followed by cleanup could not be settled."
+ },
+ {
+  "address": "0x005985C0",
+  "name": "Field_Char_StartNarrowPassAnim",
+  "signature": "void Field_Char_StartNarrowPassAnim(FieldChar* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the field character's narrow-pass animation: triggers the 'Narrow_Start' animation on the model, records the current position and the delta to the target, and pushes the movement direction to the character.",
+  "confidence": 0.65,
+  "evidence": "PTRREF at 0x0077E0E0 places it at slot +0 with Field_Char_PlayNarrowPassAnim at +4 and maybe_Field_Char_UpdateFadeByHeight at +8; the body calls self->f_28 vtable +0x84 with the string 'Narrow_Start' (0x005986CC), computes self->f_38/f_3c/f_40 from the model's f_344/f_348/f_34c/f_350/f_354/f_358 scaled by g_005986dc, stores target-minus-current in f_2c/f_30/f_34, calls 0x005F5F54(self->f_28, &{-f350,-f354,-f358}, 0) and finally model vtable +0x9c."
+ },
+ {
+  "address": "0x0059A604",
+  "name": "Ui_ModelView_ComposeCharacterText",
+  "signature": "void Ui_ModelView_ComposeCharacterText(UiTextBuilder* out, unsigned char* dst, unsigned int* src, unsigned int allocArg)",
+  "params": {
+   "param_1": "out",
+   "param_2": "dst",
+   "param_3": "src",
+   "param_4": "allocArg"
+  },
+  "summary": "Copies a list of 0x14-byte character records into a temporary 0xc-stride array and builds the character-name text object from it (or clears the output when the list is empty).",
+  "confidence": 0.55,
+  "evidence": "Only caller is maybe_Ui_ModelView_SetCharacterText (0x00599B10); if *(int*)src < 1 it writes dst[0]=0, otherwise stores the count at dst[0x24], allocates count*0xc with Mem_AllocAligned(count*0xc, *(out->f_2c+8), 4, arg4) and copies 3 u32 from src+4+offset + i*0x14 into each 0xc record, then calls 0x004B63D8(dst+4, allocator, count, tempArray, 1) (text/string build from char codes) and frees the temp; final dst[0]=1 is the success flag."
+ },
+ {
+  "address": "0x0059F248",
+  "name": "Ui_PartyMemberSlot_Update",
+  "signature": "unsigned int Ui_PartyMemberSlot_Update(UiPartyMemberSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "State-machine update for a party-member UI slot: checks the member's character record, asks the party/action subsystem whether the member is ready, and toggles the slot's completion flag and menu-actor visibility.",
+  "confidence": 0.5,
+  "evidence": "PTRREF at 0x0077E828 puts it at slot +0 between FieldParty_ResetMemberSlot (-8), maybe_Battle_Ui_Update (+4), maybe_FieldParty_CompactMemberList (+8) and maybe_Ui_Window_IsMenuActorVisible (+12); uses self[0x5f7] as a state id compared against the literals 0x00002BD3/0x00002BE5/0x00002BEC, reads the member character id from self[0x48c] via 0x0063FD24 and tests the record's f_147 == -1 (sets f_5f6=1), calls maybe_Battle_ActionUi_Update (0x003F8C48) on self->f_5fa and Battle_PartyMember_Update (0x00483870), then sets the byte at +0xd2, writes f_108 on the object returned by self vtable +0x48, and returns func_00630BB8(self). Subsystem is Battle/Field-party leaning; the UI-slot phrasing is inferred from the neighbouring vtable slots."
+ },
+ {
+  "address": "0x0059F36C",
+  "name": "maybe_Battle2DUnit_BindPartyMember",
+  "signature": "void maybe_Battle2DUnit_BindPartyMember(void* self, unsigned int unused1, unsigned int unused2, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "dataKey"
+  },
+  "summary": "Virtual-slot initialiser: clears the unit's slot ids to -1 and, when the character record resolved from dataKey is valid (record field 0x147 != -1), copies the id pair (f_122c/f_1230) to f_2a14/f_2a18, rebuilds the embedded FieldParty object at +0x17E8 from the shared params at +0x50 and raises flag f_2b63.",
+  "confidence": 0.45,
+  "evidence": "Sets -1 at +0x178C, at (g_0059F404=0x1794)+self and at +8 of that (0x179C), clears f_1260; callees maybe_Game_GetDataManager(0x0011CB38), 0x0063FD24, maybe_FieldParty_InitFromParams(0x001FEFC0), 0x003FAC5C; guard on record field 0x147; PTRREF 0x0077E824 places this slot beside FieldParty_ResetMemberSlot(0x001FF200) and maybe_FieldParty_CompactMemberList(0x001FF434); the +0x17E8 member is the one torn down by 0x0059F45C/0x0059F494."
+ },
+ {
+  "address": "0x0059F45C",
+  "name": "maybe_Battle2DUnit_DtorDeleting",
+  "signature": "void maybe_Battle2DUnit_DtorDeleting(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Deleting destructor: stores the passed vtable, destroys the embedded object at +0x17E8 (restoring its base vtable 0x00774568), runs the base destructor and then frees the object.",
+  "confidence": 0.42,
+  "evidence": "*arg1 = arg2 (vtable install); func_003FAE4C(arg1+0x5fa words = +0x17E8) yields the embedded object whose slot at -0x17E8 is overwritten with g_0059F48C (0x00774568); then func_00200220 (base dtor) followed by func_0010F6CC (free/delete). Its twin 0x0059F494 is byte-for-byte the same minus the func_0010F6CC call, i.e. the non-deleting variant."
+ },
+ {
+  "address": "0x0059F494",
+  "name": "maybe_Battle2DUnit_Dtor",
+  "signature": "void maybe_Battle2DUnit_Dtor(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Non-deleting destructor for the same class as 0x0059F45C: installs the vtable, destroys the embedded +0x17E8 object and calls the base destructor without freeing.",
+  "confidence": 0.45,
+  "evidence": "Identical body to 0x0059F45C (vtable store, func_003FAE4C(arg1+0x5fa), write of g_0059F4C0 = 0x00774568 at member-0x17E8, func_00200220) but no func_0010F6CC free call; paired with 0x0059F45C at adjacent addresses and the same 0x00774568 vtable literal."
+ },
+ {
+  "address": "0x0059F4C4",
+  "name": "maybe_Battle_Ui_ApplyScrollOffset",
+  "signature": "void maybe_Battle_Ui_ApplyScrollOffset(int self, float* scroll, unsigned int unused1, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "scroll",
+   "param_3": "unused1",
+   "param_4": "dataKey"
+  },
+  "summary": "Called from the battle UI scroll-animation update: resolves a data record from dataKey, negates the y component of the scroll vector and re-derives the target widget's two coordinates from its stored base values plus the scroll offsets.",
+  "confidence": 0.48,
+  "evidence": "Sole caller 0x0059F544 maybe_Battle_Ui_UpdateScrollAnimation; reads lookup id at *(*(self+8)+0x768) and target object at *(*(self+8)+0x8e4); writes target+0x64 = f_80 + scroll[0] + 0.0f and target->f_68 = f_84 - fVar7 + (float)(-record->f_88) (signed record field), and negates scroll[1]; REF 0x0059F540 = 0.0f."
+ },
+ {
+  "address": "0x0059FC64",
+  "name": "maybe_Battle2DUnit_ApplyEntryParam9",
+  "signature": "void maybe_Battle2DUnit_ApplyEntryParam9(int* self, unsigned int unused1, unsigned int unused2, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "dataKey"
+  },
+  "summary": "Sequence-step slot: fetches the owning actor via virtual +0x3C, looks up the per-character entry (index f_274, plus self[0x2F]/self[0x2E]) and applies the byte at entry offset +9 through the shared per-actor parameter setter.",
+  "confidence": 0.4,
+  "evidence": "PTRREF 0x0077EBD4 neighbours maybe_Battle_Ui_DismissLeaderBalloon, 0x005A0770, 0x005A2710 and maybe_Battle_Ui_UpdateMessageSequence; body is only (**(code**)(*self+0x3c))(self), f_274, func_0063FC70(0x0063FC70)(key,f_274,self[0x2f],self[0x2e]) then func_005E7848(actor, *(u8*)(entry+9), 0)."
+ },
+ {
+  "address": "0x0059FCB8",
+  "name": "maybe_Battle2DUnit_ApplyEntryParam2",
+  "signature": "void maybe_Battle2DUnit_ApplyEntryParam2(int* self, unsigned int unused1, unsigned int unused2, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "dataKey"
+  },
+  "summary": "Guarded variant of the same step: applies entry byte +2 and latches a one-shot flag in the per-instance table at 0x1B04 before the apply, skipping everything when the byte is -1.",
+  "confidence": 0.4,
+  "evidence": "Virtual +0x3C for the actor, func_0063FC70 lookup with f_274/self[0x2f]/self[0x2e]; if *(char*)(entry+2) != -1 writes 1 to *(u8*)(g_0059FD20(0x1B04)+self) then func_005E7848(actor, byte, 0); PTRREF 0x0077EC48 alongside maybe_Battle2DUnit_UpdateSpawnSequence(0x0059FFB8)."
+ },
+ {
+  "address": "0x005A04B8",
+  "name": "maybe_Battle2DUnit_UpdateMoveToTarget",
+  "signature": "unsigned int maybe_Battle2DUnit_UpdateMoveToTarget(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame step that blends the unit toward its stored destination (self[0x3D..0x3F]) from the current position, optionally interpolating along the straight line via the vector helper, pushing the result into the actor transform and setting the progress/duration fields used by the next step.",
+  "confidence": 0.42,
+  "evidence": "Calls maybe_Battle_Ui_CancelBalloon(0x001FA8C8), 0x005736A0 for the interpolated position and 0x005F5F54(actor, self+0x68b, 0) to commit it; copies self[0x37..0x39] into self[0x3D..0x3F]/[0x68B..0x68D]; branches on entry bytes +5/+6/+8 and on flags 0x1A41/self[0x690]; writes actor f_138 and self[0x68F] progress; PTRREF 0x0077EC50 with 0x0059FCB8/0x005A0A28/0x005A12B0."
+ },
+ {
+  "address": "0x005A07B0",
+  "name": "Battle2DUnit_CalcMoveDuration",
+  "signature": "void Battle2DUnit_CalcMoveDuration(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Derives the step duration from the character record's byte pair (f_260/f_261 scaled by 0.1) and the square-root easing, storing it in self[0x68F] and choosing between the two record vectors (f_268 vs its high half) for the start offset.",
+  "confidence": 0.5,
+  "evidence": "REF 0x005A08CC = 0x3DCCCCCD (0.1f) applied to VectorUnsignedToFloat(record->f_260/f_261); std_Powf(0x00673468) used for the sqrt of record->f_278; result stored as self[0x68f] = (sqrt(v)-v)/f_278; also sets byte +0x1A41 and self[0x690]; calls 0x005A289C; PTRREF 0x0077EC40 between maybe_Battle2DUnit_UpdateSpawnSequence and 0x005A08D8."
+ },
+ {
+  "address": "0x005A08D8",
+  "name": "maybe_Battle2DUnit_UpdateGroupMove",
+  "signature": "unsigned int maybe_Battle2DUnit_UpdateGroupMove(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances a grouped movement step: iterates the unit's children (virtual +0x1A0 index getter), updates each child actor, then either finishes the step (snapshotting the projected position and setting the done flag) or keeps easing while the elapsed value is below the record threshold.",
+  "confidence": 0.42,
+  "evidence": "Loop count from func_00630D64 and per-child func_001FDEF8(self, child); compares elapsed (record f_260 * 0.1f, REF 0x005A0A1C = 0x3DCCCCCD) against self[0x68F]; on completion calls maybe_Battle2DUnit_GetProjectedPosition(0x005A2768) and sets byte at g_005A0A24 (0x1A28) = 1; earlier checks g_005A0A20 (0x1A41); also calls 0x005A2A1C and, past record f_27C, 0x005A2938."
+ },
+ {
+  "address": "0x005A0A28",
+  "name": "maybe_Battle2DUnit_ApplyEntryParamBySide",
+  "signature": "unsigned int maybe_Battle2DUnit_ApplyEntryParamBySide(int* self, unsigned int unused1, unsigned int unused2, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "dataKey"
+  },
+  "summary": "Selects the entry parameter by side/facing flag (byte +3 for one side, byte +4 for the other) and applies it through the shared per-actor setter; returns 1 early when the opposite-side flag at 0x1A41 is already set.",
+  "confidence": 0.4,
+  "evidence": "Branches on (char)self[0x690] and *(char*)((int)self+0x1A41); picks *(u8*)(entry+3) or *(u8*)(entry+4) from the func_0063FC70(key,f_274,self[0x2f],self[0x2e]) record, then returns func_005E7848(actor,byte,0); PTRREF 0x0077EC4C next to 0x005A07B0/0x005A08D8/0x005A04B8."
+ },
+ {
+  "address": "0x005A12B0",
+  "name": "maybe_Battle2DUnit_UpdateTurnToTarget",
+  "signature": "unsigned int maybe_Battle2DUnit_UpdateTurnToTarget(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Turn step: projects the actor direction, takes the dot product against the stored facing/target vector at self[0x68B..0x68D], tests it against two cosine thresholds (0.3 and 0.1) and either snaps the actor into position and finishes, or keeps moving it toward the formation target.",
+  "confidence": 0.45,
+  "evidence": "func_00669D88 gives the screen-space vector, dot with self[0x68b]/[0x68c]/[0x68d], std_Acosf(0x00672A14); thresholds REF 0x005A1470 = 0x3E99999A (0.3f) and 0x005A1474 = 0x3DCCCCCD (0.1f); uses FieldParty_MoveActorTowardTarget(0x001FD97C) and maybe_FieldParty_CalcFormationPosition(0x001FEC68); sets byte at g_005A1478 (0x1B05) when entry byte +7 != -1; PTRREF 0x0077EC54."
+ },
+ {
+  "address": "0x005A147C",
+  "name": "maybe_Battle2DUnit_UpdateSnapToTarget",
+  "signature": "unsigned int maybe_Battle2DUnit_UpdateSnapToTarget(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Final step of the movement sequence: writes self[0x37..0x39] straight into the actor transform, restores the actor's stored orientation, and when the facing dot product falls below the configured threshold commits the position and clears the pending flag.",
+  "confidence": 0.45,
+  "evidence": "Dot of func_00669D88 vector with self[0x3D..0x3F] and std_Acosf(0x00672A14); unconditional iVar2->f_9C/f_A0/f_A4 = self[0x37..0x39] and f_118 = 1; compares against *(float*)(g_005A15C8(0x007A5C60)+4); restores actor f_138 from g_005A15CC (0x1A44)+self; clears byte at g_005A15C4 (0x1B05); calls 0x005F5F54(actor, self+0x3D, 0)."
+ },
+ {
+  "address": "0x005A15D0",
+  "name": "maybe_Battle2DUnit_BindMemberModel",
+  "signature": "void maybe_Battle2DUnit_BindMemberModel(void* self, unsigned int unused1, unsigned int unused2, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "dataKey"
+  },
+  "summary": "Model-side counterpart of 0x0059F36C: resets the model slot id to -1 and, for a valid character record, copies the id pair into f_2d8c/f_2d90 and (re)builds the embedded model object at +0x1B60 from the shared params before refreshing/attaching it.",
+  "confidence": 0.45,
+  "evidence": "Sets f_1B20 = -1, f_2d8c = f_122c, f_2d90 = f_1230; calls maybe_FieldParty_InitFromParams(0x001FEFC0) with (self+0x1B60, &self->f_50), then 0x0043C198 (528b, in the model-instance cluster near maybe_Monster_ModelInstance_Ctor 0x00438660) and 0x0043BF2C(ptr,1); record guard f_147 != -1 after func_0063FD24 lookup; PTRREF 0x0077EAD8 beside Battle2DUnit_UpdateSequence(0x005A0FB8)."
+ },
+ {
+  "address": "0x005A1654",
+  "name": "maybe_Battle_Ui_UnitWidget_Ctor",
+  "signature": "int maybe_Battle_Ui_UnitWidget_Ctor(void)",
+  "params": {},
+  "summary": "Constructor chain for the battle unit display widget: allocates the base monster-model instance, installs the widget vtable and screen base, then zeroes the id/position/animation arrays and seeds the transform-default fields with -0x400 and -1 sentinels before returning the object.",
+  "confidence": 0.45,
+  "evidence": "Starts from maybe_Monster_ModelInstance_Ctor(0x00438660), installs vtable g_005A18A4 (0x0077EAC0) at *obj, chains Ui_Screen_CtorBase(0x0020002C), 0x0043BD68, maybe_Ui_ScreenCtor_vt77B8DC(0x004ECCF0), FieldParty_ResetMemberSlot(0x001FF200) and 0x0018C1B8; zeroes puVar3[0x67A..0x689] and f_1400..f_142C; writes 0xFFFFFC00 to f_6C..f_78 and alternating -1/0 through f_C0; constants 0x007E7000, 0x0076F78C, 0xBF800000, 0x125C (0xFFFF written at +0x125C)."
+ },
+ {
+  "address": "0x005A2214",
+  "name": "maybe_std_InitStaticArray",
+  "signature": "void maybe_std_InitStaticArray(void)",
+  "params": {},
+  "summary": "Compiler-generated static initialiser: builds an 8-element, 4-byte-element array from the type descriptor 0x005906C0 in a 768-byte stack buffer; Ghidra marks it non-returning, so it is one of the guarded global-array constructors in this file.",
+  "confidence": 0.3,
+  "evidence": "Only callee std_ConstructArray(0x00100050) called as (auStack_318[768], g_005A250C = 0x005906C0, 8, 4); sole caller FUN_0036DB90; the 0x005906C0 literal is an element type/vtable pointer, not a string."
+ },
+ {
+  "address": "0x005A289C",
+  "name": "maybe_Battle2DUnit_RefreshChildPositions",
+  "signature": "void maybe_Battle2DUnit_RefreshChildPositions(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the unit's derived screen geometry: fetches the actor via virtual +0x3C, forces the +0x54 slot with 0, and when the unit has more than one child recomputes the adjusted screen position into a local 28-byte result.",
+  "confidence": 0.4,
+  "evidence": "Called from 0x005A07B0; calls (**(code**)(*self+0x3c))(self) and (**(code**)(*self+0x54))(self,0); child count from func_00630D64, and if >1 invokes maybe_Battle2DUnit_GetAdjustedScreenPosition(0x005A263C) writing a 28-byte stack struct."
+ },
+ {
+  "address": "0x005A2938",
+  "name": "maybe_Battle2DUnit_MoveActorTowardScreenPoint",
+  "signature": "void maybe_Battle2DUnit_MoveActorTowardScreenPoint(int* self, float rate)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rate"
+  },
+  "summary": "Offsets the child actor toward the unit's stored anchor by a normalised direction scaled by the incoming float, writing the three actor translation components and marking the transform dirty.",
+  "confidence": 0.48,
+  "evidence": "Called from 0x005A08D8; actor from virtual +0x40(self,0), position from maybe_Battle2DUnit_GetAdjustedScreenPosition(0x005A263C); delta = pos - self[0x3A..0x3C]; normalised by 0x005736A0; then actor f_9C/f_A0/f_A4 += dir * in_s0 (float arrives in s0, hence the explicit `rate` param) and f_118 = 1."
+ },
+ {
+  "address": "0x005A2A1C",
+  "name": "maybe_Battle2DUnit_CalcActorDelta",
+  "signature": "void maybe_Battle2DUnit_CalcActorDelta(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Computes the vector from the unit anchor to the current actor translation and passes it (plus a scratch vector) to the two-vector helper, producing the 3-float direction used by the move step.",
+  "confidence": 0.4,
+  "evidence": "Called from 0x005A08D8 only; local_28/24/20 = actor f_9C/f_A0/f_A4 minus self[0x3A]/[0x3B]/[0x3C]; tail call 0x00573A48(local_34, &local_28, &local_38) writing a 3-float result; the high word of self->f_3A is read as the y anchor."
+ },
+ {
+  "address": "0x005A3604",
+  "name": "maybe_Ui_Message_TestDrawMode",
+  "signature": "unsigned int maybe_Ui_Message_TestDrawMode(void)",
+  "params": {},
+  "summary": "Predicate returning 1 only for four mode/language values (3, 7, 8, 0xFF) reported by the global mode getter; used by the message drawing code to pick a special branch.",
+  "confidence": 0.4,
+  "evidence": "Callers FUN_003BCC78(48b) and maybe_Ui_Message_DrawByMode(0x004DD5DC); body is iVar1 = func_00664A80() then `iVar1 == 3 || 7 || 8 || 0xff`, else 0. func_00664A80 is a 1468-byte no-argument getter, but the dossier does not name it, so the exact meaning of the four values (mode vs language) is unclear."
+ },
+ {
+  "address": "0x005A36A8",
+  "name": "Battle_Ui_LayoutMessageBalloons",
+  "signature": "void Battle_Ui_LayoutMessageBalloons(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the per-frame layout for the battle message balloons: samples the anchor points (actor position, selected member anchor, balloon layout slot), copies the anchor record's rectangle/offset fields into self[0x3786..0x3789], and derives the quadratic trajectory coefficients stored at self[0x3795..0x3799].",
+  "confidence": 0.5,
+  "evidence": "Sole caller Battle_Sequence_Update(0x005A407C); callees maybe_Battle_Ui_LayoutBalloons(0x001F5F5C), maybe_Battle_Ui_GetBalloonAnchor(0x001F6EC4), maybe_Battle_Ui_GetMemberAnchor(0x001F89CC), maybe_Battle_Ui_CancelBalloon(0x001FA8C8), maybe_Battle_ActionSequence_ApplyAttachment(0x003CABEC), 0x005A3E84; virtual +0x3C/+0x48/+0x110/+0x114/+0x10C; reads record f_194..f_19C / f_1A0..f_1AC / f_1B0..f_1BC; coefficients use 0.5f (0x3F000000) and -2.0f (0xC0000000)."
+ },
+ {
+  "address": "0x005A39B0",
+  "name": "Battle_Ui_UpdateBalloonMotion",
+  "signature": "unsigned int Battle_Ui_UpdateBalloonMotion(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the balloon travel animation: increments the normalised progress at self[0x378B], moves the balloon along the segment between the member anchor and the unit anchor (clamping when the radius is already covered) and submits the balloon descriptor to the member-anchor screen emitter.",
+  "confidence": 0.5,
+  "evidence": "Sole caller Battle_Sequence_Update(0x005A407C); while self[0x378b] < 0x3F800000 (1.0f) adds 1.0f/self[0x3787]; calls maybe_FieldParty_RegisterMemberModel(0x001FA974) with actor->f_768 & 0xffff, maybe_Battle_ActionSequence_UpdateMemberPoses(0x003CA408), 0x0018C184, maybe_Battle_Ui_GetMemberAnchorScreen(0x001F9F88) with a descriptor whose first word carries marker 2, then func_005E7848; termination path writes actor f_A0 = 0.0f, f_118 = 1; per-instance slot g_005A3D6C (0xDDF8), defaults g_005A3D70 (0x007E7000) / g_005A3D74 (0x007E700C = 0,0,1)."
+ },
+ {
+  "address": "0x005A3E84",
+  "name": "maybe_Battle_Ui_CalcBalloonEndOffset",
+  "signature": "void maybe_Battle_Ui_CalcBalloonEndOffset(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Computes where the balloon should end up: takes the unit anchor as target (or the child model position when the per-instance slot is non-zero), normalises the delta from the base anchor and writes base + direction * (distance - 1) into self[0x3790..0x3792].",
+  "confidence": 0.45,
+  "evidence": "Called from 0x005A36A8; target comes from virtual +0x10C then 0x005F5818(obj->f_110); per-instance slot g_005A3FB8 = 0xDDF8, fallback 0 (func_00630D64 when null); thresholds g_005A3FBC = 0.0f and g_005A3FC0 = 1.0f; default direction from g_005A3FC4 (0x007E700C); result stored as arg1[0x3790..0x3792] = arg1[0x3A..0x3C] + dir*(dist-1.0f)."
+ },
+ {
+  "address": "0x005A5FD0",
+  "name": "maybe_Pack_Entry_Dtor",
+  "signature": "void maybe_Pack_Entry_Dtor(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Deleting destructor for an object that owns a Pack handle: installs the vtable, destroys the embedded Pack handle at +0x1268, runs the inner destructor and frees the allocation.",
+  "confidence": 0.45,
+  "evidence": "Body is *arg1 = arg2; func_00124154(arg1 + 0x49a words = +0x1268) where 0x00124154 is Pack_Handle_Dtor; then func_00200220(member-0x1268) and func_0010F6CC (free); no callers recorded, so the owning class is inferred only from the embedded Pack handle."
+ },
+ {
+  "address": "0x005A616C",
+  "name": "maybe_Ui_InitGlobalArray",
+  "signature": "void maybe_Ui_InitGlobalArray(char* flag)",
+  "params": {
+   "param_1": "flag"
+  },
+  "summary": "Guarded lazy initialiser for a large global array: clears the guard byte, allocates 0x2FB28 bytes aligned to 16 from the pool based at 0x00804160, then constructs 0x12EC elements of type 0x19244C and installs vtable 0x00764B84.",
+  "confidence": 0.3,
+  "evidence": "if (*flag == '\\0') nothing happens; else *flag = 0; size g_005A62D0 = 0x2FB28, align 0x10 via func_0011FE8C(0x2FB28,0x10), pool base g_005A62CC = 0x00804160 aligned by func_0011CFAC, allocation zeroed by 0x00116AE0, then std_ConstructArray(ptr+1, g_005A62DC = 0x0019244C, g_005A62D8 = 0x12EC, 0x1F) with g_005A62D4 = 0x00764B84 as the element vtable; no callers and Ghidra reports bad instruction data (control-flow truncated)."
+ },
+ {
+  "address": "0x005A6868",
+  "name": "Ui_DiveWindow_ApplyInputEvent",
+  "signature": "void Ui_DiveWindow_ApplyInputEvent(unsigned int self, void* event)",
+  "params": {
+   "param_1": "self",
+   "param_2": "event"
+  },
+  "summary": "Packs the incoming 13-byte dive-window input record into a default-initialised parameter block (0xFF ids, zero flags, one enabled byte) and forwards it to the dive-window handler.",
+  "confidence": 0.55,
+  "evidence": "Callers maybe_Ui_DiveWindow_HandleInputA(0x0029B174) and Ui_DiveWindow_OnInput(0x0029B7FC); builds a 0xD-byte local block (local_14/13 = 0xFF, local_e = 1, local_18 = 0xFFFFFFFF), copies the caller's record with std_memcpy(0x00116C10) then calls 0x0070E634(self, &block)."
+ },
+ {
+  "address": "0x005A691C",
+  "name": "Ui_RecipeBook_BuildMaterialList",
+  "signature": "void Ui_RecipeBook_BuildMaterialList(char* out, char recipeId)",
+  "params": {
+   "param_1": "out",
+   "param_2": "recipeId"
+  },
+  "summary": "Fills a recipe-book entry list: writes the recipe id and a -1 terminator, then fills up to four 4-byte material rows (u16 id from the shared table getter, one byte, and an extra byte copied from the recipe record) so the detail widget can draw the ingredient lines.",
+  "confidence": 0.6,
+  "evidence": "Callers maybe_Ui_RecipeBook_SelectRecipe(0x00263B04) and maybe_Ui_RecipeBook_BuildDetailWidget(0x00263BEC); rows of 4 bytes at out+2..out+21 with *out = recipeId and out[1] = -1; u16 half filled from func_00192580(0x00192580); if recipeId != -1 the record from Game_GetDataManager + func_0063F108(id) supplies f_10 (entry count, up to 4) and f_14 (offset base) and byte +2 of each 8-byte sub-entry."
+ },
+ {
+  "address": "0x005A69F8",
+  "name": "maybe_Ui_RecipeBook_Entry_Ctor",
+  "signature": "void maybe_Ui_RecipeBook_Entry_Ctor(unsigned char* self, unsigned char value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Small constructor: stores the same byte in the first two fields and then constructs the trailing 4-element array from the element type at 0x005A62EC.",
+  "confidence": 0.35,
+  "evidence": "*arg1 = arg2; arg1[1] = arg2; std_ConstructArray(0x00100050)(arg1+2, g_005A6A1C = 0x005A62EC, 4); no callers recorded, so the owner is guessed from the address sitting between 0x005A691C (recipe-book list builder) and 0x005A6D18 (recipe-book ctor helper)."
+ },
+ {
+  "address": "0x005A6A20",
+  "name": "maybe_Ui_UmaWindow_InitFromFlags",
+  "signature": "void maybe_Ui_UmaWindow_InitFromFlags(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructor helper that lazily creates the global 0x24A98-based table for the horse/uma window, copies six byte-pair rows from it into the window object and loads the five global flag bytes into the object's remaining slots.",
+  "confidence": 0.45,
+  "evidence": "Sole caller maybe_Ui_UmaWindow_Ctor(0x004CCC34); guard byte g_005A6C40 (0x007BE31C) plus lazy allocation using g_005A6C48 = 0x00804160, g_005A6C4C = 0x2FB28, 0x0011CFAC(...,0x10), std_ConstructArray(ptr+1, g_005A6C58 = 0x0019244C, g_005A6C54 = 0x12EC, 0x1F) and vtable g_005A6C50 = 0x00764B84; then table base *(g_005A6C44) + 0x24A98, six rows of 0x10 bytes copied as byte pairs, slot 4 via 0x001A5B28, and maybe_Flag_GetGlobalIndexed(0x001A5AE4) for indices 0..4 stored at self+3/+7/+0xB/+0xF/+0x13."
+ },
+ {
+  "address": "0x005A6C88",
+  "name": "maybe_Ui_InitStaticTable",
+  "signature": "void maybe_Ui_InitStaticTable(void)",
+  "params": {},
+  "summary": "Unrecoverable static-constructor stub: the only evidence is a bare call to the array-construction helper with no recoverable arguments, in the same family as the other guarded global-table initialisers here.",
+  "confidence": 0.15,
+  "evidence": "144-byte body consisting solely of func_00100050() (std_ConstructArray) with argument registers not recovered, flagged 'Subroutine does not return'; no CALLERS and no REF literals at all, so both the object and the element list are unknown. Placed between 0x005A6A20 and 0x005A6D18 in the 0x00804160 pool / 0x19244C element-type cluster."
+ },
+ {
+  "address": "0x005A6D18",
+  "name": "maybe_Ui_RecipeBook_State_Ctor",
+  "signature": "void maybe_Ui_RecipeBook_State_Ctor(unsigned char* self, unsigned int unused1, unsigned int unused2, unsigned int unused3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused1",
+   "param_3": "unused2",
+   "param_4": "unused3"
+  },
+  "summary": "Constructor for a small recipe-book/demo state block: sets the state byte to 1, the id field to -1 and two 0xFF sentinels, then constructs a 3-element array of the shared element type 0x00192580.",
+  "confidence": 0.45,
+  "evidence": "Callers maybe_Ui_TitleDemo_Init(0x001F1628) and maybe_Ui_RecipeBook_Ctor(0x001F1BEC); writes *self = 1, *(u32*)(self+4) = 0xFFFFFFFF, self[8] = self[9] = 0xFF, then std_ConstructArray(0x00100050)(self+10, g_005A6D84 = 0x00192580, 3, 4); 0x00192580 is the same getter used by maybe_Ui_RecipeBook_BuildMaterialList (0x005A691C)."
+ }
+]

@@ -1,0 +1,1891 @@
+[
+ {
+  "address": "0x0010EE9C",
+  "name": "std__Rb_tree_insert_and_rebalance",
+  "signature": "void std__Rb_tree_insert_and_rebalance(RbTreeNode* header, int insert_left, RbTreeNode* x, RbTreeNode* p)",
+  "params": {
+   "param_1": "header",
+   "param_2": "insert_left",
+   "param_3": "x",
+   "param_4": "p"
+  },
+  "summary": "libstdc++ red-black tree insertion: links the new node x below p, sets its colour/flag byte, calls the rebalance helper, then repairs the header's leftmost/rightmost child pointers. This is the insertion primitive behind every std::map/std::set in the game.",
+  "confidence": 0.9,
+  "evidence": "Exact structural match to libstdc++ __rb_tree_insert_and_rebalance: colour byte at node+0x10, parent +0x4, left +0x8, right +0xC (verified in asm 0x10EEA0-0x10EF60); calls 0x115290 (identified as _Rb_tree_rebalance) at 0x10EF0C; after that walks left/right spines to store leftmost/rightmost into header+8/header+0xC. 28 callers across decomp/readable (0x107F84, 0x107FC0, 0x1E88E4, 0x2ACAA4, 0x336BE4, ...) are all map/set insert sites returning iterator pairs."
+ },
+ {
+  "address": "0x0010F31C",
+  "name": "maybe_Container_ResetObject",
+  "signature": "void* maybe_Container_ResetObject(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the state words at +0x38..+0x74 of an 0x8C-byte object, zeroes the whole object with memset, then sets the two flag bytes at +0x84/+0x85 and the invalid index -1 at +0x88, returning the object. Looks like a constructor/reset helper for a fixed-size table or queue object; no call site was found, so it is probably reached through a vtable or initialiser table.",
+  "confidence": 0.3,
+  "evidence": "asm 0x10F31C-0x10F39C: eleven str r5,[r0,#0x38..#0x6c], bl 0x116AE0 with r1=0x84 twice (0x116AE0 is memset, confirmed by its 0x20-byte store loop at 0x116AE0), strb r5,[r4,#0x84], strb r5,[r4,#0x85], mvn r0,#0; str r0,[r4,#0x88]; returns r4. No func_0010F31C callers in decomp/readable, so role is inferred from shape only."
+ },
+ {
+  "address": "0x0010F6EC",
+  "name": "Mem_AllocAligned",
+  "signature": "void* Mem_AllocAligned(u32 size, MemHeap* heap, u32 alignment)",
+  "params": {
+   "param_1": "size",
+   "param_2": "heap",
+   "param_3": "alignment"
+  },
+  "summary": "Allocates size bytes with the given alignment from an engine heap: asks heap->vtable->alloc for (size+alignment+10) rounded down to 4 bytes, aligns the result with an unsigned division by alignment, and stores the heap pointer plus the untouched raw pointer in the two words before the returned block so it can be freed.",
+  "confidence": 0.85,
+  "evidence": "asm 0x10F6EC: ldr r0,[r5] (heap vtable), ldr r3,[r0], blx r3 with r0=heap, r1=(size+align+10)&~3, r2=4; then bl 0x11CFAC (unsigned divide helper: power-of-two subtraction loop) with r0=raw+align+7, r1=align; mul r1,r0,align; stm r0-8,{r5,r6} stores heap and raw pointer. 63 callers, e.g. 0x104A38 func_0010F6EC(0x12c00,arg3,0x10) and 0x10EAB0."
+ },
+ {
+  "address": "0x0010F74C",
+  "name": "Container_InitList",
+  "signature": "int Container_InitList(ContainerList* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Creates the sentinel node of an intrusive doubly-linked list (0x28-byte node from 0x115F74), points the node's prev/next at itself, zeroes the list count and stores the list in the global at 0x007AED40. Returns 0 on success and -1 when the node allocation fails.",
+  "confidence": 0.55,
+  "evidence": "Only caller is 0x109FB0 (the GPU/device initialiser) which passes base+0x868. asm: str r0,[global 0x7AED40]; bl 0x115F74 (allocates and zeroes 0x28 bytes); str r1,[r0,#0x20]/[r0,#0x24]=0; strd r0,r1,[r2] and strd r0,r1,[r2,#8] makes node->prev=node->next=node; returns 0/-1."
+ },
+ {
+  "address": "0x0010FFD8",
+  "name": "Gfx_InitPipelineState",
+  "signature": "int Gfx_InitPipelineState(GfxPipelineState* state)",
+  "params": {
+   "param_1": "state"
+  },
+  "summary": "Initialises the fixed-function GPU state block at renderer_base+0x30EC: 16 four-word attribute records (float bit patterns 0x1503/0x1406/0x8006 converted to PICA200's 24-bit float format), 16 vertex-attribute strides, default depth/blend registers (0x1E00, 0xFFFFFFFF, 0xFFFF, 0xFFFFFF) and a 0x40-byte zeroed table at +0x828.",
+  "confidence": 0.5,
+  "evidence": "Sole caller 0x109FB0 at 0x10A070 with r0 = allocation+0x30EC (asm 0x10A048-0x10A06C computes r1). Body fills the 0x298..0x3A0 arrays in pairs of floats and converts IEEE-754 to 24-bit float (mantissa>>7, exponent-0x40), a PICA200-specific format; default PICA200 register values 0x1e00/0xffffffff/0xffffff appear at +0x608/+0x60c/+0x67c; tail bl 0x111384 is memset."
+ },
+ {
+  "address": "0x00110470",
+  "name": "Gfx_InitCommandLists",
+  "signature": "int Gfx_InitCommandLists(GfxContext* ctx)",
+  "params": {
+   "param_1": "ctx"
+  },
+  "summary": "Initialises the two renderer command-list objects (0x78-byte and 0x1CC-byte variants created by 0x116430/0x116368) and rebinds them into the global at 0x007AF07A-style context slot; old objects are torn down through 0x115DCC/0x1164C8 before being replaced.",
+  "confidence": 0.55,
+  "evidence": "Only caller 0x109FB0 at 0x10A0C0 passes base+0x2840. asm stores arg in 0x7AFxxx, calls 0x116430(0), 0x116368(0), stores them into the context, then loops 6 times over 0x44-byte records calling 0x115DCC + 0x1164C8(iVar5->f_2c, rec+0x34) to release the previous lists; a free callback is invoked for each old block."
+ },
+ {
+  "address": "0x00110624",
+  "name": "Gfx_InitRenderQueue",
+  "signature": "int Gfx_InitRenderQueue(GfxRenderQueue* queue)",
+  "params": {
+   "param_1": "queue"
+  },
+  "summary": "Stores the queue object in a global and creates its backing store with 0x1165B0 (a 0x348-byte array of 16 slots x 0x18 bytes plus 16 texture references). Returns 0 on success and -1 after calling the deallocation callback when the store cannot be created.",
+  "confidence": 0.5,
+  "evidence": "Only caller 0x109FB0 at 0x10A098 passes base+0x878. Body: str arg in 0x7Axxxx, bl 0x1165B0, str result at [*g+0x800]; on failure invokes function pointer *g_00110694(0x10000,0x100,0) and clears the global. 0x1165B0 builds 16 records of 0x18 bytes plus 16 texture entries (see its body)."
+ },
+ {
+  "address": "0x00110698",
+  "name": "Gfx_InitSubsystems",
+  "signature": "u32 Gfx_InitSubsystems(GfxSubsystemSet* set)",
+  "params": {
+   "param_1": "set"
+  },
+  "summary": "Stores the subsystem set in a global and runs the four subordinate initialisers attached at +4, +8 and +0xC (0x115F4C, 0x115E5C, 0x11C5E8, 0x115E70). Always returns 0.",
+  "confidence": 0.55,
+  "evidence": "Only caller 0x109FB0. asm 0x11069C-0x1106D0: str r0,[0x7AE8E8]; bl 0x115F4C; bl 0x115E5C(*(g)+4); bl 0x11C5E8(*(g)+8); bl 0x115E70(*(g)+0xC); mov r0,#0. The four calls are pure initialisers (none returns a checked value), matching an SDK 'initialise sub-managers' step."
+ },
+ {
+  "address": "0x001106F0",
+  "name": "Gfx_RegisterResource",
+  "signature": "void Gfx_RegisterResource(u32 key, GfxResource* res, u32 unused)",
+  "params": {
+   "param_1": "key",
+   "param_2": "res",
+   "param_3": "unused"
+  },
+  "summary": "Inserts a 0x44-byte resource record into a 32-bucket hash table (buckets at 0x007E7780, next pointer at +0x40), keeping each bucket sorted by key, and updates the current-range globals at 0x007E8320/0x007E8324 from the record's base/size fields.",
+  "confidence": 0.5,
+  "evidence": "Only caller 0x109FB0 (with key 1). asm: key&0x1f selects bucket at 0x7E7780+4*k; walks node->+0x40 chain comparing *node; allocates a 0x44-byte node through the callback at *0x7E8334; node[0]=key; node[0xb]=0x300; then updates the range/limit globals 0x00110850/0x00110854 as node[3]+base and node[2]+base. 0x110858 is the matching removal routine, which confirms it is a resource registry."
+ },
+ {
+  "address": "0x00110858",
+  "name": "Gfx_UnregisterResources",
+  "signature": "void Gfx_UnregisterResources(int count, u32* keys)",
+  "params": {
+   "param_1": "count",
+   "param_2": "keys"
+  },
+  "summary": "Removes the given keys from the 32-bucket resource table, dropping the cached 'current resource' pointers, calling the resource destructor callback and the block-free callback for each match, and lowering the cached minimum address.",
+  "confidence": 0.5,
+  "evidence": "Companion of 0x1106F0 (same bucket array 0x7E7780, next at +0x40). Loops over keys, unlinks the node, clears the cached pointers 0x00110990/0x00110994, calls the destructor callback at 0x7E8334+4 with (0x10000,0x100,0,node), lowers the cached minimum 0x7E8338+8, and frees the node with (0x10000,0x100,0,node)."
+ },
+ {
+  "address": "0x001109A0",
+  "name": "maybe_Gfx_GetLcdWidth",
+  "signature": "u32 Gfx_GetLcdWidth(u32 unused)",
+  "params": {
+   "param_1": "unused"
+  },
+  "summary": "Returns the cached LCD width: for the 0x30000 GSP command it asks 0x11981C and returns the global width, otherwise 0. The condition register (ZR) guard shows this is the tail of a Thumb/dual-entry helper.",
+  "confidence": 0.4,
+  "evidence": "Body: if (ZR) { func_0011981C(); return g_001109D4; } if (arg1 == 0x30000) { func_0011981C(0x30000); result = g_001109D0; }. Globals 0x1109D0/0x1109D4 are the width values filled by the GSP display-info query; 0x1109DC is the height twin."
+ },
+ {
+  "address": "0x001109DC",
+  "name": "maybe_Gfx_GetLcdHeight",
+  "signature": "u32 Gfx_GetLcdHeight(u32 unused)",
+  "params": {
+   "param_1": "unused"
+  },
+  "summary": "Returns the cached LCD height (global 0x110A1C) or the default 0x1F000000 constant when the GSP display-info query fails; the 0x30000 command selects the same display as 0x1109A0.",
+  "confidence": 0.4,
+  "evidence": "Mirror image of 0x1109A0: calls 0x11981C(0x30000), returns g_00110A1C when it succeeds and g_00110A20 (=0x1F000000, a fixed 31.0 value) on failure; the ZR branch returns g_00110A24 or 0x1F000000. Pairs with the width getter used by the framebuffer setup."
+ },
+ {
+  "address": "0x00110A28",
+  "name": "Gfx_PushPipelineCommand",
+  "signature": "void Gfx_PushPipelineCommand(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Appends one 0x1C-byte command to the renderer's pending command array (record type 1), fills in the destination address/size from the current cursor, submits it through 0x116104 and advances the queue counters; if this was the last pending command it starts a new frame via 0x116104.",
+  "confidence": 0.55,
+  "evidence": "Readable 0x110A28: f_18 + f_20*0x1c record, *record=1, +4 = f4+f14, +8 = fc-f14, optional 0x1160AC, updates f_20, then func_001197FC/0x116104/0x11980C. Sole caller 0x109FB0 at 0x10A...; record layout and type dispatch (types 0..4) are in 0x116104, confirming this writes one command node."
+ },
+ {
+  "address": "0x00110BC0",
+  "name": "Gfx_WaitForVBlank",
+  "signature": "void Gfx_WaitForVBlank(int which)",
+  "params": {
+   "param_1": "which"
+  },
+  "summary": "Blocks until the GSP frame counter changes for the requested screen: 0x400 (top) and 0x402 (both/top+bottom) poll the per-screen counters at context+0x154/0x158 and release the CPU with 0x113700; other values wait for 0x119388.",
+  "confidence": 0.65,
+  "evidence": "Readable: if (arg1 != 0x402) { iVar4 = ctx + (arg1 != 0x400)*4; do { func_00113700(); iVar5 = iVar4->f_154; } while (iVar3 == iVar5); ... } else polls both f_154 and f_158. f_154/f_158 are the counters incremented by the VBlank handlers 0x110D34/0x110D78, which the GPU driver installs for displays 0x400/0x402."
+ },
+ {
+  "address": "0x00110C70",
+  "name": "maybe_Gfx_SubmitFrameCommand",
+  "signature": "void Gfx_SubmitFrameCommand(u32 opcode, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f)",
+  "params": {
+   "param_1": "opcode",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c",
+   "param_5": "d",
+   "param_6": "e",
+   "param_7": "f"
+  },
+  "summary": "Thunk that forwards the frame's seven parameters to 0x113714, which appends a command record to the renderer's command ring (see 0x113714). Called once per frame by the display update at 0x10AD60.",
+  "confidence": 0.45,
+  "evidence": "Only caller 0x10AD60; body is literally 'bl 0x113714; bx lr', so Ghidra shows no arguments. 0x113714 takes 7 register arguments and writes a 0x1c-byte record plus an atomic 0x100 flag; the caller passes a 7-word GPU command descriptor."
+ },
+ {
+  "address": "0x00110D34",
+  "name": "Gfx_OnVBlankTop",
+  "signature": "void Gfx_OnVBlankTop(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Top-screen VBlank interrupt handler: invokes the registered callback with display id 0x400 and advances the frame counter at context+0x154 modulo 0x7FFFFFFF.",
+  "confidence": 0.6,
+  "evidence": "Body: if (ctx->f_15c) ctx->f_15c(0x400); iVar2 = ctx->f_154 + 1; ctx->f_154 = iVar2 + ((iVar2 * 0x40000001) >> 61) * -0x7FFFFFFF (the compiler's signed-modulo-by-0x7FFFFFFF idiom). 0x110BC0 waits on exactly this counter for display 0x400, and 0x110D78 is its 0x402 twin."
+ },
+ {
+  "address": "0x00110D78",
+  "name": "Gfx_OnVBlankBottom",
+  "signature": "void Gfx_OnVBlankBottom(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Bottom/sub-screen VBlank interrupt handler: invokes the registered callback with the 0x402 display id (global 0x110DBC) and advances the second frame counter at context+0x158 modulo 0x7FFFFFFF.",
+  "confidence": 0.6,
+  "evidence": "Identical to 0x110D34 except it uses ctx->f_160 / ctx->f_158 and passes g_00110DBC (the 0x402 display id) to the callback; 0x110BC0 polls both counters when waiting for 0x402."
+ },
+ {
+  "address": "0x00110ED0",
+  "name": "Gfx_InitCommandRing",
+  "signature": "void Gfx_InitCommandRing(GfxCommandRing* ring, u32 capacity, u32 arg3)",
+  "params": {
+   "param_1": "ring",
+   "param_2": "capacity",
+   "param_3": "arg3"
+  },
+  "summary": "Initialises a lock-protected command ring: stores capacity and the caller tag, resets the two atomic counters and read/write cursors under ldrex/strex, sets both 'ready' halfwords from the current system tick, and obtains the initial tick from 0x111288.",
+  "confidence": 0.5,
+  "evidence": "Readable: *arg1=arg2; arg1[6]=arg3; arg1[9]/[10]/[1..4]=0 with hasExclusiveAccess loops (ldrex/strex spinlocks); *(short*)(arg1+10)=low16(tick); calls 0x111288(&local,0) which is the svc #0x13 wrapper and stores the 64-bit tick in arg1[5]. Sole caller 0x108C5C, part of the GSP shared-memory setup."
+ },
+ {
+  "address": "0x00110FD8",
+  "name": "Gfx_PopCommandRing",
+  "signature": "u32 Gfx_PopCommandRing(GfxCommandRing* ring, u32* out)",
+  "params": {
+   "param_1": "ring",
+   "param_2": "out"
+  },
+  "summary": "Removes one entry from the command ring: takes the lock (svc 0x24), validates the ring's result word, reads the word at the read cursor, advances it modulo capacity, decrements the pending count and wakes a waiter; returns 1 when an entry was produced and 0 when the ring is empty.",
+  "confidence": 0.5,
+  "evidence": "Readable: software_interrupt(0x24) (lock), if (arg1[5] < 0) error path, if (arg1[8] > 0) { *arg2 = *(u32*)(*arg1 + arg1[7]*4); func_0011CFAC(arg1[7]+1, arg1[6]) (modulo capacity); arg1[7]=remainder; --arg1[8]; if (arg1[10]>0) func_00117DC4(arg1+3,1); ... return 1; } return 0. Mirrors Gfx_InitCommandRing's layout."
+ },
+ {
+  "address": "0x00111430",
+  "name": "std_strncpy",
+  "signature": "char* std_strncpy(char* dst, const char* src, int n)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src",
+   "param_3": "n"
+  },
+  "summary": "newlib strncpy: copies at most n bytes from src to dst, using the usual word-at-a-time zero-byte test when both pointers are aligned, stops after copying the terminating NUL and zero-fills the remainder of the n-byte destination.",
+  "confidence": 0.8,
+  "evidence": "asm 0x111430: tst r0,#3 / tsteq r1,#3 fast path, ldr with mask 0x7EFEFEFF-style test ('uVar4 - iVar3 & ~uVar4 & iVar3 << 7'), then byte loop that breaks on NUL, then bl 0x1113EC (memset body) for the remaining count. The tail memset is the strncpy zero-pad; 0x1113EC and 0x116AE0 are the two memset variants."
+ },
+ {
+  "address": "0x00111AA0",
+  "name": "Gfx_IpcCmd803",
+  "signature": "int Gfx_IpcCmd803(u32* session, u32* out, u32 a, u32 b, u32 c, u32 d, u32 e, u32 f, u32 g, u32 h, u32 i, u32 j)",
+  "params": {
+   "param_1": "session",
+   "param_2": "out",
+   "param_3": "a",
+   "param_4": "b",
+   "param_5": "c",
+   "param_6": "d",
+   "param_7": "e",
+   "param_8": "f",
+   "param_9": "g",
+   "param_10": "h",
+   "param_11": "i",
+   "param_12": "j"
+  },
+  "summary": "IPC client stub for command 0x0803 (8 normal + 4 translated parameters) to the GPU service: fills the thread-local request buffer at TPIDRURO+0x80 and returns the service result, copying back two output words. Called by the renderer at 0x504378/0x505058 and by the SDK at 0x10B524/0x10B830.",
+  "confidence": 0.6,
+  "evidence": "asm 0x111AA0: mrc p15,0,r4,c13,c0,3 (__aeabi_read_tp), header g_00111B3C = 0x08030204 (cmd 0x803, 8 normal / 4 translate), stores 8 words at TLS+0x84.. and r0/r1 outputs at +0x8c/0x90, svc 0x32 (SendSyncRequest). Callers 0x504378/0x505058 are engine render code (they also call 0x117B78/0x117C58 semaphores)."
+ },
+ {
+  "address": "0x00111B40",
+  "name": "Gfx_IpcCmd861",
+  "signature": "u32 Gfx_IpcCmd861(u32* session, u32 value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "IPC client stub for command 0x0861 (1 normal + 2 translated parameters) to the GPU service; used to push a single dword (typically a GPU/interrupt selector) and return the service result.",
+  "confidence": 0.55,
+  "evidence": "asm: header g_00111B74 = 0x08610042 (cmd 0x861, 1 normal/2 translate), TLS +0x84 = arg2, +0x88 = 0x20, svc 0x32. Sole caller 0x10B6AC, inside the same GPU init/IRQ code that calls Gfx_IpcCmd803."
+ },
+ {
+  "address": "0x00111BAC",
+  "name": "Gfx_WaitGpuInterrupt",
+  "signature": "u32 Gfx_WaitGpuInterrupt(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Waits for a GPU interrupt by issuing the GPU service command 0x40000 (via 0x117B18) and converts the usual 'would block' result 0xFFFFF9 into a normal return while asserting on real errors.",
+  "confidence": 0.5,
+  "evidence": "Body: result = func_00117B18() (cmd 0x40000 stub); if (result < 0) { uVar3 = result >> 27; if (uVar3 != -7) func_0011ED40(result, assert_site); } The -7 (0xFFFFF9) special case is the SDK's 'try again' result; caller 0x10BA40 also calls 0x111BEC, so the pair waits on two interrupt sources."
+ },
+ {
+  "address": "0x00111BEC",
+  "name": "maybe_Gfx_ReleaseGpuInterrupt",
+  "signature": "u32 Gfx_ReleaseGpuInterrupt(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Issues GPU service command 0x30000 (via 0x117B48) and clears the cached interrupt counters at context+4/+8 on success; errors other than the 0x19/0xFFFFxxxx 'already clear' result are asserted.",
+  "confidence": 0.45,
+  "evidence": "Body: result = func_00117B48() (0x30000 stub); if (result < 0) assert unless result>>27 == 0x19 or result == g_00111C4C; else { *(g_00111C50+4)=0; *(g_00111C50+8)=0; }. Paired with 0x111BAC (0x40000) as the two halves of the GSP interrupt handshake."
+ },
+ {
+  "address": "0x00111CD8",
+  "name": "maybe_Os_SetSyncState",
+  "signature": "u32 Os_SetSyncState(OsSyncObject* obj, int mode)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "mode"
+  },
+  "summary": "Atomically replaces the state word of a synchronisation object with -1 (mode 0) or -2 (mode != 0) and returns the previous state. Used to force a wake-up/failure state on a thread or event object.",
+  "confidence": 0.35,
+  "evidence": "Body: func_00117C40(obj+1) (lock/link), uVar3 = (arg2==0) ? 0xffffffff : 0xfffffffe; do { result=*obj; } while (!hasExclusiveAccess(obj)); *obj=uVar3. 16 callers spread over engine modules (0x102AE8, 0x103544, 0x10BB34, 0x10C8C4, 0x10D6CC, 0x11896C, 0x18F974 ...), so it is a generic OS helper; the exact meaning of -1/-2 is not recoverable."
+ },
+ {
+  "address": "0x00111F60",
+  "name": "Os_CreateThreadWithStack",
+  "signature": "int Os_CreateThreadWithStack(u32* out_handle, OsThreadParams* params, u32 entry, u32 arg, int stack_top, u32 stack_size, u32 priority, int detached)",
+  "params": {
+   "param_1": "out_handle",
+   "param_2": "params",
+   "param_3": "entry",
+   "param_4": "arg",
+   "param_5": "stack_top",
+   "param_6": "stack_size",
+   "param_7": "priority",
+   "param_8": "detached"
+  },
+  "summary": "Creates a detached or joinable OS thread: computes the aligned stack top from the caller-supplied stack region, writes the thread argument block, then calls svcCreateThread (0x1112A0) with entry/arg/stack/priority and optionally patches the stack chunk header.",
+  "confidence": 0.7,
+  "evidence": "Readable: uVar4 = (stack_top - *params) & ~7; if (!detached) stack_top = 0; calls params->[1](arg, uVar4) (stack guard/clear hook); writes a 0x18-byte chunk header at uVar4-0x18; then func_001112A0(&local, g_0011204C, entry, entry, size, priority) - 0x1112A0 is 'svc #8' (CreateThread), verified in asm 0x1112A0. Callers include 0x1076AC, 0x10BB34, 0x119498, 0x517884."
+ },
+ {
+  "address": "0x0011233C",
+  "name": "maybe_Os_CallFinalizers",
+  "signature": "void Os_CallFinalizers(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Runs up to eight registered finaliser callbacks (table at 0x00112380) once, then clears the 'initialised' flag at 0x0011237C+2. Used during shutdown of the SDK subsystem that owns the table.",
+  "confidence": 0.4,
+  "evidence": "Readable: if (*(char*)(g_0011237C+2)) { for (i=0;i<8;i++) if (g_00112380[i]) g_00112380[i](); *(u8*)(g_0011237C+2)=0; }. Table of 8 function pointers and one flag; sole caller 0x10CF50, which also calls 0x114344/0x119DF8 (shutdown path)."
+ },
+ {
+  "address": "0x00112518",
+  "name": "Hid_DispatchPadReport",
+  "signature": "void Hid_DispatchPadReport(HidCalibration* cal, u32 a, u32 b, u32 c, u32 d)",
+  "params": {
+   "param_1": "cal",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c",
+   "param_5": "d"
+  },
+  "summary": "Dispatches a raw pad report to one of three calibration/decoding paths depending on the report-type byte at +0xC (0 = 0x11FBCC, 1 = 0x11A810 circle-pad, 2 = 0x11A914 touch/other), passing the two pairs of 16-bit axis values.",
+  "confidence": 0.5,
+  "evidence": "Body: cVar1 = *(char*)(arg1+0xC); if 0 -> func_0011FBCC(arg2,arg3,arg4,arg5,*arg1,arg1[3]); if 1 -> func_0011A810(...,arg1[1],arg1[4]); if 2 -> func_0011A914(...,arg1[2],arg1[5]). Callers 0x10C2D4 and 0x112640 are the two pad-reader paths; 0x11A810 is the 936-byte circle-pad calibration routine."
+ },
+ {
+  "address": "0x00112640",
+  "name": "Hid_ReadPadState",
+  "signature": "u32 Hid_ReadPadState(HidReader* reader, u32* out_state)",
+  "params": {
+   "param_1": "reader",
+   "param_2": "out_state"
+  },
+  "summary": "Reads one pad snapshot from the HID service (0x11ABB8) into out_state, computes the newly-pressed / newly-released masks against the previous state, applies the circle-pad calibration and returns 1 when a report was produced, 0 otherwise.",
+  "confidence": 0.6,
+  "evidence": "Readable: if (func_0010C51C()==0) { ...; func_0x0011ABB8(*(u32*)(*arg1+4),arg2,1,local...); if (local[0] > 0) { func_00112518(...); *arg1[2]=*arg2; uVar2=*arg2&~0x2000; arg2[1]=(uVar2^arg1[2])&~arg1[2]; arg2[2]=arg1[2]&~uVar2; ... return 1; } } The pressed/released masks in arg2[1]/arg2[2] are the classic HID button-edge computation."
+ },
+ {
+  "address": "0x00112774",
+  "name": "Gfx_IpcCmd60040",
+  "signature": "u32 Gfx_IpcCmd60040(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for GPU-service command 0x0006 with one translated parameter; returns the service result or the output word on success.",
+  "confidence": 0.6,
+  "evidence": "asm 0x112774: header 0x00060040 (cmd 6, 1 translate), TLS+0x84=arg1, svc 0x32, returns TLS+0x84. No callers in decomp/readable; grouped with the other GSP stubs by the shared request layout and the 0x60040 header."
+ },
+ {
+  "address": "0x001127B0",
+  "name": "Gfx_IpcCmd140040",
+  "signature": "u32 Gfx_IpcCmd140040(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for GPU-service command 0x0014 with one translated parameter; returns the service result or the echoed output word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x1127B0: header g_001127E0 = 0x00140040, TLS+0x84=arg1, svc 0x32, returns TLS+0x84 on success. No callers; same family as 0x112774."
+ },
+ {
+  "address": "0x00112A60",
+  "name": "maybe_Gfx_DispatchPendingCommands",
+  "signature": "void Gfx_DispatchPendingCommands(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Tail-call wrapper around 0x1129F4, used by the frame loop at 0x107628 to drain pending GPU commands before the next present.",
+  "confidence": 0.3,
+  "evidence": "Body is 'bl 0x1129F4; bx lr' (20 bytes). Sole caller 0x107628; 0x1129F4 is the actual worker, so the entry is only a nameable thunk and its role is inferred from the caller's position in the render loop."
+ },
+ {
+  "address": "0x00113554",
+  "name": "maybe_Svc_IpcCmdB0000",
+  "signature": "int Svc_IpcCmdB0000(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "IPC stub for command 0x000B0000 (no parameters) on the srv: session whose handle is stored at 0x007AF900; returns the service result and writes the 0x88 output word to *out. The neighbouring srv: initialiser at 0x1134xx references the 'srv:' name string at 0x741AD8.",
+  "confidence": 0.45,
+  "evidence": "asm 0x113554: header 0xB0000, TLS+0x80, svc 0x32, handle loaded from *0x7AF900 (0x11358C). The literal pool at 0x113540 holds 0x741AD8 = pointer to 'srv:' (found in rodata), belonging to the srv initialiser directly before this stub. No callers in the readable tree because it is reached through the SDK init table."
+ },
+ {
+  "address": "0x001136D8",
+  "name": "Gfx_WriteHwRegs",
+  "signature": "void Gfx_WriteHwRegs(u32 addr, u32 value, u32 count)",
+  "params": {
+   "param_1": "addr",
+   "param_2": "value",
+   "param_3": "count"
+  },
+  "summary": "Writes GPU hardware registers through the GPU service: obtains the session handle from the thread-local GSP state and calls 0x1196B0, which issues command 0x00010082.",
+  "confidence": 0.55,
+  "evidence": "Body: uVar1 = func_0011F730() (current GSP session); func_001196B0(uVar1, arg1, arg2, arg3). 0x1196B0's header is 0x00010082 - the GSPGPU WriteHWRegs command (addr/value/count are exactly the three parameters)."
+ },
+ {
+  "address": "0x00113714",
+  "name": "Gfx_QueueCommand",
+  "signature": "void Gfx_QueueCommand(u32 queue_id, u32 opcode, u32 a, u32 b, u32 c, u32 d, u32 e)",
+  "params": {
+   "param_1": "queue_id",
+   "param_2": "opcode",
+   "param_3": "a",
+   "param_4": "b",
+   "param_5": "c",
+   "param_6": "d",
+   "param_7": "e"
+  },
+  "summary": "Appends a 0x1C-byte command to one of the two renderer command queues kept in thread-local storage, writes the six parameter words, issues a data-synchronisation barrier and sets the entry's valid/pending bit with an ldrex/strex.",
+  "confidence": 0.55,
+  "evidence": "Readable: if (arg1 < 2) { pbVar4 = *(u8**)(tls + 0x5c + arg1*4); idx = 1 - *pbVar4; pbVar4 += idx*0x1c + 4; write arg2..arg7; coproc_moveto_Data_Synchronization(0); ldrex *pbVar4 = (*pbVar4 & 0xffff0000) | idx | 0x100; }. Caller 0x110C70; the queue base at TLS+0x5c is filled by 0x1136D8's session setup."
+ },
+ {
+  "address": "0x001137AC",
+  "name": "Os_IsInHeapRange",
+  "signature": "u32 Os_IsInHeapRange(u32 addr)",
+  "params": {
+   "param_1": "addr"
+  },
+  "summary": "Returns 1 when addr lies inside either the main heap or the second (linear/VRAM) heap range, otherwise 0; used by the debug/assert path to decide whether a pointer is a real allocation.",
+  "confidence": 0.5,
+  "evidence": "Readable: uVar1 = func_001180F0(); iVar2 = func_001180E0(); if range1 contains arg1 -> 1; else uVar1 = func_00122CD8(); iVar2 = func_00122CC0(); if (uVar1==0 || arg1<uVar1 || iVar2+uVar1<=arg1) return 0; return 1. The two (base,size) pairs are the engine heaps; no callers because it is called from an inline assert macro."
+ },
+ {
+  "address": "0x0011386C",
+  "name": "Gfx_WriteHwRegsWithMask",
+  "signature": "void Gfx_WriteHwRegsWithMask(u32 addr, u32 value, u32 mask, u32 count)",
+  "params": {
+   "param_1": "addr",
+   "param_2": "value",
+   "param_3": "mask",
+   "param_4": "count"
+  },
+  "summary": "Writes GPU hardware registers with a bit mask through the GPU service by calling 0x11979C, whose command header is 0x00020084 (GSPGPU WriteHWRegsWithMask).",
+  "confidence": 0.55,
+  "evidence": "Body: func_0011979C(func_0011F730(), arg1, arg2, arg3, arg4); 0x11979C issues header 0x00020084 with (addr,value,mask,count). Pairs with 0x1136D8 (plain write)."
+ },
+ {
+  "address": "0x00113924",
+  "name": "maybe_Gfx_InitInterrupts",
+  "signature": "void maybe_Gfx_InitInterrupts(u8* flag)",
+  "params": {
+   "param_1": "flag"
+  },
+  "summary": "Clears the caller's interrupt-enabled flag, then registers GPU interrupt callbacks (0x113A40 for three sources) and enables interrupts through 0x1143C8; the ZR test shows the real entry is a Thumb/dual-mode helper.",
+  "confidence": 0.3,
+  "evidence": "Readable: *arg1 = 0; if (!ZR) { func_00113A40(3); func_001143C8(...); }. No callers; 0x113A40 is a 0x100+ byte routine and 0x1143C8 is the lock helper, so this is an interrupt/subsystem bring-up step rather than a leaf."
+ },
+ {
+  "address": "0x00114344",
+  "name": "maybe_Svc_IpcCmd50100",
+  "signature": "void Svc_IpcCmd50100(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Submits the 32-bit value as a four-word IPC request (command 0x00050100) through 0x119A10, which forwards it to the GPU/OS service and waits for completion.",
+  "confidence": 0.4,
+  "evidence": "Body: auStack_8[0]=arg1; func_00119A10(7, auStack_8, 4, 0, 0, 0). 0x1196B0-family header 0x50100 (cmd 5, 4 normal params) is built by 0x119348; the '7' is the command selector. Only caller 0x10CF50 (shutdown)."
+ },
+ {
+  "address": "0x001143C8",
+  "name": "maybe_Os_LockScheduler",
+  "signature": "void Os_LockScheduler(u32 arg)",
+  "params": {
+   "param_1": "arg"
+  },
+  "summary": "Takes the SDK's global scheduler/GPU lock (0x119BA8 + 0x1198CC), calls 0x11A3E8 with the argument, and releases it via 0x119E1C; asserts when 0x11A3E8 reports an error.",
+  "confidence": 0.45,
+  "evidence": "Body: func_00119BA8(); uVar1=func_001198CC(); iVar2=func_0011A3E8(uVar1,arg1); if (iVar2<0) func_00118924(iVar2,assert_site); func_00119E1C();. The same lock/unlock pair surrounds every GSP call (0x1198DC, 0x11A140, 0x119A10), so it serialises access to the GPU service."
+ },
+ {
+  "address": "0x00114584",
+  "name": "Gfx_IpcCmd1010000",
+  "signature": "int Gfx_IpcCmd1010000(u8* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "IPC stub with header 0x01010000 (no parameters) to the same session as the other GPU stubs; returns the result and writes the byte at TLS+0x88 to *out.",
+  "confidence": 0.55,
+  "evidence": "asm 0x114584: header literal 0x1010000, TLS+0x80 = header, load handle from 0x7AF0D8, svc 0x32, if success *out = *(u8*)(TLS+0x88). The 0x7AF0D8 handle is shared by all stubs in this batch."
+ },
+ {
+  "address": "0x00114614",
+  "name": "Gfx_IpcCmd3B0040",
+  "signature": "u32 Gfx_IpcCmd3B0040(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for command 0x003B with one byte parameter and one translated parameter; returns the service result or the echoed value.",
+  "confidence": 0.55,
+  "evidence": "asm 0x114614: header g_00114648 = 0x003B0040, TLS+0x84 = arg1, svc 0x32, return TLS+0x84. Sole caller 0x10DA64 in the input/display code."
+ },
+ {
+  "address": "0x00114650",
+  "name": "Gfx_IpcCmd2B0000",
+  "signature": "u32 Gfx_IpcCmd2B0000(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "IPC stub for command 0x002B (no parameters) to the shared GPU session; returns the service result or the TLS output word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x114650: header &LAB_002B0000 = 0x002B0000, svc 0x32, return TLS+0x84. No callers; grouped by the 0x7AF0D8 handle."
+ },
+ {
+  "address": "0x00114680",
+  "name": "Gfx_IpcCmd190040",
+  "signature": "u32 Gfx_IpcCmd190040(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for command 0x0019 with one translated parameter; returns the result or the echoed value.",
+  "confidence": 0.55,
+  "evidence": "asm 0x114680: header 0x00190040, TLS+0x84=arg1, svc 0x32. Sole caller 0x10D884 (display code)."
+ },
+ {
+  "address": "0x001146B8",
+  "name": "Gfx_IpcCmd4F0080",
+  "signature": "u32 Gfx_IpcCmd4F0080(u32 a, u32 b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "IPC stub for command 0x004F with two normal parameters; returns the result or the first output word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x1146B8: header 0x004F0080, TLS+0x84=a, +0x88=b, svc 0x32. Sole caller 0x10DA38 (display/HDMI-ish path)."
+ },
+ {
+  "address": "0x001149AA",
+  "name": "maybe_Gfx_ThumbDecodeBroken",
+  "signature": "u32 maybe_Gfx_ThumbDecodeBroken(u32 a, int b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Placeholder for a mis-seeded Thumb entry (0x1149AA falls inside the previous routine): the bytes decode as an IPC stub that stores a parameter at (arg2>>1)+0x10 and reads a result from (arg2>>1)+4, but the true function boundary is earlier, so the role cannot be established.",
+  "confidence": 0.25,
+  "evidence": "functions_index marks this as thumb size 0x10A; capstone at 0x1149AA yields nonsense because the real prologue is before the seed (the bytes at that address are a continuation of the preceding routine). Summarised from the Ghidra pseudo-C, which clearly shows an svc 0x32 IPC exchange; no callers."
+ },
+ {
+  "address": "0x00114AB4",
+  "name": "maybe_Gfx_CommandListWorker",
+  "signature": "void maybe_Gfx_CommandListWorker(u32 a, u32 b, int c, u32* d, int e, int* f)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d",
+   "param_5": "e",
+   "param_6": "f"
+  },
+  "summary": "Worker that walks a command list: normalises a count modulo 8, validates the list header/count fields and copies command payloads. Ghidra lost the control flow on an unaligned/bad instruction, so the details are only partly recovered.",
+  "confidence": 0.35,
+  "evidence": "asm 0x114AB4-0x114B12 is valid ARM (push {r4..lr}; ldr sl/fp; cmp ip,#8; modulo-8 normalisation; ldr ip,[r0,#0x10]; cmp r2,#0 ...), but the decompiler hit 'bad instruction data' and the entry is only used through a table (no callers). The 3-word header read at +0x10 and the backward copy at 0x114B08 indicate list/command processing."
+ },
+ {
+  "address": "0x00114B12",
+  "name": "maybe_Gfx_ThumbRoutine114B12",
+  "signature": "void maybe_Gfx_ThumbRoutine114B12(u32 a, u32 b, u32 c, u32 d)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d"
+  },
+  "summary": "Mis-seeded Thumb entry: the address lands in the middle of a routine (the preceding ARM function ends at 0x114B12), so the disassembly is garbage. Kept as a documented placeholder for the covered_by entry.",
+  "confidence": 0.25,
+  "evidence": "functions_index lists 0x114B12 as thumb size 0x146, but capstone from that address decodes 'push {r4,r7,lr}; stm r0!,{r0}; rev r0,r0; b #0x115262' with branches far outside the claimed range - classic mid-function seed. Ghidra's pseudo-C (byte-swap idiom) confirms it is not a real function start; no callers."
+ },
+ {
+  "address": "0x0011511C",
+  "name": "std__Rb_tree_rebalance_for_erase",
+  "signature": "void std__Rb_tree_rebalance_for_erase(RbTreeNode* z, RbTreeNode* header, RbTreeNode* leftmost, RbTreeNode* rightmost)",
+  "params": {
+   "param_1": "z",
+   "param_2": "header",
+   "param_3": "leftmost",
+   "param_4": "rightmost"
+  },
+  "summary": "libstdc++ red-black tree erase fix-up: handles the red-leaf case, the single-child splice case and the two-children case (find successor, copy colour, rotate with 0x11B9B0) so the tree invariants and the header's leftmost/rightmost pointers remain valid.",
+  "confidence": 0.8,
+  "evidence": "Body matches _Rb_tree_rebalance_for_erase case-by-case: 'if (z->left == 0) y = z->right; else if (z->right == 0) y = z->left; else { y = min(z->right); ... }'; colour byte +0x10; uses func_0011B9B0(node,bool,header) for rotations and func_00115114(...) for the successor transplant. Companion of 0x10EE9C/0x115290; reached through map erase sites (no direct call because it is inlined at most call sites)."
+ },
+ {
+  "address": "0x00115290",
+  "name": "std__Rb_tree_rebalance",
+  "signature": "void std__Rb_tree_rebalance(RbTreeNode* x, RbTreeNode* header)",
+  "params": {
+   "param_1": "x",
+   "param_2": "header"
+  },
+  "summary": "libstdc++ red-black tree rebalancing after insertion: recolours parent/uncle/grandparent and performs the left/right rotations through 0x11B9B0 until the root is black again.",
+  "confidence": 0.9,
+  "evidence": "Textbook _Rb_tree_rebalance: while (x != root && x->parent->colour == red) { if (parent == grandparent->left) { y = grandparent->right; if (y->colour == red) { recolour; x = grandparent; } else { if (x == parent->right) { x=parent; rotate_left; } parent->colour=black; grandparent->colour=red; rotate_right(grandparent); } } ... } root->colour = black. Sole caller 0x10EE9C; rotate helper 0x11B9B0 and node layout +0x4/+0x8/+0xC/+0x10 match the insert routine."
+ },
+ {
+  "address": "0x00115F78",
+  "name": "Container_NewListNode",
+  "signature": "void* Container_NewListNode(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Allocates a 0x28-byte list node from the global block allocator at 0x007AE8EC and zeroes all ten words; returns NULL when no allocator is installed or the allocation fails. The real function starts at 0x115F74 (the batch seed is 4 bytes late).",
+  "confidence": 0.5,
+  "evidence": "asm 0x115F74: ldr r0,[0x7AE8EC]; if (!*r0) return 0; blx *r0 with r0=0x10000, r1=0x100, r2=0, r3=0x28; then ten 'str r1,[r0,#0..0x24]'. Called by 0x10F74C to create the list sentinel; the 0x10000/0x100 signature is the engine's heap allocator ABI."
+ },
+ {
+  "address": "0x00115FE0",
+  "name": "Gfx_AdvanceCommandList",
+  "signature": "void Gfx_AdvanceCommandList(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Consumes the next entry of the active GPU command list: bumps the read cursor under the renderer lock, invokes the list's completion callback when the last entry (or an end marker) is reached, and restarts the DMA through 0x116104.",
+  "confidence": 0.55,
+  "evidence": "Readable: fa0 = g_001160A8->f_a0; iVar4 = fa0->f_18 + fa0->f_28*0x1c; lock 0x1197FC; ++fa0->f_28; if (fa0->f_38 && (entry[1] || (count==f_20 && f_3c))) callback = fa0->f_38; if (entry[2]==0) { if (count<f_20) 0x116104(); else f_11=0; } else {...} unlock 0x11980C; indirect call. Same 0x1c-byte command records as 0x116104."
+ },
+ {
+  "address": "0x00116104",
+  "name": "Gfx_ExecuteCommandList",
+  "signature": "void Gfx_ExecuteCommandList(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Drains the pending GPU command array: for every record from the read cursor to the write cursor it dispatches on the record type (0 = texture copy, 1 = surface fill, 2 = textured quad/blit, 3/4 = display transfer) to the corresponding 0x11C86C/0x11F28C/0x11C8A0/0x11C880/0x11C8C0 hardware command builder.",
+  "confidence": 0.6,
+  "evidence": "Readable switch on *record (0x1c-byte entries): case 0 -> func_0011C86C; 1 -> func_0011F28C; 2 -> func_0011C8A0(...); 3 -> func_0011C880(...); 4 -> func_0011C8C0(...). Those five are the GPU command builders (0x11C86C etc. are the batch entries that tail-call 0x11F12C/0x11F21C/0x11F35C/0x11F518). 12 callers incl. 0x109FB0, 0x110A28, 0x6B9D5C."
+ },
+ {
+  "address": "0x00116368",
+  "name": "Gfx_NewCommandList",
+  "signature": "GfxCommandList* Gfx_NewCommandList(u32 capacity)",
+  "params": {
+   "param_1": "capacity"
+  },
+  "summary": "Allocates and initialises a 0x1CC-byte command-list object: 0x2600 default words, a 0xFFFFFC18 sentinel, zeroed state and eight 0x44-byte slot descriptors (stride 0x44) tagged with the capacity argument.",
+  "confidence": 0.5,
+  "evidence": "Readable: alloc(0x10000,0x100,0,0x1cc); memset(0x1cc); result[0]=result[1]=0x2600; result[2..3]=g_00116428; result[5]=0xfffffc18; loop i=0..7: result[i*0x11+0x1d]=arg1 (0x44-byte stride). Caller 0x110470 (Gfx_InitCommandLists); companion 0x116430 builds the 0x78-byte single-slot variant."
+ },
+ {
+  "address": "0x00116430",
+  "name": "Gfx_NewCommandListSlot",
+  "signature": "GfxCommandList* Gfx_NewCommandListSlot(u32 capacity)",
+  "params": {
+   "param_1": "capacity"
+  },
+  "summary": "Allocates and initialises a 0x78-byte single-slot command-list object (0x2600 defaults, 0xFFFFFC18 sentinel, one 0x44-byte descriptor at +0x74 tagged with the argument).",
+  "confidence": 0.5,
+  "evidence": "Readable: alloc 0x78, memset 0x78, result[0..1]=0x2600, result[2..3]=g_001164C0, result[5]=0xfffffc18, result[6..0xa]=g_001164C4, result[0x1d]=arg1. Called by 0x110470; pairs with 0x116368 (multi-slot)."
+ },
+ {
+  "address": "0x001164C8",
+  "name": "maybe_Gfx_FreeCommandList",
+  "signature": "void Gfx_FreeCommandList(u32 flags, GfxCommandList* list)",
+  "params": {
+   "param_1": "flags",
+   "param_2": "list"
+  },
+  "summary": "Releases a command-list object: compares the list's slot offset against the currently bound slot, calls the list's release callback with the target address/size, then clears the three bookkeeping words.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (arg1 != g_001165A4) { ... adjust by 0x10000 steps ... (*pcVar5)(iVar3, iVar2, iVar4); } *arg2=0; arg2[1]=0; arg2[2]=0. The 0x10000/0x20000 offsets are the two framebuffer slots; callers 0x110470 (teardown of the previous lists) and 0x1164C8-adjacent code."
+ },
+ {
+  "address": "0x001165B4",
+  "name": "maybe_Gfx_NewRenderQueue",
+  "signature": "GfxRenderQueue* Gfx_NewRenderQueue(u32 unused)",
+  "params": {
+   "param_1": "unused"
+  },
+  "summary": "Allocates and initialises the 0x348-byte render queue: 16 slots each with a 0x10-byte and a 0x18-byte descriptor, texture handles at +0x188/+0x18C/+0x194 and a 0.5 float at +0x288.",
+  "confidence": 0.45,
+  "evidence": "Readable: alloc 0x348, memset; for i<0x10 set (result+i*0x18)+4=4, +8=g_00116658; (result+i*0x10)+400/+0x18C/+0x188=g_00116658, +0x194=g_0011665C; (result+i*0xC)+0x288=0x3f000000 (0.5f). Called by 0x110624 (Gfx_InitRenderQueue); the 16 slots match PICA200's 16 texture units."
+ },
+ {
+  "address": "0x001167C8",
+  "name": "maybe_Container_MapLowerBound",
+  "signature": "void maybe_Container_MapLowerBound(u32* out, u32 tree, u32* key)",
+  "params": {
+   "param_1": "out",
+   "param_2": "tree",
+   "param_3": "key"
+  },
+  "summary": "Looks up the first node in a hash/tree index whose 32-bit key is >= the requested key, comparing the 0x20-byte label built from the key, and returns the matching node plus its predecessor. Used by the resource loaders at 0x107F84/0x107FC0/0x10E540.",
+  "confidence": 0.35,
+  "evidence": "Readable: builds a label with 0x11CCA0(key[1]) + memcpy 0x11142C; walks the tree using node[2]/node[3] and node[4] as leaf flag, node[5] as key; compares node->f_14 and calls func_00123660(&node->f_1c, label, 0x20) (a 0x20-byte string/hash compare). Node layout and callers match the engine's keyed resource index, but the container type is not the libstdc++ RB tree of 0x10EE9C."
+ },
+ {
+  "address": "0x00116A9C",
+  "name": "Container_ResizeArray",
+  "signature": "void* Container_ResizeArray(Container* self, int count)",
+  "params": {
+   "param_1": "self",
+   "param_2": "count"
+  },
+  "summary": "Resizes an inline array to count 4-byte elements: destroys the old storage through the virtual at +0x10, allocates count*4 bytes from heap self[0xB] and zeroes the whole buffer with an unrolled 8/4/2/1-word pattern.",
+  "confidence": 0.55,
+  "evidence": "Readable: (*(code**)(*self+0x10))(self); self->f_10=(char)count; puVar1 = Mem_AllocAligned(count<<2, self[0xb], 4) (0x10F6EC); self[0xf]=puVar1; unrolled zero loop with size-0x20 steps, then 16/8/4/2/1 tails. This is a vector-like container resize used by the command-list objects."
+ },
+ {
+  "address": "0x00116D1C",
+  "name": "maybe_Gfx_ReleaseCommandBuffers",
+  "signature": "void Gfx_ReleaseCommandBuffers(GfxCommandList* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "When the list's 'owns buffers' bit is set, releases the three GPU buffers (+0x58/+0x34, +0x60/+0x3C, +0x64/+0x40) through 0x116DA4.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (*(u8*)(self+4) & 1) { func_00116DA4(self,self->f_58,self->f_34,0); func_00116DA4(self,self->f_60,self->f_3c,0); func_00116DA4(self,self->f_64,self->f_40,0); }. Struct matches the command-list objects built by 0x116368/0x116430; no direct callers (reached via vtable)."
+ },
+ {
+  "address": "0x0011709C",
+  "name": "maybe_Os_AssertObjectReady",
+  "signature": "u32 Os_AssertObjectReady(u32* object)",
+  "params": {
+   "param_1": "object"
+  },
+  "summary": "Asserts that the object pointer stored at *object is non-zero, then returns the word at global 0x007E8324+ ... (the cached ready flag of the current renderer object).",
+  "confidence": 0.4,
+  "evidence": "Readable: if (*arg1 == 0) func_0011ED40(g_001170C4, 0x1170B4); return *(u32*)(g_001170C8 + 4). 0x11ED40 is the SDK assert/error-report routine (used by 0x111BAC etc.), so this is a debug guard; no callers, likely inlined/used through a macro."
+ },
+ {
+  "address": "0x00117458",
+  "name": "maybe_Gfx_BlitWorker",
+  "signature": "void maybe_Gfx_BlitWorker(int enable)",
+  "params": {
+   "param_1": "enable"
+  },
+  "summary": "Scans a bitmap of dirty/allocated surface slots and re-submits the ones that are still live; the register-level entry is a mis-seeded Thumb address, so only the loop structure is trustworthy.",
+  "confidence": 0.25,
+  "evidence": "functions_index marks 0x117458 thumb size 0x568 but the disassembly from the seed is inconsistent (the first real prologue is earlier). The Ghidra pseudo-C shows a 32-bit mask walk (f_80 bitmap, count at f_88, records at f_7c stride 0x14) calling 0x11B530 per live record - consistent with a surface/flush loop, not enough for a precise name."
+ },
+ {
+  "address": "0x00117AB8",
+  "name": "Gfx_IpcCmd90000",
+  "signature": "u32 Gfx_IpcCmd90000(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "IPC stub for GPU-service command 0x0009 with no parameters; returns the service result or the TLS output word.",
+  "confidence": 0.6,
+  "evidence": "asm 0x117AB8: header 0x00090000, svc 0x32, return TLS+0x84. Sole caller 0x1221C0 (GPU bring-up code); same handle family as the other GSP stubs in this batch."
+ },
+ {
+  "address": "0x00117AE8",
+  "name": "Gfx_IpcCmd20000",
+  "signature": "u32 Gfx_IpcCmd20000(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "IPC stub for GPU-service command 0x0002 with no parameters; returns the service result or the TLS output word.",
+  "confidence": 0.6,
+  "evidence": "asm 0x117AE8: header 0x00020000, svc 0x32. Sole caller 0x11E54C (session teardown), which calls it before closing the session handle."
+ },
+ {
+  "address": "0x00117B18",
+  "name": "Gfx_IpcCmd40000",
+  "signature": "u32 Gfx_IpcCmd40000(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "IPC stub for GPU-service command 0x0004 with no parameters; used as the 'wait for GPU interrupt' request (0x111BAC).",
+  "confidence": 0.6,
+  "evidence": "asm 0x117B18: header 0x00040000, svc 0x32. Sole caller 0x111BAC, which maps the 0xFFFFF9 result to 'retry'."
+ },
+ {
+  "address": "0x00117B48",
+  "name": "Gfx_IpcCmd30000",
+  "signature": "u32 Gfx_IpcCmd30000(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "IPC stub for GPU-service command 0x0003 with no parameters; used as the 'acknowledge/release interrupt' request (0x111BEC).",
+  "confidence": 0.6,
+  "evidence": "asm 0x117B48: header 0x00030000, svc 0x32. Sole caller 0x111BEC, paired with 0x111BAC/0x117B18."
+ },
+ {
+  "address": "0x00117B78",
+  "name": "Os_LockSemaphore",
+  "signature": "void Os_LockSemaphore(u32* lock)",
+  "params": {
+   "param_1": "lock"
+  },
+  "summary": "Blocks until the semaphore/lock word at *lock becomes 0, then atomically sets it to -1; when the count is positive it arbitrates through 0x11CC10 (svcArbitrateAddress) until the state word is free.",
+  "confidence": 0.6,
+  "evidence": "Readable: loop { iVar3=*arg1; if (iVar3==-2) {0x11CC10(*g,arg1,1,0,0,0); return;} if (iVar3==0) { do { if (*arg1) goto got; } while (!hasExclusiveAccess(arg1)); *arg1=-1; got: if (!iVar3) return; } else if (iVar3==1) return; 0x11CC10(*g,arg1,1,0,0,0); }. 13 callers including 0x102BA4, 0x11896C and 0x517884; the 0x11CC10 helper is the kernel address-arbiter wrapper."
+ },
+ {
+  "address": "0x00117C58",
+  "name": "Os_TryLockSemaphore",
+  "signature": "int* Os_TryLockSemaphore(int* lock)",
+  "params": {
+   "param_1": "lock"
+  },
+  "summary": "Attempts to take the semaphore: if the state is 1 it enters the waiting path, decrements/negates the counter under ldrex, and only arbitrates when the count becomes positive; returns the owner/state pointer.",
+  "confidence": 0.5,
+  "evidence": "Readable: if (*arg1 != 1) { result=*arg1; if (!result) { spin until ldrex, *arg1=-1; } return result; } result=arg1+1; func_0011E614(); spin *arg1=-2; iVar4=*result; *result=-iVar4; if (iVar4 != -1 && 0 < iVar2) func_0011CC10(...). Same state values (-1/-2/1) as 0x117B78."
+ },
+ {
+  "address": "0x00117EF0",
+  "name": "Os_AcquireSemaphore",
+  "signature": "void Os_AcquireSemaphore(int* sem)",
+  "params": {
+   "param_1": "sem"
+  },
+  "summary": "Waits until the semaphore's counter is positive, then increments it atomically; used to claim one of the engine's counted resources.",
+  "confidence": 0.55,
+  "evidence": "Readable: while (*arg1 < 1) { ClearExclusiveLocal(); func_0011CC10(*g,arg1,1,0,0,0); } ldrex/strex ++*arg1. The loop/arbitrate pattern is identical to the other Os semaphore helpers; no direct callers in the readable tree (used from inline code)."
+ },
+ {
+  "address": "0x00117F5C",
+  "name": "Os_ReleaseSemaphoreAll",
+  "signature": "void Os_ReleaseSemaphoreAll(int* sem)",
+  "params": {
+   "param_1": "sem"
+  },
+  "summary": "Waits for the resource to be free, negates the counter and wakes every waiter by arbitrating with 0xFFFFFFFF until the state reaches -1.",
+  "confidence": 0.55,
+  "evidence": "Readable: while (*arg1 < 1) { ClearExclusiveLocal(); 0x11CC10(*g,arg1,1,0,0,0); } while (!hasExclusiveAccess(arg1)); *arg1 = -*arg1; while (*arg1 != -1) func_0011CC10(*g,arg1,1,0xffffffff,0,0);. Complement of 0x117EF0."
+ },
+ {
+  "address": "0x00118004",
+  "name": "Os_ReleaseSemaphore",
+  "signature": "void Os_ReleaseSemaphore(int* sem)",
+  "params": {
+   "param_1": "sem"
+  },
+  "summary": "Decrements the semaphore count (or moves a negative count towards zero) atomically and signals the address arbiter with -1 when the last user releases it.",
+  "confidence": 0.5,
+  "evidence": "Readable: do { iVar2=*arg1; iVar2 = (iVar2<0) ? iVar2+1 : iVar2-1; } while (!hasExclusiveAccess(arg1)); *arg1=iVar2; if (*arg1 == -1) func_0011CC10(*g,arg1,0,0xffffffff,0,0);. Mirrors 0x117EF0/0x117F5C."
+ },
+ {
+  "address": "0x00118064",
+  "name": "Os_SignalSemaphore",
+  "signature": "void Os_SignalSemaphore(int* sem)",
+  "params": {
+   "param_1": "sem"
+  },
+  "summary": "Negates the semaphore counter and immediately wakes all waiters through the arbiter, without first waiting for the counter to reach a positive value.",
+  "confidence": 0.5,
+  "evidence": "Readable: spin ldrex; *arg1 = -*arg1; func_0011CC10(*g,arg1,0,0xffffffff,0,0);. Same primitive as 0x117F5C but unconditional; used by 0x1180xx mutex paths."
+ },
+ {
+  "address": "0x00118108",
+  "name": "maybe_Os_CheckSemaphoreResult",
+  "signature": "void Os_CheckSemaphoreResult(u32 result, u32 unused, OsSemaphore* sem, char* flag)",
+  "params": {
+   "param_1": "result",
+   "param_2": "unused",
+   "param_3": "sem",
+   "param_4": "flag"
+  },
+  "summary": "Error filter for semaphore operations: maps the SDK's 0xFFFFF9 'destroyed' status to a release, treats result class 1 as success, and otherwise reports the error; also clears the caller's pending flag.",
+  "confidence": 0.4,
+  "evidence": "Readable: uVar1 = result >> 27 (sign corrected); if ((sem->f_14 & 1)==0 && *flag==0) { if (uVar1==0xffffffff) func_001188EC(result,0,lr); func_0011C814(); return; } if (uVar1 != 0xfffffff9 && uVar1 != 1) func_001188EC(result,0,lr);. 0x1188EC is the assert/throw path; no callers (inline helper)."
+ },
+ {
+  "address": "0x00118170",
+  "name": "Os_InitEventFlag",
+  "signature": "void Os_InitEventFlag(OsEventFlag* event)",
+  "params": {
+   "param_1": "event"
+  },
+  "summary": "Initialises an event/flag object: takes the kernel lock (svc 0x24), validates the handle, then marks the object as initialised. Called from the shutdown path 0x11F764.",
+  "confidence": 0.5,
+  "evidence": "Readable: if (*(char*)(arg1+4)==0) { software_interrupt(0x24); if (*arg1 < 0) func_00118100(); *(u8*)(arg1+4)=1; }. 0x118100 is the panic/assert helper (used by 0x110FD8 too). Sole caller 0x11F764."
+ },
+ {
+  "address": "0x001184F4",
+  "name": "Gfx_IpcCmd10082",
+  "signature": "u32 Gfx_IpcCmd10082(u32 buffer, int size, u32 addr)",
+  "params": {
+   "param_1": "buffer",
+   "param_2": "size",
+   "param_3": "addr"
+  },
+  "summary": "IPC stub for GPU-service command 0x0001 with 2 normal + 2 translated parameters, used to feed a memory range (buffer/size/address) to the GPU; command 0x00010082 is GSPGPU's register/block write request.",
+  "confidence": 0.55,
+  "evidence": "asm 0x1184F4: header 0x00010082, TLS+0x84=arg2, +0x88=arg3, +0x8c=arg2<<4|0xC, +0x90=arg1, svc 0x32. No callers in the readable tree; 0x1196B0 is a sibling with the same header used by 0x1136D8 (Gfx_WriteHwRegs)."
+ },
+ {
+  "address": "0x00118648",
+  "name": "maybe_Hid_GetEventObject",
+  "signature": "u32 Hid_GetEventObject(HidObject* obj, u32* out, u32 a, u32 b)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "out",
+   "param_3": "a",
+   "param_4": "b"
+  },
+  "summary": "Returns the cached HID result and, when the object holds a handle, forwards the request to 0x11EC40 (HID service command 0x000C).",
+  "confidence": 0.35,
+  "evidence": "Readable: *arg2 = arg3; result = g_00118674; if (*(int*)(arg1+8) != 0) func_0011EC40(*(int*)(arg1+8), arg4, arg2);. 0x11EC40's header is 0x000C0040; caller 0x118648 is in the HID event path."
+ },
+ {
+  "address": "0x0011867C",
+  "name": "Gfx_IpcCmd130082",
+  "signature": "u32 Gfx_IpcCmd130082(u32* session, u32 a, u32 b, u32 c)",
+  "params": {
+   "param_1": "session",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "IPC stub for GPU-service command 0x0013 with 2 normal + 2 translated parameters; used to configure a shared buffer (a/b/c are address, size and offset).",
+  "confidence": 0.6,
+  "evidence": "asm 0x11867C: header 0x00130082, TLS+0x84=arg3, +0x88=arg4, +0x8c=0, +0x90=arg2, svc 0x32. No callers; same shared-buffer shape as 0x1184F4."
+ },
+ {
+  "address": "0x001186B8",
+  "name": "Gfx_IpcCmd120000",
+  "signature": "u32 Gfx_IpcCmd120000(u32* session)",
+  "params": {
+   "param_1": "session"
+  },
+  "summary": "IPC stub for GPU-service command 0x0012 with no parameters; returns the result or the TLS output word.",
+  "confidence": 0.6,
+  "evidence": "asm 0x1186B8: header 0x00120000, svc 0x32. No callers; part of the same GSP command set."
+ },
+ {
+  "address": "0x001186E0",
+  "name": "Gfx_IpcCmd170040",
+  "signature": "u32 Gfx_IpcCmd170040(u32* session, u16 value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "IPC stub for GPU-service command 0x0017 with one translated 16-bit parameter (typically a display/lcd selector).",
+  "confidence": 0.6,
+  "evidence": "asm 0x1186E0: header 0x00170040, TLS+0x84=arg2, svc 0x32. No callers."
+ },
+ {
+  "address": "0x00118718",
+  "name": "Gfx_IpcCmd160000",
+  "signature": "int Gfx_IpcCmd160000(int* session, u32* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "out"
+  },
+  "summary": "IPC stub for GPU-service command 0x0016 with no parameters; returns the service result and copies the 0x8C output word to *out.",
+  "confidence": 0.6,
+  "evidence": "asm 0x118718: header 0x00160000, svc 0x32, if success *arg2 = TLS+0x8c. No callers."
+ },
+ {
+  "address": "0x001191F4",
+  "name": "maybe_Gfx_SetDisplayFlag",
+  "signature": "u32 Gfx_SetDisplayFlag(int ctx, u16 value)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "value"
+  },
+  "summary": "Sets a 16-bit field at +0x1A of the display record selected by ctx and marks the record dirty by OR-ing 0x10000000 into its first word; serialised by 0x11E99C/0x11E9A8.",
+  "confidence": 0.45,
+  "evidence": "Readable: func_0011E99C(); if (func_0011E9B4()) { rec = *(u32**)(ctx + *(u16*)(g_00119250+ctx)*4 + 0x10A4); *(u16*)(rec+0x1a)=arg2; *rec |= 0x10000000; func_0011E9A8(); return 1; } ... return 0. The 0x10000000 dirty bit matches the display/command list flags in 0x116104."
+ },
+ {
+  "address": "0x001192F4",
+  "name": "Gfx_IpcCmd50100Query",
+  "signature": "int Gfx_IpcCmd50100Query(u32* out, u32 a, u32 b, u32 c)",
+  "params": {
+   "param_1": "out",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "IPC stub for command 0x00050100 (4 normal parameters): sends a/b/c, returns the service result and copies the 0x8C output word to *out.",
+  "confidence": 0.55,
+  "evidence": "asm 0x1192F4: header g_00119348 = 0x00050100, func_0011FFFC(TLS+0x84), TLS+0x8c=arg3, +0x90=arg4, svc 0x32; on success *arg1=TLS+0x8c. Largest-command-id sibling of 0x114344 (which sends one word with the same header family)."
+ },
+ {
+  "address": "0x00119350",
+  "name": "Gfx_IpcCmdC0080",
+  "signature": "u32 Gfx_IpcCmdC0080(u32 a, u32 b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "IPC stub for command 0x000C with two normal parameters; returns the service result or the echoed first word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x119350: header g_00119380 = 0x000C0080, TLS+0x84=a, +0x88=b, svc 0x32. Callers 0x10BA40 and 0x1170CC."
+ },
+ {
+  "address": "0x0011938C",
+  "name": "maybe_Gfx_GetQueueStatus",
+  "signature": "int Gfx_GetQueueStatus(int index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Returns the pending byte at offset +1 of the thread-local queue object selected by index; used as the 'command list busy' predicate.",
+  "confidence": 0.45,
+  "evidence": "Readable: iVar1 = func_0011F720() (TLS); return *(char*)(*(int*)(iVar1 + 0x5c + arg1*4) + 1);. 0x113714 writes that same queue object; no callers because it is a tiny inline-able predicate."
+ },
+ {
+  "address": "0x00119688",
+  "name": "maybe_Os_DestroyThreadLocal",
+  "signature": "void Os_DestroyThreadLocal(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "If a thread-local object exists, passes it to 0x11F730/0x11F698 to destroy the TLS slot; used at thread exit.",
+  "confidence": 0.35,
+  "evidence": "Readable: iVar1 = func_0011F20C(); if (iVar1) { func_0011F730(iVar1); func_0011F698(); }. No callers (called from a destructor/exit path)."
+ },
+ {
+  "address": "0x001196B0",
+  "name": "Gfx_WriteHwRegsBlock",
+  "signature": "u32 Gfx_WriteHwRegsBlock(u32* session, u32 addr, u32 value, int count)",
+  "params": {
+   "param_1": "session",
+   "param_2": "addr",
+   "param_3": "value",
+   "param_4": "count"
+  },
+  "summary": "Sends a GPU register write block: 2 normal + 2 translated parameters, count encoded as ((count<<14)|2), through command 0x00010082.",
+  "confidence": 0.6,
+  "evidence": "asm 0x1196B0: header 0x00010082, TLS+0x84=arg2, +0x88=arg4, +0x8c=arg4<<14|2, +0x90=arg3, svc 0x32. Called by 0x1136D8 (Gfx_WriteHwRegs); identical structure to 0x1184F4 but with the count packing."
+ },
+ {
+  "address": "0x0011979C",
+  "name": "Gfx_WriteHwRegsMasked",
+  "signature": "u32 Gfx_WriteHwRegsMasked(u32* session, u32 addr, u32 value, u32 mask, int count)",
+  "params": {
+   "param_1": "session",
+   "param_2": "addr",
+   "param_3": "value",
+   "param_4": "mask",
+   "param_5": "count"
+  },
+  "summary": "Sends a masked GPU register write: 2 normal + 2 translated parameters plus the count packing, through command 0x00020084 (GSPGPU WriteHWRegsWithMask).",
+  "confidence": 0.6,
+  "evidence": "asm 0x11979C: header 0x00020084, TLS+0x84=arg2, +0x88=count, +0x8c=count<<14|2, +0x90=arg3, +0x94=count<<14|0x402, +0x98=arg4, svc 0x32. Called by 0x11386C."
+ },
+ {
+  "address": "0x001198DC",
+  "name": "Gfx_WaitGpuEvent",
+  "signature": "int Gfx_WaitGpuEvent(u32* a, u32* b, u8* c, int d, u32* e, int* f, int mode)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d",
+   "param_5": "e",
+   "param_6": "f",
+   "param_7": "mode"
+  },
+  "summary": "Waits for a GPU service reply: selects the event object (0x11F758 or 0x11F804), takes the scheduler lock, polls 0x11F9CC (command 0x000D) with timeout handling, unlocks and returns the reply, optionally signalling the event via svc 0x23.",
+  "confidence": 0.5,
+  "evidence": "Readable: iVar1 = mode ? 0x11F804() : 0x11F758(); 0x11F73C(iVar1); lock 0x119BA8/0x1198CC; func_0011F9CC(a,event,b,c,d,e,f); unlock 0x119E1C; if (local_34) svc 0x23. Caller 0x11A50C; the 0x11F9CC header is 0x000D0080, i.e. the GPU service's 'wait for event' command."
+ },
+ {
+  "address": "0x00119A10",
+  "name": "Gfx_IpcCmd4B00C2Call",
+  "signature": "int Gfx_IpcCmd4B00C2Call(u32 mode, u32* buf, int size, int a, int b, u32* out)",
+  "params": {
+   "param_1": "mode",
+   "param_2": "buf",
+   "param_3": "size",
+   "param_4": "a",
+   "param_5": "b",
+   "param_6": "out"
+  },
+  "summary": "Takes the scheduler lock and issues GPU command 0x004B (3 normal + 2 translated parameters, built by 0x11F810) with the caller's buffer; asserts on failure and releases the lock.",
+  "confidence": 0.5,
+  "evidence": "Readable: local zeros; lock 0x119BA8; if (!arg2 || !arg3) arg2=&local; result = func_0011F810(arg1,arg2) - 0x11F810 header is 0x004B00C2 (cmd 0x4B, 3 normal/2 translate); if (result<0) 0x118924(result, site); ... unlock 0x119E1C. Sole caller 0x114344."
+ },
+ {
+  "address": "0x00119B4C",
+  "name": "maybe_Gfx_GetEventData",
+  "signature": "void Gfx_GetEventData(u32* out8)",
+  "params": {
+   "param_1": "out8"
+  },
+  "summary": "Copies the eight words returned by 0x11F5C0 (GPU event/time query) into the caller's 8-word buffer.",
+  "confidence": 0.4,
+  "evidence": "Readable: func_0011F5C0(&local_28); out[0]=local[0] ... out[7]=local[7]; the stack block is 8 words. 0x11F5C0 calls 0x123508 on a TLS object and normalises the field bits, so this is a query/status snapshot; no callers."
+ },
+ {
+  "address": "0x00119BDC",
+  "name": "Gfx_IpcCmdF0100Query",
+  "signature": "int Gfx_IpcCmdF0100Query(u32 a, u32 b, u32 c, u32 d)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d"
+  },
+  "summary": "Issues GPU command 0x000F (4 normal parameters) and returns the byte result written by the service; asserts on failure.",
+  "confidence": 0.5,
+  "evidence": "Readable: lock 0x119BA8; iVar1 = func_0011F8E4(a,b,c,d,local_1c) - 0x11F8E4 header 0x000F0100; if (iVar1<0) 0x118924; unlock; return local_1c[0]. Sole caller 0x113A50."
+ },
+ {
+  "address": "0x00119C30",
+  "name": "maybe_Os_WaitUntilTick",
+  "signature": "u32 Os_WaitUntilTick(u32 lo, u32 hi, u32 max_delta, u32 flags)",
+  "params": {
+   "param_1": "lo",
+   "param_2": "hi",
+   "param_3": "max_delta",
+   "param_4": "flags"
+  },
+  "summary": "Waits until the 64-bit system tick (svc 0x28) reaches the deadline lo:hi or the timeout expires, recomputing the remaining time in 3x steps and yielding through 0x11CC94; returns 1 when the deadline was reached.",
+  "confidence": 0.4,
+  "evidence": "Readable: reads *0x7B2D38 pair; svc 0x28 tick; loop { 0x11A36C(flags,&status); if (status) return 1; if (deadline passed) return 0; ... 3x delta math ... func_0011CC94(timeout,0); }. The svc 0x28 tick read and the 3x margin are the same as 0x11A140/0x119E8C (GPU event waits)."
+ },
+ {
+  "address": "0x00119DF8",
+  "name": "maybe_Os_SignalEvent",
+  "signature": "void Os_SignalEvent(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Signals the pending GPU event: calls 0x11A3B0 under the scheduler lock, swaps the event words, and closes a handle with svc 0x23 when one is still open.",
+  "confidence": 0.4,
+  "evidence": "Readable: lock 0x119BA8/0x1198CC; if (0x11A3B0()<0) assert; iVar2=*g_00119E7C; if (iVar2) { svc 0x23; *g_00119E7C=*g_00119E84; } ... svc 0x14; unlock 0x119E1C. Sole caller 0x10CF50 (shutdown)."
+ },
+ {
+  "address": "0x00119E1C",
+  "name": "Os_UnlockScheduler",
+  "signature": "void Os_UnlockScheduler(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Releases the scheduler/GPU lock taken by 0x1143C8/0x119BA8: restores the saved event word, signals the owner with svc 0x23 if needed, and drops the thread priority with svc 0x14.",
+  "confidence": 0.5,
+  "evidence": "Readable: iVar2=*g_00119E7C; if (iVar2) { svc 0x23; *g_00119E7C=*g_00119E84; iVar1=iVar2; } if (iVar1<0) assert; if (*g_00119E88) { svc 0x14; if (*g_00119E88<0) 0x118100(); }. 33 callers - it closes the lock around every GPU/IPC call."
+ },
+ {
+  "address": "0x00119E8C",
+  "name": "maybe_Gfx_WaitGpuEventLoop",
+  "signature": "u32 Gfx_WaitGpuEventLoop(u32 requested, u32* out)",
+  "params": {
+   "param_1": "requested",
+   "param_2": "out"
+  },
+  "summary": "Polls GPU command 0x000D (0x11A50C) in a loop until the returned event matches the requested one or the service reports an error, invoking the registered callback for every event.",
+  "confidence": 0.45,
+  "evidence": "Readable: loop { result = func_0011A50C(&uStack_54, aiStack_50, 0,0, auStack_40, &uStack_58, *puRam00119F7C, ...); if (iRam00119F80 != result*0x400000) { if (result>=0 && cb) cb(...); ... } } while (!matched); if (result<0) break; ... The callback table at 0x119F84 and the 0x400000 scaling are the GPU event relay."
+ },
+ {
+  "address": "0x0011A0BC",
+  "name": "Gfx_Cmd400042Call",
+  "signature": "u32 Gfx_IpcCmd400042(u32 a, u32 b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Takes the scheduler lock and issues GPU command 0x0040 (2 translated parameters) through 0x11FA58, then releases the lock and returns the result.",
+  "confidence": 0.55,
+  "evidence": "Readable: lock 0x119BA8; result = func_0011FA58(arg1,arg2); unlock 0x119E1C; return. 0x11FA58's header is 0x00400042 (cmd 0x40, 2 translate). No callers."
+ },
+ {
+  "address": "0x0011A11C",
+  "name": "Gfx_IpcCmd3F0040Call",
+  "signature": "void Gfx_IpcCmd3F0040Call(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Takes the scheduler lock, calls 0x11FAA4 (GPU command 0x003F), asserts on failure and releases the lock.",
+  "confidence": 0.55,
+  "evidence": "Readable: lock 0x119BA8; if (func_0011FAA4()<0) 0x118924(...); unlock 0x119E1C. 0x11FAA4 header is 0x003F0040. Sole caller 0x113A50."
+ },
+ {
+  "address": "0x0011A140",
+  "name": "maybe_Gfx_ReadGpuBuffer",
+  "signature": "int Gfx_ReadGpuBuffer(u32 id, u32 flags, u32 size, u32 offset, u32 a5, u32 a6, u32 deadline_lo, u32 deadline_hi)",
+  "params": {
+   "param_1": "id",
+   "param_2": "flags",
+   "param_3": "size",
+   "param_4": "offset",
+   "param_5": "a5",
+   "param_6": "a6",
+   "param_7": "deadline_lo",
+   "param_8": "deadline_hi"
+  },
+  "summary": "Reads a GPU buffer in at most 0x1000-byte chunks through command 0x000C (0x11F88C), retrying on the 'busy' status with a 3x timeout deadline until the requested range is transferred.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (arg4 > 0x1000) 0x11C814(); loop { size/offset clamped; lock 0x119BA8; result = func_0011F88C(0x1198CC(), id, flags, size, offset, a6) - header 0x000C0104; if (result>=0 && (flags&0x10000)) 0x11F764(); unlock 0x119E1C; if error not 0x11A324 break; deadline retry with 3x math and 0x11CC94 wait; }. Sole caller 0x113A50."
+ },
+ {
+  "address": "0x0011A334",
+  "name": "Gfx_IpcCmd420080",
+  "signature": "u32 Gfx_IpcCmd420080(u32 a, u32 b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "IPC stub for GPU command 0x0042 with two normal parameters; returns the result or the echoed first word.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11A334: header 0x00420080, TLS+0x84=a, +0x88=b, svc 0x32. No callers."
+ },
+ {
+  "address": "0x0011A36C",
+  "name": "Gfx_IpcCmd90040",
+  "signature": "int Gfx_IpcCmd90040(u32 a, u8* out)",
+  "params": {
+   "param_1": "a",
+   "param_2": "out"
+  },
+  "summary": "IPC stub for GPU command 0x0009 with one translated parameter; returns the service result and copies the 0x88 output byte to *out.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11A36C: header 0x00090040, TLS+0x84=a, svc 0x32, *arg2=TLS+0x88. Callers 0x10CDE0, 0x10DA64, 0x119C30, 0x51BEFC - the 0x119C30 use (event polling) shows it is a query command."
+ },
+ {
+  "address": "0x0011A3B0",
+  "name": "Gfx_IpcCmd430040",
+  "signature": "u32 Gfx_IpcCmd430040(u32 a)",
+  "params": {
+   "param_1": "a"
+  },
+  "summary": "IPC stub for GPU command 0x0043 with one translated parameter; returns the result.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11A3B0: header 0x00430040, TLS+0x84=a, svc 0x32. Sole caller 0x119DF8 (event signalling)."
+ },
+ {
+  "address": "0x0011A3E8",
+  "name": "Gfx_IpcCmd3E0080",
+  "signature": "u32 Gfx_IpcCmd3E0080(u32 a, u8 b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "IPC stub for GPU command 0x003E with two normal parameters; returns the result or the echoed word. Used by the scheduler lock helper 0x1143C8.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11A3E8: header 0x003E0080, TLS+0x84=a, +0x88=b, svc 0x32. Sole caller 0x1143C8 (Os_LockScheduler)."
+ },
+ {
+  "address": "0x0011A42C",
+  "name": "Gfx_IpcCmdB0040",
+  "signature": "int Gfx_IpcCmdB0040(u32 a, u8* out)",
+  "params": {
+   "param_1": "a",
+   "param_2": "out"
+  },
+  "summary": "IPC stub for GPU command 0x000B with one translated parameter; returns the result and copies the 0x88 output byte.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11A42C: header 0x000B0040, TLS+0x84=a, svc 0x32, *arg2=TLS+0x88. No callers."
+ },
+ {
+  "address": "0x0011A470",
+  "name": "maybe_Gfx_WriteGpuBuffer",
+  "signature": "int Gfx_WriteGpuBuffer(u8* a, u8* b, u8* c, int size, u8* data, int* out)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "size",
+   "param_5": "data",
+   "param_6": "out"
+  },
+  "summary": "Takes the scheduler lock and submits a buffer write (command 0x000E via 0x11F940), handling the null-buffer defaults and returning the service status.",
+  "confidence": 0.4,
+  "evidence": "Readable: lock 0x119BA8; defaults for null args; result = func_0011F940(a,b,c,size,data,out) - 0x11F940 header 0x000E0080; unlock. Sole caller 0x113A50."
+ },
+ {
+  "address": "0x0011A50C",
+  "name": "maybe_Gfx_TransferGpuBuffer",
+  "signature": "int Gfx_TransferGpuBuffer(u32* a, u32* b, u8* c, int size, u32* d, int* out, u32 e, u32 f)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "size",
+   "param_5": "d",
+   "param_6": "out",
+   "param_7": "e",
+   "param_8": "f"
+  },
+  "summary": "Wraps a GPU buffer transfer (command 0x000D through 0x11F9CC) in the scheduler lock, supplying safe stack buffers for null arguments and optionally waiting for the event (0x11ABB8).",
+  "confidence": 0.45,
+  "evidence": "Readable: 0x119BA8/0x11A3E8 lock; 0x11F9CC(destination/source/size/...) with header 0x000D0080; 0x119E1C unlock; callers 0x10CF50 and 0x119E8C (the GPU event loop). The parameter-defaulting pattern (null -> stack temp) matches the other wrappers."
+ },
+ {
+  "address": "0x0011A7D0",
+  "name": "maybe_Hid_UpdateCalibration",
+  "signature": "void Hid_UpdateCalibration(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "If the HID calibration is active, reads the current calibration blob (0x11FB90) and, when its id matches the cached one (0x11A80C), sends it to the hardware with 0x11FB18.",
+  "confidence": 0.35,
+  "evidence": "Readable: if (g_0011A808[1]) { iVar2 = func_0011FB90(*g_0011A808); if (iVar2 == g_0011A80C) { func_0011FB18(*puVar1); return; } }. 0x11FB90/0x11FB18 are the calibration read/write pair; 0x11ABB8 calls the same pair."
+ },
+ {
+  "address": "0x0011A810",
+  "name": "Hid_CalibrateCirclePad",
+  "signature": "int Hid_CalibrateCirclePad(u16* out, u16* raw, int a, int b, int deadzone, int scale)",
+  "params": {
+   "param_1": "out",
+   "param_2": "raw",
+   "param_3": "a",
+   "param_4": "b",
+   "param_5": "deadzone",
+   "param_6": "scale"
+  },
+  "summary": "Converts raw circle-pad samples to calibrated signed axis values: applies the per-axis min/max calibration (from the calibration blob at 0x11A8xx), clamps to the dead-zone and writes the two results to *out.",
+  "confidence": 0.5,
+  "evidence": "Readable: 0x11A810 (936 bytes) is called from Hid_DispatchPadReport (0x112518) for report type 1; it uses the calibration constants read by 0x11FB90 and writes two shorts through the out pointers, with separate min/max scaling per axis. 0x11A914 is the type-2 twin."
+ },
+ {
+  "address": "0x0011ABB8",
+  "name": "maybe_Hid_ReadCalibratedPad",
+  "signature": "u32* Hid_ReadCalibratedPad(u32* a, u32* b, int count, u32* c, u32* d, u32 e, int f)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "count",
+   "param_4": "c",
+   "param_5": "d",
+   "param_6": "e",
+   "param_7": "f"
+  },
+  "summary": "Reads the raw pad/HID report through the service IPC path (0x11F9CC inside the 0x11A7B8 state machine), waits for the interrupt event with a 3x timeout and fills the caller's button/axis outputs; also refreshes the calibration when its id changes. The caller chain (0x112640 -> 0x108A00/0x10C2D4) is the input code, although the IPC command it uses is the same one the GPU event loop uses.",
+  "confidence": 0.45,
+  "evidence": "Readable: state at 0x7AE938; uses func_0011F9CC (header 0x000D0080), func_0011CC94 waits, func_0011FB90/0x11FB18 calibration refresh (same as 0x11A7D0), and g_0011A7B8/g_0011A7C0 deadline constants. Sole caller 0x112640 (Hid_ReadPadState), which uses the results for the pressed/released masks."
+ },
+ {
+  "address": "0x0011AC6E",
+  "name": "maybe_Hid_ThumbReader",
+  "signature": "u32 maybe_Hid_ThumbReader(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Mis-seeded Thumb entry inside the HID reader; the Ghidra body 'return 0x4C' is decompiler fallout. The surrounding code reads HID shared memory and 0x11AD3C is the pad reader, so this is HID input code, but the exact function boundary is not recoverable.",
+  "confidence": 0.25,
+  "evidence": "functions_index lists 0x11AC6E thumb size 0x13E, but capstone shows the bytes are the middle of a preceding routine (the real prologue is before 0x11AC6E). src/hid/pad.c documents 0x11AD3C as PadReader_Read; this entry lies immediately before it, so it is HID shared-memory access, not a standalone function."
+ },
+ {
+  "address": "0x0011B212",
+  "name": "maybe_Hid_NormalizeAxis",
+  "signature": "int Hid_NormalizeAxis(u32 unused, u32 max, u32 unused2, int value)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "max",
+   "param_3": "unused2",
+   "param_4": "value"
+  },
+  "summary": "Normalises a signed circle-pad value against an axis range and writes the two 16-bit results through fixed registers: clamps value to +/-max, computes the square root denominator and scales both components by 0x80 with integer division (0x11CD80).",
+  "confidence": 0.45,
+  "evidence": "Readable (thumb seed, body partially decoded): if (arg4<0) { if (-uVar3 != arg4 && (int)uVar3 <= -arg4) arg4 += uVar3; } else if ((int)uVar3 < arg4) arg4 -= uVar3; then iVar2 = arg4*arg4 + reg*reg; sqrt loop with 0x11CD80 (signed divide); *unaff_r9/*unaff_r10 = scaled shorts; returns the radius. The fixed output registers come from the caller 0x11B22A; this is the circle-pad normalisation math."
+ },
+ {
+  "address": "0x0011B22A",
+  "name": "maybe_Hid_CalibrationWorker",
+  "signature": "void maybe_Hid_CalibrationWorker(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Mis-seeded Thumb entry inside the circle-pad calibration routine (the real body starts earlier); the surrounding 778-byte routine computes the pad's min/max/centre from a series of samples and stores the result in the HID calibration blob.",
+  "confidence": 0.25,
+  "evidence": "functions_index lists 0x11B22A thumb but capstone from that address decodes branches into unrelated code; the real prologue is before the seed. Evidence for the role is indirect: it sits between Hid_NormalizeAxis (0x11B212) and the vibration setter (0x11B534) and the 0x11A810 calibration routine is its only logical caller family."
+ },
+ {
+  "address": "0x0011B534",
+  "name": "maybe_Hid_SetVibration",
+  "signature": "void Hid_SetVibration(HidVibration* vib, u32 pattern)",
+  "params": {
+   "param_1": "vib",
+   "param_2": "pattern"
+  },
+  "summary": "Programs a vibration/rumble pattern: stores the larger of the two float arguments at +0xB8 and the smaller at +0xBC, the pattern at +0xC0 and clears the phase counter at +0xC4 (0x11CBD4 snaps the two floats to the hardware range).",
+  "confidence": 0.45,
+  "evidence": "Readable: if (in_s0 < in_s1) in_s0 = in_s1; func_0011CBD4((float*)&self->f_b8); self->f_b8=in_s0; self->f_bc=fVar1; self->f_c0=arg2; self->f_c4=0. The float params arrive in s0/s1 (VFP ABI) and 0x11CBD4 clamps them; HID vibration is the only subsystem using this layout at +0xB8..+0xC4."
+ },
+ {
+  "address": "0x0011B7EC",
+  "name": "maybe_Os_EnsureInitialized",
+  "signature": "u32 Os_EnsureInitialized(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Lazy one-time initialiser: if the global flag at 0x007AECE0 is not yet set, calls the once-only helper 0x11B958 and the init routine 0x10009C, then returns the cached object at 0x007E8320. Ghidra merged this 0x54-byte routine into the neighbouring function.",
+  "confidence": 0.4,
+  "evidence": "asm 0x11B7EC: push {r4,lr}; ldr r0,[r0]; tst r0,#1; bne done; ldr r0,[0x7AECE0]; blx 0x10009C; if (r0) { ldr r0,[0x7E8320]; bl 0x11B958; ... } done: ldr r0,[0x7E8320]; pop. functions_index marks it 'covered_by' 0x11B57C/0x11B840, which is why it had no own C file; the body is still a valid ARM function."
+ },
+ {
+  "address": "0x0011BC44",
+  "name": "Gfx_LoadDefaultState",
+  "signature": "void Gfx_LoadDefaultState(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Writes the renderer's complete default GPU state: a long list of (register, value) pairs for the PICA200 pipeline (texture units, combiners, depth, fog, lighting, stencil), plus 0x100-byte and 0xE00-byte coefficient tables allocated from the frame heap and 0xBD per-channel lookup entries.",
+  "confidence": 0.6,
+  "evidence": "Readable: ~90 'if (cursor < end) { *cursor++=value; *cursor++=g_reg }' pairs using GPU register ids g_0011C44C..g_0011C50C; calls func_00120010(0x101,7,0), func_00120010(0x1c8,8,0) 32x, func_001200D8(0x2cc,0x200,buf), func_001200D8(0x29c,0xe00,buf); allocates 0x4000 and copies 0xBD entries from +0x1300/+0x16B1. The register-id/command-buffer pattern is the same as Gfx_ExecuteCommandList (0x116104)."
+ },
+ {
+  "address": "0x0011C5F4",
+  "name": "Gfx_UpdateTextureBindings",
+  "signature": "void Gfx_UpdateTextureBindings(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Rebuilds the 16-slot texture binding table from the render state: for each slot it either points at the default texture record, marks the slot dirty, or resolves the current texture through 0x123458 and records its address/size, handling the 0x1400/0x1401/0x1406/0x140B format classes.",
+  "confidence": 0.5,
+  "evidence": "Readable: for i<0x10 { iVar5 = ctx + 0x458 + i*0x18; if (!iVar5->f_15) { slots[i+0x13]=ctx+0x298+i*0x10; slots[i+0x23]=0; } else if (iVar5->f_10==0) dirty(i); else { handle = *(int*)(*g_0011C80C + i*4 + 0x810); ... uVar3 = func_00123458(*piVar10 + *piVar4); slots[i+1]=uVar3; slots[i+0x13]=...; } } - the 0x810 array is the texture handle table; caller 0x6BA4AC is engine render code."
+ },
+ {
+  "address": "0x0011C818",
+  "name": "maybe_Os_ThreadExit",
+  "signature": "void Svc_ExitThread(u32 arg1, u32 arg2, u32* cleanup)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "cleanup"
+  },
+  "summary": "Thread entry cleanup: calls the registered cleanup callback once with the thread argument, then terminates the current thread with svc 0x3C and never returns.",
+  "confidence": 0.45,
+  "evidence": "asm 0x11C818: pcVar1=*arg3; if (pcVar1) { *arg3=0; pcVar1(0,0,0,0,0,arg2); } svc 0x3C; return 0. The call-then-svc shape and the dead return path match a thread entry trampoline; the exact SVC number-to-name mapping in this SDK build is not independently verified, hence the maybe_ prefix."
+ },
+ {
+  "address": "0x0011C86C",
+  "name": "Gfx_CmdCopyTexture",
+  "signature": "void Gfx_CmdCopyTexture(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Dispatch stub for command-list type 0: forwards the recorded parameters to 0x11F12C, which builds the texture-copy GPU command.",
+  "confidence": 0.5,
+  "evidence": "Body: 'bl 0x11F12C; bx lr'. Called from Gfx_ExecuteCommandList (0x116104) case 0. 0x11F12C writes the 0x1C-byte command record for a texture copy; the type number comes from Gfx_PushPipelineCommand (record type 1) / the list builder."
+ },
+ {
+  "address": "0x0011C880",
+  "name": "Gfx_CmdBlitTexture",
+  "signature": "void Gfx_CmdBlitTexture(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Dispatch stub for command-list type 3: forwards to 0x11F518, which builds the textured-blit GPU command.",
+  "confidence": 0.5,
+  "evidence": "Body: 'bl 0x11F518; bx lr'. Called from 0x116104 case 3; 0x11F518 packs two 16-bit coordinate pairs and a texture handle into the command record."
+ },
+ {
+  "address": "0x0011C8A0",
+  "name": "Gfx_CmdUploadTexture",
+  "signature": "void Gfx_CmdUploadTexture(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Dispatch stub for command-list type 1: forwards to 0x11F21C, which builds the texture upload/fill GPU command.",
+  "confidence": 0.5,
+  "evidence": "Body: 'bl 0x11F21C; bx lr'. Called from 0x116104 case 1; 0x11F21C writes a command with two coordinate pairs and a handle."
+ },
+ {
+  "address": "0x0011C8C0",
+  "name": "Gfx_CmdSetTextureRegion",
+  "signature": "void Gfx_CmdSetTextureRegion(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Dispatch stub for command-list type 4: forwards to 0x11F35C, which builds the texture-region/format GPU command.",
+  "confidence": 0.5,
+  "evidence": "Body: 'bl 0x11F35C; bx lr'. Called from 0x116104 case 4; 0x11F35C writes the 0x1C-byte record with four 16-bit fields."
+ },
+ {
+  "address": "0x0011CD34",
+  "name": "std_memmove_backward",
+  "signature": "void std_memmove_backward(void* dst_end, const void* src_end, u32 size)",
+  "params": {
+   "param_1": "dst_end",
+   "param_2": "src_end",
+   "param_3": "size"
+  },
+  "summary": "newlib memmove's backward copy path: moves size bytes from src_end-size to dst_end-size, copying 16-byte blocks then 8/4/2/1-byte tails, for overlapping ranges where dst > src.",
+  "confidence": 0.7,
+  "evidence": "asm 0x11CD34: loop copying four words from [r1,#-16].. to [r0,#-16].. while size >= 0x10; then 'uVar3*0x20000000' tests bit 3 for an 8-byte block, bit 2 for 4, bit 1 for 2, bit 0 for 1 - the standard ARM memmove backward tail. No callers because it is the alternate entry of the memmove at 0x11CD2C (callers jump to this address directly)."
+ },
+ {
+  "address": "0x0011CF9C",
+  "name": "maybe_Gfx_FinalizeTextures",
+  "signature": "void Gfx_FinalizeTextures(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Tail-call into 0x115E68 with 0; that routine releases the texture/command resources owned by the current GPU context. Used during renderer teardown.",
+  "confidence": 0.35,
+  "evidence": "Body: 'mov r0,#0; bl 0x115E68; bx lr' (68 bytes). 0x115E68 is one of the four sub-initialisers used by Gfx_InitSubsystems (0x110698), so the zero argument selects 'finalize all'; no callers in the readable tree."
+ },
+ {
+  "address": "0x0011E448",
+  "name": "Hid_ApplyDeadzone",
+  "signature": "u32 Hid_ApplyDeadzone(short* axis, u32 flags)",
+  "params": {
+   "param_1": "axis",
+   "param_2": "flags"
+  },
+  "summary": "Turns raw circle-pad axis shorts into direction bits: scales both axes by 0x28/0x91, compares them with the dead-zone at 0x0011E548+0x20 and ORs the up/down/left/right masks (0x01000000..0x08000000) into the button word.",
+  "confidence": 0.5,
+  "evidence": "Readable: arg2 &= 0xf0ffffff; func_0011FBCC(&local_20,local_1e, axis[0],axis[1], 0x28,0x91) (0x28/0x91 are the 40/145 dead-zone range); iVar4=0x11CD80(local_1e[0]<<8, iVar5); then four comparisons against g_0011E548->f_20 and OR of 0x1000000/0x2000000/0x4000000/0x8000000. 0x11E98E is the Thumb twin of the same code."
+ },
+ {
+  "address": "0x0011E54C",
+  "name": "maybe_Gfx_FinalizeSession",
+  "signature": "void Svc_FinalizeSession(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Finalises a service session: releases it with 0x117AE8 (command 0x0002), destroys the shared event, closes the handle with svc 0x23 and unmaps the shared memory via 0x12325C; clears the open flag.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (*g_0011E5B0) { if (0x117AE8(*g)<0) assert; func_0011E8A0(g_0011E5B8); svc 0x23; if (*g_0011E5BC<0) assert; if (0x12325C()<0) assert; *pcVar1=0; }. Callers 0x10BA40, 0x10BB34, 0x122650, 0x123BB0 (shutdown paths). The exact service is not recorded in the function."
+ },
+ {
+  "address": "0x0011E63C",
+  "name": "maybe_Os_WaitSemaphore",
+  "signature": "void Os_WaitSemaphore(int* sem)",
+  "params": {
+   "param_1": "sem"
+  },
+  "summary": "Counted semaphore wait with owner hand-off: while the counter is negative it decrements, arbitrates through 0x11CC10, and flips the count when it becomes positive; the positive branch flips the sign back and returns.",
+  "confidence": 0.4,
+  "evidence": "Readable: loop { while (*arg1 < 0) { if (ldrex) { --*arg1; do { func_0011CC10(*g,arg1,1,0,0,0); while (*arg1 > 0) { if (ldrex) { *arg1 = 1 - *arg1; return; } } ClearExclusiveLocal(); } while(1); } } ClearExclusiveLocal(); while (*arg1 > 0) { if (ldrex) { *arg1 = -*arg1; return; } } ClearExclusiveLocal(); }. Same arbiter primitive as 0x117EF0/0x117F5C; no callers (inline)."
+ },
+ {
+  "address": "0x0011E80C",
+  "name": "maybe_Os_MapSharedMemory",
+  "signature": "void Os_MapSharedMemory(OsSharedMem* mem, u32 addr, u32 size)",
+  "params": {
+   "param_1": "mem",
+   "param_2": "addr",
+   "param_3": "size"
+  },
+  "summary": "Maps a 4 KB-aligned shared-memory region into an object: when no mapping exists and addr/size are page-aligned, obtains the mapping handle with 0x11126C and stores addr/size/handle; asserts on failure.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (*(int*)(self+8)==0 && (arg2 & 0xfff)==0 && (arg3 & 0xfff)==0) { u32 local=0; iVar1=func_0011126C(&local); if (iVar1>=0) { self->f_14=local; *(u32*)(self+8)=arg2; self->f_c=arg3; } } if (iVar1<0) func_00118100();. Callers 0x107328, 0x122200, 0x51B7C4."
+ },
+ {
+  "address": "0x0011E98E",
+  "name": "maybe_Hid_ApplyDeadzoneThumb",
+  "signature": "u32 maybe_Hid_ApplyDeadzoneThumb(int pad, u32 a, u32 b, u32 c)",
+  "params": {
+   "param_1": "pad",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Mis-seeded Thumb copy of the dead-zone/direction-bit logic seen in 0x11E448: it compares the axis against pad->f_20 and ORs the same 0x01000000/0x08000000 masks, but the entry lands mid-routine so the argument setup is unreliable.",
+  "confidence": 0.3,
+  "evidence": "functions_index lists 0x11E98E thumb, but the first bytes decode as a fragment; the Ghidra body still shows the 0x11E448 comparisons with self->f_20 and the 0x1000000/0x8000000/0x4000000 ORs, plus a call to 0x11EAB4 (HID command 0x1100C2). Only caller 0x11E940."
+ },
+ {
+  "address": "0x0011E9C4",
+  "name": "maybe_Svc_IpcCmd1100C2",
+  "signature": "u32 Hid_IpcCmd1100C2(u32 a, u32 b, u32 c, u32 d)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d"
+  },
+  "summary": "Sends service command 0x0011 (3 normal + 2 translated parameters) through the session stored in a global object, after waiting on the object's lock; part of the same interrupt-relay client as 0x11ECC0.",
+  "confidence": 0.4,
+  "evidence": "Readable: waits for the lock 0x1180B0/0x11CC94, then func_0011EAB4(*(u32*)(g_0011EA68+8), a,b,c,d, g_0011EA74); 0x11EAB4's header is 0x1100C2 (cmd 0x11, 3 normal/2 translate). Callers 0x1071AC, 0x118788, 0x11ECC0."
+ },
+ {
+  "address": "0x0011EA7C",
+  "name": "maybe_Svc_IpcCmd70040",
+  "signature": "u32 Hid_IpcCmd70040(u32* session, u16 value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "Service IPC stub for command 0x0007 with one translated 16-bit parameter; the session handle is supplied through the caller's object, so the owning service is not obvious from this routine alone (the nearby HID/GSP code means it can only be pinned to 'the engine service that owns this session').",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EA7C: header 0x00070040, TLS+0x84=arg2, handle loaded from *arg1, svc 0x32. No callers. Its header format (7 normal/1 translate) matches the service descriptor table at 0x72FC40 rather than the fixed gsp handle, but no caller proves which service."
+ },
+ {
+  "address": "0x0011EAB4",
+  "name": "maybe_Svc_IpcCmd1100C2Read",
+  "signature": "int Hid_IpcCmd1100C2Read(int* session, u32 a, int b, u16 c, u16 d, u8* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c",
+   "param_5": "d",
+   "param_6": "out"
+  },
+  "summary": "Service command 0x0011 (3 normal + 2 translated): sends a/b/c/d and, on success, writes the 0x88 output byte to *out and returns the 0x84 result word. The session handle is passed via arg1 (pointer to handle).",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EAB4: header 0x001100C2, TLS+0x84=b, +0x88=c, +0x8c=d, +0x90=b<<4|10, +0x94=a, handle = *(u32*)arg1, svc 0x32; success -> *arg6=TLS+0x88. Called by 0x11E940/0x11E98E/0x11E9C4."
+ },
+ {
+  "address": "0x0011EB14",
+  "name": "maybe_Svc_IpcCmd20040",
+  "signature": "int Hid_IpcCmd20040(int* session, u16 value, u8* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_3": "out"
+  },
+  "summary": "Service IPC stub for command 0x0002 with one translated parameter; returns the result and copies the 0x88 output byte to *out.",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EB14: header 0x00020040, TLS+0x84=arg2, handle from *arg1, svc 0x32, success -> *arg3=TLS+0x88. No callers."
+ },
+ {
+  "address": "0x0011EB58",
+  "name": "maybe_Svc_IpcCmdD0082",
+  "signature": "u32 Hid_IpcCmdD0082(u32* session, u32 a, u32 b, int count)",
+  "params": {
+   "param_1": "session",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "count"
+  },
+  "summary": "Service IPC stub for command 0x000D with 2 normal + 2 translated parameters, count packed as (count<<14)|0x402.",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EB58: header 0x000D0082, TLS+0x84=a, +0x88=count, +0x8c=count<<14|0x402, +0x90=b, handle from *arg1, svc 0x32. No callers."
+ },
+ {
+  "address": "0x0011EC40",
+  "name": "maybe_Svc_IpcCmdC0040",
+  "signature": "int Hid_IpcCmdC0040(int* session, u32 a, u32* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "a",
+   "param_3": "out"
+  },
+  "summary": "Service IPC stub for command 0x000C with one translated parameter; returns the result and copies the 0x88 output word to *out. Called by Hid_GetEventObject, which is the only caller and suggests an event/timer query.",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EC40: header 0x000C0040, TLS+0x84=a, handle from *arg1, svc 0x32, success -> *arg3=TLS+0x88. Sole caller 0x118648."
+ },
+ {
+  "address": "0x0011EC7C",
+  "name": "maybe_Svc_IpcCmd10040",
+  "signature": "int Hid_IpcCmd10040(int* session, u16 value, u16* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_3": "out"
+  },
+  "summary": "Service IPC stub for command 0x0010 with one translated parameter; returns the result and copies the 0x88 halfword to *out.",
+  "confidence": 0.4,
+  "evidence": "asm 0x11EC7C: header 0x00100040, TLS+0x84=arg2, handle from *arg1, svc 0x32, success -> *arg3=TLS+0x88 (ldrh). No callers."
+ },
+ {
+  "address": "0x0011ECC0",
+  "name": "maybe_Gfx_ProcessInterruptRelay",
+  "signature": "void Hid_ProcessInterrupt(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Interrupt-relay dispatcher: services the queued interrupt through 0x11E9C4, invokes up to eight registered per-source callbacks, clears the queued flag and optionally re-arms the event via 0x11EBA0. The eight callbacks match the GPU interrupt sources, but the owning module is not proven.",
+  "confidence": 0.4,
+  "evidence": "Readable: *g_0011ED38=0; if (g[2]) { iVar2=func_0011E9C4(g->f_1c,g->f_20,*(u16*)(g+4),*(u16*)(g+6)); if (iVar2<0) assert; for (i=0;i<8;i++) if (g_0011ED3C[i]) g_0011ED3C[i](); g[2]=0; if (*(int*)(g+8)) func_0011EBA0(*(int*)(g+8),(char)g[3]); }. Caller 0x119AF4 is a GPU helper, so 'Gfx' is the best-supported prefix."
+ },
+ {
+  "address": "0x0011F12C",
+  "name": "Gfx_SetTextureSource",
+  "signature": "void Gfx_SetTextureSource(u32 handle, u32 src, u32 size, u32 format, int flags)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "src",
+   "param_3": "size",
+   "param_4": "format",
+   "param_5": "flags"
+  },
+  "summary": "Builds and queues a GPU texture-source command: fills a 0x1C-byte record with type 0, handle, source address/size, format word and flags, then pushes it through 0x123360.",
+  "confidence": 0.5,
+  "evidence": "Readable: if (flags==0 || handle in the GPU address window) { base = *(u32**)(g+4); local header = (*g & 0xff000000) | 0; local[1]=handle; [2]=src; [3]=size; [4]=format; [5]=flags; func_00123360(TLS+0x58, &record); }. Called by dispatch stub 0x11C86C for command-list type 0."
+ },
+ {
+  "address": "0x0011F21C",
+  "name": "Gfx_SetTextureSourcePair",
+  "signature": "void Gfx_SetTextureSourcePair(u32 handle, u32 src, u32 size, u16 x, u32 a, u32 b, u32 c, u16 y)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "src",
+   "param_3": "size",
+   "param_4": "x",
+   "param_5": "a",
+   "param_6": "b",
+   "param_7": "c",
+   "param_8": "y"
+  },
+  "summary": "Builds and queues a two-coordinate GPU texture command (record type 2) with the handle, source/size and the two 16-bit coordinates, then calls 0x123360.",
+  "confidence": 0.5,
+  "evidence": "Readable: header byte = 2; local_3c=handle, local_34=src, uStack_38=size; local_24 = x:y packed; local_28=a, uStack_30=b, uStack_2c=c; func_00123360(TLS+0x58,&record). Called by dispatch stub 0x11C8A0 (type 1)."
+ },
+ {
+  "address": "0x0011F290",
+  "name": "maybe_Gfx_SetTextureFill",
+  "signature": "void Gfx_SetTextureFill(u32 src, u32 size, int enable, u32 color)",
+  "params": {
+   "param_1": "src",
+   "param_2": "size",
+   "param_3": "enable",
+   "param_4": "color"
+  },
+  "summary": "Queues a GPU fill command (record type 5 then type 1) used to clear a texture/surface: the first record carries the source/size, the second the fill colour.",
+  "confidence": 0.45,
+  "evidence": "Readable: if (enable) { fill record type 5 with src/size; func_00123360; } if (result>=0) { record type 1 with src/size/color; func_00123360; }. No callers (reached through a table); the two-step fill pattern matches PICA200 surface clear."
+ },
+ {
+  "address": "0x0011F35C",
+  "name": "Gfx_SetTextureRegion",
+  "signature": "void Gfx_SetTextureRegion(u32 handle, u32 src, u32 size, u32 x0, int y0, u32 x1, int y1, u32 fmt)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "src",
+   "param_3": "size",
+   "param_4": "x0",
+   "param_5": "y0",
+   "param_6": "x1",
+   "param_7": "y1",
+   "param_8": "fmt"
+  },
+  "summary": "Queues a rectangular texture-region command (record type 4): packs the two 16-bit coordinate pairs and the format word into the 0x1C-byte record and calls 0x123360.",
+  "confidence": 0.5,
+  "evidence": "Readable: header byte 4; local_3c=handle, uStack_38=src, uStack_34=size; uStack_30 = x0 | y0<<16; uStack_2c = x1 | y1<<16; uStack_28=fmt; func_00123360. Called by dispatch stub 0x11C8C0 (type 4)."
+ },
+ {
+  "address": "0x0011F518",
+  "name": "Gfx_SetTextureBlit",
+  "signature": "void Gfx_SetTextureBlit(u32 handle, u32 dst, int x, u32 src, u32 size, int y, u32 fmt)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "dst",
+   "param_3": "x",
+   "param_4": "src",
+   "param_5": "size",
+   "param_6": "y",
+   "param_7": "fmt"
+  },
+  "summary": "Queues a textured blit command (record type 3) with handle, destination, source/size and two 16-bit coordinates, then calls 0x123360.",
+  "confidence": 0.5,
+  "evidence": "Readable: header byte 3; local_3c=handle; uStack_38=dst; local_34 = x | y<<16; uStack_2c=fmt; uStack_30=size; local_28=src; func_00123360. Called by dispatch stub 0x11C880 (type 3)."
+ },
+ {
+  "address": "0x0011F5C0",
+  "name": "maybe_Os_QueryTime",
+  "signature": "void Os_QueryTime(OsTime* out, u32 unused, int mode)",
+  "params": {
+   "param_1": "out",
+   "param_2": "unused",
+   "param_3": "mode"
+  },
+  "summary": "Queries the current system time into an 8-word structure (0x123508 fills it), then normalises the two packed date/time fields: clears them to -1 when empty and splits the flag bits from the values.",
+  "confidence": 0.35,
+  "evidence": "Readable: uVar1 = func_0011F730() (TLS); func_00123508(uVar1, arg1) (fills the 8 words); if ((arg1[2] & 0x70)==0) arg1[2]=-1 else { if (!(arg1[2]&0x20)) arg1[1]=*arg1; arg1[2] &= 7; } arg1[6] &= 7; ... arg1[5]=arg1[4];. Called by 0x119B4C (Gfx_GetEventData); the 0x70/7 bitfields are the SDK's packed time flags."
+ },
+ {
+  "address": "0x0011F698",
+  "name": "Gfx_IpcCmd1A0000",
+  "signature": "u32 Gfx_IpcCmd1A0000(u32* session)",
+  "params": {
+   "param_1": "session"
+  },
+  "summary": "IPC stub for command 0x001A with no parameters; returns the result or the TLS output word.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11F698: header 0x001A0000, svc 0x32. Sole caller 0x119688 (Os_DestroyThreadLocal), so it is the GPU session's close/unregister request."
+ },
+ {
+  "address": "0x0011F764",
+  "name": "Svc_CloseSessionHandles",
+  "signature": "void Svc_CloseSessionHandles(void)",
+  "params": {
+   "param_1": "none"
+  },
+  "summary": "Closes the GPU session's three handles and its event: sets the 'closing' flag, calls svc 0x18, takes the event lock (svc 0x24), marks the event, signals it via 0x118170, then closes the event and the three handles with svc 0x23.",
+  "confidence": 0.5,
+  "evidence": "Readable: *g_0011F7F8=1; svc 0x18; if (*piVar1<0) assert; svc 0x24; if (*g_0011F800<0) assert; *(u8*)(piVar4+1)=1; func_00118170(piVar2); if (*piVar4) { svc 0x23; *g_0011F800=0; } for i<3 { if (piVar1[i]) { svc 0x23; piVar1[i]=0; } }. Sole caller 0x11A140 (GPU buffer read on error)."
+ },
+ {
+  "address": "0x0011F810",
+  "name": "Gfx_IpcCmd4B00C2",
+  "signature": "int Gfx_IpcCmd4B00C2(u32 handle, u32 buf, int size, u32 a, int b, u32* out)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "buf",
+   "param_3": "size",
+   "param_4": "a",
+   "param_5": "b",
+   "param_6": "out"
+  },
+  "summary": "IPC stub for GPU command 0x004B (3 normal + 2 translated parameters): sends handle/buf/size/a and the size-packed descriptor, returning the result and the 0x88 output word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x11F810: header 0x004B00C2, TLS+0x84=handle, +0x88=size, +0x8c=a, +0x90=size<<14|0x402, +0x94=buf; additionally swaps TLS+0x180/+0x184 to size<<14|2 and a for the duration of the call, then svc 0x32. Sole caller 0x119A10."
+ },
+ {
+  "address": "0x0011F88C",
+  "name": "Gfx_IpcCmdC0104",
+  "signature": "u32 Gfx_IpcCmdC0104(u32 handle, u32 buf, u32 size, u32 offset, int count, u32 a6)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "buf",
+   "param_3": "size",
+   "param_4": "offset",
+   "param_5": "count",
+   "param_6": "a6"
+  },
+  "summary": "IPC stub for GPU command 0x000C (4 normal + 1 translated parameter) used for chunked buffer reads: sends handle/buf/size/offset plus the count descriptor and returns the result.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11F88C: header 0x000C0104, TLS+0x84=handle, +0x88=buf, +0x8c=size, +0x90=count, +0x94=0, +0x98=a6, +0x9c=count<<14|2, +0xa0=offset, svc 0x32. Sole caller 0x11A140 (Gfx_ReadGpuBuffer), which reads in 0x1000-byte chunks."
+ },
+ {
+  "address": "0x0011F8E4",
+  "name": "Gfx_IpcCmdF0100",
+  "signature": "int Gfx_IpcCmdF0100(u8 a, u32 b, u8 c, u32 d, u8* out)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "d",
+   "param_5": "out"
+  },
+  "summary": "IPC stub for GPU command 0x000F (4 normal parameters): sends a/b/c/d, and on success writes the 0x88 output byte to *out.",
+  "confidence": 0.55,
+  "evidence": "asm 0x11F8E4: header 0x000F0100, TLS+0x84=a, +0x88=b, +0x8c=c, +0x90=d, svc 0x32, success -> *arg5=TLS+0x88. Sole caller 0x119BDC."
+ },
+ {
+  "address": "0x0011F940",
+  "name": "Gfx_IpcCmdE0080",
+  "signature": "int Gfx_IpcCmdE0080(u32* out1, u32 handle, u32* out2, u32 src, int a5, u32* out3, u32* out4)",
+  "params": {
+   "param_1": "out1",
+   "param_2": "handle",
+   "param_3": "out2",
+   "param_4": "src",
+   "param_5": "a5",
+   "param_6": "out3",
+   "param_7": "out4"
+  },
+  "summary": "IPC stub for GPU command 0x000E (2 normal + 2 translated parameters): submits a source/size descriptor and returns four output words (handle, offset, flags, size) to the caller.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11F940: header 0x000E0080, TLS+0x84=handle, +0x88=a5, +0x180 swapped to a5<<14|2 with +0x184=src, svc 0x32; on success *arg1=TLS+0x88, *arg3=TLS+0x8c, *arg6=TLS+0x90, *arg7=TLS+0x98. Sole caller 0x11A470 (Gfx_WriteGpuBuffer)."
+ },
+ {
+  "address": "0x0011F9CC",
+  "name": "Gfx_IpcCmdD0080",
+  "signature": "int Gfx_IpcCmdD0080(u32* out1, u32 handle, u32* out2, u32 src, int a5, u32* out3, u32* out4)",
+  "params": {
+   "param_1": "out1",
+   "param_2": "handle",
+   "param_3": "out2",
+   "param_4": "src",
+   "param_5": "a5",
+   "param_6": "out3",
+   "param_7": "out4"
+  },
+  "summary": "IPC stub for GPU command 0x000D (2 normal + 2 translated parameters): used as the event-wait/transfer request; returns four output words on success.",
+  "confidence": 0.6,
+  "evidence": "asm 0x11F9CC: header 0x000D0080, TLS+0x84=handle, +0x88=a5, TLS+0x180 swapped to a5<<14|2 with +0x184=src, svc 0x32; success fills *arg1/*arg3/*arg6/*arg7 from TLS+0x88/0x8c/0x90/0x98. Callers 0x1198DC, 0x11A50C, 0x11ABB8 - the three GPU event/read loops."
+ },
+ {
+  "address": "0x0011FA58",
+  "name": "Gfx_IpcCmd400042",
+  "signature": "u32 Gfx_IpcCmd400042(u32 a, int b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "IPC stub for GPU command 0x0040 (2 translated parameters): sends a and the descriptor b<<14|2 and returns the result or the echoed word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x11FA58: header 0x00400042, TLS+0x84=b, +0x88=b<<14|2, +0x8c=a, svc 0x32. Sole caller 0x11A0BC."
+ },
+ {
+  "address": "0x0011FAA4",
+  "name": "Gfx_IpcCmd3F0040",
+  "signature": "u32 Gfx_IpcCmd3F0040(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for GPU command 0x003F with one translated parameter; returns the result or the echoed word.",
+  "confidence": 0.55,
+  "evidence": "asm 0x11FAA4: header 0x003F0040, TLS+0x84=arg1, svc 0x32. Sole caller 0x11A11C."
+ }
+]

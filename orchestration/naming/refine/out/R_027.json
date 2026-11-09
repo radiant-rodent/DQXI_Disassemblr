@@ -1,0 +1,2182 @@
+[
+ {
+  "address": "0x00267FD8",
+  "name": "Ui_BattleTargetMarker_UpdatePositions",
+  "signature": "void Ui_BattleTargetMarker_UpdatePositions(UiBattleTargetMarkerSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame position refresh of the battle target markers: for each of the first two 0x18-byte marker entries it looks up the tracked target object by handle, copies the target's world position into object+0x9c and the rotated offset into object+0xc0 via Gfx_EffectPart_SetDirection, and clears f_d9 when a marker handle is still live. The decompiler dropped the argument of the leading maybe_Ui_BattleTargetMarker_Update(0x00267BC4) call.",
+  "confidence": 0.55,
+  "evidence": "NEW: the only named suspicious callee is Gfx_EffectPart_SetDirection, and the body writes exactly the effect-part position fields (+0x9c/+0xa0/+0xa4, i.e. puVar7[0x27..0x29]) before the direction call, so this really is the 'move the marker effects onto the target' step. Confident sibling Ui_BattleTargetMarker_Manager_Update (0x003D427C) and the Ui_BattleTargetMarker_Update/ReleaseAll family share the same 0x18-byte marker entries and handle table 0x007B80C0, and the marker set address (battle work+0x3B50) is passed in from the battle command state machine 0x0046C56C. Prefix Ui_ kept because it is the UI-side marker object, not a battle unit. The trailing `maybe_...Update()` call has no argument in the readable C (Ghidra dropped it), which is the only damaged part.",
+  "previous_name": "maybe_Ui_BattleTargetMarker_UpdatePositions",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004D5608",
+  "name": "Ui_Window_IsGroupIdle",
+  "signature": "u32 Ui_Window_IsGroupIdle(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns 1 when the window's animation group has finished: neither animated object handle (self+0xF04, self+0xF08) is registered any more and, when the child-check flag f_f1e is set, every one of the 16 child windows (stride 0xE4) reports idle. Used by the battle command, balloon and marker state machines to wait for a window animation.",
+  "confidence": 0.5,
+  "evidence": "NEW: the 16 child slots at stride 0xE4 match the Ui_CompositeWindow child array (its Dtor destroys the same 0xe4 x 0x10 range), and the confident callers Ui_BattleTargetMarker_Manager_Update (0x003D427C) and Battle_Ui_Balloon_UpdateState (0x003D3A38) both use the result to decide whether the current UI state may advance (state ids 0xD37/0xD3B, 0xE4B). The two 0x3FFFFF-masked handles are the shared animation-object handles. Still no name for the child predicate func_00406E08, which is the only unknown left.",
+  "previous_name": "maybe_Ui_Window_IsGroupIdle",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004D58E0",
+  "name": "Battle_TargetMarker_StartEffects",
+  "signature": "void Battle_TargetMarker_StartEffects(TargetMarkerManager* self, BattleUnit* unit)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unit"
+  },
+  "summary": "Starts the target-marker effect chain for one battle unit: resets the slot counter/flag, then either spawns up to 15 effect instances into the 0xE4-stride child slots via Effect_SpawnAttachedFromDescriptor, or in alternate mode starts the first one through maybe_Battle_TargetMarker_SpawnNext and sets the pending flag f_f1e.",
+  "confidence": 0.5,
+  "evidence": "NEW: the only caller that names it is Ui_BattleTargetMarker_Manager_Update (0x003D427C), and its siblings maybe_Battle_TargetMarker_UpdateSlots (0x004D5794) / maybe_Battle_TargetMarker_UpdateSlotEffects (0x004D5230) use the same f_f18 slot counter and f_f1c/f_f1e flags, which pins the 'start the slot effects' role. Confidence stays at 0.5 because the mode byte f_d meaning (0 vs 1) and the functionally opaque func_004D56BC descriptor source are still guesses; the arg4/arg4 tail of the second branch is a decompiler artefact.",
+  "previous_name": "maybe_Battle_TargetMarker_StartEffects",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0036D5AC",
+  "name": "maybe_Ui_CompositeWindow_DtorLarge",
+  "signature": "void maybe_Ui_CompositeWindow_DtorLarge(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor (not a constructor) of a very large composite UI object: after reinstalling the outer and inner vtable pointers it tears down five repeated widget groups (Ui_BattleTargetMarker_ReleaseAll, Anim_ModelInstance_Release, std_destroy_range over 0x14/0xE4/0x58-stride arrays), runs the embedded Pack_Handle_Dtor and Battle_Effect_Dtor base destructors and returns the last member-4 address. Has no callers, so it is a vtable destructor entry.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: the old 'CtorLarge' is wrong - the function starts by overwriting the vtable slots and then only destroys: Ui_BattleTargetMarker_ReleaseAll, Anim_ModelInstance_Release, std_destroy_range, Pack_Handle_Dtor, maybe_Battle_Effect_Dtor. That is the same shape as the confident Ui_CompositeWindow_Dtor (0x00282578): `*self = vtable;` followed by member/base teardown and a returned tail pointer. A constructor would allocate/initialise the 0x58/0xE4 arrays instead of destroy_range-ing them. Still maybe_ because the class identity only comes from the vtable data (PTR_DAT_0036D7A4.., 0x168/0x154 sub-vtables) and no named caller exists to confirm which composite window it belongs to.",
+  "previous_name": "maybe_Ui_CompositeWindow_CtorLarge",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00268AE4",
+  "name": "Ui_BattleTargetMarker_Dtor",
+  "signature": "MarkerSet* Ui_BattleTargetMarker_Dtor(MarkerSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the battle target-marker set: releases every marker effect (Ui_BattleTargetMarker_ReleaseAll), destroys the embedded anim model instance at self+8 and the 20-entry two-word array at self+0x58, then returns self unchanged (the caller frees it).",
+  "confidence": 0.5,
+  "evidence": "NEW: the callees now carry confident names and they are all teardown: Ui_BattleTargetMarker_ReleaseAll + Anim_ModelInstance_Release + std_destroy_range(0x14 elements of 2 words), in the same idiom as the confident Ui_CompositeWindow_Dtor (vtable not rewritten here, so it is the member destructor rather than the deleting one). No callers in the readable set, i.e. a vtable slot. Confidence 0.5 only because the surrounding class name rests on the marker-set layout shared with 0x00267FD8.",
+  "previous_name": "maybe_Ui_BattleTargetMarker_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0046C56C",
+  "name": "maybe_Battle_Manager_UpdateCommandState",
+  "signature": "int maybe_Battle_Manager_UpdateCommandState(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame state machine that advances the battle command/target selection: it validates the current action object (self[0x3B4D]), reads its flags through func_005F5818, cycles the state word self[0x3B87] through 0xFFB/0x1002/0x100C/0x1013/0x101A/0x101F, drives the target-marker updates and candidate/anchor lookup, and returns 1 when the state finished.",
+  "confidence": 0.45,
+  "evidence": "NEW: the state constants and the named callees make the role clear - maybe_Ui_BattleTargetMarker_UpdatePositions/ReleaseAll, maybe_Ui_Window_IsGroupIdle and Anim_SetupNamedTrackList are the same target-marker chain used by Ui_BattleTargetMarker_Manager_Update, while func_0035EB98 (party member) and maybe_Item_SlotIsCategory6 supply the actor data. It is therefore a command/target-selection state machine, but the object is the battle work (byte size > 0xED3D, action object at +0x3B50) and the state ids 0xFFB..0x1020 are still unnamed enums, so the exact 'manager vs UiFlow' wording stays a guess and the name keeps maybe_.",
+  "previous_name": "maybe_Battle_Manager_UpdateCommandState",
+  "previous_confidence": 0.32,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00282F04",
+  "name": "Ui_GlobalFlag_SetEnabled",
+  "signature": "void Ui_GlobalFlag_SetEnabled(u32 self, int enable, u32 p2, u32 p3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "enable",
+   "param_3": "p2",
+   "param_4": "p3"
+  },
+  "summary": "Enables or disables the shared UI 'slot active' flag: writes the byte at UI context+0xDE8, lazily creates the 0x98-byte helper singleton (0x0011FE8C/0x0011CFAC/0x00116AE0 + object header) and notifies it through 0x00626A9C/0x00282CFC. Called with enable=0 from Ui_Slot_Dtor and with enable=1 from maybe_Ui_CompositeWindow_SetMode.",
+  "confidence": 0.5,
+  "evidence": "NEW: the confident caller Ui_Slot_Dtor (0x00283110) calls it with enable=0 and its own header describes exactly 'disables the global flag' right before releasing the slot; the other caller, maybe_Ui_CompositeWindow_SetMode, calls it with enable=1 when switching the window to mode 1. The enable path allocates/reuses one 0x98-byte singleton and hands it to 0x00626A9C, the disable path runs 0x00282CFC on it - consistent with a global on/off toggle rather than a per-object flag. The callee names Gfx_GetContext/Gfx_SetCameraLookAt at 0x282CFC/0x28xxx look mis-assigned (that body writes camera matrices but is called here with a singleton), which is why confidence stops at 0.5.",
+  "previous_name": "maybe_Ui_GlobalFlag_SetEnabled",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00284E84",
+  "name": "Ui_MessageWindow_ApplyControlCode",
+  "signature": "void Ui_MessageWindow_ApplyControlCode(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Re-applies the pending message control code after a sound/lookup succeeded: rewinds the message cursor through GameWork+0x24A98 by the amount reported by the window's slot vtable +0x18, re-reads the 7-byte code, executes it with Ui_MessageWindow_ExecControlCode and stores the resulting 0x48-byte control record when the opcode is not 7.",
+  "confidence": 0.55,
+  "evidence": "NEW: the control-code executor callee is now confidently named Ui_MessageWindow_ExecControlCode (0x0030F258) and is called with the same 7-byte {0xFF,0xFF,0,0,...} block the function builds; the GameWork+0x24A98 cursor advance via func_00613FC0(...,-n) is the documented message cursor, and self[0xB] is a sound handle checked with Sound_GetPlayer + func_0063071C. That combination (cursor rewind + code replay + 0x48-byte record copy from 0x0072B810) is exactly 'apply one control code', so the guess holds. Confidence not higher because the caller side (why the sound handle gates it) is still unclear.",
+  "previous_name": "maybe_Ui_MessageWindow_ApplyControlCode",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002851C4",
+  "name": "Ui_ShopWindow_UpdateAffordability",
+  "signature": "void Ui_ShopWindow_UpdateAffordability(UiCmdRecord* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the shop window's input-enabled flag f_130 from the mode bytes f_d3C/f_d3D/f_d3F, then for modes 2/4 asks the window vtable +0x18 for the current price and issues message control code 4 when the price is above the player's gold or code 5 when it is affordable; modes 3/5 always issue code 3.",
+  "confidence": 0.55,
+  "evidence": "CORRECTED name: the old 'Check...AgainstGold' implied a predicate and a vague 'limit'; the function is void/returns nothing, so the checker's predicate trap applies. NEW and decisive: the compared dword is *(GameWork+0x24AC0), and per FACTS.md the bag is GameWork+0x24A98 with gold at bag+0x28, i.e. exactly 0x24AC0 - so this really compares the price with the player's gold and then *issues* a control code (4 = too expensive, 5 = ok). That is an update/issue action, not a check, hence the rename. Confidence 0.55: the code meanings 3/4/5 come from the branches, not from a named enum.",
+  "previous_name": "maybe_Ui_ShopWindow_CheckPriceAgainstGold",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002B0358",
+  "name": "maybe_Ui_MessageWindow_StepQueuedByteEx",
+  "signature": "void maybe_Ui_MessageWindow_StepQueuedByteEx(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Extended queued-byte step of the message-window task: if the 0x1948..0x194C byte queue is empty it finishes the task with state 5 and copies the default timing record from 0x0072BA14; otherwise it pops one byte, shrinks the queue with memmove and executes the byte as a control code with payload length 0x14 and the 'more text follows' flag.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callee is now confidently Ui_MessageWindow_ExecControlCode and the third argument (queue not empty) matches how 0x0030F258 uses its 'more follows' flag; the sibling 0x002B0174 is the plain variant of the same step (state 1, no length). The extra meaning of this variant is in the record field set to 0x14 (payload length 20) plus task state 5, which is still not tied to a known control code, so 'Ex' stays and the name keeps maybe_.",
+  "previous_name": "maybe_Ui_MessageWindow_StepQueuedByteEx",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002B0174",
+  "name": "Ui_MessageWindow_StepNextQueuedByte",
+  "signature": "void Ui_MessageWindow_StepNextQueuedByte(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Message-window task step: if the window's 0x1948..0x194C byte queue is empty it finishes the task with step state 1 and the default timing record from 0x0072B888; otherwise it pops the next byte, memmoves the remaining queue down and executes that byte as a control code.",
+  "confidence": 0.5,
+  "evidence": "NEW: Ui_MessageWindow_ExecControlCode is now a confident name and is called with exactly the popped byte plus a zero third argument, and the task-state writes (*(self+8) = 1) plus the timing-table copy at 0x0072B888 match the other named message-window step functions (0x002B0044/0x002B00D4 use the same table). The behaviour is fully described by the old name; only the purpose of control codes in general is unknown.",
+  "previous_name": "maybe_Ui_MessageWindow_StepNextQueuedByte",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0028561C",
+  "name": "maybe_Ui_ShopWindow_CloseSubPanel",
+  "signature": "void maybe_Ui_ShopWindow_CloseSubPanel(UiCmdRecord* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small shop-window command: calls func_0036B450 on the widget at window+0xD4C (the presumed price/quantity sub panel) and then hands control code 0x0F to the message window, i.e. the 'leave the sub panel' command.",
+  "confidence": 0.38,
+  "evidence": "NEW: nothing new - the callee func_0036B450 is still unnamed (no readable file), so 'close/destroy the widget' is only inferred from the call shape, and code 0x0F is unique in the shop family but has no known meaning. Named callee Ui_MessageWindow_ExecControlCode confirms the record layout only. Kept maybe_ because both the widget role and the code meaning are guesses.",
+  "previous_name": "maybe_Ui_ShopWindow_CloseSubPanel",
+  "previous_confidence": 0.38,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00285AE4",
+  "name": "maybe_Ui_ShopWindow_ClearPriceText",
+  "signature": "void maybe_Ui_ShopWindow_ClearPriceText(UiCmdRecord* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Shop-window command that resets the widget at window+0x13C (func_00248AC4, currently maybe_Script_NotifyVmGlobal), hides the widget at window+0x14C, clears the pending byte at window+0xD65 and issues control code 4.",
+  "confidence": 0.42,
+  "evidence": "NEW: the 0x13C helper is now named maybe_Script_NotifyVmGlobal, which fits 'reset a text/VM-backed widget' but is itself uncertain; no named caller pins the widget to the price display. Named callee Ui_MessageWindow_ExecControlCode only confirms the record layout and code 4 (which 0x002851C4 uses for 'too expensive'). Kept maybe_ because 'price text' is still an inference from the shop neighbourhood.",
+  "previous_name": "maybe_Ui_ShopWindow_ClearPriceText",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00285B44",
+  "name": "maybe_Ui_ShopWindow_ShowRowDataText",
+  "signature": "void maybe_Ui_ShopWindow_ShowRowDataText(UiCmdRecord* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Shop-window command: fetches the selected list row with maybe_Ui_RowData_AtIndex(window+0x158) and passes the row's text reference (row+0x220) as the third argument of message control code 5, i.e. asks the message window to show the row's text.",
+  "confidence": 0.45,
+  "evidence": "NEW: the row accessor is now named maybe_Ui_RowData_AtIndex, which confirms the 'take the selected row' half; the third argument of Ui_MessageWindow_ExecControlCode is a record pointer, and here it points at row+0x220, so 'show the row's text' is the natural reading. Still maybe_ because nothing proves +0x220 is a text reference rather than e.g. an item id, and the row accessor itself is only maybe_.",
+  "previous_name": "maybe_Ui_ShopWindow_ShowRowDataText",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002B0044",
+  "name": "Ui_MessageWindow_StepCode3E",
+  "signature": "void Ui_MessageWindow_StepCode3E(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One message-window task step for control code 0x3E: in window states 2/4 it executes the 0x3E record and schedules the next step from the 0x0072B858 timing table; in states 3/5 it only finishes the step (state 1) with the alternate timing pair.",
+  "confidence": 0.5,
+  "evidence": "NEW: the dispatcher callee is confidently Ui_MessageWindow_ExecControlCode (0x0030F258) and is called with the literal record byte 0x3E, and the state split 2/4 vs 3/5 plus the timing-table copies are shared with the equally named 0x002B00D4 handler. The constant and the shape are certain, only the meaning of code 0x3E is unknown - which the name deliberately does not claim.",
+  "previous_name": "maybe_Ui_MessageWindow_StepCode3E",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002B00D4",
+  "name": "Ui_MessageWindow_StepCode3F42",
+  "signature": "void Ui_MessageWindow_StepCode3F42(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One message-window task step that executes control code 0x3F in window states 2/4, or code 0x42 in states 3/5 (the two text-speed/auto variants), and then schedules the next step from the corresponding pair of the 0x0072B858 timing table.",
+  "confidence": 0.5,
+  "evidence": "NEW: confidently named callee Ui_MessageWindow_ExecControlCode receives the literal 0x3F/0x42 records, and the pair of state branches matches the 0x002B0044 sibling exactly (same table, same self+0x10/self+0x14 next-step fields). The 'text-speed/auto variant' gloss is NOT proven, so the summary keeps it as the two state variants; name is a structural label, which is exactly what is certain.",
+  "previous_name": "maybe_Ui_MessageWindow_StepCode3F42",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0030E984",
+  "name": "maybe_Ui_MessageWindow_ConfirmAdvance",
+  "signature": "bool maybe_Ui_MessageWindow_ConfirmAdvance(MessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Message-window handler for an advance/confirm input while the window is paging (state byte f_D3C in 2..5): marks the text buffer dirty (byte +0x12C), asks the tween controller at self+0xD8C for state 7 and restarts it, then recomputes the 'accept input' flag f_130 from f_D3C/f_D3D/f_D3F and returns 1.",
+  "confidence": 0.45,
+  "evidence": "NEW: the tween call is now readable as self->f_d8c vtable +0x14/+0x10 (a small state controller) and the f_130 recomputation is identical to Ui_ShopWindow_UpdateAffordability, so this is a shared 'end the paging wait / accept input' handler. But nothing names *who* dispatches it (it is only reachable through the handler table at 0x0072BACC) and 'ConfirmAdvance' is still an interpretation of the input role, so the name keeps maybe_.",
+  "previous_name": "maybe_Ui_MessageWindow_ConfirmAdvance",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002959F4",
+  "name": "maybe_Ui_DiveStartWindow_CreatePartB",
+  "signature": "UiWindow* maybe_Ui_DiveStartWindow_CreatePartB(int* self, u32 recordHandle, u32 flag)",
+  "params": {
+   "param_1": "self",
+   "param_2": "recordHandle",
+   "param_3": "flag"
+  },
+  "summary": "ARM variant of the dive-start window part factory: installs vtable 0x0075DD90, initialises the embedded sub-object at self+0xC, allocates a 0x4AC-byte part and constructs it with Ui_DiveStartWindowPart_Ctor, registers it via Ui_Object_CreatePartsFromTable, applies the record handle/flag with Ui_DiveStartWindow_SetRecordHandle, marks the part active (+0x94 = 1) and runs its update slot +0x24.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: the old 'Ui_CompositeWindow_CtorB' named the wrong class. NEW: the part constructor callee is now confidently Ui_DiveStartWindowPart_Ctor, the registration is Ui_Object_CreatePartsFromTable and the follow-up is maybe_Ui_DiveStartWindow_SetRecordHandle - exactly the same sequence as the thumb twin 0x00294F7E (maybe_Ui_DiveStartWindow_CreatePart), only in ARM and with the 0x4AC size; its only visible caller is maybe_Menu_TalkParty_CreatePanel (0x002175BC), which builds a talk/party UI panel. The 'B' suffix keeps it distinct from the thumb twin; still maybe_ because the owning window class rests on those callee names.",
+  "previous_name": "maybe_Ui_CompositeWindow_CtorB",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00294F7E",
+  "name": "maybe_Ui_DiveStartWindow_CreatePart",
+  "signature": "unsigned int maybe_Ui_DiveStartWindow_CreatePart(unsigned int self, unsigned int arg2, unsigned int arg3, unsigned int arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Thumb part factory for the dive-start window: byte-swaps the part id, constructs it with Ui_DiveStartWindowPart_Ctor, registers it through Ui_Object_CreatePartsFromTable, stores it at +8, applies the record handle and marks the part's controller active (+0x94 = 1) before running its update slot.",
+  "confidence": 0.35,
+  "evidence": "NEW: the named callees are the same set as the ARM twin 0x002959F4 (Ui_DiveStartWindowPart_Ctor -> Ui_Object_CreatePartsFromTable -> maybe_Ui_DiveStartWindow_SetRecordHandle), which strengthens the dive-start attribution. The body itself is damaged (unaff_r5, in_cr6, coprocessor_store, dropped arguments), so per FACTS.md it stays maybe_ at 0.35 and no confidence is claimed for the exact parameter meaning.",
+  "previous_name": "maybe_Ui_DiveStartWindow_CreatePart",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00295DE8",
+  "name": "Gfx_CreateMeshFromTransform",
+  "signature": "void Gfx_CreateMeshFromTransform(GfxMeshNode* self, GfxTransform* transform, GfxNode* owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "transform",
+   "param_3": "owner"
+  },
+  "summary": "Creates the mesh object of a scene node from a transform record: copies the owner's position into +0x9C and its Euler rotation via Gfx_Node_SetEulerRotation, builds a 0x6E4-byte Gfx_MeshObject_Init instance named \"mesh\" (0x6873656D), applies the layout config, registers the child on the owner, and stores the transform plus the owner-minus-transform offset so the mesh can follow it.",
+  "confidence": 0.5,
+  "evidence": "NEW: the confident field caller Field_MultiPart_InitSpriteList (0x0044DA90) calls it in its part loop with (node, placement record, owner) - one call per 0x3C-stride part; the object name literal 0x6873656D spells \"mesh\", and the named callees Gfx_MeshObject_Init / Gfx_Node_SetEulerRotation / Mem_AllocAligned_2 match the mesh factory. The remaining 0x178-byte record and the follow-offset fields f_224..f_22C are still only described by shape.",
+  "previous_name": "maybe_Gfx_CreateMeshFromTransform",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x006F1F88",
+  "name": "Ui_UiManager_GetInstance",
+  "signature": "UiManager** Ui_UiManager_GetInstance(UiManager** out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Returns the process-wide UI manager singleton in *out, lazily allocating and constructing the 0xE3C8-byte object on first use (BSS flag 0x007BE304, instance 0x007BE308, vtable 0x00782964 with the secondary base at +0x18). Callers use its open-screen array at +0xE1C0 and mode byte at +0xE3C4.",
+  "confidence": 0.55,
+  "evidence": "NEW: 25 callers are now named and all are UI/menu code - Save_SlotUi_BuildThree walks +0xE120/+0xE1C8/+0xE270 slot records through it, Ui_Menu_StartModeTransition/UpdateModeTransition and Ui_DualDisplayWindow_SelectMode read the mode byte, and the same plain lazy-singleton idiom (BSS flag + size + vtable constants) is used by the other named *_GetInstance helpers. Only the exact class name 'UiManager' is inferred from that usage; the singleton role itself is certain.",
+  "previous_name": "maybe_Ui_UiManager_GetInstance",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003B43FC",
+  "name": "maybe_Save_SlotUi_ResetThree",
+  "signature": "void maybe_Save_SlotUi_ResetThree(SaveSlotPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "vtable command (sole slot of 0x0072BC1C) that resets the embedded save-slot panel at self+0x158: rebuilds the three slot rows with Save_SlotUi_BuildThree, re-selects the default pane with Ui_DualDisplayWindow_SelectDefaultPane and then activates the panel through func_0029126C(ptr, 1). Same body as 0x00298AEC; the twin of this handler at 0x003B4FC8 differs only in its vtable.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'ThreeListPanel_ResetAndSelectA' was only half right - the three lists are the save-slot rows. NEW: the callees are now confidently Save_SlotUi_BuildThree (three save-slot rows from work+0xE120/+0xE1C8/+0xE270) and Ui_DualDisplayWindow_SelectDefaultPane, and the old evidence (three groups at +0x50/+0x380/+0x6B0) refers to the *sub-object's* fields, not to this function's arguments. Still maybe_ because the panel is only identified through the save-slot builder and no caller names it.",
+  "previous_name": "maybe_Ui_ThreeListPanel_ResetAndSelectA",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00298AEC",
+  "name": "maybe_Save_SlotUi_ResetThreeB",
+  "signature": "void maybe_Save_SlotUi_ResetThreeB(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the save-slot panel embedded at self+0x158: rebuilds the three slot rows (Save_SlotUi_BuildThree), selects the default pane (Ui_DualDisplayWindow_SelectDefaultPane) and activates the panel (func_0029126C(ptr,1)). Same body as 0x003B43FC; the B suffix marks the copy.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED and de-duplicated: the old 'Ui_Widget_ResetAndEnableChild' described a generic widget, but the body is exactly the three-call save-slot reset used at 0x003B43FC (same body as 0x003B43FC, so the B suffix keeps the two addresses distinguishable). NEW: both callee halves are confidently named Save_SlotUi_BuildThree / Ui_DualDisplayWindow_SelectDefaultPane, which pins the subject to the save-slot panel. Kept maybe_ 0.4 because only the call sequence identifies the object.",
+  "previous_name": "maybe_Ui_Widget_ResetAndEnableChild",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003BAA00",
+  "name": "Ui_TsuyosaWindow_FillRowsA",
+  "signature": "void Ui_TsuyosaWindow_FillRowsA(UiTsuyosaRow* self, int characterId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "characterId"
+  },
+  "summary": "Fills the parameter window's per-character row: clears the 0x180-byte flag block, then walks the character's record list (member record from func_0035EB98) and appends each entry's id bytes that pass the map-visit conditions into the 0x30-byte, 16-slot grid at +0x54, plus the high-bit-marked entries of the member's second list; finally selects the entry, refreshes the row text and calls Ui_Row_Apply.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callers are the confident Ui_TsuyosaWindow_Update / Ui_TsuyosaWindow_UpdateSelection, the tail is maybe_Ui_Row_Apply and the entry selection is Ui_List_SelectEntryById, so the 'fill this window's row' role is confirmed by context, and the twin 0x003BAE6C writes the same grid. What the ids mean is still unproven (func_006291EC/func_006298E0 are the count/getter pair also used for text candidates), so the summary says 'record list' rather than claiming skills. Changed to confirmed at 0.5 rather than 0.6 because the id semantics stay open.",
+  "previous_name": "maybe_Ui_TsuyosaWindow_FillRowsA",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003BAE6C",
+  "name": "Ui_TsuyosaWindow_FillRowsB",
+  "signature": "void Ui_TsuyosaWindow_FillRowsB(UiTsuyosaRow* self, int characterId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "characterId"
+  },
+  "summary": "Second filler of the parameter window's grid: takes the character's id list (func_00629214 count / func_006298F0 getter), sorts it by the display-name field of each entry (comparator reading record+0xC2), writes the ids 17 per row into the 0x30-byte grid at +0x54, then refreshes the caption text and calls Ui_Row_Apply.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callers are the confident Ui_TsuyosaWindow_Update / Ui_TsuyosaWindow_UpdateSelection, the tail is the named maybe_Ui_Row_Apply + Ui_List_SelectEntryById, and the twin 0x003BAA00 proves the family writes the same +0x54 grid. The only novelty here is the sort (maybe_Ui_SortEntriesByGlyphMetric + func_00717CB0 insertion sort by record+0xC2) and the 17-per-row packing. What the ids mean is not proven, so the summary says 'id list', not 'skills'.",
+  "previous_name": "maybe_Ui_TsuyosaWindow_FillRowsB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002A0D9C",
+  "name": "maybe_Ui_TsuyosaWindow_OnInput_NoPane",
+  "signature": "void maybe_Ui_TsuyosaWindow_OnInput_NoPane(UiTsuyosaWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Minimal input handler of the parameter window: on the cancel mask (f_134 & 4) it pops the current pane with Ui_TsuyosaWindow_PopPane; otherwise it just runs the shared selection step Ui_TsuyosaWindow_UpdateSelection, without the pane forwarding its five siblings do.",
+  "confidence": 0.45,
+  "evidence": "NEW: both callees are now confidently named (Ui_TsuyosaWindow_PopPane, Ui_TsuyosaWindow_UpdateSelection) and they place this in the Ui_TsuyosaWindow input family; the 0x002A0554 selection-step address is shared with the sibling handlers. Kept maybe_ because 'NoPane' only says what the function does *not* do - why this variant has no pane is still unknown, and it has no named caller.",
+  "previous_name": "maybe_Ui_TsuyosaWindow_OnInput_NoPane",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003BADD8",
+  "name": "maybe_Ui_Row_Reset",
+  "signature": "void maybe_Ui_Row_Reset(UiRow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Puts a Tsuyosa/parameter row back into its empty state: clears the selection index f_4A and the cursor fields f_1E0/f_1E4, turns off the two icon panes at +0x1D4/+0x1DC while turning on +0x1D8, re-measures the empty caption (func_002BCFF4(0x47) + func_001A6680 on pane 0x30) and re-applies the row.",
+  "confidence": 0.4,
+  "evidence": "NEW: the tail now reads maybe_Ui_Row_Apply (0x003B8B88) and the caller/neighbour set is the Ui_TsuyosaWindow row family, so 'reset one row' is well supported. The tri-state pane toggle at +0x1D4/+0x1D8/+0x1DC (icon left/middle/right) is inferred from the bit-0 writes, and no caller names the operation, so the name stays maybe_.",
+  "previous_name": "maybe_Ui_Row_Reset",
+  "previous_confidence": 0.38,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002A285C",
+  "name": "maybe_Ui_Window_BuildMessageArgFromToken",
+  "signature": "void maybe_Ui_Window_BuildMessageArgFromToken(UiWindow* self, u32 token, u32 tokenType)",
+  "params": {
+   "param_1": "self",
+   "param_2": "token",
+   "param_3": "tokenType"
+  },
+  "summary": "Converts a message control-token chain into button-icon message arguments: the token type byte selects icon resource 0x4D..0x51 (0x50 becomes 0x51 when only one party member is alive), stores it at self+4, applies it with Ui_SakusenWindow_BuildMessageArgs, and keeps pulling the next token (via maybe_Party_FieldModel_UpdateAll's out-params) while the chain continues, ending it with icon 0x2E.",
+  "confidence": 0.4,
+  "evidence": "NEW: the apply half is the confidently named Ui_SakusenWindow_BuildMessageArgs (0x002A29A8) and the one-member test is Party_CountAliveMembers, so the 'button icon id per token type' reading is solid; callers are the Sakusen window init 0x002A16E8 and 0x002A2C1C. Kept maybe_ because the first argument arrives in a register Ghidra named in_s0 (damaged: `*(self+8) = in_s0;`), and 'token' is a reading of the 4-byte text-control record, not a documented type.",
+  "previous_name": "maybe_Ui_Window_BuildMessageArgFromToken",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002A2C0C",
+  "name": "maybe_Ui_SakusenWindow_BuildMessageArgsTail",
+  "signature": "void maybe_Ui_SakusenWindow_BuildMessageArgsTail(void)",
+  "params": {},
+  "summary": "NOT a real function: 0x002A2C0C is the second `bl 0x1902A4` plus the epilogue inside Ui_SakusenWindow_BuildMessageArgs (0x002A29A8). Ghidra emitted halt_baddata because the entry point lands mid-sequence; the name only exists so the merge step does not create a bogus symbol.",
+  "confidence": 0.3,
+  "evidence": "NEW: still no caller/callee context; the disassembly evidence in asm/text/text_00280048.s (bl #0x1902a4; add sp,#0x6c; mov r0,r7; pop {r4,r5,r6,r7,r8,sb,pc}) is unchanged, and the named parent Ui_SakusenWindow_BuildMessageArgs now exists in the merged set. It remains an epilogue fragment, so it keeps maybe_ at 0.3.",
+  "previous_name": "maybe_Ui_SakusenWindow_BuildMessageArgsTail",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002A2E70",
+  "name": "maybe_Ui_SakusenWindow_HandlePaneEvent",
+  "signature": "void maybe_Ui_SakusenWindow_HandlePaneEvent(UiSakusenWindow* self, u32 p1, u32 p2, u32 p3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "p1",
+   "param_3": "p2",
+   "param_4": "p3"
+  },
+  "summary": "Event handler for the two panes at self+0x160/self+0x17C: if the active pane is hidden it just swaps visibility; otherwise it dispatches on the pane event mask (+0x14) - bit 4 closes the 3D view and advances the command queue, bit 1 executes the pane's text command 0/1/2/3, bit 0x10 consumes the next ring-buffer entry - and finally records the result in the pane/command state.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'TogglePane' only covered the first early-out branch; the body is really the pane *event* dispatch. NEW: the callees are now confidently named - Ui_SakusenWindow_Set3DViewEnabled, Ui_CommandQueue_AdvanceAlt, Container_RingBuffer_Next, Ui_GetCore, maybe_Text_ExecuteCommand - and together they show confirm (text command), cancel (close 3D view) and scroll (ring buffer) handling. Still maybe_ because the two panes' exact roles and the +0x14 mask bit meanings are inferred.",
+  "previous_name": "maybe_Ui_SakusenWindow_TogglePane",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00382AD0",
+  "name": "maybe_Ui_ClearPendingInputA",
+  "signature": "void maybe_Ui_ClearPendingInput(void)",
+  "params": {},
+  "summary": "Tiny UI helper: if Container_RingBuffer_Next reports another input event, it clears the pending-input word at UiCore+0x94. Same body as 0x00387058 (the two are copies used by different windows); the argument it receives is dropped by the decompiler (`in_r3`).",
+  "confidence": 0.3,
+  "evidence": "CORRECTED: 'MessageWindow_NotifyAdvance' claimed both a window and a 'notify' action, but nothing in the body names the message window and the action is a *clear* of UiCore+0x94 (the same field the Sakusen pane handler zeroes when it consumes an event). NEW: both callees are confidently Container_RingBuffer_Next and Ui_GetCore, so the input-queue role is solid while the window attribution is not. Kept maybe_ at 0.3 because UiCore+0x94 has no proven field meaning and the input register is damaged (in_r3).",
+  "previous_name": "maybe_Ui_MessageWindow_NotifyAdvance",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00387058",
+  "name": "maybe_Ui_ClearPendingInputB",
+  "signature": "void maybe_Ui_ClearPendingInput(void)",
+  "params": {},
+  "summary": "Tiny UI helper copied from 0x00382AD0: when Container_RingBuffer_Next reports another input event it clears the pending-input word at UiCore+0x94. Same body as 0x00382AD0.",
+  "confidence": 0.3,
+  "evidence": "CORRECTED for the same reason as 0x00382AD0: identical 52/56-byte body, no message-window or title-text evidence, and the only named callees are Container_RingBuffer_Next / Ui_GetCore. Keeping the twin names distinct would invent a window attribution, so both copies get the descriptive name; the field UiCore+0x94 and the dropped in_r3 argument remain unproven (hence maybe_ 0.3).",
+  "previous_name": "maybe_Ui_TitleTextWindow_NotifyAdvance",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0039AA4C",
+  "name": "maybe_Ui_ClearPendingInputC",
+  "signature": "void maybe_Ui_ClearPendingInputC(RingBuffer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Tiny input-queue handler (registered in the table at 0x0072C498): if Container_RingBuffer_Next(self+8) reports another event, it fetches the process-wide UI core - with Ui_GetCore's lazy 0x98-byte allocation written out inline - and clears its pending-input word at +0x94. Same operation as 0x00382AD0/0x00387058, only with the core getter inlined.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'Container_RingBuffer_AllocSlots' misread the inline Ui_GetCore allocation as a ring-buffer slot array. NEW: the allocated object is 0x98 bytes with vtable 0x00782A08 - exactly the UiCore singleton documented in the confident Ui_GetCore (0x006F229C) - and the final `puVar3->f_25 = 0` is word 0x94, the UI mode/pending-input word that 0x00382AD0/0x00387058 clear after the same Container_RingBuffer_Next test. Name is the C copy because the body is the same operation; kept maybe_ because the +0x94 field meaning is inferred and no named caller exists.",
+  "previous_name": "maybe_Container_RingBuffer_AllocSlots",
+  "previous_confidence": 0.38,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0040FBB8",
+  "name": "maybe_Effect_MeshEmitter_SetupB",
+  "signature": "void maybe_Effect_MeshEmitter_SetupB(EffectEmitter* self, EffectMeshDef* def)",
+  "params": {
+   "param_1": "self",
+   "param_2": "def"
+  },
+  "summary": "Mesh-emitter setup variant B: stores the emitter record fields, sets the effect node name to the fixed string \"Open\" (0x6E65704F) at +0x320, applies the placement's position/rotation, adds a sprite child with a colour descriptor, registers an fCol animator and creates the mesh from the definition's id (+0x42) and variant byte (f_11).",
+  "confidence": 0.4,
+  "evidence": "NEW: (1) the fixed string passed to std_FixedString15_Ctor is 0x6E65704F = \"Open\", which is a real node/animation name and explains the otherwise opaque four-word copy into +0x320; (2) the caller is the field scene-object spawner block 0x0034D0B8, which allocates the emitter and calls this with the on-stack definition record - the same per-kind init pattern as R_019's gadgets; (3) the setup siblings (0x0040FDA0 \"Off\", 0x0044E644) are confirmed by cross-references. Still maybe_ because 'Effect_MeshEmitter' is inferred from the class family, not from a named constructor.",
+  "previous_name": "maybe_Effect_MeshEmitter_SetupB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040FDA0",
+  "name": "maybe_Effect_MeshEmitter_SetupC",
+  "signature": "void maybe_Effect_MeshEmitter_SetupC(EffectEmitter* self, EffectMeshDef* def)",
+  "params": {
+   "param_1": "self",
+   "param_2": "def"
+  },
+  "summary": "Mesh-emitter setup variant C: same sprite child + fCol animator + mesh creation as 0x0040FBB8 but stores the fixed string \"Off\" (0x0066664F) at +0x320, sets the variant flag f_318 = 1, takes the mesh id from def->f_F, and writes the id to +0x312 instead of +0x2C8.",
+  "confidence": 0.4,
+  "evidence": "NEW: the copied string literal is 0x0066664F = \"Off\", the counterpart of \"Open\" in 0x0040FBB8, and the caller is the spawner block 0x0034D454 that allocates the emitter - so the two functions are the on/off named variants of the same effect emitter set-up. The variant flag f_318 = 1 and the different mesh-id field are certain from the body; 'MeshEmitter' itself is still the family guess, so it stays maybe_.",
+  "previous_name": "maybe_Effect_MeshEmitter_SetupC",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002F35B8",
+  "name": "Field_Marker_InitModelMarker",
+  "signature": "void Field_Marker_InitModelMarker(FieldMarker* self, u32* placement)",
+  "params": {
+   "param_1": "self",
+   "param_2": "placement"
+  },
+  "summary": "Initialises a field marker that carries a 3D model: copies the placement id/position, applies its Euler rotation, adds the sprite-node descriptor child, registers the fCol animator, creates the mesh from the placement's model id (+0xC, variant byte +0x32), then looks up motion ids in the marker motion table (func_0063DCE8) and caches them at +0x2C8..+0x2E0; model id 0x2D6 also sets the quick-blink flags.",
+  "confidence": 0.5,
+  "evidence": "NEW: the now-readable caller is the second field scene-object spawner block 0x0034A140, which allocates the MarkerModel with Mem_AllocAligned and then calls exactly this function with the on-stack placement record - so this is the per-kind initialiser of a spawned marker model, not a generic mesh helper. All heavy callees are confidently named (Gfx_Node_SetEulerRotation, maybe_Gfx_SpriteActor_AddChildC, Gfx_AddFColAnimator, Gfx_CreateMeshObjectByParams, Game_GetDataManager) and the special model id 0x2D6 is a concrete constant.",
+  "previous_name": "maybe_Field_Marker_InitModelMarker",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002F4594",
+  "name": "maybe_Gfx_CreateMeshWithColorAnim",
+  "signature": "void maybe_Gfx_CreateMeshWithColorAnim(int* self, unsigned int* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Model-part style initialiser: copies the record's mesh/colour bytes (0x26C, 0xB3, 0x2CA), applies position and Euler rotation, adds a sprite child plus an fCol colour descriptor, calls the node's vtable +0x58 with 4 and creates the mesh from params->f_F/f_10; used by a field scene-object spawner for one kind of model part.",
+  "confidence": 0.4,
+  "evidence": "NEW: its address is referenced from the spawner block 0x0034C20C, which allocates the object and calls this with a definition record - the same per-kind init pattern as the neighbouring Field_Marker_InitModelMarker; the field offsets (f_26C, f_2C8/0x2CA, f_46=0x118, f_9C/f_A0/f_A4) are identical to the maybe_Gfx_ModelPart_Init* family, so the generic 'Gfx_' prefix may be too broad but the mesh+colour-animator action is certain. Kept maybe_ because no named caller or vtable pins the owning class.",
+  "previous_name": "maybe_Gfx_CreateMeshWithColorAnim",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003A3CC8",
+  "name": "maybe_Gfx_ModelPart_InitMeshColored",
+  "signature": "void maybe_Gfx_ModelPart_InitMeshColored(ModelPart* self, PartParams* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Initialises a coloured mesh model part: copies the part's mesh/variant bytes, applies position and Euler rotation, adds a sprite child, offsets the created child's local position by params[0x11..0x13], adds an fCol colour descriptor when the record has one and creates the mesh from params->f_14 (+0x52 variant); marks the part specially when the mesh id is 0x325.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is the spawner block 0x0034D7EC, which allocates the part object and calls this with the on-stack parameter record - consistent with the R_019 finding that these 0x0034xxxx blocks are the per-kind constructors of field scene objects. The named callees (Gfx_Node_SetEulerRotation, maybe_Gfx_SpriteActor_AddChildC, Gfx_AddFColAnimator, Gfx_CreateMeshObjectByParams) confirm the 'mesh + colour animator' half; 'ModelPart' still comes from the struct shape only, so the name keeps maybe_.",
+  "previous_name": "maybe_Gfx_ModelPart_InitMeshColored",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003A449C",
+  "name": "maybe_Gfx_ModelPart_InitMeshPair",
+  "signature": "void maybe_Gfx_ModelPart_InitMeshPair(ModelPart* self, PartParams* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Initialises a model part that needs two sprite children: builds and adds the first child at f_278, the second at f_2C8 (with its own position/scale from params[9..0x11]), registers one fCol colour descriptor and creates the mesh from params->f_18 (+0x62 variant).",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is the spawner block 0x0034AC50, which allocates the object and calls this with the parameter record; both sprite-child constructions and the single mesh creation are visible in the body, and the callees are the named Gfx helpers. Kept maybe_ because 'Pair' is our label for the two children - the second child's role (shadow? attachment?) is not proven.",
+  "previous_name": "maybe_Gfx_ModelPart_InitMeshPair",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003DD134",
+  "name": "maybe_Gfx_ModelPart_InitColoredB",
+  "signature": "void maybe_Gfx_ModelPart_InitColoredB(ModelPart* self, PartParams* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Coloured model-part initialiser variant: writes an explicit six-word tint block (0, 1.356, 0, 0.75, 1.34, 0.675 with the enable word 1) to f_2CC..f_2E4, applies position/rotation, adds the sprite child, feeds the tint to Gfx_AddFColAnimator and creates the mesh from params->f_F, storing the variant byte at +0x2E5.",
+  "confidence": 0.45,
+  "evidence": "NEW: the tint constants are now visible as concrete floats (0x3FAD70A4 = 1.356, 0x3FACCCCD = 1.35, 0x3F400000 = 0.75) and the created child is fed straight into Gfx_AddFColAnimator, which confirms the 'explicit colour block' reading. Still maybe_ because no caller or vtable names the owning class; the 'B' variant only says it differs from 0x003A15E0.",
+  "previous_name": "maybe_Gfx_ModelPart_InitColoredB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002B5E30",
+  "name": "maybe_Ui_SpriteActor_CreateCharacterSprite",
+  "signature": "void maybe_Ui_SpriteActor_CreateCharacterSprite(UiSpriteActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the 2D character sprite of a UI sprite actor: asks its vtable +0xCC for the character id, resolves the character record through the 0x0A24-byte record manager (vtable 0x00782990), adds the atlas quad as a child at self+0x9E, chooses the record's uv rect or (when func_0062AB3C(gameWork+8) == 2) the battle palette block, and registers the fCol colour animator.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is now named maybe_Gfx_MeshNode_InitChildren (0x002B535C) and the record fetch is func_0063D6B8 through a lazily built 0xA24-byte table object, so 'make the character sprite for this actor' is consistent. Still maybe_ because func_0063D6B8 and the palette test func_0062AB3C are unnamed and the function writes an actor-shaped struct we cannot yet type.",
+  "previous_name": "maybe_Ui_SpriteActor_CreateCharacterSprite",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003A15E0",
+  "name": "maybe_Gfx_ModelPart_InitColored",
+  "signature": "void maybe_Gfx_ModelPart_InitColored(ModelPart* self, PartParams* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Model-part initialiser for untextured coloured geometry: copies the part's stage/colour bytes (0x26C, 0x2C8, 0x2CA), applies position and Euler rotation, adds the sprite child at f_278 and registers a flat white fCol animator - no mesh is created, so the part is colour-only.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are confirmed as Gfx_Node_SetEulerRotation + maybe_Gfx_SpriteActor_AddChildC + Gfx_AddFColAnimator (no Gfx_CreateMeshObjectByParams), which proves the 'coloured, no mesh' distinction against the neighbouring InitMeshColored. Still maybe_ because no caller or vtable pins the owning class; the colour block values (1.0/0.5) are the function's own constants.",
+  "previous_name": "maybe_Gfx_ModelPart_InitColored",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003DDCD0",
+  "name": "maybe_Gfx_ModelPart_InitMeshOnly",
+  "signature": "void maybe_Gfx_ModelPart_InitMeshOnly(ModelPart* self, PartParams* params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Minimal model-part initialiser: copies only the position (f_9C..f_A4), registers a fixed two-entry fCol colour block enabled with scale 1.0, then creates the mesh from the u16 at params[3] - no sprite child and no transform/rotation step.",
+  "confidence": 0.45,
+  "evidence": "NEW: the mesh creation callee is confidently Gfx_CreateMeshObjectByParams and the colour one Gfx_AddFColAnimator, and the body really lacks the maybe_Gfx_SpriteActor_AddChildC / Gfx_Node_SetEulerRotation calls its siblings have - so 'mesh only' is a fair structural name. Kept maybe_ because the class (ModelPart) and the meaning of the two-word params block are still inferred from the family.",
+  "previous_name": "maybe_Gfx_ModelPart_InitMeshOnly",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005F7E60",
+  "name": "maybe_Gfx_Node_SetChildHandle",
+  "signature": "void maybe_Gfx_Node_SetChildHandle(GfxNode* node, void* handle)",
+  "params": {
+   "param_1": "node",
+   "param_2": "handle"
+  },
+  "summary": "Replaces the node's child/attachment handle at +0x168: detaches the old one (func_005E785C), stores the new handle and attaches it (func_005E7650) - the same detach/store/attach triple the scene-graph child setters use.",
+  "confidence": 0.35,
+  "evidence": "CORRECTED: 'FloorCollisionHandle' had no support - the very same two helpers are the add/remove-child pair used in Gfx_CreateMeshFromTransform (func_005E7650) and the callers listed are sprite/animator creation (Field_Actor_CreateSprite, Gfx_AddFColAnimator, Field_ModelObj_UpdateEffect, Field_MultiPart_CreateSpriteFromResource). NEW: naming the field at +0x168 a generic child slot is the honest reading; whether it is specifically the floor-collision child cannot be verified, so it stays maybe_ at 0.35.",
+  "previous_name": "maybe_Gfx_Node_SetFloorCollisionHandle",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00449930",
+  "name": "maybe_Effect_ParticleEmitter_InitPoolA",
+  "signature": "void maybe_Effect_ParticleEmitter_InitPoolA(EffectEmitter* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Effect-emitter pool initialiser A: runs the scene-node base init, allocates a 0xAC-byte emitter object (vtable 0x0075AF90), stores the owner at +0x20 and constructs 64 two-word pool entries with std_ConstructArray(obj+9, 0x006CE2B8, 0x40, 2); the failure path copies the default colour/fade block from 0x00725E4C.",
+  "confidence": 0.35,
+  "evidence": "NEW: the named callees (Mem_AllocAligned_2, Ui_Object_InitMemberPair, std_ConstructArray) confirm the object+pool construction, and the three siblings 0x0044AB78/0x0044D29C/0x0044F404 differ only in object size (0x6C vs 0xAC), pool element size (1 vs 2 words) and which slice of the shared default table they copy. The decorator writes are still mis-decoded (_DAT_000000xx globals) and 'particle' is not proven, so the name keeps maybe_ at 0.35.",
+  "previous_name": "maybe_Effect_ParticleEmitter_InitPoolA",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0044AB78",
+  "name": "maybe_Effect_ParticleEmitter_InitPoolB",
+  "signature": "void maybe_Effect_ParticleEmitter_InitPoolB(EffectEmitter* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Effect-emitter pool initialiser B: same construction as 0x00449930 but a 0x6C-byte object (vtable 0x0075AFB4) with 64 single-word pool entries (std_ConstructArray(obj+9, 0x006CE608, 0x40, 1)) and the default block taken from 0x00725E4C f_30..f_44.",
+  "confidence": 0.35,
+  "evidence": "NEW: sibling comparison now shows the exact differences (object size 0x6C, element stride 1 word, default slice f_30..f_44) against 0x00449930, so the family is certain even though the class is not. Kept maybe_ 0.35: the '_DAT_000000xx' decorator writes are mis-decoded and 'particle' is still only the family guess.",
+  "previous_name": "maybe_Effect_ParticleEmitter_InitPoolB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0044D29C",
+  "name": "maybe_Effect_ParticleEmitter_InitPoolC",
+  "signature": "void maybe_Effect_ParticleEmitter_InitPoolC(EffectEmitter* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Effect-emitter pool initialiser C: 0xAC-byte object (vtable 0x0075AFD8) with 64 two-word pool entries, defaults from the 14-word table 0x00726114 and an extra scalar f_138 = 0.35 (0x3EB33333).",
+  "confidence": 0.35,
+  "evidence": "NEW: differs from 0x00449930 in the vtable, the construct array 0x006CE940 and the default table 0x00726114, plus the extra self->f_138 = 0.35 write; the pool geometry is identical. Kept maybe_ 0.35 because the default/decorator writes are mis-decoded globals and the effect class is unproven.",
+  "previous_name": "maybe_Effect_ParticleEmitter_InitPoolC",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0044F404",
+  "name": "maybe_Effect_ParticleEmitter_InitPoolE",
+  "signature": "void maybe_Effect_ParticleEmitter_InitPoolE(EffectEmitter* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Effect-emitter pool initialiser E: 0xAC-byte object (vtable 0x0075B020) with 64 two-word pool entries (ctor 0x006CEFC4), taking its default colour/fade values from the upper half of the shared table 0x00725E4C (f_88..f_B4) instead of f_50..f_7C.",
+  "confidence": 0.35,
+  "evidence": "NEW: sibling comparison pins the only difference from 0x00449930 - the default slice (f_88..f_B4 vs f_50..f_7C), the vtable 0x0075B020 and the element ctor 0x006CEFC4. The 'E' label is arbitrary (there is a D sibling at 0x0044EC8C that is not in this batch). Kept maybe_ 0.35 for the same reasons as A/B/C: mis-decoded decorator writes, unproven effect class.",
+  "previous_name": "maybe_Effect_ParticleEmitter_InitPoolE",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00471308",
+  "name": "maybe_Gfx_EffectNodeCreateChild_75B0B0",
+  "signature": "void maybe_Gfx_EffectNodeCreateChild_75B0B0(EffectNode* self, u32 mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Virtual slot 1 of effect-node vtable 0x773350: clears f_2CA, calls the node's vtable +0x54 with 4, allocates a 0xAC-byte child object (vtable 0x0075B0B0), stores the owner at +0x20 and builds its 64 two-word pool (std_ConstructArray(obj+9, 0x006CFC98, 0x40, 2)); on allocation failure it copies the default colour block from 0x00726074 and clears self[0x13].",
+  "confidence": 0.35,
+  "evidence": "NEW: the 0xAC-byte child plus 64-entry two-word pool is the same object shape as the 0x00449930/0x0044AB78/0x0044D29C pool initialisers in this batch, so these 'EffectNodeCreateChild' entries are per-type node constructors of that shared pool class. The class itself is still unidentified and the failure path is mis-decoded (_DAT_000000xx globals), hence maybe_ 0.35.",
+  "previous_name": "maybe_Gfx_EffectNodeCreateChild_75B0B0",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004B1994",
+  "name": "maybe_Gfx_EffectNodeCreateChild_75B188",
+  "signature": "void maybe_Gfx_EffectNodeCreateChild_75B188(EffectNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Virtual slot 1 of effect-node vtable 0x77687C: allocates the 0xAC-byte child object (vtable 0x0075B188), stores the owner at +0x20 and constructs its 64 two-word pool (ctor 0x006D0FDC); failure copies the default colour block from 0x00725E4C (f_C0..f_EC).",
+  "confidence": 0.33,
+  "evidence": "NEW: same allocate-copy-or-default body as 0x00471308 and the same 0xAC/pool geometry as the pool-initialiser family; only the vtable (0x75B188), the pool element ctor (0x006D0FDC) and the default slice differ. Kept maybe_ at 0.33 because the failure path is mis-decoded globals and the concrete effect-node type behind vtable 0x77687C is unknown.",
+  "previous_name": "maybe_Gfx_EffectNodeCreateChild_75B188",
+  "previous_confidence": 0.33,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004CB33C",
+  "name": "maybe_Gfx_EffectNodeCreateChild_75B1F4",
+  "signature": "void maybe_Gfx_EffectNodeCreateChild_75B1F4(EffectNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Virtual slot 1 of effect-node vtable 0x7785F8: allocates the 0xAC-byte child (vtable 0x0075B1F4), owner at +0x20, 64 two-word pool (ctor 0x006D1990); failure copies the default block from 0x007261B4 (f_98..f_C4).",
+  "confidence": 0.33,
+  "evidence": "NEW: identical allocate-copy-or-default structure to the other three child creators and to the 0x0044xxxx pool initialisers; the differing constants are the vtable, 0x006D1990 and the 0x007261B4 default slice. Kept maybe_ 0.33 - mis-decoded globals and an unidentified node class.",
+  "previous_name": "maybe_Gfx_EffectNodeCreateChild_75B1F4",
+  "previous_confidence": 0.33,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004EFDFC",
+  "name": "maybe_Gfx_EffectNodeCreateChild_75B23C",
+  "signature": "void maybe_Gfx_EffectNodeCreateChild_75B23C(EffectNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Virtual slot 1 of effect-node vtable 0x77C2C8: allocates the 0xAC-byte child (vtable 0x0075B23C), owner at +0x20, 64 two-word pool (ctor 0x006D2004); failure copies the default block from 0x00726074 (f_40..f_6C) and clears f_4C.",
+  "confidence": 0.33,
+  "evidence": "NEW: same allocate-copy structure; this is the fourth copy in the batch and differs only in vtable/ctor/default slice. Kept maybe_ 0.33 for the same reasons (mis-decoded failure path, unknown node class).",
+  "previous_name": "maybe_Gfx_EffectNodeCreateChild_75B23C",
+  "previous_confidence": 0.33,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002C5CE0",
+  "name": "maybe_Gfx_SceneNode_Init",
+  "signature": "void maybe_Gfx_SceneNode_Init(GfxSceneNode* self, int params)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params"
+  },
+  "summary": "Scene-node initialiser: calls the shared mesh attach (Gfx_SceneNode_LoadMeshByName) with the caller's resource name, resolves the record's name string through the 0xA24-byte name table (vtable 0x00782990) and copies it into the node's 32-byte name field f_224..f_240, then sets the attached list object's f_114/f_154 to 4.",
+  "confidence": 0.35,
+  "evidence": "NEW: the first call is the confident Gfx_SceneNode_LoadMeshByName (0x005F541C) - its argument is the resource name the vtable caller passes, which Ghidra dropped, so the 'Init' reading holds; the name-table object at guard 0x007BE30C/vtable 0x00782990 is the same one the character-sprite code uses (0x002B5E30), and the f_114/f_154 = 4 tail matches 0x00382048. Still maybe_ because f_224..f_240 (a 32-byte fixed string) and params+4 (a u16 id) are inferred from shape.",
+  "previous_name": "maybe_Gfx_SceneNode_Init",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002F3110",
+  "name": "maybe_Gfx_MeshNode_InitFlag",
+  "signature": "void maybe_Gfx_MeshNode_InitFlag(GfxSceneNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Minimal vtable override (slot 1 of 0x7618B0): runs the shared mesh attach (Gfx_SceneNode_LoadMeshByName with the caller-supplied name) and sets the state word f_2B4 to 1.",
+  "confidence": 0.4,
+  "evidence": "NEW: the leading call is now confidently Gfx_SceneNode_LoadMeshByName - and since its resource-name argument is simply forwarded from the vtable caller, the function is an override, not a standalone mesh loader. The flag offset f_2B4 is certain (str r0,#0x2b4), only its meaning is not, so the name stays maybe_ 0.4.",
+  "previous_name": "maybe_Gfx_MeshNode_InitFlag",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00382048",
+  "name": "maybe_Ui_ListWindow_SetRowsPerPage",
+  "signature": "void maybe_Ui_ListWindow_SetRowsPerPage(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Vtable override (slot 7 of 0x00766164): attaches the list's mesh through Gfx_SceneNode_LoadMeshByName and then sets both row-count bytes of the list object at f_160 (f_114 the current page size and f_154 the maximum) to 4.",
+  "confidence": 0.45,
+  "evidence": "NEW: the leading call is the confident Gfx_SceneNode_LoadMeshByName, so this is a 'load the layout then configure the list' override rather than a pure setter - the name still describes the part that is certain (four rows per page in both fields). The list object at f_160 and the two byte fields are also used by the sibling 0x002C5CE0, which keeps the Ui_ListWindow attribution plausible. Stayed at 0.45 because the class is inferred from f_160 only.",
+  "previous_name": "maybe_Ui_ListWindow_SetRowsPerPage",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003EA1AC",
+  "name": "maybe_Ui_SubObject_Init",
+  "signature": "void maybe_Ui_SubObject_Init(UiSubObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Thin initialiser: attaches the object's mesh through Gfx_SceneNode_LoadMeshByName and then calls the shared sub-object/effect-object setup at 0x003D9A00 with defaults (0, 0, 0x007E7000, 0).",
+  "confidence": 0.4,
+  "evidence": "NEW: the second callee is now named maybe_Gfx_EffectObject_Replace (0x003D9A00), which matches the old evidence that 0x003D9A00 is the generic sub-object creator used by the 0x003D/0x003E window family; the first call is the confident mesh attach. Still maybe_ because the 0x007E7000 argument is a shared default block whose contents (effect/resource descriptor) are unknown.",
+  "previous_name": "maybe_Ui_SubObject_Init",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006E668C",
+  "name": "maybe_Ui_PanelStack_1In_SetEntry",
+  "signature": "void maybe_Ui_PanelStack_1In_SetEntry(UiPane* self, const char* resourceName)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resourceName"
+  },
+  "summary": "Panel-stack stage pane for the 'g3101_1_in' animation: loads the pane's mesh through Gfx_SceneNode_LoadMeshByName with the caller's resource name and then calls the pane's vtable +0x40 with display mode 4.",
+  "confidence": 0.4,
+  "evidence": "NEW: the leading call is the confidently named Gfx_SceneNode_LoadMeshByName and it forwards the second register argument untouched - so the parameter is the resource name, not a ResourceEntry struct as the old signature said (renamed the parameter, kept the function name). The class binding to 'g3101_1_in' comes from the class descriptor 0x0076E380 whose slot +0x74 is a one-instruction accessor returning that string (0x007C2ADA). Kept maybe_ because SetEntry is still our label for the vtable slot and the class family is inferred from those accessors.",
+  "previous_name": "maybe_Ui_PanelStack_1In_SetEntry",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006E6724",
+  "name": "maybe_Ui_PanelStack_2In_SetEntry",
+  "signature": "void maybe_Ui_PanelStack_2In_SetEntry(UiPane* self, const char* resourceName)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resourceName"
+  },
+  "summary": "Panel-stack stage pane bound to the 'g3101_2_in' animation: same 40-byte body as 0x006E668C (load the pane mesh through Gfx_SceneNode_LoadMeshByName, then vtable +0x40 with mode 4). Same body as 0x006E668C; the Ghidra body here is halt_baddata because the Thumb entry lands mid-sequence.",
+  "confidence": 0.4,
+  "evidence": "NEW: same-body-as-0x006E668C, and the class descriptor 0x0076E438 has its slot +0x74 accessor 0x0064D540 returning 'g3101_2_in' (0x007C2AE5); the neighbouring 0x006E668C is now readable with the named Gfx_SceneNode_LoadMeshByName call. Kept maybe_ 0.4: the decompilation of this copy is damaged (halt_baddata) and 'SetEntry' is still a functional guess.",
+  "previous_name": "maybe_Ui_PanelStack_2In_SetEntry",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006E67BC",
+  "name": "maybe_Ui_PanelStack_3In_SetEntry",
+  "signature": "void maybe_Ui_PanelStack_3In_SetEntry(UiPane* self, const char* resourceName)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resourceName"
+  },
+  "summary": "Panel-stack stage pane bound to the 'g3101_3_in' animation: loads the pane mesh with Gfx_SceneNode_LoadMeshByName and re-applies display mode 4 through vtable +0x40. Same body as 0x006E668C.",
+  "confidence": 0.4,
+  "evidence": "NEW: same-body-as-0x006E668C with the named mesh-load call; class descriptor 0x0076E4F0, slot +0x74 accessor 0x0064D54C -> 'g3101_3_in' (0x007C2AF0). Kept maybe_ 0.4 for the same reasons (our vtable-slot label, class family inferred from string accessors).",
+  "previous_name": "maybe_Ui_PanelStack_3In_SetEntry",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006E68EC",
+  "name": "maybe_Ui_PanelStack_5In_SetEntry",
+  "signature": "void maybe_Ui_PanelStack_5In_SetEntry(UiPane* self, const char* resourceName)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resourceName"
+  },
+  "summary": "Panel-stack stage pane bound to the 'g3101_5_in' animation: loads the pane mesh with Gfx_SceneNode_LoadMeshByName and re-applies display mode 4 through vtable +0x40. Same body as 0x006E668C; the 'g3101_4_in' pane is a separate class (accessor 0x0064D558) outside this batch.",
+  "confidence": 0.4,
+  "evidence": "NEW: same-body-as-0x006E668C with the named mesh load; class descriptor 0x0076E660, accessor 0x0064D564 -> 'g3101_5_in' (0x007C2B06). Kept maybe_ 0.4 - the strings only prove which class descriptor owns the slot, not what the slot's semantic name is.",
+  "previous_name": "maybe_Ui_PanelStack_5In_SetEntry",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002C6CBC",
+  "name": "maybe_Ui_JackpotScreen_HandleInput",
+  "signature": "void maybe_Ui_JackpotScreen_HandleInput(void* self, u32 arg2, u32 b, u32 c)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Jackpot (slot machine) screen reaction to the current row: if the two row indices f_D4/f_D8 match and that row is enabled it starts cue 0x3C, shows the payout panes and raises the face icon; otherwise it plays the hit/miss animation with cue 0x3A/0x3B chosen by the payout bucket. It then updates every enabled row through func_0030D674, refreshes the roulette frame and copies the default timing pair.",
+  "confidence": 0.35,
+  "evidence": "NEW: the callees are now confidently named and they are all slot-machine UI steps (Ui_SlotMachine_PlayHitAnim/PlayMissAnim, Ui_RouletteWindow_SetFrame, Ui_Object_PlayAnimationPoor, maybe_Ui_Cue_Start, Ui_GetCore-based Field_Action 0x10/0xF), which confirms the jackpot screen; the payout bucket thresholds 0x22F/0x15E0/0xDAC0 are concrete constants. Kept maybe_ because 'HandleInput' is only a guess for the trigger - the function reacts to a row change, and it has no named caller.",
+  "previous_name": "maybe_Ui_JackpotScreen_HandleInput",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002CEF08",
+  "name": "maybe_Ui_MessageWindow_UpdateFrame",
+  "signature": "void maybe_Ui_MessageWindow_UpdateFrame(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame fade/text refresh of a message-style window: notifies the layout child (vtable +0x2C), runs Ui_MessageText_Update, resolves the pending text id f_131 (< 0x21) through the shared text-sequence manager and stores the result in f_134, then recomputes the accept-input flag and starts the fade/row transition when f_D6C and f_D70 differ.",
+  "confidence": 0.45,
+  "evidence": "CORRECTED: 'UpdateFade' described only the last step, and the name would have collided with the confident Ui_MessageWindow_Update (0x001C40F8, the window's input/advance update). NEW: the body is the per-frame refresh of a window that owns UI text (Ui_MessageText_Update), a pending text id f_131 and the fade bytes f_D3C/f_D3D/f_D3F; the caller is maybe_Ui_KyoukaiWindow_Update. Kept maybe_ 0.45 because the concrete window class is not proven and the 'text resolve' helper is currently mis-named Sound_CommandQueue_Push_2.",
+  "previous_name": "maybe_Ui_MessageWindow_UpdateFade",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002D04EC",
+  "name": "maybe_Menu_ApplyRowColorState",
+  "signature": "void maybe_Menu_ApplyRowColorState(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Applies the colour/height state of one menu row from the overlay cursor state (1..3): clamps the member record's height f_16 by the font metric, pushes the two row text colours through Ui_ApplyTextColorAlt/Ui_ApplyTextColor and starts transition 0x2A with 0x32/0x33/0x34 (or 0x37/0xFF when no state is active).",
+  "confidence": 0.35,
+  "evidence": "NEW: the state query is maybe_Ui_Overlay_GetCursorRowState and the three branches are byte-identical except for the transition id, which makes 'apply the row's colour state' the honest reading; the member record comes from func_0035EB98 and the height clamp uses the font metric helper func_0018C1B8. Kept maybe_ 0.35: 'Menu_' is generic, the meaning of states 1/2/3 and of f_16 is inferred, and the body has 0x634A58-style unnamed helpers.",
+  "previous_name": "maybe_Menu_ApplyRowColorState",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00381ED8",
+  "name": "maybe_Field_Menu_OpenPlaceMenu",
+  "signature": "void maybe_Field_Menu_OpenPlaceMenu(FieldMenu* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Menu entry handler: validates the current place id (must be 1, otherwise starts transition 0x27/0x2F), then clamps the member's MP/height, applies the row text colours, sets the UI menu mode to 0 and runs transition 0x2A/0x30.",
+  "confidence": 0.4,
+  "evidence": "NEW: the validation callee is now confidently maybe_Field_GetCurrentPlaceId, which supports the 'place menu' half of the name; the rest of the body is the same member-row colour update as maybe_Menu_ApplyRowColorState (member record func_0035EB98, Ui_ApplyTextColorAlt, maybe_Ui_Menu_SetMode, maybe_Model_SetupTransition). Kept maybe_ because 'Open' is an interpretation - the function may be a per-state colour update rather than the opener, and the caller is not named.",
+  "previous_name": "maybe_Field_Menu_OpenPlaceMenu",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002CFB6C",
+  "name": "maybe_Ui_Text_FitLineWidth",
+  "signature": "void maybe_Ui_Text_FitLineWidth(TextLineOwner* self, u32 glyphId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "glyphId"
+  },
+  "summary": "Checks one inline glyph against the member row's remaining width: resolves the owner member (self+0x0A) and the glyph's member-style record, and if the glyph's line-width field fits it shrinks the remaining width f_16 and re-applies the two text colours; otherwise it runs the generic text-layout step 0x45/0x47.",
+  "confidence": 0.42,
+  "evidence": "NEW: the two colour callees are now confidently Ui_ApplyTextColorAlt/Ui_ApplyTextColor and Game_GetWork gives the work pointer, which confirms the same row-colour family as maybe_Menu_ApplyRowColorState (0x002D04EC). The body is damaged - Ghidra truncates at halt_baddata right after the colour calls - so the 'else' tail and the exact width fields f_2EC/f_EE cannot be verified; name and confidence stay as they were (42%).",
+  "previous_name": "maybe_Ui_Text_FitLineWidth",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003F0D54",
+  "name": "maybe_Ui_JumonWindow_SelectEntry",
+  "signature": "void maybe_Ui_JumonWindow_SelectEntry(UiJumonWindow* self, int memberId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "memberId"
+  },
+  "summary": "Selection step of the spell (jumon) window: reads the member's entry count at +0x14 and the object's own count through vtable +8, and when the count fits it clamps the text width f_16, applies the normal/alternate row colours and sets the party mask; when the count is empty it runs transition 0x27/0x25, otherwise 0x27/0x28.",
+  "confidence": 0.45,
+  "evidence": "NEW: the helper is now confidently Ui_JumonWindow_SetPartyMask, which pins the window class to the jumon (spell) window; Game_GetWork + func_0035EB98 give the member record and the colour calls are the named Ui_ApplyTextColor/Alt. Still maybe_ because the count at member+0x14 and the three transition ids are only described by shape - 'SelectEntry' is our label for the slot.",
+  "previous_name": "maybe_Ui_JumonWindow_SelectEntry",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002DA850",
+  "name": "maybe_Battle_UpdatePartyDisplay",
+  "signature": "unsigned int maybe_Battle_UpdatePartyDisplay(int* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Battle state-machine step for the party display: waits on the sequence counter at self+0x17FC (states 0x558/0x56F/0x57B), and once the party models are ready it centres the group (FieldParty_CalcGroupCenterPosition), replays the member animation 0x2E, resolves the unit models, plays popup 0x48, and finishes with state -2 when the current actor is idle.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callees are now confidently FieldParty_CalcGroupCenterPosition, maybe_BattleUnitDisplay_ResolveModel, Ui_PopupEntry_PlayById and Actor_IsIdleAndQueueEmpty, and the state counter arithmetic (+0x17FC, 0x558/0x56F/0x57B, -2) matches the battle-sequence state-machine style. Kept maybe_ because 'UpdatePartyDisplay' only describes the middle of the step - this is a sequence state, and the sibling 0x002D9B08 shares the same counters.",
+  "previous_name": "maybe_Battle_UpdatePartyDisplay",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00377440",
+  "name": "maybe_Ui_Label_SetFromCharPairB",
+  "signature": "void maybe_Ui_Label_SetFromCharPairB(FieldObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Rebuilds a two-item status label of a member: reads the member's equipped items in slots 0 and 1 (func_006292F0), classifies the pair with Text_GetCharPairStyle and, for style 9 (one item) or 10 (two items), looks up both item records and writes their name fields into the label widget at self+0x700. Same body as 0x00377420 minus the leading 0x40A680 apply step.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callers are the confidently named Battle_ActionAnimTable_Build and 0x0066DAD0, and the item path is explicit: func_006292F0(member,0/1) -> Item_LookupRecord -> func_004EDA68(&self->f_700, ...). This is NOT an item-text misread: it genuinely builds a label from the equipped item records, hence the waiver on the Char/item name flag. Still maybe_ because style ids 9/10 and the label widget at +0x700 are inferred, and the 'B' copy only differs by the missing apply call.",
+  "previous_name": "maybe_Ui_Label_SetFromCharPairB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002DB96C",
+  "name": "Ui_ListSubObject_CreateA",
+  "signature": "void* Ui_ListSubObject_CreateA(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant A: runs the shared Ui_ListSubObject_BaseCtor and installs vtable 0x00760E34, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: the base constructor is now a confident name (Ui_ListSubObject_BaseCtor), and the only caller is the confidently named Battle_ActionAnimTable_Build (0x003744C8), which builds one of each A/B/C/D variant - so the function is exactly 'base ctor + this vtable'. The A/B/C/D letters are arbitrary but the constructor role and class are evidenced by the named base ctor.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateA",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002DBBDC",
+  "name": "Ui_ListSubObject_CreateB",
+  "signature": "void* Ui_ListSubObject_CreateB(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant B: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00760E68, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: base ctor is the confident Ui_ListSubObject_BaseCtor, the only caller is Battle_ActionAnimTable_Build, and the sibling A/C/D are identical except for the vtable constant. Confirmed at 0.5; the B letter is still only a disambiguator.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateB",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002DBD68",
+  "name": "Ui_ListSubObject_CreateC",
+  "signature": "void* Ui_ListSubObject_CreateC(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant C: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00760E9C, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: same evidence as the A/B/D copies - confident base ctor, single caller Battle_ActionAnimTable_Build, only the vtable differs. Confirmed at 0.5; C is a disambiguator only.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateC",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002DBDB8",
+  "name": "Ui_ListSubObject_CreateD",
+  "signature": "void* Ui_ListSubObject_CreateD(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant D: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00760ED0, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: same evidence - confident Ui_ListSubObject_BaseCtor plus the single caller Battle_ActionAnimTable_Build; differs from A/B/C only in the vtable. Confirmed at 0.5.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateD",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002DBE0C",
+  "name": "Ui_ListSubObject_CreateE",
+  "signature": "void* Ui_ListSubObject_CreateE(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant E: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00760F04, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: same body as the A-D variants, and the base constructor is the confident Ui_ListSubObject_BaseCtor; the only caller is Battle_ActionAnimTable_Build (0x003744C8). Confirmed at 0.5 - only the E letter is arbitrary.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateE",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00323B50",
+  "name": "Ui_ListSubObject_CreateF",
+  "signature": "void* Ui_ListSubObject_CreateF(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant F: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00763B04, returning the object. The vtable sits next to the popup-3D deleting destructors (0x00323B70/0x00323BAC/0x00323C1C), which uses the same base ctor.",
+  "confidence": 0.5,
+  "evidence": "NEW: confident Ui_ListSubObject_BaseCtor plus the same 'ctor + vtable' body as A-E; the vtable neighbours 0x00763B04.. are the popup-3D classes, so the family is the shared list-row base. Confirmed at 0.5.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateF",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00323B8C",
+  "name": "Ui_ListSubObject_CreateG",
+  "signature": "void* Ui_ListSubObject_CreateG(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant G: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00763B38, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: same body and same confident base ctor; G differs only by its vtable (0x00763B38), which sits in the popup-3D class block. Confirmed at 0.5.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateG",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00323BFC",
+  "name": "Ui_ListSubObject_CreateH",
+  "signature": "void* Ui_ListSubObject_CreateH(void)",
+  "params": {},
+  "summary": "Constructs list/row sub-object variant H: runs Ui_ListSubObject_BaseCtor and installs vtable 0x00763B6C, returning the object.",
+  "confidence": 0.5,
+  "evidence": "NEW: same body, confident Ui_ListSubObject_BaseCtor, only the vtable (0x00763B6C) differs; caller set includes Battle_ActionAnimTable_Build. Confirmed at 0.5.",
+  "previous_name": "maybe_Ui_ListSubObject_CreateH",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0046978C",
+  "name": "Battle_ActionAnim_TumbleEndElementCtor",
+  "signature": "BattleAnimElement* Battle_ActionAnim_TumbleEndElementCtor(BattleAnimElement* storage, void* window, void* controller, const void* actionKey, u32 flags)",
+  "params": {
+   "param_1": "storage",
+   "param_2": "window",
+   "param_3": "controller",
+   "param_4": "actionKey",
+   "param_5": "flags"
+  },
+  "summary": "Constructor of a battle action-animation element registered at slot 0x9F: runs Ui_ListSubObject_BaseCtor and installs the tumble-end popup animation vtable g_battleActionAnimTumbleEndVtable. Its action key is a data blob (0x00376F1C), not a name string, so the exact action variant cannot be read from the binary.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: the old 'Slot9F' label described the registration slot but hid what the element is. NEW: the vtable constant is now symbolised as g_battleActionAnimTumbleEndVtable, the same family as the confidently named Battle_ActionAnim_BatTumbleEndElementCtor (0x00469808), which installs g_battleActionAnimTumbleEndVtableB and binds the 'bat_tumble_end' string. So this is the other tumble-end element variant; the slot 0x9F and the blob key stay in the summary. Confidence 0.5 because the vtable name itself comes from the sibling's evidence.",
+  "previous_name": "maybe_Battle_ActionAnim_ElementCtorSlot9F",
+  "previous_confidence": 0.5,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E2448",
+  "name": "Battle_Popup_EnsureMissSingleB",
+  "signature": "void Battle_Popup_EnsureMissSingleB(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the single MISS popup and resets its shake: if f_130 is set and f_114 is empty it allocates the 0x9C popup (vtable g_battleMissPopupVtable), builds the 0x3C animation handle, binds it through func_002E1794 with layout 'pop_miss_single' (0x002E2700), then sets f_98 = 1.0 and runs Ui_AnimShake_Update.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: the old 'EnsureSingleA' could have been any single popup. NEW: the confident twin Battle_Popup_EnsureMissSingle (0x002E2650) creates the *same* object at f_114, with the same vtable g_battleMissPopupVtable, the same 0x3C anim handle and the same 0x002E2700 ('pop_miss_single') layout argument - this copy differs only by inlined guards plus the final shake reset (f_98 = 1.0, Ui_AnimShake_Update, f_136 = 0). Hence 'MissSingleB'. Confidence 0.5: the extra shake reset is understood, the B suffix marks the copy.",
+  "previous_name": "maybe_Battle_Popup_EnsureSingleA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E253C",
+  "name": "Battle_Popup_EnsureHeal",
+  "signature": "void Battle_Popup_EnsureHeal(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the single heal-number popup stored at f_CC: allocates 0x530 bytes, constructs the popup base with vtable g_battleHealPopupVtable (the heal class that owns 6 number objects of 0xA8 plus 3 labels of 0x50) and builds the 0x50 x 3 label array.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: 'EnsureLargeA' only said 'big popup'. NEW: the vtable is now symbolised as g_battleHealPopupVtable, which the confident Battle_Popup_Heal_Dtor (0x00403CC4) also installs while destroying exactly 0xA8 x 6 + 0x50 x 3 arrays, and the field is f_CC. The per-slot variant with the same class is separately named Battle_Popup_EnsureLargePerSlot (0x002E2F40), so this fixed-slot copy is the plain heal popup. 0.5 because the class name comes from the vtable symbol; note the Ghidra output loses the store into f_CC (`self->f_cc = 0` after the allocation).",
+  "previous_name": "maybe_Battle_Popup_EnsureLargeA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E2714",
+  "name": "maybe_Battle_Popup_EnsureHealB",
+  "signature": "void maybe_Battle_Popup_EnsureHealB(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the big heal popup stored at f_9C: allocates 0xBB8 bytes (15 number objects of 0xA8 + 5 labels of 0x50 + header) and constructs the popup base with vtable g_battleHealPopupVtableB, whose destructor 0x0046ADA4 frees exactly 0xA8 x 0xF and 0x50 x 5; this function builds the 0x50 x 5 label array.",
+  "confidence": 0.45,
+  "evidence": "CORRECTED: 'EnsureSingleB' is wrong - the object is the 15-number heal form, not a single one. NEW: 0xBB8 = 15*0xA8 + 5*0x50 + header matches g_battleHealPopupVtableB, whose dtor (0x0046ADA4, and Battle_Popup_InitMpHealPopup 0x0046ADF8 next to it) destroys 0xA8 x 0xF and 0x50 x 5. Kept maybe_ 0.45 because I cannot tell whether this B class is the HP or the MP heal variant, so the name stays neutral ('HealB').",
+  "previous_name": "maybe_Battle_Popup_EnsureSingleB",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E2864",
+  "name": "Battle_Popup_EnsureCrit",
+  "signature": "void Battle_Popup_EnsureCrit(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the fixed critical-hit popup stored at f_FC (case 0xC of the popup update): allocates 0x530 bytes, constructs the popup base with vtable g_battleCritPopupVtable and builds its 0x50 x 3 label array.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: 'EnsureLargeB' only said 'big popup'. NEW: the vtable is now symbolised as g_battleCritPopupVtable (the critical-hit popup class, same 0x530 layout as the heal popup) and the body's field f_FC matches the case-0xC slot of Battle_Popup_EnsureAndPlayByType (0x002E18F0). The 0x530 allocation + 0x50 x 3 array are certain; only the 'Crit' gloss rests on the vtable symbol, hence 0.5 not higher.",
+  "previous_name": "maybe_Battle_Popup_EnsureLargeB",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E2A18",
+  "name": "Battle_Popup_EnsureDamage",
+  "signature": "void Battle_Popup_EnsureDamage(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the damage-number popup stored at f_B4 (case 3 of the popup update): allocates the larger 0xBB8-byte form, constructs the base with vtable g_battleDamagePopupVtable and builds its five 0x50-byte label objects.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: 'EnsureLargeC' was purely positional. NEW: the vtable is symbolised as g_battleDamagePopupVtable and the object size 0xBB8 with 0x50 x 5 labels matches the 15-number damage popup layout; f_B4 is the case-3 slot in Battle_Popup_EnsureAndPlayByType. Size, vtable and slot agree, so 0.5.",
+  "previous_name": "maybe_Battle_Popup_EnsureLargeC",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E2E20",
+  "name": "Battle_Popup_EnsureMpDamage",
+  "signature": "void Battle_Popup_EnsureMpDamage(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the MP-damage popup stored at f_E4 (case 9 of the popup update): allocates 0x530 bytes, constructs the base with vtable g_battleMpDamagePopupVtable and builds its 0x50 x 3 label array.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: 'EnsureLargeD' was positional. NEW: the vtable is symbolised as g_battleMpDamagePopupVtable, f_E4 is the case-9 slot of the popup update, and the 0x530/0x50 x 3 shape matches the other small large-popup classes. 0.5 because the 'Mp' part comes from the vtable symbol.",
+  "previous_name": "maybe_Battle_Popup_EnsureLargeD",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E5C38",
+  "name": "maybe_Gfx_Scene_GetSpriteParam",
+  "signature": "u32 maybe_Gfx_Scene_GetSpriteParam(GfxSceneSprite* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns the sprite parameter word at object+0x68 for the sprite handle stored at self+0x5C, or 0 when the handle is empty or the lookup misses.",
+  "confidence": 0.45,
+  "evidence": "NEW: the neighbour set is the sprite family (Gfx_SpriteObject_InitFromDesc / Gfx_SpriteObject_UpdateFrame) and the caller-visible field f_5C is the same sprite handle that 0x002E6828 releases, so 'get a parameter of the sprite referenced by this object' holds. Kept maybe_ 0.45 because the lookup callee is currently named Gfx_SpritePool_Alloc, which is wrong for a getter (it is called with no arguments and returns an object), and +0x68's meaning is unknown.",
+  "previous_name": "maybe_Gfx_Scene_GetSpriteParam",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002E6828",
+  "name": "maybe_Gfx_SpriteObject_ReleaseChildOnPause",
+  "signature": "void maybe_Gfx_SpriteObject_ReleaseChildOnPause(GfxSpriteObject* self, int pause)",
+  "params": {
+   "param_1": "self",
+   "param_2": "pause"
+  },
+  "summary": "When the object owns a child handle at f_5C, the caller passes a non-zero pause flag and func_005F1BFC reports that child active, releases the handle through maybe_Svc_HandlePool_Release; otherwise does nothing.",
+  "confidence": 0.3,
+  "evidence": "CORRECTED: 'Sound_Channel_PauseIfPlaying' claimed a sound channel and a pause action, but the body only calls maybe_Svc_HandlePool_Release on f_5C - the same f_5C sprite handle read by 0x002E5C38 - and the only caller is the confidently named Gfx_SpriteObject_UpdateFrame (0x004C625C). NEW: the handle/lookup pair (func_005F1BFC + pool release) is a child-handle lifetime check, not audio. Kept maybe_ at 0.30 because func_005F1BFC's predicate and the meaning of f_5C (sprite vs generic child) are still unproven.",
+  "previous_name": "maybe_Sound_Channel_PauseIfPlaying",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005F500C",
+  "name": "maybe_Field_SceneObject_SetSubObjectValueAndNotify",
+  "signature": "void maybe_Field_SceneObject_SetSubObjectValueAndNotify(FieldSceneObject* self, int key, int value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "key",
+   "param_3": "value"
+  },
+  "summary": "Replaces the value of one key in the sub-object table at f_BC (linear search over the key array at sub+0x5C) and then forwards (key, value) to the derived class through vtable +0x78 so it can react; same table edit as 0x005F4FB0, which does not notify.",
+  "confidence": 0.4,
+  "evidence": "NEW: the sole caller is the confidently named Gfx_SpriteObject_UpdateFrame (0x004C625C), which pushes per-frame key/value pairs this way - so 'set a value and notify' is supported by the call site. The body is partly damaged: func_004C3944 returns the begin/end pair in a 64-bit register pair that Ghidra models as u64 (`(u64)uVar4 >> 0x20`), and the tail is an indirect jump. Hence maybe_ 0.4.",
+  "previous_name": "maybe_Field_SceneObject_SetSubObjectValueAndNotify",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002F5D64",
+  "name": "maybe_Ui_JockeyPanel_ResetFade",
+  "signature": "void maybe_Ui_JockeyPanel_ResetFade(UIWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the panel's five state bytes f_141..f_145, notifies the bound UI parts (Ui_Part_NotifySlots(&f_10, 1)), then restarts the panel's sound: sets the voice gain from f_148, stops the old handle f_14C, rebuilds the player state and prepares stream/sound id 5 into f_150.",
+  "confidence": 0.42,
+  "evidence": "NEW: the sound half is now fully named (Sound_GetPlayer, Sound_SetVoiceGainByHandle, maybe_Sound_StopBgmHandle, Snd_PrepareBgmStream) and Ui_Part_NotifySlots proves the UI-panel side, so the 'reset panel state and restart its sound' reading holds. Kept maybe_ 0.42 because 'Fade' is still a guess for the five bytes f_141..f_145 and 'JockeyPanel' is not confirmed by a caller.",
+  "previous_name": "maybe_Ui_JockeyPanel_ResetFade",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002F66E8",
+  "name": "maybe_Ui_JockeyPanel_Destruct",
+  "signature": "void maybe_Ui_JockeyPanel_Destruct(UIWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Teardown of the panel: when f_143 is clear it rebinds the UI parts (Ui_Part_BindSlotsToLayout(&f_10)), when the sound handle f_150 is live it stops sound id 5 and clears the handle, and when the state object f_13C exists it runs its vtable slots +8 and +0xC to release it.",
+  "confidence": 0.42,
+  "evidence": "NEW: the callees are now named (Ui_Part_BindSlotsToLayout, Sound_GetPlayer, Snd_RequestBgmPlay, maybe_Sound_StopBgmHandle) and the release pattern f_13C->vtable[8]/[0xC] matches the neighbouring panel teardown 0x002F5D64. Kept maybe_ 0.42: this is a release helper rather than a C++ destructor (no vtable overwrite), and Snd_RequestBgmPlay being used to *stop* sound id 5 suggests that callee name is wrong, so the exact audio action is uncertain.",
+  "previous_name": "maybe_Ui_JockeyPanel_Destruct",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0036797C",
+  "name": "Ui_Part_UpdateCursorRepeat",
+  "signature": "void Ui_Part_UpdateCursorRepeat(UiPart* part, u32 input)",
+  "params": {
+   "param_1": "part",
+   "param_2": "input"
+  },
+  "summary": "Shared cursor auto-repeat for UI parts: queries the pressed/repeat flags for `input`, and on a repeat with the edge flag f_275 not yet consumed it advances the part index f_9C (wrapping at the core's row count - 1), resets the sub-cursor fields f_A6..f_A8, calls the change slots +0xC8/+0xC4 and records the edge.",
+  "confidence": 0.5,
+  "evidence": "NEW: the sole caller is the confidently named Ui_Part_BindSlotsToLayout (0x0021DB80), which loops over the layout's parts and feeds each one its input state - so this is the shared per-part cursor step. The repeat logic is explicit (f_275 edge byte, f_9D one-shot flag, wrap at core+0x130's count-1, vtable +0xC4 change / +0xC8 end). 0.5 because func_00367158's flag meanings and the +0xC4/+0xC8 slot names are still inferred.",
+  "previous_name": "maybe_Ui_Part_UpdateCursorRepeat",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002F6B9C",
+  "name": "Ui_BigWindow_Ctor",
+  "signature": "UiBigWindow* Ui_BigWindow_Ctor(UiBigWindow* self, u32 variant, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "variant",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Constructor of a wrapper around the 0x1FBC-byte big window: installs vtable 0x00761EB8, clamps `variant` to 0/1, allocates and constructs the big window through Ui_BigWindow_CtorBase, registers it with the UI core, applies the two extra arguments with maybe_Ui_JewelShopWindow_SetFlag and marks it enabled (+0x94 = 1).",
+  "confidence": 0.5,
+  "evidence": "NEW: the embedded constructor is now a confident name (Ui_BigWindow_CtorBase) and the call site is the same maybe_Menu_TalkParty_CreatePanel (0x002175BC) that builds the other talk-panel sub-windows, so the 'big window sub-object ctor' role is solid. The per-kind flag call is maybe_Ui_JewelShopWindow_SetFlag. 0.5 because 'variant' only selects between two ctor modes and the wrapper's own class (vtable 0x00761EB8) has no other named member.",
+  "previous_name": "maybe_Ui_BigWindow_Ctor",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002FCAF0",
+  "name": "Ui_ListWindow_CtorB",
+  "signature": "UiListWindow* Ui_ListWindow_CtorB(UiListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructor of the shared scrolling list window base: runs Ui_Object_CtorBase, installs vtable 0x007626EC, clears the five cursor/scroll words at +0x4C..+0x5C and constructs eight 0x5C-byte row objects at +0x60.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callers are the confidently named Ui_SkillPanel_Ctor (0x0036F878) and Ui_SkillPanelWindow_Ctor (0x003ACE88), both of which embed this list, and the vtable's slots are the named maybe_Ui_List_Reset / maybe_Ui_List_Destruct / Ui_ItemMenuWindow_InitPanes. That makes it the common list-window base ctor. 0.5 because the five zeroed words are only cursor/scroll by inference and the B copy is one of several list ctors.",
+  "previous_name": "maybe_Ui_ListWindow_CtorB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002FCC44",
+  "name": "maybe_Menu_ItemBox_Ctor",
+  "signature": "void* maybe_Menu_ItemBox_Ctor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small constructor: runs Ui_Object_CtorBase on self, installs vtable 0x00762760 and clears the one object pointer at +0x4C. The vtable sits right next to the list-window vtable 0x007626EC, so this is a list/item-box subclass.",
+  "confidence": 0.3,
+  "evidence": "CORRECTED: 'ItemBox_Reset' was wrong - the function installs a vtable and returns a constructed object, exactly the same body shape as Ui_ListWindow_CtorB (0x002FCAF0): `Ui_Object_CtorBase(); *obj = vtable; obj[0x13] = 0;`. NEW: the vtable 0x00762760 is adjacent to the named list-window vtable 0x007626EC, which is why 'Menu_ItemBox' stays in the name, but no call site or class symbol confirms the class, so it stays maybe_ at 0.3.",
+  "previous_name": "maybe_Menu_ItemBox_Reset",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00306958",
+  "name": "Ui_RecipeMessage_Ctor",
+  "signature": "UiRecipeMessage* Ui_RecipeMessage_Ctor(UiRecipeMessage* self, u32 recipeId, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "recipeId",
+   "param_3": "mode"
+  },
+  "summary": "Constructor of the recipe message widget: installs vtable 0x00762D44, initialises the 0x10-byte command vector at +0xC..+0x1C, builds the embedded update node (vtable 0x00762028), registers it with priority 2 / id 0x1FF, sets the mode-dependent node flags, fills the recipe command list with Ui_Recipe_BuildGetMessage(recipeId, mode) and binds the widget's text through the UI core's text object.",
+  "confidence": 0.55,
+  "evidence": "NEW: the command-list builder is the confidently named Ui_Recipe_BuildGetMessage and the registration callee is Ui_NodeList_Register; the vtable 0x00762D44 and the embedded node vtable 0x00762028 are written literally, and the caller is maybe_Menu_TalkParty_CreatePanel. That is a recipe-message widget ctor, not just 'a ctor'. 0.55 because 'Message' (as opposed to e.g. a recipe list row) comes from the surrounding recipe family and the mode flags 1/3 are not decoded.",
+  "previous_name": "maybe_Ui_RecipeMessage_Ctor",
+  "previous_confidence": 0.5,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0053E9A4",
+  "name": "maybe_Gfx_Sprite_ResetAnimator",
+  "signature": "void maybe_Gfx_Sprite_ResetAnimator(GfxSprite* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Stops the sprite's animation: resets the animator state object at self+0xB8 with func_00541D04 and clears bit 3 (the 'animation attached' flag) of the attached pane's byte at +0x7C.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callers are now all named sprite/UI animation code - Gfx_Sprite_SetFrameUV, Ui_Part_SetupFromAnimRecord, Ui_Part_UpdateAttached, maybe_Ui_Pane_SetCornerRotation, maybe_Ui_ArrangeEightChildPanes - which confirms the sprite-animation context, and the bit-3 clear on f_A4->f_7C is certain. Kept maybe_ 0.4 because func_00541D04 (the 'reset') is unnamed and bit 3 is only assumed to mean 'animation attached'.",
+  "previous_name": "maybe_Gfx_Sprite_ResetAnimator",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0030E034",
+  "name": "Ui_RouletteWindow_SetFrame",
+  "signature": "void Ui_RouletteWindow_SetFrame(RouletteWindow* self, u32 frameIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "frameIndex"
+  },
+  "summary": "Shows one frame of the roulette result animation: advances the reel/tween state at self+0x3058 with Ui_SlotMachine_UpdateReelPositions and selects the frame bit mask 1<<frameIndex on the pane group at self+0x5A4.",
+  "confidence": 0.5,
+  "evidence": "NEW: the first callee is confidently Ui_SlotMachine_UpdateReelPositions and the caller is the jackpot screen handler 0x002C6CBC, which passes its selected row index; the sibling 0x0030DCD4 uses the same func_004B4908 on the frame_red/green/blue panes. So 'set the roulette frame' is well supported. 0.5 because func_004B4908 is unnamed and the frame mask indexing is inferred.",
+  "previous_name": "maybe_Ui_RouletteWindow_SetFrame",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003ECB04",
+  "name": "maybe_Ui_SmithMenu_DetailStack_PopPush",
+  "signature": "void maybe_Ui_SmithMenu_DetailStack_PopPush(UiSmithMenu* self, int push)",
+  "params": {
+   "param_1": "self",
+   "param_2": "push"
+  },
+  "summary": "Maintains the smith menu's small pane/detail stack at self+0x11C (depth f_170, 0xC-byte entries): pop mode destroys the top entry, runs its stored callback and re-broadcasts to the revealed pane; push mode appends a new detail entry through Ui_SmithMenu_PushPaneDetail.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callers are the named Ui_SmithMenu_HandleCommand and maybe_Ui_ListWindow_DispatchInput, and the push helper is the confident Ui_SmithMenu_PushPaneDetail, so the smith-menu attribution and the stack role are supported. Kept maybe_ 0.4 because the entry layout (0xC stride, the callback at f_120/f_124) is entangled with Ghidra's damaged member-function-pointer arithmetic (`(int)self->f_124 >> 1`) and the pop path's broadcast target is inferred.",
+  "previous_name": "maybe_Ui_SmithMenu_DetailStack_PopPush",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003ECCF8",
+  "name": "maybe_Ui_SmithMenu_UpdateDetailList",
+  "signature": "void maybe_Ui_SmithMenu_UpdateDetailList(UiSmithMenu* self, u32 controller)",
+  "params": {
+   "param_1": "self",
+   "param_2": "controller"
+  },
+  "summary": "Refreshes the smith menu's detail list from the controller: for cell index 1 only it takes the controller's current entry (func_00644A9C) and the row count (func_003813B0+8), then pushes both into the detail list widget through maybe_Ui_SmithMenu_SetDetailPair(self+0x300, ...); other cell indices push a null entry.",
+  "confidence": 0.4,
+  "evidence": "NEW: the index query is the confidently named Ui_SmithMenu_GetCellIndex and the sink is maybe_Ui_SmithMenu_SetDetailPair, so the smith-menu detail refresh is real. Two callee names look wrong and are the reason confidence stays 0.4: Ui_Talk_LoadDialogueLayout (func_00644A9C) is called as an entry getter, not a layout load. The switch has only the case-1 entry, so 'UpdateDetailList' is a fair label.",
+  "previous_name": "maybe_Ui_SmithMenu_UpdateDetailList",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003ECD50",
+  "name": "maybe_Ui_SmithMenu_UpdateDetailListEx",
+  "signature": "void maybe_Ui_SmithMenu_UpdateDetailListEx(UiSmithMenu* self, u32 controller, u32 row)",
+  "params": {
+   "param_1": "self",
+   "param_2": "controller",
+   "param_3": "row"
+  },
+  "summary": "Like 0x003ECCF8 but for an explicit row: resolves the row's name string and writes it into the name widget at self+0x2B4, then pushes the row's entry and count into the detail widget through maybe_Ui_SmithMenu_SetDetailPair(self+0x300, ...).",
+  "confidence": 0.4,
+  "evidence": "NEW: the shared sink is the named maybe_Ui_SmithMenu_SetDetailPair and the row count comes from func_003813B0+8 exactly as in 0x003ECCF8, so the 'Ex' variant is the explicit-row form. Kept maybe_ because two callees carry misleading names (Ui_Message_SetItemNameArg is used here as a row-record getter returning a name blob, Ui_Talk_LoadDialogueLayout as a controller getter) and the +0x2B4 name widget is inferred.",
+  "previous_name": "maybe_Ui_SmithMenu_UpdateDetailListEx",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041B0D0",
+  "name": "maybe_Ui_PageStack_Push",
+  "signature": "void maybe_Ui_PageStack_Push(UiPageStackOwner* self, u32 arg2, u32 page)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "page"
+  },
+  "summary": "Pushes a page onto the owner's two-deep page stack at self+0x1C68: resolves the page object (func_00644B1C), moves it into the current-page slot at +0x393C, broadcasts activation to the previous page and stores the new entry (page, callback); depth is capped at 2 (f_1C8C).",
+  "confidence": 0.45,
+  "evidence": "NEW: the callers are 0x00625308/0x006258B0, the code that also drives the now-named smith-menu handlers, and the entry/stack helpers are Ui_Object_BroadcastToChildren + func_00123594, matching the same 0xC-stride stack layout as maybe_Ui_SmithMenu_DetailStack_PopPush. Kept maybe_ 0.45 because the stored callback (f_1C6C/f_1C70) is a damaged C++ member-function pointer and 'page' is our label for the pushed object.",
+  "previous_name": "maybe_Ui_PageStack_Push",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003ECC1C",
+  "name": "maybe_Ui_SmithMenu_UpdateCategory",
+  "signature": "void maybe_Ui_SmithMenu_UpdateCategory(UiSmithMenu* self, u32 controller)",
+  "params": {
+   "param_1": "self",
+   "param_2": "controller"
+  },
+  "summary": "Maps the smith menu's current category index (0..4) to the selection values 10/2/4/6/8 (0xFF when out of range), applies the value to the category list and the name label at self+0x2B4, then sets the active flag of the widget at self+0x34C from the category record's +0x10 field.",
+  "confidence": 0.4,
+  "evidence": "NEW: the index query is the confidently named Ui_SmithMenu_GetCellIndex and the caller set is the smith-menu command family, so the category mapping is well supported. Kept maybe_ 0.4: the 10/2/4/6/8 values are probably item-category ids but that is not proven, and func_00644B5C / func_004E749C / func_0029126C are unnamed.",
+  "previous_name": "maybe_Ui_SmithMenu_UpdateCategory",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041BEC8",
+  "name": "maybe_Ui_List_SelectByValue",
+  "signature": "void maybe_Ui_List_SelectByValue(UiList* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Selects the row that contains a given byte value: for a 2-row list it scans the 14-entry byte table at record+0x40, converts the hit index to a row/offset with a divide-by-5, selects the entry through Ui_List_SelectEntryById and clamps the visible window to 5 rows.",
+  "confidence": 0.4,
+  "evidence": "NEW: the entry selection callee is the confidently named Ui_List_SelectEntryById and the caller is the smith-menu controller 0x00625308, so 'select the row containing this value' is supported. Kept maybe_ 0.4 because the body is damaged around the two 64-bit-return helper calls (`(u64)uVar9 >> 0x20`, `pbVar5 + (-0x40 - iVar1)`), and the 14-entry table's value meaning (item category?) is unknown.",
+  "previous_name": "maybe_Ui_List_SelectByValue",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00311C3C",
+  "name": "maybe_Ui_Object_ReleaseHandles",
+  "signature": "void maybe_Ui_Object_ReleaseHandles(ResObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears four state words (+0x4, +0x8, +0x28, +0x94) and releases the two tagged handles at +0x8C and +0x90 through the 0x007B4D68 handle table, each resolved object being destroyed with maybe_Ui_DestroyChildList.",
+  "confidence": 0.35,
+  "evidence": "CORRECTED twice: 'Res_ReleaseTwoHandles' implied engine resources (the release callee is the UI child-list destroyer 0x...), and the first rename collided with the confident Ui_ReleaseTwoHandles (0x003A6E70) - a different helper. NEW: the two releases use the 10-bit tag form of the shared handle table (0x3FFFFF mask, 0x007B4D68 base) and the callers (0x00625308 smith-menu controller, 0x0062564C) dispose UI objects. Kept maybe_ 0.35 because the +0x94 'active' byte and the exact object type are inferred.",
+  "previous_name": "maybe_Res_ReleaseTwoHandles",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003192C8",
+  "name": "maybe_Ui_Window_ResetSubObjectLists",
+  "signature": "void maybe_Ui_Window_ResetSubObjectLists(UiWindow* self, u32 subObjectId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "subObjectId"
+  },
+  "summary": "Re-initialises the window's two intrusive child lists at +0x134 and +0x198 after a sub-object id change: unlinks the current entries, resets both heads to their own sentinels, and then loads either the alternate sub-object (when the data-manager record has a name) or the default one through the tutorial-pane loader.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is the confidently named Ui_SakusenWindow_Confirm (0x002A30C8) and the data lookup is Game_GetDataManager + func_0063E3C8, so the 'reset the lists for a new sub-object id' role holds. Kept maybe_ 0.45: the loader callee is currently named Ui_TutorialPane_ShowEntry, which looks wrong for a generic sub-object load, and the record's +0xC name offset is only read by shape.",
+  "previous_name": "maybe_Ui_Window_ResetSubObjectLists",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0032A288",
+  "name": "maybe_Ui_HidePane",
+  "signature": "void maybe_Ui_HidePane(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Toggles the widget's pane at self+0x4C through the shared show/hide helper with flag 1, then stores the incoming register value in the word at self+0x64.",
+  "confidence": 0.35,
+  "evidence": "NEW: the call callee is now named Ui_AnimRef_ResetPanes, which is a *reset*, not necessarily a hide - so the '1' may select the hidden state, but that is not proven. The second half is damaged (`*(u32 *)(self + 100) = in_s0;`), so the parameter and the +0x64 field are unknown. Callers are the credit-window routines. Kept maybe_ 0.35.",
+  "previous_name": "maybe_Ui_HidePane",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00329FA4",
+  "name": "maybe_Ui_SetGaugeValue",
+  "signature": "void maybe_Ui_SetGaugeValue(UiWidget* self, float value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Twin of 0x0032A288 on the second pane handle: resets the pane group at self+0x9C with flag 1 through Ui_AnimRef_ResetPanes and stores the incoming value in the word at self+0xB4 (used by the credit/result windows for their roll-up value).",
+  "confidence": 0.3,
+  "evidence": "NEW: the pane callee is now named Ui_AnimRef_ResetPanes, which is a reset/show-hide helper, not a gauge setter - so the 'gauge' part is only the interpretation of the stored word at +0xB4. The body is damaged: the value arrives in `in_s0` and Ghidra shows `self->f_b4 = in_s0` with no typed parameter. Callers are the credit/result windows 0x00286DB8/0x00288990. Kept maybe_ at 0.30 and the summary now names the exact fields.",
+  "previous_name": "maybe_Ui_SetGaugeValue",
+  "previous_confidence": 0.32,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0032DE54",
+  "name": "maybe_Field_Actor_SpawnStateEffect",
+  "signature": "void maybe_Field_Actor_SpawnStateEffect(FieldActor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Spawns a 0x240-byte effect/model object for a field actor: when the actor has a held item id (f_232 != -1) it looks the item record up, chooses between two effect variants by the item's id range (0xAA3..0xB3A / 0xA82..0xAA2) and calls maybe_Gfx_EffectObject_Replace with the actor position; when f_232 is -1 it instead builds the object from record 0x2DE and loads it through Ui_ItemModel_Load.",
+  "confidence": 0.45,
+  "evidence": "NEW: the item path is now explicit - Item_LookupRecord on actor->f_232 and a range test `(id - 0xAA3 < 0x98) || (id - 0xA82 < 0x21)` selecting the effect variant, with Ui_ItemModel_Load / maybe_Gfx_EffectObject_Replace as the sinks. That matches FACTS.md's item id space and shows this is per-actor model/effect spawning, not a generic state effect. Still maybe_ because the trigger (f_232 held item vs f_234 sprite path) and the two id ranges' meaning are inferred; the body is also full of CONCAT/uint3 decompiler artefacts.",
+  "previous_name": "maybe_Field_Actor_SpawnStateEffect",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003343D8",
+  "name": "maybe_Ui_EquipWindow_PushSelectPane",
+  "signature": "void maybe_Ui_EquipWindow_PushSelectPane(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Equipment-window selection handler: pops the old pane when the input flags require it, scrolls the candidate list, and when the selection flags (f_17C bit 0x102) are set it resolves the member's item in the highlighted slot (func_006292A4) and either pops back or pushes the candidate pane with message id 8 (normal) or 9 (alternate) through Ui_EquipWindow_PushPane.",
+  "confidence": 0.45,
+  "evidence": "NEW: the pane callees are now confidently named Ui_EquipWindow_PushPane / Ui_Window_PopPaneRawB / Ui_Window_PopPaneUntilIdB and the slot test is func_006292A4 (documented in FACTS.md as 'slot is equipped'), so the equipment-selection role is supported. Kept maybe_ 0.45 because func_00333760 (the apply/compare helper) and the message ids 8/9 are not decoded, and 'PushSelectPane' is our label for the slot.",
+  "previous_name": "maybe_Ui_EquipWindow_PushSelectPane",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00333EA8",
+  "name": "maybe_Ui_EquipWindow_ReleaseCallbacks",
+  "signature": "void maybe_Ui_EquipWindow_ReleaseCallbacks(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Finishes the equip window's current callback step: runs the +0x2C virtual of the embedded object at f_98, then for input flag 0x20 marks the next-state bytes f_1A/f_1B, for flag 4 either finishes the pending 0x00333BEC step or pops the pane, and otherwise resolves and invokes the callback stored in the current 0xC-byte stack entry.",
+  "confidence": 0.45,
+  "evidence": "NEW: the pane callee is the confidently named Ui_Window_PopPaneRawB and the callback stack is the same 0xC-stride array used by the named equip handlers (0x003343D8/0x00334A88), so the 'run/finish the deferred callback' role is real. Kept maybe_ 0.45 because the callback slots are damaged C++ member-function pointers (Ghidra's `(int)self->f_124 >> 1` arithmetic) and 'Release' may be too strong a word.",
+  "previous_name": "maybe_Ui_EquipWindow_ReleaseCallbacks",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00334A88",
+  "name": "maybe_Ui_EquipWindow_PopPaneAndRunCallbacks",
+  "signature": "void maybe_Ui_EquipWindow_PopPaneAndRunCallbacks(UiWindow* window)",
+  "params": {
+   "param_1": "window"
+  },
+  "summary": "Updates the equip window's embedded widget, pops the current pane when func_0062F680 reports completion, and then walks the global handler table (0x007A8F00..0x007A8F30) invoking each entry until one returns non-zero (or the member lookup fails).",
+  "confidence": 0.4,
+  "evidence": "NEW: the pane pop is the confidently named Ui_Window_PopPaneRawB and the widget update is Ui_Widget_Update, so the 'pop and continue' skeleton is confirmed. Kept maybe_ 0.4 because the loop is a C++ member-function-pointer table with Ghidra-damaged dispatch (`(u64)uVar7 >> 0x20` carries the return) and the entries' purpose is unknown.",
+  "previous_name": "maybe_Ui_EquipWindow_PopPaneAndRunCallbacks",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003350AC",
+  "name": "maybe_Ui_EquipWindow_OnDecideC",
+  "signature": "u32 maybe_Ui_EquipWindow_OnDecideC(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Unconditional 'decide' action of the equip window: resolves the member's candidate item, applies the selection through func_00333760, plays the equip sound (maybe_Equip_PlaySeForSlot) and pops the pane; always returns 1 (no predicate).",
+  "confidence": 0.4,
+  "evidence": "NEW: the sidebar calls are now named - maybe_Equip_PlaySeForSlot and Ui_Window_PopPaneRawB - and the sibling 0x003343D8 shows the same selection resolve/apply pair, so this is the confirm variant of the equip handler. Kept maybe_ 0.4 because func_00333760 (the actual apply) is unnamed and 'C' is only a disambiguator.",
+  "previous_name": "maybe_Ui_EquipWindow_OnDecideC",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00335A18",
+  "name": "maybe_Actor_ReleaseAttachedObjects",
+  "signature": "void maybe_Actor_ReleaseAttachedObjects(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One-shot teardown of an actor's attached-object list: if the flag byte at +0x1F4 is set, clears it first, then calls the virtual destructor (object->vtable[0xF][3]) of every entry in the array at +0x204 (count f_224). Runs at most once.",
+  "confidence": 0.45,
+  "evidence": "CORRECTED: 'ReleaseEffectNodes' claimed the entries are effect nodes, but the only evidence is the +0x204 array / f_224 count and a virtual-destructor call; the 11 callers are all actor/model teardown paths, so 'attached objects' is the honest description. NEW: the one-shot flag +0x1F4 is cleared before the loop (certain), and the two-level vtable call (+0x3C then +0xC) is a destructor slot. Kept maybe_ 0.45 because the element class is unidentified.",
+  "previous_name": "maybe_Gfx_ReleaseEffectNodes",
+  "previous_confidence": 0.5,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00342E34",
+  "name": "maybe_Ui_StatusWindow_AssignModelSlots",
+  "signature": "void maybe_Ui_StatusWindow_AssignModelSlots(UiStatusWindow* window)",
+  "params": {
+   "param_1": "window"
+  },
+  "summary": "Assigns the current member's model set to a free slot: finds the 0x418-byte slot (max 20) by character model id in the keyed table at +0x53E4, inserts/replaces the key with std::rb_tree, then walks the window's actor list (f_1E0/f_1DC) and fills each of the 64 0x10-byte sub-entries with the actor's model id and record.",
+  "confidence": 0.45,
+  "evidence": "NEW: the tree operations are the confidently named std_RbTree_EraseNode / std__Rb_tree_insert_and_rebalance, and the free-slot scan (`for i<0x14: if window+i*0x418+0x614 == 0`) plus the 64-entry fill loop make the 'assign the model slots for this character' reading solid. Kept maybe_ 0.45 because the key (u16 at slot+0x12, taken from the character record's f_14) and the actor vtable +0x10 result are only described by shape, and the caller 0x0033D3E4 is not named.",
+  "previous_name": "maybe_Ui_StatusWindow_AssignModelSlots",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0035A1D0",
+  "name": "maybe_Field_SceneObject_SpawnByTypeC",
+  "signature": "void maybe_Field_SceneObject_SpawnByTypeC(void* self, void* params, void* arg3, void* arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Large field scene-object spawner for one object family: it runs five parallel loops over count arrays inside the placement block (offsets +0x13A8, +0x143D, +0x11DC, +0x1506, +0x151E) and for each entry allocates and constructs the matching sub-object (0x2E8 effect node, 0x464 node, 0x2F4 multi-part sprite, 0x2D0 sprite actors), adds it to the scene list at self+0x1DC and inserts it into the object's rb-tree keyed by position.",
+  "confidence": 0.3,
+  "evidence": "NEW: the confident callees now identify the sub-object kinds - maybe_Gfx_EffectNode_Ctor, Field_MultiPart_InitSpriteList, maybe_Gfx_SpriteActor_InitFromDescMesh2 / InitFromDesc / InitFromDescLarge / InitFromDescSmall - so this really is the 'spawn the attachment set for this scene object' routine of the field spawner family. The body is heavily damaged (Ghidra halt_baddata, coprocessor_storelong, int***** types, lost argument registers), so per FACTS.md it stays maybe_ at 0.30 and the exact placement-record layout is not claimed.",
+  "previous_name": "maybe_Field_SceneObject_SpawnByTypeC",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003634D8",
+  "name": "Field_Actor_ApplyVisibilityState",
+  "signature": "void Field_Actor_ApplyVisibilityState(FieldActor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Applies the actor's visibility state to its second set of part handles: sets f_2C9 from the UI overlay mode byte (context+0x281 == 7), and when both f_2C8 and f_2CA are clear it shows the f_278/f_2D4/0x320 parts and enables the scene entry at +0x368 or at +0x5C4 depending on f_2C9; otherwise it disables both scene entries.",
+  "confidence": 0.5,
+  "evidence": "NEW: the mirror sibling 0x0036348C is readably the same switch on the first handle set, and the callees are the confidently named Field_Object_EnableSceneEntry / Field_Object_DisableSceneEntry; the overlay-manager byte at context+0x281 is the documented UI mode byte (FACTS.md: work+0x48 overlay manager, mode byte +0x281). The only damage is the dropped 4th register argument (`uStack_18 = arg4`), which does not affect the verdict.",
+  "previous_name": "maybe_Field_Actor_ApplyVisibilityState",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00371F6C",
+  "name": "maybe_Field_Actor_TriggerNearbySameType",
+  "signature": "u32 maybe_Field_Actor_TriggerNearbySameType(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Triggers the 'situation' reaction of every other actor of the same sub-type (byte +0x2E5) within the radius g_007A3EB4 of this actor's world position: ORs the results of maybe_Field_Actor_PlaySituationEffect and, if anything reacted, plays SE 0xEE on this actor and plays its own situation effect.",
+  "confidence": 0.45,
+  "evidence": "CORRECTED: 'FindNearbySameType' described only the scan. NEW: the named callee maybe_Field_Actor_PlaySituationEffect is called for each match *and* accumulated with OR, and the match path ends with Sound_PlaySeById(0xEE) - so the function performs a group reaction, it does not return a found actor. The type byte +0x2E5, the radius table 0x007A3EB4 and the unit-list walk (battle-type lists at +0x4254) are visible. Kept maybe_ because the situation-effect meaning and the radius value are not decoded.",
+  "previous_name": "maybe_Field_Actor_FindNearbySameType",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004ED394",
+  "name": "Ui_Status_RefreshAilmentPlate",
+  "signature": "void Ui_Status_RefreshAilmentPlate(UiStatusPlate* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the status plate's ailment display for the actor at f_28->f_273: finds the actor's plate in the two unit lists (battle work +0x4254 then +0x4270), reads its current state id with func_00639FA8 and applies the matching pose/label through Ui_Status_PlayAilmentPose; then either commits or releases the two model attachment slots at actor+0x40/+0x48 depending on the plate's virtual +0x188.",
+  "confidence": 0.55,
+  "evidence": "NEW: the sink is the confidently named Ui_Status_PlayAilmentPose and the two attachment operations are Model_Equip_CommitNodeChanges and Model_AttachSlot_Release, both confident names; the two unit lists +0x4254/+0x4270 are the documented battle unit lists (FACTS.md). The state id from func_00639FA8 and the virtual +0x188 are the only unproven parts, and both are concrete offsets.",
+  "previous_name": "maybe_Ui_Status_RefreshAilmentPlate",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0037823C",
+  "name": "maybe_Ui_Window_InitSlotB",
+  "signature": "void maybe_Ui_Window_InitSlotB(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the window's third text/portrait slot once (guarded by f_26D): scans the type-3 text table (func_0063F4F4) for the entry whose byte matches the window's character f_273, allocates the 0x23C message widget (func_003ADAC0), inserts it into the UI list, stores its handle at self[0x1C6] and finally copies the window position into it and switches the display mode.",
+  "confidence": 0.35,
+  "evidence": "NEW: Game_GetDataManager + func_0063F4F4 identifies the table scan as a data-manager row lookup, and func_005F5818 (the node getter) is used for the position copy; the widget is inserted through func_001235A4 into the list at uiCore->f_10 + 0x164. Kept maybe_ 0.35 because the table index 3, the entry layout (byte + u16) and 'SlotB' are inferred, and the 0x23C widget class is unnamed.",
+  "previous_name": "maybe_Ui_Window_InitSlotB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005F7948",
+  "name": "Anim_PlayByNameIfPresent",
+  "signature": "u32 Anim_PlayByNameIfPresent(SceneObject* self, u32 nameId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "nameId"
+  },
+  "summary": "Safe animation trigger: if the object has an animatable child and a non-zero animation name id, it resolves the name table of that child and, only when func_0010540C finds the name, forwards to the object's 'play animation' virtual (+0x84); a missing name returns 1 so callers can ignore it.",
+  "confidence": 0.5,
+  "evidence": "NEW: the wrapper caller maybe_Anim_PlayByName (0x001833E8) and the confirmed sprite caller maybe_Gfx_SpriteActor_ApplyColourAnim (0x0031B6E8) show the call contract, and the body's three-step check (child present -> table entry -> name lookup) plus the +0x84 virtual is explicit. The 'returns 1 when absent' behaviour is certain from the code. Only func_0010540C's name-lookup role is inferred, so 0.5.",
+  "previous_name": "maybe_Anim_PlayByNameIfPresent",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00377AC4",
+  "name": "maybe_Model_Actor_ShowAttachment",
+  "signature": "void maybe_Model_Actor_ShowAttachment(ModelActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One-shot show of an attachment: when the flag at +0x26F is clear it calls the object's vtable +0x40 with display mode 4 and sets the flag. The mirror function 0x00377DE8 hides it with the same pattern.",
+  "confidence": 0.4,
+  "evidence": "NEW: the sibling 0x00377DE8 is the hide counterpart (same +0x26F flag, same vtable slot) and the same 'vtable +0x40(self,4)' call is used by the named list-window initialiser 0x00382048 to make a list visible - so mode 4 means 'show'. Kept maybe_ 0.4 because the +0x26F flag and the 'attachment' class are still only inferred from the mirror pair.",
+  "previous_name": "maybe_Model_Actor_ShowAttachment",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00378114",
+  "name": "maybe_Ui_Window_OpenSlot",
+  "signature": "void maybe_Ui_Window_OpenSlot(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One-shot 'show the slot' for the window state at self+0x9C: when the flag is clear it calls the window's vtable +0x40 with display mode 4 and sets the flag; counterpart of 0x003781E0, which closes it.",
+  "confidence": 0.35,
+  "evidence": "NEW: the same vtable +0x40(self,4) 'show' idiom is used by the named list-window initialiser 0x00382048 and by the mirror pair 0x00377AC4/0x00377DE8, and 0x003781E0 is the matching close function - so 'open/show the slot once' is consistent. Kept maybe_ 0.35 because f_9C is the same offset that 0x00282F04 treats as a pane group handle, so 'slot' vs 'pane' is unresolved.",
+  "previous_name": "maybe_Ui_Window_OpenSlot",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00378208",
+  "name": "maybe_Ui_Window_OpenSlotB",
+  "signature": "void maybe_Ui_Window_OpenSlotB(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One-shot 'show the slot' for the window state at self+0x26E: when the flag is clear it calls the window's vtable +0x40 with display mode 4 and sets the flag. Same body as 0x00378114 with a different state offset.",
+  "confidence": 0.35,
+  "evidence": "NEW: same-body-as-0x00378114, and the same vtable +0x40(self,4) 'show' idiom is used by the named list-window initialiser 0x00382048 and the actor attachment pair 0x00377AC4/0x00377DE8. Kept maybe_ 0.35 because only the state offsets (+0x26E vs +0x26F vs +0x9C) distinguish these one-shot helpers and their subject (slot vs pane vs attachment) is not proven.",
+  "previous_name": "maybe_Ui_Window_OpenSlotB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0037CBD8",
+  "name": "Ui_RecordDetailWindow_HandleInputA",
+  "signature": "void Ui_RecordDetailWindow_HandleInputA(UiRecordDetailWindow* self, u32 inputState, u32 dy, u32 dx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "inputState",
+   "param_3": "dy",
+   "param_4": "dx"
+  },
+  "summary": "Input handler for the record-detail page kind A: on confirm it applies the cursor position (virtual +0x3C) and refreshes the text, on cancel it pops the sub-pane, and on the left/right flags it cycles the visible column index f_2AC through 0..3, refreshes the paged icon select and rebuilds the text; the toggle flag flips the sub-page and pushes its sound.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callees are now named and they pin the role - Ui_Window_PopSubPane on cancel, Ui_PagedIconSelect_RefreshPanes + Ui_RecordDetailWindow_UpdateText on the column change, Ui_GetCore to clear the pending-input word, and maybe_Ui_WidgetStack_PushAt/func_003B3334 for the sub-page push. The input bits (1/4/8/0x40/0x80) are read from self[3]->f_14 exactly like the three sibling handlers. 0.5 because the page-kind letters and the f_2AC column meaning are our labels.",
+  "previous_name": "maybe_Ui_RecordDetailWindow_HandleInputA",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0037CD88",
+  "name": "Ui_RecordDetailWindow_HandleInputB",
+  "signature": "void Ui_RecordDetailWindow_HandleInputB(UiRecordDetailWindow* self, u32 inputState, u32 dy, u32 dx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "inputState",
+   "param_3": "dy",
+   "param_4": "dx"
+  },
+  "summary": "Input handler for the record-detail page kind B: scrolls the first text column (self+0x61) with the input delta, and on confirm reads the row from the column (func_00654D30); row 0x28 (end of list) plays sound 0x5B and calls the slot's end virtual, otherwise it sets the row virtual +0x3C and plays the row sound (row + 0xB4), then refreshes and pushes the page.",
+  "confidence": 0.5,
+  "evidence": "NEW: Ui_TextWidget_MoveCursorBy, Ui_Window_PopSubPane, Ui_RecordDetailWindow_UpdateText and maybe_Ui_WidgetStack_PushAt are all confidently named, and the row/sound arithmetic (0x28 end marker, sound 0x5B, row+0xB4) is explicit. The same 0x102 confirm mask is used by the three siblings. 0.5 because 'page kind B' is positional and the slot virtuals +0x28/+0x3C are unnamed.",
+  "previous_name": "maybe_Ui_RecordDetailWindow_HandleInputB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0037CF24",
+  "name": "Ui_RecordDetailWindow_HandleInputC",
+  "signature": "void Ui_RecordDetailWindow_HandleInputC(UiRecordDetailWindow* self, u32 inputState, u32 dy, u32 dx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "inputState",
+   "param_3": "dy",
+   "param_4": "dx"
+  },
+  "summary": "Input handler for the record-detail page kind C: scrolls the second text column (self+0x47) and on confirm handles row 0x28 with the slot's +0x24 virtual and sound 0x5A, otherwise sets row virtual +0x3C with sound row+0xB4; then refreshes the text and pushes the page.",
+  "confidence": 0.5,
+  "evidence": "NEW: same structure as the confirmed sibling 0x0037CD88 with the column offset +0x47 instead of +0x61 and the end-of-list sound 0x5A instead of 0x5B; all named callees (Ui_TextWidget_MoveCursorBy, Ui_RecordDetailWindow_UpdateText, maybe_Ui_WidgetStack_PushAt, Ui_Window_PopSubPane) match. 0.5 - the only unproven part is which record page this column belongs to.",
+  "previous_name": "maybe_Ui_RecordDetailWindow_HandleInputC",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0037D06C",
+  "name": "Ui_RecordDetailWindow_HandleInputD",
+  "signature": "void Ui_RecordDetailWindow_HandleInputD(UiRecordDetailWindow* self, u32 inputState, u32 dy, u32 dx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "inputState",
+   "param_3": "dy",
+   "param_4": "dx"
+  },
+  "summary": "Input handler for the record-detail page kind D: scrolls the third text column (self+0x7B) and on confirm handles row 0x28 by jumping the slot to entry 0xE with sound 0x70, otherwise sets row virtual +0x3C with sound row+0xB4; then refreshes the text and pushes the page.",
+  "confidence": 0.5,
+  "evidence": "NEW: same structure as the confirmed B/C handlers; the end-of-list branch here calls slot virtual +0x20 with the literal entry 0xE and sound 0x70, and Ui_TextWidget_MoveCursorBy applies the same input delta. 0.5 - the 'D' label is positional and the entry 0xE target is not decoded.",
+  "previous_name": "maybe_Ui_RecordDetailWindow_HandleInputD",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0037D1EC",
+  "name": "maybe_Ui_RecordDetailWindow_HandleTabInput",
+  "signature": "void maybe_Ui_RecordDetailWindow_HandleTabInput(UiRecordDetailWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Applies the currently selected record sub-page: on the confirm mask it reads the page kind from self[0x21]+0xC and, for kinds 0/1/2, selects the matching text column (+0x47/+0x61/+0x7B) and pushes the matching page, while kinds 3..6 call the slot virtuals +0x2C..+0x38 and play sounds 0x2C..0x2F; it always applies the cursor and pops the sub-pane on cancel.",
+  "confidence": 0.48,
+  "evidence": "NEW: the callees are now named (maybe_Ui_TextWidget_SetTextIndex, maybe_Ui_WidgetStack_PushAt, Ui_RecordDetailWindow_UpdateText, Ui_Window_PopSubPane) and the switch on the page kind is explicit, so this is the page/sub-page switch rather than a literal Tab key. Kept maybe_ 0.48 because 'TabInput' implies the tab key, which the body does not prove (the trigger is the 0x102 confirm mask), and the six page kinds are not mapped to record screens.",
+  "previous_name": "maybe_Ui_RecordDetailWindow_HandleTabInput",
+  "previous_confidence": 0.48,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0037C8E0",
+  "name": "maybe_Ui_RecordWindow_RefreshPage",
+  "signature": "void maybe_Ui_RecordWindow_RefreshPage(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Thumb helper that re-applies the current record page with the same five-call tail every record input handler uses: slot virtual +0x24, func_0045CE0C, Ui_RecordDetailWindow_UpdateText, slot virtual +0x28 and maybe_Ui_WidgetStack_PushAt.",
+  "confidence": 0.3,
+  "evidence": "NEW: the callee sequence is now identifiable and matches the tail of the confirmed handlers 0x0037CBD8/0x0037CD88/0x0037CF24/0x0037D06C exactly. But the decompilation is damaged: the object arrives in `unaff_r4` and all arguments are dropped (`(**...)(void)`), and the 48-byte Thumb function has no named caller. Per FACTS.md this stays maybe_ at 0.30 - the name only records the observed refresh sequence.",
+  "previous_name": "maybe_Ui_RecordWindow_RefreshPage",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0037FB18",
+  "name": "maybe_Ui_ShopWindow_BuildSelectedItemText",
+  "signature": "void maybe_Ui_ShopWindow_BuildSelectedItemText(ShopWindow* self, u32 arg2, int* record)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "record"
+  },
+  "summary": "Builds the shop's selected-item info line (style id 0x21): takes the item id from the record's variable-length blob, looks up the item row, tests the bag at GameWork+0x24A98 with func_0066B9BC and writes either the owned-count message argument (Text_FormatMessageArg) or the item description string into the line buffer.",
+  "confidence": 0.45,
+  "evidence": "NEW: the bag test uses GameWork+0x24A98 (FACTS.md bag pointer) and Item_LookupRecord on the id from record[1]+4, and the message-argument builder is Text_FormatMessageArg - so the 'item info line' role is supported and this is not an item-code misread: it genuinely formats UI text from the item row. Kept maybe_ 0.45 because large parts of the body are Ghidra artefacts (func_00100B74 calls marked 'Subroutine does not return', unreachable-block removal, unused local_154) and the 'in bag -> count, else description' branch is inferred from the two string sources.",
+  "previous_name": "maybe_Ui_ShopWindow_BuildSelectedItemText",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00384480",
+  "name": "maybe_Party_BuildMemberIdList",
+  "signature": "u32 maybe_Party_BuildMemberIdList(u32 listId)",
+  "params": {
+   "param_1": "listId"
+  },
+  "summary": "Builds the id list of the party members that pass the display filter: walks the party (GameWork+0x24A98 via func_0066B0E4, count at GameWork+0x27218), keeps members whose record flag f_DA bit is set, whose overlay byte at +0x254 is 1 and whose id is non-zero, appends their ids to a scratch buffer and pushes it into the UI string builder; returns the first id's category (0xB, or 1 when the bag mode is 0x22).",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'ListWindow_CollectVisibleIds' claimed list-window rows, but nothing in the body reads a list widget - it walks the *party* array (GameWork+0x27218 count, func_0066B0E4(bag, index) member ids, func_0035EB98 member records) and builds a text-argument buffer via func_0051B1FC/func_0011CD80. NEW: the same party walk appears in the sibling functions 0x004A4D80/0x004A54AC. Kept maybe_ 0.4 because the filter bytes (+0x254, f_DA) and the returned category 0xB are not decoded, and the function is damaged (memmove/Ghidra-return artefacts).",
+  "previous_name": "maybe_Ui_ListWindow_CollectVisibleIds",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00389D58",
+  "name": "maybe_Battle_Ui_UpdateStateMachineB",
+  "signature": "int maybe_Battle_Ui_UpdateStateMachineB(u32* out, BattleUi* self)",
+  "params": {
+   "param_1": "out",
+   "param_2": "self"
+  },
+  "summary": "Tail block of the battle UI state machine: collects the per-slot values through the object's +0x48 virtual, spawns the multi-actor popup for them, updates unit transforms, then walks the two unit slots' update virtuals and writes the chosen stage id (0x1101..0x111B) through *out.",
+  "confidence": 0.3,
+  "evidence": "NEW: the named callees (maybe_Battle_Ui_ChooseDamageNumberFont, Ui_PopupEntry_SpawnMultiActor, Battle_UpdateUnitTransform, Battle_PrepareUnitListUi, maybe_Battle_ResetUnitUi, Actor_IsIdleAndQueueEmpty) show this is the popup/unit stage of the battle UI update, matching the old 'tail of 0x003890C0'. But the body is damaged: it branches to LAB_00389378, an address *outside* this 80-byte function, and carries unaff_r4/r6/r8 and in_d8/in_d9 registers, so per FACTS.md it stays maybe_ 0.30.",
+  "previous_name": "maybe_Battle_Ui_UpdateStateMachineB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0039EF94",
+  "name": "Field_ObjectSprite_InitFromDesc",
+  "signature": "void Field_ObjectSprite_InitFromDesc(FieldObjectSprite* self, int* desc, u32 owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "desc",
+   "param_3": "owner"
+  },
+  "summary": "Builds the scene-sprite draw entries of a field object from its descriptor: resolves the object/kind pair, allocates the sprite slot with Gfx_Scene_AllocSpriteSlot (or appends with Gfx_Scene_AddNodeType4), copies the shape-group ids/masks and, for the kind-10 record, stores the sprite rectangle, then links each group's bit mask into the render entry.",
+  "confidence": 0.55,
+  "evidence": "NEW: all four heavy callees are now confidently named - Gfx_GetSceneSpriteContext, Gfx_Scene_AllocSpriteSlot, Gfx_Scene_AddNodeType4, Field_Object_GetKind10Record - and the caller is the field object table builder 0x0033A140 with a 0x224-byte stride; the 13 shape-group loop with func_003DF8BC masks and the per-group 8-slot cap are explicit. The descriptor field offsets (0x52, 0x14/0x16, groups at desc[2..0x13]) are the only inferred part.",
+  "previous_name": "maybe_Field_ObjectSprite_InitFromDesc",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003AF808",
+  "name": "maybe_Actor_FindNextEntryForCharacter",
+  "signature": "u8* maybe_Actor_FindNextEntryForCharacter(ActorEntryCursor* cursor)",
+  "params": {
+   "param_1": "cursor"
+  },
+  "summary": "Advances the search cursor over the 0x14-byte-record table (array at +0xC, count at +8) and returns the cursor at the next entry whose gates hold: its story flag is set in the bitset at GameWork+0x2A444, its map is visited in the byte array at +0x27508, its chapter field is -1 or the quest state is 9, and its condition byte list (opcodes 0x19..0x22) matches the character record's state at +0x664..+0x66C; when nothing matches the cursor is set to 0x7FFFFFFF.",
+  "confidence": 0.4,
+  "evidence": "NEW: the gate sources are now identifiable - Game_GetWork offsets +0x2A444 (story bitset) and +0x27508 (visited-map array, the same array the Tsuyosa window uses), func_0066AF08 the quest flag, func_0035EB98 the member record, and func_0063F93C the 0x14-stride record table. The callers (0x003AFE90, 0x0045A1E0, 0x004A4D80/0x004A54AC) are all field/talk lookup code. Kept maybe_ 0.4 because *which* content table (actor entries? talk entries?) is still unproven.",
+  "previous_name": "maybe_Actor_FindNextEntryForCharacter",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004A4D80",
+  "name": "maybe_Battle_Group_BuildFromString",
+  "signature": "u32 maybe_Battle_Group_BuildFromString(u32 partyCtx, char* spec)",
+  "params": {
+   "param_1": "partyCtx",
+   "param_2": "spec"
+  },
+  "summary": "Resolves a battle/party specification string into an id: requires the party size at GameWork+0x27218 to be > 3, reads the spec type char and its index byte, handles the 'R' form with func_004A4AD0 (bits 0x7F/0x80) or the other form with func_004A5498, allocates the result table with func_0010F6CC, and otherwise scans the party member skill list (func_00629214/func_006298F0) for the requested byte.",
+  "confidence": 0.4,
+  "evidence": "NEW: the party size read (GameWork+0x27218), the 'R' spec char, the 0x7F/0x80 masks and the member skill-list pair func_00629214/func_006298F0 are all visible, and Party_GetFirstActorForCharacter confirms the party context. However two callees carry clearly wrong names (maybe_Ui_Plate_SetLeftMargin/SetRightMargin are used here as cursor accessors) and the body is damaged (halt_baddata, 64-bit-return artefacts, a bogus Game_GetWork(0xE5900008,...) call), so it stays maybe_ 0.40 and 'BuildFromString' remains a label.",
+  "previous_name": "maybe_Battle_Group_BuildFromString",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004A54AC",
+  "name": "maybe_Party_FindEntryByType",
+  "signature": "u32 maybe_Party_FindEntryByType(u32 partyCtx, u32 arg2, int member, u32 type)",
+  "params": {
+   "param_1": "partyCtx",
+   "param_2": "arg2",
+   "param_3": "member",
+   "param_4": "type"
+  },
+  "summary": "Walks the character's entry cursor (Party_GetFirstActorForCharacter + maybe_Actor_FindNextEntryForCharacter) until it finds a record whose f_12 equals `type`, returning that record's f_11 id, or `type` itself when the list is exhausted; member 3 is first resolved by scanning the party for id 0x1B.",
+  "confidence": 0.35,
+  "evidence": "NEW: the iteration is exactly the same cursor protocol as the named maybe_Actor_FindNextEntryForCharacter, and Party_GetFirstActorForCharacter supplies the first cursor - so 'find the first entry of this type' is supported. Kept maybe_ 0.35 because the return value is the record's f_11 id (not the entry), the sentinel -1 handling is only readable from the C, and the two callees still carry the wrong Ui_Plate_Set*Margin names.",
+  "previous_name": "maybe_Party_FindEntryByType",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003B0034",
+  "name": "Ui_CreateChildHandle",
+  "signature": "void Ui_CreateChildHandle(HandleSlot* slot, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "slot",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Replaces the object owned by a handle slot: releases the old object through the UI core's parts table, allocates a 0x218-byte object on the UI heap, installs vtable 0x00776C1C, zeroes its 0xE0-byte tail and registers it with Ui_Object_CreatePartsFromTable, storing the result back in *slot.",
+  "confidence": 0.5,
+  "evidence": "NEW: the UI-core getter (Ui_GetCore), the parts-table registration (Ui_Object_CreatePartsFromTable + func_0021F8B8 release) and the literal vtable 0x00776C1C are all visible, and the only caller is the now-named casino poker-table setup (0x0023F114). That confirms the 'release old / allocate / register new' helper. 0.5 because the 0x218 class and the unused arg2..arg4 are unidentified.",
+  "previous_name": "maybe_Ui_CreateChildHandle",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003B9BF0",
+  "name": "maybe_Ui_Row_MoveCursor",
+  "signature": "void maybe_Ui_Row_MoveCursor(UiRow* self, int dx, char dy, int page)",
+  "params": {
+   "param_1": "self",
+   "param_2": "dx",
+   "param_3": "dy",
+   "param_4": "page"
+  },
+  "summary": "Moves the cursor inside the row's two-column grid: wraps the column index dx within the row width, steps the row index dy clamped to the row count (with page wrapping), re-applies the row through maybe_Ui_Row_Apply when the row changed and selects the new cell with Ui_List_SelectEntryById.",
+  "confidence": 0.42,
+  "evidence": "NEW: the sink calls are the confident maybe_Ui_Row_Apply and Ui_List_SelectEntryById, and the same f_78/f_79/f_7A row fields are used by the named Tsuyosa fillers, so the 'move the row cursor and select the cell' role holds. The body is damaged - Ghidra truncates it with two halt_baddata sites and an unaff_r10 register - so it stays maybe_ 0.42 and the column arithmetic is not claimed as verified.",
+  "previous_name": "maybe_Ui_Row_MoveCursor",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003BF4D4",
+  "name": "Model_ReleaseResourceSet",
+  "signature": "int Model_ReleaseResourceSet(ModelResource* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the three embedded texture-binding sub-sets at f_10/f_3C/f_68, frees the two arrays at f_94/f_98 with operator delete[], resets the handle/state fields and destroys the 0x2C-stride binding array, returning self. Called from the model attach-slot destructor path.",
+  "confidence": 0.5,
+  "evidence": "NEW: the three sub-set releases are now the confidently named Gfx_TextureBinding_Release, the frees are std_operator_delete_array and the tail is std_destroy_range(&f_10, 0x2C, 2) - so the function really releases one model's binding set. The caller side (0x00225B78, next to Model_AttachSlot_Dtor) confirms the teardown role. 0.5 because 'ResourceSet' is our umbrella word for the three bindings.",
+  "previous_name": "maybe_Model_ReleaseResourceSet",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003C10EC",
+  "name": "maybe_Field_ActorActionSeq_RunExtraEntry",
+  "signature": "u32 maybe_Field_ActorActionSeq_RunExtraEntry(FieldActorSeq* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Action-sequence state step for the secondary (extra) entry list at f_21F4: on the first state (0x18DE) it flushes the pending entry and pushes the damage action entry, waits for Actor_IsIdleAndQueueEmpty, then advances the action, updates the unit anim/slot widgets and ends in state -2 or 0x18F8.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now all named - maybe_Field_ActorActionSeq_FlushPending, maybe_Battle_PushDamageActionEntry, maybe_Field_ActorActionSeq_AdvanceAction, Battle_Ui_UpdateUnitAnimState/Slots, maybe_Field_ActorActionSeq_AllActorsReady - and the state ids 0x18DE/0x18EA/0x18F8 with the +0x0C/+0x1A offsets are explicit. Kept maybe_ 0.45 because 'Extra' only says it indexes the second list (f_21F4 vs f_70C) and the entry semantics are unknown.",
+  "previous_name": "maybe_Field_ActorActionSeq_RunExtraEntry",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003C1C9C",
+  "name": "Battle_ActionSequence_UpdateActorStep",
+  "signature": "int Battle_ActionSequence_UpdateActorStep(BattleActionSequence* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-actor dispatch of the battle action sequence: reads the actor state byte at self+0x168D and routes state 0/6/7 to the extra-entry runner, 1 to StepEntryA, 2 to AppendEntries, and 3/4/5 through the wait-id states 0x19BF/0x19E0/0x19FF (+0x11/+0x0E) that advance the action once Actor_IsIdleAndQueueEmpty, ending with the ready flag f_27CC and state -2.",
+  "confidence": 0.55,
+  "evidence": "NEW: all four dispatch targets are named (maybe_Field_ActorActionSeq_RunExtraEntry, Field_ActorActionSeq_StepEntryA, Field_ActorActionSeq_AppendEntries) and the three wait branches share the exact 'set wait id, check +0x11/+0x0E, check Actor_IsIdleAndQueueEmpty' pattern with concrete ids. That is the actor step dispatcher, not a single action. 0.55 because the actor state byte at +0x168D is still unnamed and states 6/7 share state 0's path.",
+  "previous_name": "maybe_Battle_ActionSequence_UpdateActorStep",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003C5B58",
+  "name": "Battle_Ui_SpawnMemberBalloonA",
+  "signature": "void Battle_Ui_SpawnMemberBalloonA(BattleUiContext* self, u32 actorIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorIndex"
+  },
+  "summary": "Spawns balloon slot A for a member: plays the member's SE (record+0x2CC), builds the layout/transform with Battle_Ui_LayoutBalloons or Battle_Ui_Balloon_CalcAnchorTransform depending on the record flags, then creates the effect instance for record id +0x2BA with Effect_FindOrCreateInstance and stores it at self+0xD8EC.",
+  "confidence": 0.5,
+  "evidence": "NEW: the chain is now fully named - Battle_Ui_LayoutBalloons, Battle_Ui_Balloon_CalcAnchorTransform, Effect_FindOrCreateInstance, Sound_PlaySeById - and the per-slot constants (+0x2BA id, self+0xD8EC handle, record flags f_2F7/f_2A0) are explicit. The sibling B/C/D differ only in those constants. 0.5 because the 'balloon' meaning and the slot letters are our labels for the record fields.",
+  "previous_name": "maybe_Battle_Ui_SpawnMemberBalloonA",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003C4B9C",
+  "name": "maybe_Battle_Ui_SpawnMemberBalloonForSlot",
+  "signature": "void maybe_Battle_Ui_SpawnMemberBalloonForSlot(BattleUiContext* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Damaged helper that lays out the balloon transform (Battle_Ui_LayoutBalloons / Battle_Ui_Balloon_CalcAnchorTransform or the member-anchored variant) and creates the effect instance for record id +0x2BA, storing it at context+0xD8EC. Same role as 0x003C5B58 but with the arguments lost.",
+  "confidence": 0.25,
+  "evidence": "NEW: the callee names are the same as the confirmed sibling 0x003C5B58 (Battle_Ui_LayoutBalloons, Battle_Ui_Balloon_CalcAnchorTransform, Effect_FindOrCreateInstance), so the role is identifiable. But this 32-byte Thumb entry is badly damaged: the context and record arrive in unaff_r4/unaff_r5, all virtual calls are argument-less, and the stack pointer arithmetic (stack0xffffffec) is not trustworthy. Per FACTS.md it stays maybe_ at 0.25.",
+  "previous_name": "maybe_Battle_Ui_SpawnMemberBalloonForSlot",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003C5D8C",
+  "name": "Battle_Ui_SpawnMemberBalloonB",
+  "signature": "void Battle_Ui_SpawnMemberBalloonB(BattleUiContext* self, u32 actorIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorIndex"
+  },
+  "summary": "Spawns balloon slot B for a member: same layout/anchor/effect chain as 0x003C5B58 but with record id +0x2BC (700 decimal in the C), record flags f_2F8/f_2A1, offset record+0x254 and the handle stored at self+0xD8F0 with a one-shot byte at self+0xDE07.",
+  "confidence": 0.5,
+  "evidence": "NEW: same-body-as-0x003C5B58 with the named balloon layout/anchor/effect callees; it also gained a one-shot guard (byte self+0xDE07) and a separate record offset block (+0x254 vs +0x248). 0.5 because the B slot's meaning (which balloon) comes only from the record field offset.",
+  "previous_name": "maybe_Battle_Ui_SpawnMemberBalloonB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003C5FAC",
+  "name": "Battle_Ui_SpawnMemberBalloonC",
+  "signature": "void Battle_Ui_SpawnMemberBalloonC(BattleUiContext* self, u32 actorIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorIndex"
+  },
+  "summary": "Spawns balloon slot C for a member: same chain as 0x003C5D8C with record id +0x2BE, record flags f_2F9/f_2A2, offset record+0x260, handle at self+0xD8F4 and one-shot byte at self+0xDE08.",
+  "confidence": 0.5,
+  "evidence": "NEW: identical to the confirmed B variant apart from the record offset (+0x2BE), the flag bytes and the storage slots, with the same named balloon layout/anchor/effect callees. 0.5 for the same reason: the C label is positional.",
+  "previous_name": "maybe_Battle_Ui_SpawnMemberBalloonC",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003C62DC",
+  "name": "Battle_Ui_SpawnMemberBalloonD",
+  "signature": "void Battle_Ui_SpawnMemberBalloonD(BattleUiContext* self, u32 actorIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorIndex"
+  },
+  "summary": "Spawns balloon slot D for a member: same chain again with record id +0x2C0, record flags f_2FA/f_2A3, offset record+0x26C, handle at self+0xD8F8 and one-shot byte at self+0xDE09.",
+  "confidence": 0.5,
+  "evidence": "NEW: identical to the confirmed B/C variants apart from the record offset (+0x2C0) and storage slots, with the named balloon layout/anchor/effect callees. 0.5 because the D label is positional.",
+  "previous_name": "maybe_Battle_Ui_SpawnMemberBalloonD",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003CA388",
+  "name": "maybe_Battle_ActionSequence_UpdateMemberFaces",
+  "signature": "void maybe_Battle_ActionSequence_UpdateMemberFaces(BattleActionSequence* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "In the battle talk sub-mode (record+0x1F8 == 2 and +0x1F9 in 1..3) it walks every member of the battle (func_00630D64 count, virtual +0x10C actor getter) and calls func_001FD10C(self, actor) on each - the face/expression update.",
+  "confidence": 0.35,
+  "evidence": "NEW: the gate is identical to the now-readable sibling 0x003C9B08 (same +0x1F8/+0x1F9 talk-mode bytes) and the loop uses the same member accessor as the battle UI code, so the 'per-member update in talk mode' role is solid. Kept maybe_ 0.35 because func_001FD10C is still unnamed - 'faces' is only the old guess for what it updates.",
+  "previous_name": "maybe_Battle_ActionSequence_UpdateMemberFaces",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003CB740",
+  "name": "maybe_Battle_Ui_MemberWidget_SpawnStatusPopup",
+  "signature": "void maybe_Battle_Ui_MemberWidget_SpawnStatusPopup(BattleUiMemberWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Spawns the member widget's status/name popup (one-shot per widget): it builds a popup argument from the record's +0xE4 name id and the widget's +0x150 kind, calls Ui_PopupEntry_SpawnNameCodeBalloon or Ui_PopupEntry_SpawnForStatus depending on the record's f_10/f_B0FA flags, plays the matching SE (record+0xAE or 0x18..0x1B) and broadcasts the entry pair with Menu_BroadcastEntryPair.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'PushMenuValues' described only the final broadcast. NEW: the dominant work is popup spawning - Ui_PopupEntry_SpawnNameCodeBalloon / Ui_PopupEntry_SpawnForStatus with the record's name id +0xE4, then an SE chosen by the record flags, then Menu_BroadcastEntryPair. Kept maybe_ 0.4 because the record flags f_10/f_B0FA and the +0x150 widget kind are not decoded, and the one-shot byte +0x137B may also gate later frames.",
+  "previous_name": "maybe_Battle_Ui_MemberWidget_PushMenuValues",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003D2E2C",
+  "name": "maybe_Os_StaticCtorA",
+  "signature": "void maybe_Os_StaticCtorA(StaticDescriptor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small static/global initialiser: writes a 12-byte descriptor (type byte 0xFF, dword at +4 = 0, bytes +8/+9 = 0/1, word +0xA = 0) and then tail-calls the array/registration helper func_00100B74, which is why Ghidra marks the call as non-returning.",
+  "confidence": 0.25,
+  "evidence": "NEW: nothing in the merged names identifies func_00100B74 (still unnamed) or the descriptor's consumers; the sibling 0x003D2EE4 has the same shape. The body is a handful of constant stores plus a trampoline call, so per FACTS.md it stays maybe_ at 0.25 - 'StaticCtorA' only records the neighbourhood.",
+  "previous_name": "maybe_Os_StaticCtorA",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003D5610",
+  "name": "maybe_Ui_DungeonWindow_SetRow",
+  "signature": "void maybe_Ui_DungeonWindow_SetRow(UiDungeonWindow* self, char* record)",
+  "params": {
+   "param_1": "self",
+   "param_2": "record"
+  },
+  "summary": "Initialises the dungeon window's row object at self+0x1D8 from the caller's 0x29-byte record and stores the row pointer in the active-row field at self+0x12C. The record argument is forwarded to maybe_Ui_DungeonWindow_SetRowKind.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'SetInputHandlerA' claimed an input-handler table, but the callee is now named maybe_Ui_DungeonWindow_SetRowKind - it copies a 0x29-byte row record into self+0x1D8 (see 0x0028981C, whose only caller is this function). NEW: the second store is just the row pointer at +0x12C, so this is the row setter. Kept maybe_ 0.4 because the callee itself is only maybe_ and the window class is inferred.",
+  "previous_name": "maybe_Ui_DungeonWindow_SetInputHandlerA",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003D5648",
+  "name": "maybe_Field_Gimmick_InitActionTriggerD",
+  "signature": "void maybe_Field_Gimmick_InitActionTriggerD(FieldGimmick* gimmick)",
+  "params": {
+   "param_1": "gimmick"
+  },
+  "summary": "Initialises the field gimmick's fourth component at +0x224 as an action trigger (Field_Gimmick_InitActionTrigger) and registers it by storing its pointer at gimmick+0x12C.",
+  "confidence": 0.4,
+  "evidence": "CORRECTED: 'InitComponentD' was purely positional. NEW: the callee is the now confidently named Field_Gimmick_InitActionTrigger, applied to the sub-object at +0x224, and the function only registers the result at +0x12C - so this is the action-trigger component initialiser. Kept maybe_ 0.4 because 'D' is a disambiguator and the callers (SendEventType6/7, SendEventType3OnDestroy) only show it is created with the event components.",
+  "previous_name": "maybe_Field_Gimmick_InitComponentD",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003D6138",
+  "name": "Ui_Menu_SetCategoryText",
+  "signature": "void Ui_Menu_SetCategoryText(UiMenu* self, u32 category, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "category",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Maps the menu category (0..0x10) to its label text id (0xD8/0xD9/0xDA, 0x62..0x6B, 0xDB..0xDD), resolves that text through the UI core's text lookup (func_00633560 on core->f_10) and applies it to the menu's label at f_28.",
+  "confidence": 0.5,
+  "evidence": "CORRECTED: 'SetCategoryVisual' implied a layout/font resource, but the mapped value is passed to func_00633560(core->f_10, id) - the UI text lookup documented in the confident Ui_GetCore header (0x633560(core->f_10, textId)) - and the result goes to func_001A6680(self, self->f_28<<16, text), so it sets a label text id. NEW: the 15-case switch of category -> text id is explicit. 0.5 because 'category' names the switch input only by shape.",
+  "previous_name": "maybe_Ui_Menu_SetCategoryVisual",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ }
+]

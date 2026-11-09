@@ -1,0 +1,1795 @@
+[
+ {
+  "address": "0x0016BA4C",
+  "name": "maybe_Battle_ResetCommandQueue",
+  "signature": "void maybe_Battle_ResetCommandQueue(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases every queued battle-command object of the manager (the intrusive list rooted at +0x110) and clears the 'command queue dirty' byte at +0x13d. Called when a battle action list is rebuilt.",
+  "confidence": 0.45,
+  "evidence": "calls 0x16D854 which walks the +0x110 list and calls vtable+4 on each node; then writes self+0x13d=0. 0x16D854 is only used from command-list teardown paths."
+ },
+ {
+  "address": "0x0016BA64",
+  "name": "Battle_SyncUnitModelTransforms",
+  "signature": "void Battle_SyncUnitModelTransforms(void)",
+  "params": {},
+  "summary": "Walks the four 26-entry battle-unit lists at world+0x428c and copies each live unit's model transform (+0x75c, three words) into the actor/model object registered for that unit id, keeping the rendered monsters and party models on top of their logical battle-unit positions.",
+  "confidence": 0.55,
+  "evidence": "iterates j=0..3, i=0..0x19 over func_002AB62C(world+0x428c+j*0x1c,i); filters on vtable+0x18 (active) and vtable+0xe8(0x5a); unit id at +0x110 is split into group/id and resolved through g_0016bbe8/ec/f0; final call 0x5F5F54(actor, unit+0x75c, 0) writes the 3-word transform and (arg3!=0) orientation. 0x5F5F54 stores those words into +0x120 and derives +0x8c..+0x98."
+ },
+ {
+  "address": "0x0016BBF4",
+  "name": "Battle_QueueUnitActions",
+  "signature": "void Battle_QueueUnitActions(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Collects the actions already chosen by every battle unit (unit field +0xe94) and appends a battle action slot for each one, tagging it with the unit pointer and the manager's action counter before marking the source command as consumed (vtable+0xe4 with 0x5a).",
+  "confidence": 0.5,
+  "evidence": "same 4x26 unit walk as 0x16BA64; for units with piVar2[0x3a5]!=0 it sets local_98=unit, local_48=self->f_11c++ and calls 0x16F28C(self,self->f_124,&entry,g_0016bdac,0,1) (the action-slot insert), then vtable+0xe4(unit,0x5a,1)."
+ },
+ {
+  "address": "0x0016BDB0",
+  "name": "Battle_BuildTargetList",
+  "signature": "void Battle_BuildTargetList(BattleManager* self, BattleTarget* out, int count, int* outSideACount, int* outSideBCount)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "count",
+   "param_4": "outSideACount",
+   "param_5": "outSideBCount"
+  },
+  "summary": "Builds the candidate-target array for the current action: clears the caller's 8-byte entries, then enumerates the ally list (world+0x4254) and the enemy list (world+0x4270) into one id array. Each output entry receives the target id plus a flag saying whether it came from the first (ally) list.",
+  "confidence": 0.55,
+  "evidence": "initialises count*8 bytes with 0xffffffff/0; 0x2ABAD8(world+0x4254,0,ids,5) returns the first-side count into *arg4, 0x2ABAD8(world+0x4270,*arg4,ids,5) the second into *arg5; 0x2ABAD8 writes ids from entry+0x18 offset by its arg2, proving the concatenation. Loop then stores ids[0] and sets byte +1 = (i < *arg4)."
+ },
+ {
+  "address": "0x0016C128",
+  "name": "maybe_Battle_UpdateUnitCommandPhase",
+  "signature": "uint32_t maybe_Battle_UpdateUnitCommandPhase(BattleUnit* unit)",
+  "params": {
+   "param_1": "unit"
+  },
+  "summary": "State check for a battle unit's command byte (+0x2f0): recognises the idle/done values plus the three 'ready for input' states, optionally notifies the UI/target subsystem, and finally calls the unit's vtable slot +0x198. Returns 0 for unknown states so the caller can defer the unit.",
+  "confidence": 0.35,
+  "evidence": "reads (char)unit[0xbc]=+0x2f0 and compares it with -1, +0x106, 3, +0x103, +0xfd and +0x40; the accepted branch calls 0x169BC8(unit) and ends in (**(vtable+0x198))(unit). 0x3247DC(world+0x4324,0) is called when world+0x4244 is 1 (in-battle debug/target mode)."
+ },
+ {
+  "address": "0x0016C3AC",
+  "name": "maybe_Battle_ValidateQueuedCommands",
+  "signature": "uint32_t maybe_Battle_ValidateQueuedCommands(BattleManager* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Checks whether the queued command objects at world+0x4260 are all valid for the current battle unit: first all entries must pass their vtable+0x10 validation, then each valid entry is offered to the manager's vtable+0x190. Returns 1 when the queue can be executed, 0 otherwise.",
+  "confidence": 0.45,
+  "evidence": "walks the circular list world+0x4260/0x4264, calls (**(vtable+0x10))() on each node, and on the retry pass calls (**(self+0x190))(self,node); returns 0 as soon as one fails. Also consults 0x627B24(self) (battle busy check) before accepting."
+ },
+ {
+  "address": "0x0016C52C",
+  "name": "maybe_Battle_QueueDefaultActions",
+  "signature": "void maybe_Battle_QueueDefaultActions(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fallback command pass: for every active battle unit that has no forced command, appends a default action (id 0x2a) built from the unit's transform/state so the turn can still resolve. Used when AI or player input produced nothing.",
+  "confidence": 0.45,
+  "evidence": "4x26 unit walk; filters vtable+0x18 !=0, vtable+0x24 !=0, vtable+0x1c==0; builds the same 0x78-byte entry as 0x16BBF4 and calls 0x16F28C(self,self->f_124,entry,0x2a,0,1). Constant 0x2a also appears as a default action id in 0x16D258/0x16DFA8."
+ },
+ {
+  "address": "0x0016C714",
+  "name": "maybe_Battle_RefreshBattleUi",
+  "signature": "void maybe_Battle_RefreshBattleUi(void)",
+  "params": {},
+  "summary": "One-line bridge that fetches the game/world singleton and hands it to 0x207DEC. Looks like a battle-side 'rebuild/refresh HUD or target list' notification; the callee is not recovered as an entry point, so the exact UI element is unconfirmed.",
+  "confidence": 0.3,
+  "evidence": "body is only func_006F1EEC(&stack) followed by func_00207DEC(world). No arguments are used, no globals written locally."
+ },
+ {
+  "address": "0x0016C740",
+  "name": "maybe_Battle_FinalizeUnitCommands",
+  "signature": "void maybe_Battle_FinalizeUnitCommands(void)",
+  "params": {},
+  "summary": "Second command pass: for each active unit it builds a small action descriptor and, when the unit reports a pending action, calls the unit's vtable+0x50 with 1 (confirm/commit). Complements 0x16C52C which only queues entries.",
+  "confidence": 0.4,
+  "evidence": "4x26 unit walk; entry+0x18 non-zero; 0x176948/0x1762AC initialise the descriptor with the unit; vtable+0x1c!=0 triggers (**(vtable+0x50))(unit,1). 0x1762AC is also used by 0x174324 for the same unit->descriptor path."
+ },
+ {
+  "address": "0x0016C7F8",
+  "name": "Battle_SelectAiActions",
+  "signature": "void Battle_SelectAiActions(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Enemy AI turn: for every active battle unit it evaluates the unit's AI table (+0x8f0) against the current battle seed, rolls 1..100, chooses one of the unit's skill/attack ids, applies the skill's target/side rules, and appends the resulting action slots. This is the routine that decides what monsters do each round.",
+  "confidence": 0.62,
+  "evidence": "walks the four 0x1c-stride unit lists and the 0x50 action slots; reads unit->f_770 (remaining AI actions), unit->f_8f0 AI table via 0x2031A4, and skill ids through 0x63FA60/0x63FC70/0x63FD24 (skill data table); random roll func_001CA474(world+0x4218,1,100,0); writes f_e80 AI branch flag; pushes actions with 0x16B810. Skill id constants 0x1df/0x1ea/0x38e/0x548/0x550 are battle skills."
+ },
+ {
+  "address": "0x0016D258",
+  "name": "maybe_Battle_DispatchUnitAction",
+  "signature": "void maybe_Battle_DispatchUnitAction(BattleManager* self, BattleUnit* unit, uint32_t actionId, int** outEntry)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unit",
+   "param_3": "actionId",
+   "param_4": "outEntry"
+  },
+  "summary": "Dispatches one battle unit's pending action: reads the unit's action descriptor at +0xb0f7/+0xb0f9 (or the alternate +0xb12a block), looks up the handler in the manager's small function table at self[actionType], runs it, then either appends the entry with 0x16B810 or inserts it with 0x16F28C using action id 0x14.",
+  "confidence": 0.4,
+  "evidence": "reads bytes +0xb0f7/+0xb0f9 on the unit and selects either unit+0xb12a or +0xb14a; indexes self+cVar1*8 (0..10) and calls the two function pointers stored there with (unitId, subId); falls back to 0x16B810(...,0x14,...) or 0x16F28C(...,0x14,0,1). The same +0xb0f7 flag gates 0x16DFA8's choice between 0x16B810 and 0x16F28C."
+ },
+ {
+  "address": "0x0016D438",
+  "name": "maybe_Battle_SpawnUnitEntryEffects",
+  "signature": "void maybe_Battle_SpawnUnitEntryEffects(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Counts the battle units that are present and collects their data ids, then hands the lineup descriptor to 0x3FE054, which spawns the per-monster entry/aura effect objects (0x20c-byte effect instances). Runs once when the battle line-up is finalised.",
+  "confidence": 0.35,
+  "evidence": "for each of the 4x26 unit lists it tests vtable+0x18 and self+i*8+200==0, increments self->f_c0 and stores unit->f_768; then fills local_48 from self->f_c4/f_cc..f_e0 and calls 0x3FE054(&self->f_bc,local_48,0). 0x3FE054 allocates 0x20c-byte objects from heap+0x354 and calls 0x20A9B8 with effect ids 0xd..0x80 for each u16 entry."
+ },
+ {
+  "address": "0x0016D58C",
+  "name": "Battle_UpdatePhaseState",
+  "signature": "void Battle_UpdatePhaseState(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Derives the battle phase byte (+0xbc, values 0..8) from a series of virtual predicates on the manager (vtable+0x164..+0x188), so the main battle update can branch on a single state value.",
+  "confidence": 0.55,
+  "evidence": "assigns self->f_bc = 0,1,2,3,5,4,6,7,8 from successive (**(vtable+0x164/0x168/0x16c/0x170/0x174/0x17c/0x180/0x184/0x188))(self) tests, each guarded by the list head check self[0x44]==&self[0x43] and 0x627B24/0x627D04 (battle-busy); world+0x56b4/0x56b8 choose between states 0 and 3."
+ },
+ {
+  "address": "0x0016D854",
+  "name": "Battle_FreeCommandList",
+  "signature": "void Battle_FreeCommandList(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destroys every node of the manager's queued-command list (+0x110) through the node vtable slot +4. Called when a battle ends or the queue is rebuilt.",
+  "confidence": 0.5,
+  "evidence": "walks self->f_110 circular list; for each node calls (**(code**)(*node+4))(); no other side effects. Callers are 0x16BA4C (queue reset) and 0x16E3E0 (battle teardown), both command-list lifecycle points."
+ },
+ {
+  "address": "0x0016DFA8",
+  "name": "Battle_ExecuteItemAction",
+  "signature": "void Battle_ExecuteItemAction(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Resolves a battle action that uses an item: reads the item id from the acting unit (vtable+0x84), looks up the item record, hands its id/effect data to the unit, then queues the item-use action (0xf) or its extended variant (0x10). The special item 0x120 (288) with world+0x4e64==0x45 forces a scan of the four unit lists for item 400, i.e. a scripted battle item event.",
+  "confidence": 0.58,
+  "evidence": "0x61BD4C (Item_LookupRecord) is called with (vtable+0x84)(unit); 0x63DF9C resolves the item data; special case world+0x4e64==0x45, unit+0x768==0 and item==0x120 scans 4 lists at world+0x428c for id 400 with states 0x9e/0x9f; pushes 0xf via 0x16B810 or 0x16F28C, and 0x10 when the scan succeeded."
+ },
+ {
+  "address": "0x0016E228",
+  "name": "Battle_CountActionTargets",
+  "signature": "int Battle_CountActionTargets(uint32_t arg1, int arg2, BattleUnit* action)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Counts how many candidates an action may hit: walks the ally container (world+0x4254) and the enemy container (world+0x4270), keeping units whose side matches the action's target mode (vtable+0xa8) and that report targetable (vtable+0x24). Returns the total count.",
+  "confidence": 0.55,
+  "evidence": "two loops over 0x5797D8(world+0x4254/0x4270,0) with 0x2AB62C(index); filters (vtable+0xa8)(action) against 2/3 (side selectors) and (vtable+0x24)(unit) targetable. Sibling 0x16FA10 does the same with vtable+0xac and extra state 10."
+ },
+ {
+  "address": "0x0016E3E0",
+  "name": "Battle_Update",
+  "signature": "void Battle_Update(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Main per-frame battle update: clears finished command objects, runs the queued action processing, executes the AI pass when this frame is not an interrupt, resolves the current action queue, updates the camera/scene hooks, and advances the phase/action counters. Also handles the 'battle over' hand-off to the next state.",
+  "confidence": 0.55,
+  "evidence": "teardown calls 0x16D854/0x16BEDC; then 0x16EB54 (unit action processing), 0x16C7F8 (AI), 0x16B810; 0x171DA4/0x171944/0x1739A0/0x174674 are the scene/camera updates; 0x169ED8/0x16901C finish the frame; resets f_124 (action slot) and f_2f0. Called from the battle state machine in 0x606xxx."
+ },
+ {
+  "address": "0x0016E65C",
+  "name": "maybe_Battle_Start",
+  "signature": "void maybe_Battle_Start(BattleManager* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Virtual battle-start entry: clears the current action slot (-1), initialises the world battle interface, resets the action flags, syncs unit model transforms, notifies the field/weather layer, releases the previous battle scene object (world+0x4320) and finally calls the manager's vtable+0x2c (prepare/finish init).",
+  "confidence": 0.45,
+  "evidence": "starts with func_001BBECC(&self->f_c1) (animation/timer start), self[0x46]=-1, 0x20B49C(world), f_3d=f_3e=0, 0x16BA64 (sync unit transforms), 0x3247B0/0x3247DC on world+0x4324, releases world+0x4320->f_204 through 0x2E0D60, then (**(code**)(*self+0x2c))(self). No direct callers: reached only through the manager vtable."
+ },
+ {
+  "address": "0x0016E680",
+  "name": "Battle_Initialize",
+  "signature": "void Battle_Initialize(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Battle initialisation used when the battle scene is created: same resets as Battle_Start, syncs unit transforms, hides the field view, releases the old battle scene object and calls the manager's vtable+0x2c. Called by the battle-scene setup routine 0x607B7C before its per-slot checks.",
+  "confidence": 0.5,
+  "evidence": "identical body to 0x16E65C minus the 0x1BBECC preamble; single caller 0x607B7C starts with func_0016E680() and then configures the four battle slots (0x3238BC); resets self[0x46], f_3d/f_3e and calls 0x16BA64, 0x3247B0, 0x2E0D60, vtable+0x2c."
+ },
+ {
+  "address": "0x0016E75C",
+  "name": "Battle_UpdateActionQueue",
+  "signature": "uint32_t Battle_UpdateActionQueue(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances one battle action: asks the manager's virtual predicates whether an action is pending/ready, builds the action queue for the current unit (0x16BBF4) and the default/AI passes, and when the action completes marks the unit list dirty and starts the next action. Returns 0 (the caller keeps ticking).",
+  "confidence": 0.5,
+  "evidence": "calls vtable+0x158/0x15c/0x160/0x18c/0x194/0x1b8/0x1a8 in sequence; when slot+0x2c5 is set calls 0x16BBF4, 0x168AA4, 0x16A78C, 0x16932C (queue building); then 0x16C52C/0x16A3F8 when idle, and 0x16EA5C; f_3d marks 'action list built', f_124 is the slot index."
+ },
+ {
+  "address": "0x0016EA5C",
+  "name": "Battle_FindActiveUnit",
+  "signature": "uint8_t* Battle_FindActiveUnit(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scans the manager's command/unit list (world+0x4260) and returns the first unit that is active, not dead and not suppressed, packaged into a small descriptor (0x176948/0x175F80/0x176134). Returns NULL when no unit qualifies. Used to pick 'whose turn is it'.",
+  "confidence": 0.5,
+  "evidence": "iterates world+0x4260..0x4264; checks vtable+0x18 (active), vtable+0x24 (alive), vtable+0x1c (busy), vtable+0xd8 and unit+0x108; calls 0x176948 then 0x175F80(&desc,unit,self->f_148) and 0x176134. 0x175F80 is also used from 0x16E75C for each queued unit."
+ },
+ {
+  "address": "0x0016EB54",
+  "name": "maybe_Battle_ProcessUnitActions",
+  "signature": "void maybe_Battle_ProcessUnitActions(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-unit action processing for the ally-side container (world+0x4254): for each live, non-suppressed unit it resolves the monster/character data id, then either dispatches the pending action through 0x16D258 or runs the fallback action dispatcher 0x16911C with the unit's category. Decrements the unit's remaining-action counter.",
+  "confidence": 0.45,
+  "evidence": "walks 0x5797D8/0x2AB62C on world+0x4254; filters vtable+0x18/0x20/0x24; id from piVar1[0x1da] (+0x768) resolved by 0x35EB98; special cases data->f_e4==5, byte at g_0016ed30==7, state 0x7d; calls 0x16D258(self,unit) or 0x16911C(self,unit,category,1); decrements piVar1[0x1dc]."
+ },
+ {
+  "address": "0x0016ED4C",
+  "name": "maybe_Battle_ResolveActionType",
+  "signature": "void maybe_Battle_ResolveActionType(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Chooses the concrete battle action id for a unit: under the debug/battle flag world+0x4244 it reads the action category from the unit's monster/actor data (+0x31) and maps it to ids 1/2/3/0xe, otherwise uses the normal action id. The action is appended or inserted depending on the unit's +0xb0f7 flag.",
+  "confidence": 0.4,
+  "evidence": "writes a 6-byte descriptor to (vtable+0x58)(unit,&desc) first; reads 0x20D08C(world,unit)->f_31 (action category) and maps 0/1/2/3 to 1/0xe/2/3; calls 0x16B810(self,action,id,...,7) or 0x16F28C(self,self->f_124,action,id,0,1); unit+0xb0f7 selects push vs insert."
+ },
+ {
+  "address": "0x0016EFB4",
+  "name": "maybe_Battle_QueueAttackActions",
+  "signature": "void maybe_Battle_QueueAttackActions(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Queues the two-step attack sequence for a unit: action 0xd (attack/approach) followed by 0x2e (finish). When the unit is in the 'immediate' mode (+0xb0f7) both slots are inserted at the current action index, otherwise appended; flags for the follow-up slot are derived from the unit's alive/state bytes.",
+  "confidence": 0.42,
+  "evidence": "reads unit f_b0f7/f_b0f9/f_10/f_b108; emits 0x16B810(...,0xd,...,uVar3=3 or 7) and (...,0x2e,0,0,8); in the insert path emits 0x16F28C(...,0xd,0,1) then finds the first free action slot (+0x2c5) and inserts 0x2e there. 0x2e/0xd also appear in 0x16FD90/0x1701B0 as follow-up ids."
+ },
+ {
+  "address": "0x0016F120",
+  "name": "Battle_ResetUnitStates",
+  "signature": "void Battle_ResetUnitStates(void)",
+  "params": {},
+  "summary": "Clears transient battle state on all units: empties the command list (calling each node's vtable+0x174/0x48 and 0x1CD53C), zeros the per-unit delay fields (+0x8e0/+0x8dc), and resets the four unit-group lists' animation/attack counters. Called between battles or on a full battle reset.",
+  "confidence": 0.5,
+  "evidence": "walks world+0x4260 list calling vtable+0x174(0), +0x48(0), 0x1CD53C(node); zeroes unit+0x8e0/+0x8dc for the 4 units of world+0x4254; for each of the 4 group lists (world+0x428c) calls vtable+0xb8 and zeroes +0x8dc/+0x8e0."
+ },
+ {
+  "address": "0x0016F28C",
+  "name": "Battle_InsertActionSlot",
+  "signature": "void Battle_InsertActionSlot(BattleManager* self, int index, BattleAction* action, uint32_t actionId, int arg5, uint8_t arg6)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index",
+   "param_3": "action",
+   "param_4": "actionId",
+   "param_5": "arg5",
+   "param_6": "arg6"
+  },
+  "summary": "Inserts one 0x2c8-byte action slot at the given index of the manager's 0x50-slot action array: first snapshots every slot into the backup array (+0xec), shifts the range [index..0x4e] up by one, zeroes the new slot, then hands the action descriptor to 0x3CDF74 which fills the slot and its five 0x8c sub-records.",
+  "confidence": 0.65,
+  "evidence": "copies all 0x50 slots from f_e8 to f_ec (5x0x8c each plus the +0x2c0..0x2c6 tail), shifts slots, writes 0xffffffff headers and +0x2c4=6/+0x2c6=1 for the new slot; final call func_003CDF74(f_e8+index*0x2c8+arg5*0x8c, action, 0x2c8, index*0x2c8+700, self, index). Callers use it for action ids 0x14/0x15/1..0x10/0x2a/0x2d/0x2e."
+ },
+ {
+  "address": "0x0016FA10",
+  "name": "Battle_CountActionCandidates",
+  "signature": "int Battle_CountActionCandidates(uint32_t arg1, int arg2, BattleUnit* action)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Second target-count helper: counts units in the four battle groups plus the ally container that match the action's target mode (vtable+0xac, values 0/1) and are selectable, excluding units with state 10. Used to size/validate target lists.",
+  "confidence": 0.5,
+  "evidence": "4x26 loop over world+0x428c and a loop over world+0x4254; selects on (vtable+0xac)(action)==0 with (unit vtable+0x18) or ==1 with (unit vtable+0x10); the ally loop additionally requires 0x639954(unit,10)==0. Sibling of 0x16E228 which uses vtable+0xa8/0x24."
+ },
+ {
+  "address": "0x0016FBF8",
+  "name": "maybe_Battle_QueueGroupAction",
+  "signature": "void maybe_Battle_QueueGroupAction(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds a group action (id 0x2d) for up to four units: prefers units that are active and not already acting, otherwise falls back to any valid unit, then inserts the group action at the current action index. Used for multi-target/combined actions.",
+  "confidence": 0.42,
+  "evidence": "scans world+0x4260 list twice with vtable+0x24/0x18 and (**(self+0x190))(self,unit); stores up to 4 pointers in the local array; if slot 0 is non-NULL calls 0x16F28C(self, self->f_124, list, 0x2d, 0, 1); increments self->f_11c (action counter)."
+ },
+ {
+  "address": "0x0016FD90",
+  "name": "Battle_QueueAbilityAction",
+  "signature": "void Battle_QueueAbilityAction(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Queues a spell/skill action: reads the ability id (vtable+0x7c), resolves its data through 0x18C184, copies the data flags to the unit, then chooses the action id from the ability's category byte (+0x298: 6,7,8,9,10,0xb) or the default 0x1f/0x20. Also emits the special 0x30/0x31/0x32/0x2e variants for healing/revive/status abilities.",
+  "confidence": 0.55,
+  "evidence": "0x18C184(abilityId) returns the ability record; (vtable+0x58)(unit, record+0x1f8); record->f_2f3 and first char switch produce 0x30/0x31/0x32/0x2e; record->f_298 switches 0..5 to action ids 7,6,8,9,0xb,10; otherwise 0x1f/0x20. All pushes go through 0x16B810/0x16F28C."
+ },
+ {
+  "address": "0x001701B0",
+  "name": "maybe_Battle_QueueAbilityActionVariant",
+  "signature": "void maybe_Battle_QueueAbilityActionVariant(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Sibling of Battle_QueueAbilityAction for the second ability-record table (0x18C1B8): resolves the ability id via vtable+0x78, applies the record to the unit and queues action 4/5 according to the record byte +0xeb, with 0x25/0x26 as fallbacks for invalid records.",
+  "confidence": 0.45,
+  "evidence": "mirrors 0x16FD90 but calls (vtable+0x78)(unit,0) and 0x18C1B8; action ids 4 and 5 are selected by record->f_eb (0/1); invalid record falls back to 0x25/0x26; the unit's +0xb0f7 flag again selects append (0x16B810) vs insert (0x16F28C)."
+ },
+ {
+  "address": "0x001703B0",
+  "name": "Battle_ResetLineupState",
+  "signature": "void Battle_ResetLineupState(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the battle line-up bookkeeping (counters f_c0/f_c4/f_cc/f_d0/f_d4/f_d8/f_dc/f_e0 to 0xffff/0, flags f_f2/f_129, f_148) and then calls 0x16D438 to (re)spawn the unit entry effects. Used when the battle line-up changes or a battle is initialised.",
+  "confidence": 0.5,
+  "evidence": "writes self->f_f2=1, f_148=0, f_fc/f_c4/f_d0/f_cc/f_d8/f_d4/f_e0/f_dc/f_c0/f_129 then calls 0x16D438(self) (the effect-spawn pass over the unit lists) and stores g_00170410 in self+0x130."
+ },
+ {
+  "address": "0x00170450",
+  "name": "maybe_Battle_UpdateActionScene",
+  "signature": "uint32_t maybe_Battle_UpdateActionScene(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the presentation of the current battle action: tracks a state value at +0x134 (waiting on a unit animation/effect), creates the hit/impact effect through 0x3FE054 and 0x35FF3C at the acting unit's position, selects the model/effect by unit id (0x63E5C8/0x633C38/0x633DCC), and updates the camera/scene target. Returns 1 while the action still needs frames.",
+  "confidence": 0.35,
+  "evidence": "state at self+0x134 compared with g_001709a4/g_001709a4+0x34/+0x38/-1; tests float at self->f_e4+8 against 1.5f and g_001709d8; calls 0x3FE054(&self->f_bc,desc,1) to spawn effects; 0x63E5C8/0x633C38/0x633DCC resolve model+animation by unit id; 0x35FF3C creates the effect at g_001709d0; self->f_13d gates the effect and sets f_134 on completion."
+ },
+ {
+  "address": "0x00170A0C",
+  "name": "maybe_Battle_CheckUnitsCondition",
+  "signature": "int maybe_Battle_CheckUnitsCondition(BattleManager* self, uint32_t mode, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Boolean battle-condition query used by the state machine: mode 4 compares arg3<=arg4, mode 5 asks the world for a value (0x206BA4), mode 6 requires every group unit to pass 0x1CABF4, mode 7 requires every unit to have state 0x33, mode 8 returns world+0x4252. Used to decide when all units have finished an animation/command.",
+  "confidence": 0.48,
+  "evidence": "switch(arg2) 4..8; case 6/7 walk the 4 group lists at world+0x428c and test 0x1CABF4(unit)/0x1CB738(unit,0x33); case 8 reads the byte world+0x4252; callers 0x1745E8 pass the four stored command ids and 0x174324 uses the result for its next state."
+ },
+ {
+  "address": "0x00170B84",
+  "name": "maybe_Battle_QueueUnitListAction",
+  "signature": "void maybe_Battle_QueueUnitListAction(BattleManager* self, uint32_t arg2, BattleUnit** out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "out"
+  },
+  "summary": "Collects up to eight active, targetable battle units into the caller's array and queues action 0x2f (a group/area action) with the acting unit as source. Similar to 0x16FBF8 but without the 'prefer idle units' pass.",
+  "confidence": 0.38,
+  "evidence": "walks world+0x4260 list keeping units with vtable+0x24, vtable+0x18, vtable+0xd8==0 and no states 8/10 (0x639954), max 8 entries; then 0x16815C computes the source unit value and 0x16B810(self,out,0x2f,value,0,0) queues the action."
+ },
+ {
+  "address": "0x00170D4C",
+  "name": "Battle_SelectActionTargets",
+  "signature": "int Battle_SelectActionTargets(BattleManager* self, BattleUnit** out, int groupIndex, uint32_t arg4, uint32_t arg5)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "groupIndex",
+   "param_4": "arg4",
+   "param_5": "arg5"
+  },
+  "summary": "Chooses the concrete target(s) of an action: dispatches on the action's target-mode virtual +0xa4 (single, one group, all, self, random) and range checks via +0xb0, then fills out[8..] with the selected unit pointers and returns the count. This is the routine behind every 'who gets hit' decision.",
+  "confidence": 0.6,
+  "evidence": "first calls (vtable+0xa4)(action) and switches modes 3/4/5: mode 3 collects all units from the four group lists (world+0x428c) plus allies (world+0x4254); mode 4 returns the acting unit; mode 5 picks one ally or, for groupIndex<0, all allies; modes 1/2 delegate to 0x16E228/0x16FA10; +0xb0(x,y) calls are the shape/range validity checks."
+ },
+ {
+  "address": "0x001711AC",
+  "name": "maybe_Battle_SelectGroupTargets",
+  "signature": "uint32_t maybe_Battle_SelectGroupTargets(BattleManager* self, BattleAction* action, BattleUnit* source, int groupIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "action",
+   "param_3": "source",
+   "param_4": "groupIndex"
+  },
+  "summary": "Target selection for group/row actions: counts the units of group `groupIndex` matching the action's target mode, and when the action record has the 'group' flag (g_001714d0) marks the group's leader as the primary target (action+0x20). Falls back to counting all groups when no primary target was set.",
+  "confidence": 0.48,
+  "evidence": "walks world+0x428c+groupIndex*0x1c, selects by (action vtable+0xac)==0 -> unit vtable+0x18 or ==1 -> unit vtable+0x10; if byte g_001714d0[action]!=0 calls 0x627800(self,action,leader) and sets action->f_20; otherwise repeats the count over all four groups."
+ },
+ {
+  "address": "0x001714D4",
+  "name": "maybe_Battle_FinishBattleScene",
+  "signature": "void maybe_Battle_FinishBattleScene(void)",
+  "params": {},
+  "summary": "Shuts down the battle presentation layer: tells the battle scene object (world+0x4320->f_204) to hide/animate out, spawns its closing popup through 0x2DFDE8, invokes the scene object's vtable+0x2c, and releases the battle effect manager at world+0x431c.",
+  "confidence": 0.38,
+  "evidence": "fetches world+0x4320 (battle scene); calls (**(scene->f_204+0x18))(obj,1) and (+0x74)(obj,0); 0x2DFDE8(obj,g_001715bc,...); then (**(scene vtable+0x2c))(); finally 0x269B24(world+0x431c)."
+ },
+ {
+  "address": "0x001715C4",
+  "name": "maybe_Battle_CloseBattleScene",
+  "signature": "void maybe_Battle_CloseBattleScene(void)",
+  "params": {},
+  "summary": "Second half of the battle-scene teardown: calls the scene object's vtable+0x28 (close) and releases the battle effect manager at world+0x431c. Shorter sibling of 0x1714D4, used when no popup is needed.",
+  "confidence": 0.35,
+  "evidence": "world+0x4320->f_204 vtable+0x28() then 0x2695DC(world+0x431c); no arguments used and no state written."
+ },
+ {
+  "address": "0x00171614",
+  "name": "maybe_Battle_UpdateActionAnim",
+  "signature": "uint32_t maybe_Battle_UpdateActionAnim(BattleManager* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Advances the per-action animation pair at self+0x304/+0x35c (0x4B8A84 interpolates them) and, when the battle scene is still active, sets the current actor (self->f_e4) to state 8 (animation done). Always returns 1 so the state machine continues.",
+  "confidence": 0.32,
+  "evidence": "calls 0x4B8A84(&self->f_35c,&self->f_304); if world+0x4320!=0 and 0x640348(scene)!=0 calls (**(self->f_e4+0x14))(self->f_e4,8); returns 1 unconditionally."
+ },
+ {
+  "address": "0x0017163C",
+  "name": "maybe_Battle_CheckActionAnimEnd",
+  "signature": "uint32_t maybe_Battle_CheckActionAnimEnd(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Simplified variant of 0x171614: waits until the battle scene is gone/busy and then sets the current actor to state 8. Used as the 'wait for animation' step of an action state machine.",
+  "confidence": 0.3,
+  "evidence": "reads world+0x4320 and 0x640348; on the false branch (**(self->f_e4+0x14))(self->f_e4,8); returns 1. No other side effects; same state write as 0x171614."
+ },
+ {
+  "address": "0x001716E0",
+  "name": "maybe_Battle_ScanUnitIntro",
+  "signature": "uint32_t maybe_Battle_ScanUnitIntro(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scans all battle groups (f_2f8=0..3, f_2fc up to 0x120 entries) for units that pass the world query 0x632694 and the unit condition check, then feeds each match to 0x3FBE4C which drives the unit's intro/entrance presentation. Advances the group/entry cursor and finishes after the last group.",
+  "confidence": 0.35,
+  "evidence": "state at self+0x134 compared with g_00171904/-0xbf5/+0x1e; walks world+0x429c lists by f_2f8 and entries f_2f4/f_2fc, calls 0x632694(world,unit) and (vtable+0xe8)(unit,index); builds a descriptor (local_38/local_30) and calls 0x3FBE4C(&self->f_bc,desc,1); sets actor state 7 when past 4 groups."
+ },
+ {
+  "address": "0x00171930",
+  "name": "maybe_Battle_SelectTargetsThunk",
+  "signature": "void maybe_Battle_SelectTargetsThunk(void)",
+  "params": {},
+  "summary": "Argument-forwarding thunk to Battle_SelectActionTargets (0x170D4C), used as a callback/vtable entry where the caller already set up r0-r4.",
+  "confidence": 0.4,
+  "evidence": "body is exactly func_00170D4C() with untouched registers; no locals or constants. Ghidra shows it as a 20-byte thunk."
+ },
+ {
+  "address": "0x00171944",
+  "name": "maybe_Battle_QueueCommandMenuEntries",
+  "signature": "void maybe_Battle_QueueCommandMenuEntries(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the per-unit command entries the battle menu consumes: for every valid unit in the active/all lists and every battle group it appends action 0x28 (row) and 0x33 (group header) with a descending priority counter starting at 100. This is what makes each character/monster appear in the command list.",
+  "confidence": 0.45,
+  "evidence": "three passes: world+0x4260 list, world+0x427c list, and the four world+0x428c group lists; each valid unit gets 0x16B810(self,entry,0x28,100-i,0,1) and (...,0x33,...) or g_00171d9c/g_00171da0 for the group variants; counter starts 100 and decrements."
+ },
+ {
+  "address": "0x00172338",
+  "name": "maybe_Battle_QueueNullAction",
+  "signature": "void maybe_Battle_QueueNullAction(BattleManager* self, uint32_t arg2, BattleUnit** unit)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "unit"
+  },
+  "summary": "Queues action id 0 (empty/no-op) for a unit; if the unit has state 0x7d (dead/removed) it queues the slot twice so the following action moves one position later.",
+  "confidence": 0.35,
+  "evidence": "reads (vtable+0xe8)(*unit,0x7d); in both cases 0x16B810(self,unit,0,value,f,7); the 0x7d branch emits a second identical call with arg5=1."
+ },
+ {
+  "address": "0x001723E8",
+  "name": "Battle_BuildTargetSlots",
+  "signature": "uint32_t Battle_BuildTargetSlots(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fills one of the battle's 16-byte target-slot records with the units that satisfy the current action's target pattern: it iterates all four groups, computes each unit's remaining HP/effect amount through 0x495E04/0x490994/0x488638/0x491E3C, sets the selection flags (bit 1 = invalid, 2 = dead, 4/8/0x10 = status), and writes the chosen pattern index into the slot. Called from the attack sequence (0x173CD0/0x173D04).",
+  "confidence": 0.5,
+  "evidence": "reads (action+0xa0) then its vtable+8 for a scaling factor (g_00172828); 0x6297D8 decides 1 or 2 target 'layers'; 0x495E04/0x490994/0x488638/0x491E3C compute per-unit amounts for modes 4/5/other; flags at slot+1 (+1/+2/+4/+8/+0x10), slot+2/3 mark dead/status; copies the group/pattern table from g_00172848.. and stores slot->f_20."
+ },
+ {
+  "address": "0x00172ED8",
+  "name": "Battle_BuildTargetSlotsForCommand",
+  "signature": "uint32_t Battle_BuildTargetSlotsForCommand(BattleManager* self, BattleAction* action, BattleUnit** out, int groupIndex, int mode, uint8_t arg6, char* arg7)",
+  "params": {
+   "param_1": "self",
+   "param_2": "action",
+   "param_3": "out",
+   "param_4": "groupIndex",
+   "param_5": "mode",
+   "param_6": "arg6",
+   "param_7": "arg7"
+  },
+  "summary": "Same target-slot construction as Battle_BuildTargetSlots but scoped to one group and command mode (4/5/other): it runs the ability/item range test, sets the per-unit selection flags, then dispatches the resulting table through 0x100906 with a pattern-specific callback (g_001734c4..d4).",
+  "confidence": 0.5,
+  "evidence": "if action->f_b0f5 is set it first tries 0x627800(self,action,ally) and stores the ally as action->f_20; then 0x627610(self,action,&group); loops group units (world+0x428c), calls 0x18C1B8 + 0x488638/0x491E3C/0x490994 for modes 4/5/other, and finally 0x100906(table,count,0x10,callback) with the callback selected by *arg7 (0..5)."
+ },
+ {
+  "address": "0x00173534",
+  "name": "maybe_Battle_AreAllUnitsDefeated",
+  "signature": "uint32_t maybe_Battle_AreAllUnitsDefeated(uint32_t arg1, BattleUnit* target, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "target",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Victory check: requires the reference target to have state 0x9a and then verifies that no alive group unit still carries state 0x9b (reviving/undead). Returns 1 when the battle can end.",
+  "confidence": 0.45,
+  "evidence": "returns 0 if target==NULL or (vtable+0xe8)(target,0x9a)==0; then walks all four group lists and returns 0 as soon as a unit with vtable+0x10==0 also has state 0x9b; otherwise 1."
+ },
+ {
+  "address": "0x00173984",
+  "name": "Battle_SelectTargetsMode6",
+  "signature": "void Battle_SelectTargetsMode6(uint32_t self, uint32_t arg2, uint32_t arg3, BattleUnit** out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "out"
+  },
+  "summary": "Thin wrapper that selects targets with fixed target-mode 6 (all-enemies style) via Battle_SelectActionTargets(0x170D4C).",
+  "confidence": 0.55,
+  "evidence": "single tail call func_00170D4C(arg1,arg4,arg3,6,arg2); the 6 is the target-mode constant consumed by 0x170D4C's switch."
+ },
+ {
+  "address": "0x001739A0",
+  "name": "maybe_Battle_QueueFirstUnitAction",
+  "signature": "void maybe_Battle_QueueFirstUnitAction(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Finds the first active unit in the four battle groups and queues the scripted action id stored at g_00173a7c for it (via a small 6-byte descriptor). Returns after the first match.",
+  "confidence": 0.4,
+  "evidence": "walks world+0x4298 group lists, on vtable+0x18!=0 builds descriptor {unit, 0, 0xb} and calls 0x16B810(self,desc,g_00173a7c,0); returns immediately after queueing."
+ },
+ {
+  "address": "0x00173A88",
+  "name": "maybe_Battle_UpdateStateCallbacks",
+  "signature": "uint32_t maybe_Battle_UpdateStateCallbacks(BattleManager* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Dispatches the manager's per-state callbacks based on the phase byte (+0x2f0) and the stored phase ids: calls vtable+0x1a4 when both phase counters agree and +0x1b0/+0x1ac succeed, vtable+0x1a0 for state +0x103, and vtable+0x19c for state 3. Returns 0 to keep the state machine running.",
+  "confidence": 0.4,
+  "evidence": "compares (char)self[0xbc] (+0x2f0) with +0xfd/+0x40/+0x103/3 and invokes vtable+0x1b0/0x1ac/0x1a4/0x1a0/0x19c; guarded by world+0x4320==0 or 0x640348(scene)==1."
+ },
+ {
+  "address": "0x00173B90",
+  "name": "Battle_SelectTargetsMode2",
+  "signature": "void Battle_SelectTargetsMode2(uint32_t self, uint32_t arg2, uint32_t arg3, BattleUnit** out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "out"
+  },
+  "summary": "Thin wrapper selecting targets with fixed target-mode 2 (single-target) through Battle_SelectActionTargets.",
+  "confidence": 0.55,
+  "evidence": "single tail call func_00170D4C(arg1,arg4,arg3,2,arg2)."
+ },
+ {
+  "address": "0x00173BAC",
+  "name": "Battle_WriteActionSlot",
+  "signature": "void Battle_WriteActionSlot(BattleManager* self, BattleAction* action, uint32_t arg3, uint32_t arg4, int subIndex, uint8_t arg6)",
+  "params": {
+   "param_1": "self",
+   "param_2": "action",
+   "param_3": "arg3",
+   "param_4": "arg4",
+   "param_5": "subIndex",
+   "param_6": "arg6"
+  },
+  "summary": "Non-shifting sibling of Battle_InsertActionSlot: writes an action descriptor directly into the current action slot (f_124) and sub-record `subIndex` without moving the other slots. Used when the state machine fills a slot that was already reserved.",
+  "confidence": 0.55,
+  "evidence": "f124=self->f_124; calls 0x51B1F0(world+0x4218) then 0x3CDF74(self->f_e8 + f124*0x2c8 + arg5*0x8c, action); no shift/copy loop, unlike 0x16F28C."
+ },
+ {
+  "address": "0x00173C6C",
+  "name": "Battle_SelectTargetsMode5",
+  "signature": "void Battle_SelectTargetsMode5(uint32_t self, uint32_t arg2, uint32_t arg3, BattleUnit** out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "out"
+  },
+  "summary": "Thin wrapper selecting targets with fixed target-mode 5 (single ally / all allies) through Battle_SelectActionTargets.",
+  "confidence": 0.55,
+  "evidence": "single tail call func_00170D4C(arg1,arg4,arg3,5,arg2)."
+ },
+ {
+  "address": "0x00173C88",
+  "name": "Battle_SelectTargetsMode4",
+  "signature": "void Battle_SelectTargetsMode4(uint32_t self, uint32_t arg2, uint32_t arg3, BattleUnit** out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "out"
+  },
+  "summary": "Thin wrapper selecting targets with fixed target-mode 4 (self) through Battle_SelectActionTargets.",
+  "confidence": 0.55,
+  "evidence": "single tail call func_00170D4C(arg1,arg4,arg3,4,arg2)."
+ },
+ {
+  "address": "0x00173CD0",
+  "name": "maybe_Battle_StartActionSequence",
+  "signature": "uint32_t maybe_Battle_StartActionSequence(BattleManager* self, int arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Starts the visual/sequence part of an attack or ability action: resets the effect/track objects at self+0x13b/0xd7/0xc1, picks the first non-empty battle group and a random unit, allocates the action track object (0x1EBC68), sets the primary target, then runs the virtual hit routine +0x1c0 and the target-table build 0x1723E8. Ends by starting the unit's animation state / clears the target.",
+  "confidence": 0.45,
+  "evidence": "initial 0x4D2374(self+0x13b) and 0x4B8A84(self+0xd7,self+0xc1); state self[0x4d]==-1 or g_00174128-0xb7b; scans groups via 0x5797D8, picks with 0x1CA438(random), stores target self[0x51]; calls vtable+0x64 (100) and +0x1c0; 0x1EBC68(track,0x158,0); on completion sets self[0x4d]=g_00174148 and returns 1."
+ },
+ {
+  "address": "0x00173D04",
+  "name": "maybe_Battle_UpdateActionSequence",
+  "signature": "uint32_t maybe_Battle_UpdateActionSequence(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Continuation of Battle_StartActionSequence: same state machine without the opening effect reset. Advances the target-table build, starts the hit animation and, when the scene is done, clears the primary target and moves the manager to the next action state via the unit's secondary state machine (+0x14 with 5/6/7).",
+  "confidence": 0.45,
+  "evidence": "identical to 0x173CD0 minus 0x4D2374/0x4B8A84 preamble; same self[0x4d] states g_00174128/-0xb7b/0xb/0x13, calls 0x1723E8 and vtable+0x1c0, then (**(self[0x39]+0x14))(self[0x39],5/6/7) after scanning group units for state vtable+0xdc."
+ },
+ {
+  "address": "0x00174174",
+  "name": "maybe_Battle_SpawnBattleEndEffect",
+  "signature": "uint32_t maybe_Battle_SpawnBattleEndEffect(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Battle-end presentation step: for result code f_128==1 spawns effect 0x3FF6FC with the lineup descriptor, for f_128==2 marks the battle as lost/ended (f_f9/f_129=1) and spawns the other variant, then sets the actor's animation state 7 once the scene object rises above a threshold.",
+  "confidence": 0.35,
+  "evidence": "state f_134 compared with g_00174310/-0xbbb/+0x1f; f_128 1 or 2 selects 0x3FF6FC(&self->f_bc,desc,0) with a flag; compares self->f_130 + *g_00174314 against float (self->f_e4)[2] before (**(f_e4+0x14))(f_e4,7)."
+ },
+ {
+  "address": "0x00174324",
+  "name": "maybe_Battle_FinishCommandPhase",
+  "signature": "uint32_t maybe_Battle_FinishCommandPhase(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the current command phase: confirms unit commands (0x16C740), rebuilds the per-unit action descriptors (0x1762AC) for all four groups, clears the action slots (0x174464), then asks vtable+0x18c whether the phase is complete and moves the actor to state 8/3 accordingly.",
+  "confidence": 0.45,
+  "evidence": "self->f_3e=0; 0x16C740(self); for each group unit with vtable+0x18 calls 0x176948/0x1762AC; 0x174464(self); result of (**(vtable+0x18c))(self) stored in f_3e; (**(self[0x39]+0x14))(self[0x39],8 or 3) based on self[0x4a]/f_f6."
+ },
+ {
+  "address": "0x00174464",
+  "name": "maybe_Battle_ClearActionSlots",
+  "signature": "void maybe_Battle_ClearActionSlots(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the four 0x58-byte command/track slot records at self+0x150.. and refills them from the active unit list (0x495F10). Sets self->f_f6 when any slot still has a pending status flag (0x194..0x1a0), which tells the caller that an action is still unresolved.",
+  "confidence": 0.45,
+  "evidence": "loops i<4 writing 0 to +0x150..+0x1a7 and 0x1113EC(+0x16a,0x38); walks world+0x4260 units and calls 0x495F10(self+i*0x58+0x150,unit); then checks bytes f_194/f_196/f_198/f_19a/f_19c/f_19e/f_1a0 and sets self->f_f6=1."
+ },
+ {
+  "address": "0x001745E8",
+  "name": "Battle_CheckUnitCommandCondition",
+  "signature": "uint32_t Battle_CheckUnitCommandCondition(BattleManager* self, uint32_t commandId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "commandId"
+  },
+  "summary": "Looks up which of the four stored command slots (f_fd, f_100, f_103, f_106) matches the given command id and evaluates its condition via Battle_CheckUnitsCondition(0x170A0C) with the slot's two parameters. Returns the last evaluated result.",
+  "confidence": 0.5,
+  "evidence": "four sequential comparisons self+0xfd/0x100/0x103/0x106 against arg2; each match calls func_00170A0C(self,slotId,slot+2,slot+1); the f_106 branch returns immediately. Slots f_fd/f_100/f_103/f_106 are also compared in 0x16C128."
+ },
+ {
+  "address": "0x00175B38",
+  "name": "maybe_Ui_ReleaseAnimationObject",
+  "signature": "void maybe_Ui_ReleaseAnimationObject(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Stops and releases the window's optional animation object at +0xe4 (vtable+8 = stop, vtable+0xc(0) = reset/clear). Part of a window teardown path.",
+  "confidence": 0.35,
+  "evidence": "if self->f_e4 != NULL calls (**(vtable+8))() and (**(vtable+0xc))(self->f_e4,0); no other fields touched. 0x16E3E0 calls a similarly shaped cleanup for battle-side objects."
+ },
+ {
+  "address": "0x00175B78",
+  "name": "maybe_Battle_QueueReactionAction",
+  "signature": "void maybe_Battle_QueueReactionAction(BattleManager* self, uint32_t arg2, BattleAction* action)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "action"
+  },
+  "summary": "Queues action 0x16 for a unit that has a pending reaction/opportunity flag: sets the action's wait flag from unit+0x10 and the extra flag from g_00175c18[unit], then appends the action with mode 7.",
+  "confidence": 0.32,
+  "evidence": "reads unit f_10, the byte table g_00175c18 indexed by the unit pointer, and f_b108; writes action[0x1e] and calls 0x16B810(self,action,0x16,value,flag,7)."
+ },
+ {
+  "address": "0x00175C1C",
+  "name": "maybe_Battle_CheckCommandCondition",
+  "signature": "int maybe_Battle_CheckCommandCondition(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns 1 when the manager's stored command id 2 (f_106) is not active or its condition (0x170A0C with f_108/f_107) succeeds, otherwise falls back to the manager flag f_f3. Small helper used by a command predicate.",
+  "confidence": 0.4,
+  "evidence": "if self->f_106==2 returns self->f_f3; else calls 0x170A0C(self,f_106,f_108,f_107) and returns 1 if it is non-zero, otherwise f_f3."
+ },
+ {
+  "address": "0x00175F20",
+  "name": "maybe_Battle_Destroy",
+  "signature": "BattleManager* maybe_Battle_Destroy(BattleManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Battle manager destructor: destroys the optional child object at +0xe4 (self[0x39]) through its vtable+4, nulls the slot, then frees the queued-command list at +0x110 via Battle_FreeCommandList. Returns self.",
+  "confidence": 0.45,
+  "evidence": "calls (**(self[0x39]+4))() and clears self[0x39]; then 0x16D854(self) frees the +0x110 command list; returns arg1. The self[0x39] object is also used as an action-state dispatcher in 0x173CD0/0x173D04."
+ },
+ {
+  "address": "0x0017613C",
+  "name": "maybe_Battle_UpdateUnitCommandSlots",
+  "signature": "void maybe_Battle_UpdateUnitCommandSlots(uint32_t arg1, BattleUnit* unit)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "unit"
+  },
+  "summary": "For the given unit, walks the whole command list and calls vtable+0x1c on every live unit, resets the effect manager (0x63CDA0) and finally invokes the unit's vtable+0x54 (commit/finish). Looks like the 'all commands entered' hand-off.",
+  "confidence": 0.35,
+  "evidence": "loops world+0x4260; for units with vtable+0x24!=0 and vtable+0x18!=0 calls (vtable+0x1c)(); then 0x63CDA0(effectMgr) and (**(unit vtable+0x54))(unit)."
+ },
+ {
+  "address": "0x001762B4",
+  "name": "maybe_Battle_FinalizeUnitAction",
+  "signature": "void maybe_Battle_FinalizeUnitAction(uint32_t arg1, BattleUnit* unit)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "unit"
+  },
+  "summary": "Finishes a unit's action: if the unit is not in the extra phase, compares two monster-data rates (f_de/f_e0) and re-rolls the battle random when they differ; otherwise selects the character by f_1da. Ends by calling the unit's vtable+0x54.",
+  "confidence": 0.35,
+  "evidence": "for (char)unit[4]==0 resolves 0x63E5C8(unit->f_76c) and compares f_de/f_e0 via float conversion, calling 0x1CA3E4(world+0x4218,0) when unequal; else 0x63FDAC(unit->f_768); then (**(unit vtable+0x54))(unit)."
+ },
+ {
+  "address": "0x001763FC",
+  "name": "Field_CheckZonePoint",
+  "signature": "uint64_t Field_CheckZonePoint(uint32_t arg1, FieldActor* actor, uint32_t arg3)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "actor",
+   "param_3": "arg3"
+  },
+  "summary": "Tests whether an actor is inside a named field zone/trigger volume: compares the actor's current height/position against the zone's point list, walks the actor's zone links and returns a packed (string, bool) result whose string is 'ZONEFALSE'/'ZONETRUE'. Debug text mentions 'ZonePoint'.",
+  "confidence": 0.5,
+  "evidence": "the function contains the string literals s_ZONEFALSE__ZonePoint_001768a0 and s__ZONETRUE___ZonePoint_001768eb; compares float actor->+0x118 against g_0017689c/g_001768b8/g_001768d8..e8 thresholds; calls 0x66AF20(world+0x24a98) to get the zone manager and 0x63E5C8/0x63FDAC for actor data; returns CONCAT44(string,flag)."
+ },
+ {
+  "address": "0x00176A3C",
+  "name": "maybe_Ui_UpdateWindowClose",
+  "signature": "void maybe_Ui_UpdateWindowClose(UiWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Per-frame close step of a layout window: updates the layout animation pair (0x1DAD58), and when the open flag is set without the 'closing' bit plays the close SE (0xb/0xc) and sets sub-object flags 0x10/0x14; otherwise just advances the close animation (0x6D7200).",
+  "confidence": 0.35,
+  "evidence": "0x1DAD58(&self->f_2d8,&self->f_160); 0x62F680(self->f_2d8)!=0; if (self->f_174&4)==0 then 0x253290(world+0x6c, 0xb or 0xc) and sets self->f_11c->f_10=1/f_14=0xd; else 0x6D7200(&self->f_120)."
+ },
+ {
+  "address": "0x00176AD8",
+  "name": "maybe_Ui_UpdateWindowOpen",
+  "signature": "void maybe_Ui_UpdateWindowOpen(UiWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Per-frame open/tick step of the same layout window: updates the layout animation, and when the window's mode is 1 runs animation 99/100 (0x2BBAD0) and applies keyframe timing (g_00176ba8) through 0x1DAB30/0x6D72B4.",
+  "confidence": 0.35,
+  "evidence": "0x1DAD58(&self->f_2d8,&self->f_160); 0x62F680/0x62F694 gate the path; mode 1 -> 0x1DAB30(&self->f_2d8,0x2BBAD0(99)) and 0x6D72B4(...,g_00176ba8->f_28,f_2c,0); else 0x2BBAD0(100)."
+ },
+ {
+  "address": "0x00176BAC",
+  "name": "maybe_Ui_UpdateWindowState",
+  "signature": "void maybe_Ui_UpdateWindowState(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "State machine for a layout-backed window: dispatches on the sub-state returned by 0x632860 (0..5). Each case either plays an SE and starts a layout animation (0x1DAB30/0x6D72B4), completes back to the parent window, or creates the child sub-object 0x2D5A08. Handles the 'window open/close/confirm/cancel' animation sequence.",
+  "confidence": 0.45,
+  "evidence": "switch(0x632860(&self->f_17c)) cases 0..5; flags tested at self->f_174 (bit 1, bit 2, 0x100); plays SE via 0x253290(world+0x6c, 3/6/9/10) and animations 0x62/0x65/0x66; allocates 0x30-byte child with 0x2D5A08; writes g_00176fdc.. as keyframe data; sets self->f_11c->f_10/f_14."
+ },
+ {
+  "address": "0x00177000",
+  "name": "maybe_Ui_UpdateWindowConfirm",
+  "signature": "void maybe_Ui_UpdateWindowConfirm(UiWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Variant of the window tick for the confirm/cancel sub-state: only when the layout animation reports mode 1 and the stored SE id (+0x320) is not -1 does it play that SE and set the sub-object flags; otherwise it advances the animation.",
+  "confidence": 0.32,
+  "evidence": "0x1DAD58/0x62F680/0x62F694; mode==1 && *(char*)(self+0x320)!=-1 -> 0x253290(world+0x6c,*(u8*)(self+0x320)) and f_11c flags; else 0x6D7200(&self->f_120)."
+ },
+ {
+  "address": "0x00177144",
+  "name": "maybe_Ui_UpdateChildObject",
+  "signature": "void maybe_Ui_UpdateChildObject(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Ticks the window's optional child object at +0x324: when it reports done (vtable+0xc) it is destroyed, the completion SE (0x65) is played through the layout, or, if the world flag 0x66AAD0 is set, the parent window switches to sub-state 9. Otherwise it keeps updating the child.",
+  "confidence": 0.45,
+  "evidence": "if self->f_324==NULL -> 0x6D7200; else (**(f_324+0xc))()!=0 -> (**(f_324+4))(), f_324=0, 0x6D7200, check 0x66AAD0(world+0x2fb18,0), play 0x253290(...,9) or animation 0x65; else (**(f_324+8))() tick."
+ },
+ {
+  "address": "0x0017726C",
+  "name": "maybe_Ui_PlayWindowSe",
+  "signature": "void maybe_Ui_PlayWindowSe(UiWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Minimal window update used for the SE-only case: updates the layout animation and, if the layout is open, plays the SE id stored at self+0x320 and sets the sub-object flags.",
+  "confidence": 0.35,
+  "evidence": "0x1DAD58(&self->f_2d8,&self->f_160); 0x62F680(&self->f_2d8)!=0 -> 0x253290(world+0x6c,*(u8*)(self+0x320)); self->f_11c->f_10=1, f_14=0xd."
+ },
+ {
+  "address": "0x001773D8",
+  "name": "maybe_Field_DestroyNpcActionObject",
+  "signature": "void maybe_Field_DestroyNpcActionObject(NpcAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor for a large NPC/actor action object: releases the child object at +0x324, destroys the embedded message-page object (0x1DB5D0) and a chain of embedded sub-objects (0x1A6768/0x36B514/0x1D8C2C), then frees the block through 0x10F6CC.",
+  "confidence": 0.35,
+  "evidence": "releases arg1[0xc9] via vtable+4; 0x1DB5D0(arg1+0xb6) (Ui_MessagePage_Dtor), repeated 0x1A6768 on successive -0x54/-0x4c/-0x68 offsets, 0x36B514, 0x1D8C2C, then 0x10F6CC (free); object layout matches the UiWindow code above (f_324 child)."
+ },
+ {
+  "address": "0x001775C0",
+  "name": "maybe_Field_NpcActionDestroyThunk",
+  "signature": "void maybe_Field_NpcActionDestroyThunk(void)",
+  "params": {},
+  "summary": "Two-call destructor thunk: destroys an embedded sub-object (0x1A6768) and frees the allocation (0x10F6CC). Used where a plain function pointer is needed.",
+  "confidence": 0.32,
+  "evidence": "body is 0x1A6768(); 0x10F6CC(); no arguments/locals. 0x10F6CC is the same free used at the end of 0x1773D8."
+ },
+ {
+  "address": "0x00177610",
+  "name": "maybe_Field_NpcUpdateMoveState",
+  "signature": "void maybe_Field_NpcUpdateMoveState(NpcBehavior* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "NPC movement-state update: when the actor has waited long enough (f_24->f_44 >= f_2c) it evaluates distance/terrain through 0x62DDF0 and flags, then sets the actor's movement state to 0 (walk), 2 (blocked), 3 (slow) or 9 (turn) via 0x5E7848.",
+  "confidence": 0.42,
+  "evidence": "compares self->f_24->f_44 with self->f_2c; reads actor f_9c/a0/a4 and f_26a; calls 0x62DDF0(levelMgr,&pos,f_26a,*(u16*)(actor+0x258)); 0x5E7E58(actor,1); tests g_0017770c[actor] bit 1; then 0x5E7848(actor,state)."
+ },
+ {
+  "address": "0x00177784",
+  "name": "Field_NpcCheckPlayerDistance",
+  "signature": "void Field_NpcCheckPlayerDistance(NpcBehavior* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Checks whether the NPC is close enough to the player to start an action: runs the sight check (0x17843C), sets the actor to the 'aware' movement state 4, accumulates the distance accumulator f_30 and switches to movement state 2 once it exceeds g_0017785c.",
+  "confidence": 0.5,
+  "evidence": "calls 0x17843C(self->f_28) then 0x5E7848(actor,4,0); computes SQRT of (f_9c-f_c0)^2+(f_a0-f_c4)^2+(f_a4-f_cc)^2 and compares with g_00177858; adds to self->f_30 and compares with *g_0017785c; sets f_2c=0 and calls 0x5E7848(actor,2,0)."
+ },
+ {
+  "address": "0x0017843C",
+  "name": "Field_NpcCheckSight",
+  "signature": "int Field_NpcCheckSight(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "NPC perception test: returns 1 when the actor can see the player (or another actor) this frame. It checks the actor's enable/awareness flags, distance, the view cone (Field_IsPointInActorViewCone at 0x178DD0) and, for actors with the 'group sight' bit, compares the nearest group member positions.",
+  "confidence": 0.55,
+  "evidence": "checks (self+0x2aa) bits, world+0x44, distance g_001787b0, then calls 0x178DD0(self,&playerPos,1,...) (named Field_IsPointInActorViewCone in N_001); second pass walks actors with flag 0x20 in self+0x2aa and calls 0x178DD0 for each, using 0x63DCA4 to compare sizes; returns 1 and stores the found actor id in self[0xc3]."
+ },
+ {
+  "address": "0x001788F0",
+  "name": "Field_NpcMoveTowardTarget",
+  "signature": "uint32_t Field_NpcMoveTowardTarget(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Moves an NPC one step toward its current move target: clamps the direction vector to g_00178af4, asks the level collision system (0x2E7F08) whether the position is free, and sets movement state 1 (move) or 2 (blocked), with an extra 'path blocked' state 4 when the path object is active.",
+  "confidence": 0.5,
+  "evidence": "target = actor position (f_9c/a0/a4) + g_00178ae8; direction from 0x63451C(world+0x48); normalises if length > g_00178aec else uses g_00178af0; 0x2E7F08(pathObj,&pos,0)!=0 -> (vtable+0xb4)(self,1,0) else (...,1); extra (vtable+0xb4)(self,4,0/1) when world+0x54->f_1c != 0 and 0x46E7AC()==0."
+ },
+ {
+  "address": "0x00179714",
+  "name": "maybe_Field_NpcUpdateFacing",
+  "signature": "void maybe_Field_NpcUpdateFacing(NpcBehavior* self, int mode, uint32_t arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode",
+   "param_3": "arg3"
+  },
+  "summary": "Adjusts the NPC's turn/animation direction: for mode 1/2 it inspects the world's 2D/3D flag (world+0x3c values 1/4) and the actor's stored direction flags f_36/f_37, then forwards to the actor's turn routine 0x5E754C.",
+  "confidence": 0.35,
+  "evidence": "reads g_006F1EEC()->world+0x3c (1 or 4) and world+0x44; sets self->f_60->f_36/f_37; ends with 0x5E754C(self,arg2,arg3) (actor set-state helper used by NPC movement)."
+ },
+ {
+  "address": "0x00179D7C",
+  "name": "Field_NpcPlayGesture",
+  "signature": "void Field_NpcPlayGesture(NpcBehavior* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the NPC's current gesture/emote: switches on the desired gesture byte (+0xaa) and creates the matching one-shot action object (gesture, sleep, ecstacy, mimic, frog-jump) with names taken from strings 'Gesture', 'Sleep', 'Ecstacy', 'Mimic', 'FrogJump'. Also resets the action state afterwards.",
+  "confidence": 0.62,
+  "evidence": "switch on (char)self[0xaa] == 1/2/3/4/5; every branch looks up a scripted action name via 0x641628(actor->f_11c, \"Sleep\"/\"Ecstacy\"/\"Mimic\"/\"FrogJump\"/\"Gesture\"), allocates the effect object (0x109DC8, 0x2c/0xd8 bytes) and calls 0x215AE4/0x332E38/0x3D8FA4/0x332B38; finally 0x2A86C0(actor,1,0) and resets actor f_36/f_37."
+ },
+ {
+  "address": "0x0017A2D8",
+  "name": "Field_NpcPlayAnimation",
+  "signature": "void Field_NpcPlayAnimation(NpcBehavior* self, uint8_t animId, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "animId",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Plays an animation on the NPC's linked actor: looks up the actor action record at the current table index/slot (+0x26c/+0x2b4) and forwards animId to the animation object's 0x28C7B4 setter.",
+  "confidence": 0.5,
+  "evidence": "guards self->f_26a==1/2, indexes world+0x4c + f_26c*g_0017a35c*4 + f_2b4*0x1c + 0x154, takes record->f_10 (animation object) and calls 0x28C7B4(anim,animId)."
+ },
+ {
+  "address": "0x0017A360",
+  "name": "maybe_Field_NpcGetActionAnimId",
+  "signature": "void maybe_Field_NpcGetActionAnimId(NpcBehavior* self, NpcActionEntry* out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out"
+  },
+  "summary": "Resolves the animation/action record for the NPC's current action slot and writes its id into out->f_c. When the table index is valid it advances the slot cursor (f_2a4 wrapping over the entry count) and reads the animation id through 0x62B71C.",
+  "confidence": 0.45,
+  "evidence": "guard g_0017a4ec[self]==1/2; indexes the same world+0x4c table with g_0017a4f0 stride; uses f_2a4, 0x62B830 (count), 0x62B7F8, 0x11CD80 (modulo) and 0x62B71C; on failure calls 0x1D233C(...,levelMgr,id+0x30,self,0) to create the object; writes out->f_c."
+ },
+ {
+  "address": "0x0017A6EC",
+  "name": "maybe_Field_NpcApplyActionResult",
+  "signature": "void maybe_Field_NpcApplyActionResult(NpcBehavior* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Applies the result code at +0x325 of a finished NPC action: result 1 runs the 'finish' virtuals (vtable+0x3c with 4, vtable+0x98 twice) and sets movement state 2; result 2 runs vtable+0x40 with 4 and sets movement state 2 with the alternate flag.",
+  "confidence": 0.45,
+  "evidence": "switch on *(char*)(self+0x325); case 1 calls (vtable+0x3c)(self,4), (vtable+0x98)(self) twice, (vtable+0xb4)(self,2,0); case 2 calls (vtable+0x40)(self,4) and (vtable+0xb4)(self,2,1). Same vtable slots are used by 0x17A8AC."
+ },
+ {
+  "address": "0x0017A7BC",
+  "name": "Field_NpcPlayActionAnim",
+  "signature": "void Field_NpcPlayActionAnim(FieldActor* actor, uint32_t primaryId, uint32_t fallbackId)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "primaryId",
+   "param_3": "fallbackId"
+  },
+  "summary": "Plays the animation for an NPC action: if the actor has a gesture/action track (f_58/f_11c) and the named action exists (0x641628), uses primaryId, otherwise falls back to fallbackId. Both paths call the actor's vtable+0x84.",
+  "confidence": 0.5,
+  "evidence": "reads actor[0x58]->f_11c and 0x641628(track); if found -> (**(vtable+0x84))(actor,arg2) else (**(vtable+0x84))(actor,arg3). Called from 0x1775D4 with the two registered action tables g_00177608/g_00177604."
+ },
+ {
+  "address": "0x0017A81C",
+  "name": "maybe_Field_NpcPlayLinkedAnimation",
+  "signature": "void maybe_Field_NpcPlayLinkedAnimation(NpcBehavior* self, uint8_t animId, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "animId",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Applies an animation to the current NPC action slot's linked animation object through 0x28CDE0 (with the NPC as owner), used for actions that drive a child/partner actor as well.",
+  "confidence": 0.45,
+  "evidence": "same table index as 0x17A2D8 but without the extra stride constant (g_0017a8a8); takes record->f_10 and calls 0x28CDE0(anim,self,animId)."
+ },
+ {
+  "address": "0x0017A8AC",
+  "name": "Field_NpcApplyAction",
+  "signature": "void Field_NpcApplyAction(NpcBehavior* self, NpcActionRecord* rec)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec"
+  },
+  "summary": "Applies a parsed NPC action record: copies its 16 words (speed, animation, move flags, object ids) into the NPC object, resolves the animation object (0x2D71AC) and the action record for the current table (0x62D5DC/0x62D65C), and for flag 1 spawns the 'moveSt' action; for the paired record it spawns 'movePa'. Flag 0x40 ends the action.",
+  "confidence": 0.55,
+  "evidence": "copies rec->f_c..f_4c into self[0x9a..0xaa]; 0x2D71AC(rec->f_14) -> self[0xac], self[0xab]=+f_18*10; self[0xad]=0x62D5DC/0x62D65C(levelMgr,rec->f_1c,rec->f_10); if rec->f_4e&1 -> 0x2A8874(actor,3), allocate 0x34 bytes and 0x2B2F40(...,\"moveSt\"); if the slot record 0x62B8A4 fails -> allocate 0x44 bytes and 0x2B2ED0(...,\"movePa\"); if rec->f_4e&0x40 -> (vtable+0x40)(self,4), (vtable+0xb4)(self,2,1)."
+ },
+ {
+  "address": "0x0017ABF8",
+  "name": "maybe_Field_NpcFinishAction",
+  "signature": "void maybe_Field_NpcFinishAction(NpcBehavior* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Ends the current NPC action: if the action slot is valid it sends animation id 3 through 0x28CDE0, then lets the actor/sprite system finish the action (0x336938) so the NPC returns to its idle behaviour.",
+  "confidence": 0.45,
+  "evidence": "guards self->f_41; indexes the action table with g_0017ac98/g_0017ac9c and calls 0x28CDE0(anim,self,3); finally 0x336938(self) (same finish helper as 0x17AEE4)."
+ },
+ {
+  "address": "0x0017AEE4",
+  "name": "maybe_Field_NpcActionDestroy",
+  "signature": "void maybe_Field_NpcActionDestroy(NpcBehavior* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor tail for the NPC action object: releases the two actor handles at +0x260/+0x264 via 0x336B3C and frees the object block (0x10F6CC).",
+  "confidence": 0.45,
+  "evidence": "reads arg1[0x98]/arg1[0x99] (offsets 0x260/0x264), calls 0x336B3C (sprite/actor release, also used by 0x17ABF8) then 0x10F6CC (free)."
+ },
+ {
+  "address": "0x0017BA38",
+  "name": "maybe_Ui_GetTableEntry",
+  "signature": "uint8_t* maybe_Ui_GetTableEntry(int index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Lazily initialises the global 8-byte-record table g_0017bafc (0x10009C constructor) and returns the entry for the given index. Tiny table accessor used by the fade-window code.",
+  "confidence": 0.35,
+  "evidence": "if ((*g_0017baf8 & 1)==0) 0x10009C(g_0017baf8); return g_0017bafc + index*8. No other state; the table base is a data symbol, not a function."
+ },
+ {
+  "address": "0x0017BB1C",
+  "name": "Ui_FadeWindow_Setup",
+  "signature": "void Ui_FadeWindow_Setup(UiFade* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the full-screen fade overlay: loads the 'win_fade' layout into the widget at self+0x138 (0x1D85EC) and starts its open animation (0x29126C with 1).",
+  "confidence": 0.55,
+  "evidence": "passes the literal string \"win_fade\" to 0x1D85EC(self, self+0x138, \"win_fade\", 0), then 0x29126C(self+0x138,1). 0x1D85EC is the same layout-loader used by other window setup paths."
+ },
+ {
+  "address": "0x0017BE9C",
+  "name": "maybe_Ui_CreateFadeWindow",
+  "signature": "UiFade* maybe_Ui_CreateFadeWindow(uint32_t arg1, uint32_t arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Constructor for the fade overlay object: allocates the base object (0x1D8B6C), initialises its intro/outro child lists and colour-transform block (0x1A66A0), installs the fade vtables (g_0017bf98/9c) and stores the caller's screen mode in +0x128. Returns the object.",
+  "confidence": 0.45,
+  "evidence": "calls 0x1D8B6C (UI object allocator), writes vtable words g_0017bf98/g_0017bf9c, builds two intrusive list heads at +0x120/+0x128 (self-referencing), 0x1A66A0(self+0x138) for the transform, copies g_0017bff0.. colour words, stores arg2 at +0x128; returns self+0 (puVar4-0x4e). 0x17BFB4 is the matching destructor."
+ },
+ {
+  "address": "0x0017BFB4",
+  "name": "Ui_FadeWindow_Destroy",
+  "signature": "void Ui_FadeWindow_Destroy(UiFade* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor for the fade overlay created by Ui_CreateFadeWindow: releases the embedded transform/widget (0x291220, 0x1A6768), runs the layout destructor (0x1D8C2C at -0x138) and frees the block (0x10F6CC).",
+  "confidence": 0.5,
+  "evidence": "calls 0x291220(self+0x4e), 0x1A6768(self+0x4e), 0x1D8C2C(self+0x4e-0x138), 0x10F6CC; object offsets match 0x17BE9C exactly."
+ },
+ {
+  "address": "0x0017C054",
+  "name": "maybe_Ui_RegisterActor",
+  "signature": "uint32_t maybe_Ui_RegisterActor(UiActorHolder* holder, UiActor* actor, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "holder",
+   "param_2": "actor",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Registers a UI/sprite actor with the holder object and notifies the sprite manager: stores the actor's packed id pair in +0xc/+0xd, bumps the reference count, calls 0x339FC0(world+0x58, holder) to link/visibility-toggle it, and decrements the remaining-life counter.",
+  "confidence": 0.35,
+  "evidence": "checks (holder vtable+0xc)(); writes arg2->f_4 into +0xc and arg3->f_4 into +0xd, +0xe=0xfffffff, +0x10++; calls 0x339FC0(world+0x58,holder) which sets param_1+0x14=param_2 and calls 0x1A1774(...,2,1/0); decrements +0xf. Called from 0x180B94/0x1835AC/0x184958 to register table actors."
+ },
+ {
+  "address": "0x0017C11C",
+  "name": "maybe_Ui_RegisterActorVariant",
+  "signature": "uint32_t maybe_Ui_RegisterActorVariant(UiActorHolder* holder, UiActor* actor, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "holder",
+   "param_2": "actor",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Second variant of the UI actor registration: same packed-id/link path but the second word is the raw arg3 rather than a second actor, used for single-actor slots.",
+  "confidence": 0.33,
+  "evidence": "same structure as 0x17C054 but only arg2 is dereferenced (+0xc), +0xd is built from a global, +0xe=arg3; then 0x339FC0(world+0x58,holder)."
+ },
+ {
+  "address": "0x0017C320",
+  "name": "maybe_Ui_ObjectDestroyThunk",
+  "signature": "void maybe_Ui_ObjectDestroyThunk(void)",
+  "params": {},
+  "summary": "Thunk that runs the small object destructor (0x17C334) and frees the block (0x10F6CC).",
+  "confidence": 0.35,
+  "evidence": "body: func_0017C334(); func_0010F6CC()."
+ },
+ {
+  "address": "0x0017C334",
+  "name": "maybe_Ui_DestroyObject",
+  "signature": "UiObject* maybe_Ui_DestroyObject(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor body for a small UI/2D object: releases the embedded heap block at +0x14 (0x10EC00/0x10EC14) when the object owns one, resets the vtable/id word at +4 and returns self. Called by the many destructor thunks around 0x18130C/0x184CA4.",
+  "confidence": 0.4,
+  "evidence": "if self->f_24: 0x10EC14(&self->f_14, 0x10EC00(&self->f_14)); sets vtable word g_0017c398 on the object at g_0017c394 + (*(u16*)(self+4)&0x7ff)*8; returns self. Used as the common sub-object dtor."
+ },
+ {
+  "address": "0x0017C51C",
+  "name": "maybe_Ui_DestroyChildList",
+  "signature": "void maybe_Ui_DestroyChildList(UiContainer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Walks the intrusive child list at self+0x20/+0x24 and destroys each child through vtable+0xc, then marks the container as released (f_92=1).",
+  "confidence": 0.4,
+  "evidence": "iterates self->f_24..self->f_20 calling (**(vtable+0xc))(); sets self->f_92=1."
+ },
+ {
+  "address": "0x0017C654",
+  "name": "maybe_Ui_SetupWidgetAnimation",
+  "signature": "void maybe_Ui_SetupWidgetAnimation(UiWidget* widget, uint32_t arg2)",
+  "params": {
+   "param_1": "widget",
+   "param_2": "arg2"
+  },
+  "summary": "Binds a UI animation to the widget: fetches the animation track (0x2BBF6C), resolves the named animation data (0x62AB3C) and installs it with 0x1A6210 under the widget's vtable+0x34 animation slot, using g_0017c894 as the descriptor.",
+  "confidence": 0.38,
+  "evidence": "calls 0x2BBF6C (anim track), 0x62AB3C (named anim lookup), (**(vtable+0x34))(widget,&g_0017c894,*(u16*)(widget+0x28)<<16,0) and 0x1A6210(widget, id<<16, animData); fallback branch builds an animation via g_0017c89c/0x627308 and 0x633560(...,0xfb)."
+ },
+ {
+  "address": "0x0017C8B4",
+  "name": "maybe_Ui_ObjectDestroyThunk2",
+  "signature": "void maybe_Ui_ObjectDestroyThunk2(void)",
+  "params": {},
+  "summary": "Thunk: destroys an embedded sub-object (0x1A6768) and frees the block (0x10F6CC). Same shape as 0x17C320.",
+  "confidence": 0.32,
+  "evidence": "body: func_001A6768(); func_0010F6CC();"
+ },
+ {
+  "address": "0x0017C910",
+  "name": "maybe_Ui_CreateMapCursor",
+  "signature": "void maybe_Ui_CreateMapCursor(UiMapCursorHolder* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates the map cursor/marker instance: resolves the marker definition for self->f_e0, allocates a 0x280-byte actor (0x1CE8AC) from the world's UI heap and registers it with 0x21F738, then activates it through vtable+0x24.",
+  "confidence": 0.35,
+  "evidence": "requires world->f_3c==2 and 0x62AD40(world)->f_4==1 and self->f_dc==0; allocates 0x280 bytes from the UI heap, 0x1CE8AC(block,self->f_e0), 0x21F738(world,obj) (register), on failure 0x21F8B8 unregisters; self->f_dc=obj; obj->f_94=1; calls vtable+0x24."
+ },
+ {
+  "address": "0x0017CCD8",
+  "name": "maybe_Ui_DestroyMapCursor",
+  "signature": "void maybe_Ui_DestroyMapCursor(UiMapCursorHolder* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destroys the map cursor/marker: when the world reports the map is closing, unregisters and frees the cursor object created by 0x17C910.",
+  "confidence": 0.35,
+  "evidence": "if self->f_e0 != 1 calls 0x2EBB08(&self->f_c); if self->f_dc!=0 and 0x62C078(world)!=0, unregisters via 0x21F8B8(world,cursor) (after 0x3966A4) and sets self->f_dc=0."
+ },
+ {
+  "address": "0x0017D2E4",
+  "name": "maybe_Ui_SetupWindowAnimations",
+  "signature": "void maybe_Ui_SetupWindowAnimations(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Loads the window's two idle animations ('anim01' and 'anim_01') into +0x120 and +0x124, binding the first from the widget's animation list (0x53649C) and the second from its timeline (0x3E00CC).",
+  "confidence": 0.45,
+  "evidence": "literal strings \"anim01\" and \"anim_01\"; calls 0x53649C(self->f_ac,\"anim01\") -> self->f_120 and 0x3E00CC(&self->f_124,self->f_98,\"anim_01\",0)."
+ },
+ {
+  "address": "0x0017D414",
+  "name": "Ui_WorldMap_UpdateShipIcon",
+  "signature": "void Ui_WorldMap_UpdateShipIcon(UiWorldMap* self, uint32_t arg2, uint32_t arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Places the ship/vehicle icon on the world map: reads the current map node and its per-map offset/scale tables from the world-map data (0x66B7C0/0x66B724/0x66B5D8/0x66B738/0x66B91C) and forwards the resulting 2D point to Ui_MapShipIcon_Update (0x3A7C4C). Also applies the map's rotation offset to the five marker objects.",
+  "confidence": 0.6,
+  "evidence": "reads world+0x24a98 world-map object via 0x66B7C0/0x66B738, indexes the node tables at mapObj->f_60 and f_78, then calls func_003A7C4C (named Ui_MapShipIcon_Update in N_010) with the computed point; five marker objects at self+0x48..+0x58 are updated with the rotated offsets g_0017d7f0. Strings none, but every callee is a world-map data accessor."
+ },
+ {
+  "address": "0x0017DA14",
+  "name": "Ui_SelectPage",
+  "signature": "void Ui_SelectPage(UiPager* self, int pageIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "pageIndex"
+  },
+  "summary": "Selects one of the five page actors of a pager widget: highlights the matching actor (0x292B48(actor, i==page)), copies its transform into +0x98..+0xa4, stores the page index in +0xa8 and notifies the parent through 0x621358/0x628464.",
+  "confidence": 0.5,
+  "evidence": "reads the page byte *(u8*)(self+arg2+0x24); loops i<5 over self+0x48+i*4 calling 0x292B48(actor,i==page); 0x291678(&self->f_98) then stores the 4 words; self->f_a8=arg2; 0x628464(self)->0x621358(self->f_20,value). Also used as a UI pager/status screen selector."
+ },
+ {
+  "address": "0x0017E7CC",
+  "name": "maybe_Ui_ReleasePageActors",
+  "signature": "void maybe_Ui_ReleasePageActors(UiPager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the five page actors of the pager (calls 0x2914D4 on each non-null actor at self+0x48).",
+  "confidence": 0.45,
+  "evidence": "loop i<5: if *(int*)(arg1+i*4+0x48)!=0 call 0x2914D4(); no other side effects."
+ },
+ {
+  "address": "0x0017EC88",
+  "name": "maybe_Ui_UpdatePageSelection",
+  "signature": "void maybe_Ui_UpdatePageSelection(UiPager* self, uint32_t arg2, int arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Applies a page selection change on the pager and mirrors it into the party-status screen: looks up the selected page actor, enables the party status display (0x23C72C(world+0x48,1,0)) and updates the pager state (0x62155C).",
+  "confidence": 0.38,
+  "evidence": "reads self->f_a8 and the page byte; if the selected actor exists, 0x23C72C(world+0x48,1,0) (named Party_Status_SetEnabled) and 0x62155C(self); the alternate branch calls 0x17FC64(self,...)."
+ },
+ {
+  "address": "0x0017FC64",
+  "name": "maybe_Ui_ApplyPageHighlight",
+  "signature": "void maybe_Ui_ApplyPageHighlight(UiPager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Sets the pointer/hover highlight on the pager's five page actors: gives the current page actor the highlight flag (f_9f4=1), clears it on the other four, and updates the parent window's cursor state.",
+  "confidence": 0.4,
+  "evidence": "if self->f_91==0: sets f_60->f_9f4=1 and clears f_48/f_4c/f_50/f_54/f_58->f_9f4; then 0x621550/0x6215FC on self->f_20 or f_20->f_94=0."
+ },
+ {
+  "address": "0x001802E8",
+  "name": "maybe_Ui_ResetPageFlag",
+  "signature": "void maybe_Ui_ResetPageFlag(UiPager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the pager's busy flag (+0x2a3) when the world UI query 0x636AFC returns false.",
+  "confidence": 0.35,
+  "evidence": "if 0x636AFC(world+0x6c)==0 then self->f_2a3=0. Nothing else."
+ },
+ {
+  "address": "0x0018031C",
+  "name": "maybe_Field_CreateEffectSprite",
+  "signature": "void maybe_Field_CreateEffectSprite(FieldObject* self, int* arg2, int* arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Creates a positioned sprite/effect on a field object: merges the two caller point arrays (0x47B280/0x47B460) into a transform, then attaches a sprite child (0x335A6C) using the world's 2D mode (world+0x48->f_27f) and stores its handle in +0x29c.",
+  "confidence": 0.38,
+  "evidence": "builds local_98 descriptor from g_00180578, reads the world 2D mode byte world+0x48->0x27f, 0x47B280/0x47B460 (point/rect merge), then 0x335A6C(self,&desc,&self->f_254,0); result stored in self->f_29c (0xff on failure). 0x335A6C is maybe_Gfx_SpriteActor_AddChild from N_022."
+ },
+ {
+  "address": "0x0018057C",
+  "name": "Field_CreateCollisionSprite",
+  "signature": "void Field_CreateCollisionSprite(FieldObject* self, int* arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Creates the field object's collision proxy: builds the rectangle from the caller's point list, allocates a 0x68-byte sprite (0x4C65A0) and a 0xa4-byte collision object named 'collision' (0x4C3B50), then registers both through 0x5F4F34/0x5F4E94.",
+  "confidence": 0.5,
+  "evidence": "literal string \"collision\"; allocates 0x68 bytes and 0xa4 bytes from self->f_48, 0x4C65A0/0x4C3B50 create the objects, 0x5F4F34/0x5F4E94 store them on self; the world 2D mode byte world+0x48->0x27f chooses the collision depth flags f_4c/f_50/f_58."
+ },
+ {
+  "address": "0x001808C0",
+  "name": "maybe_Field_UpdateObjectHandle",
+  "signature": "void maybe_Field_UpdateObjectHandle(FieldObject* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Forwards an update to the sprite/effect handle stored in the page array at +0x204 (index +0x29c) through 0x3DF8D8; clears the busy flag if the update rejected it.",
+  "confidence": 0.38,
+  "evidence": "if self->f_29c != 0xff and self[+0x204+index*4]!=0, sets f_2a3=1, calls 0x3DF8D8(obj+0x3c,arg2,g_0018090c), and clears f_2a3 when it returns 0."
+ },
+ {
+  "address": "0x00180910",
+  "name": "maybe_Field_SceneObject_ApplyTransform",
+  "signature": "void maybe_Field_SceneObject_ApplyTransform(FieldSceneObject* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Applies a scene object's size/position: sets the model size (Field_SceneObject_SetModelSize 0x5F3500), refreshes the object handle (0x5F36E0), resolves the object's actor record by id (0x1C8F58), stores it in +0x22c and updates the actor's movement state (0x5E7848).",
+  "confidence": 0.45,
+  "evidence": "calls 0x5F4034, 0x5F3500(self,self->f_240,self->f_242), 0x5F36E0(self,self->f_244,1), 0x1C8F58(world+0x54,f_36,0) then resolves the object type and stores self->f_22c; self->f_246=(0x62AB3C(world)!=0); 0x5E7848(self,2 or 0,1)."
+ },
+ {
+  "address": "0x00180A54",
+  "name": "maybe_Field_SceneObject_Refresh",
+  "signature": "void maybe_Field_SceneObject_Refresh(FieldSceneObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lightweight refresh of a scene object: updates its animation (0x5E780C) and re-applies the actor movement state derived from +0x246.",
+  "confidence": 0.4,
+  "evidence": "0x5E780C(self); state = f_246?2:0; 0x5E7848(self,state,1); if it returns non-zero and f_29f/f_b8 are set calls 0x460274()."
+ },
+ {
+  "address": "0x00180B94",
+  "name": "maybe_Field_RegisterAnimActors",
+  "signature": "void maybe_Field_RegisterAnimActors(FieldObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates actors for new entries of the field object's animation table (self->f_248): walks the entries after the last processed index (+0x2ac), resolves each entry's object (0x33D99C) and registers it with 0x17C054.",
+  "confidence": 0.38,
+  "evidence": "requires world->f_44==0 and self->f_248!=0; loops i=f_2ac+1..f_2b0, skips entries with count<=0, resolves 0x33D99C(world+0x58, entry) and calls 0x17C054(obj,self,0); stores f_2ac=f_2b0."
+ },
+ {
+  "address": "0x001810B0",
+  "name": "maybe_Field_Gadget_TriggerEffect",
+  "signature": "int maybe_Field_Gadget_TriggerEffect(FieldObject* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Triggers a field gadget command: allocates the command/effect object (0x1EBC68) and issues gadget command 10 with the object's id (+4) through 0x256678. Clears the busy flag on failure.",
+  "confidence": 0.45,
+  "evidence": "allocates via g_001811a4 pool and 0x1EBC68(block,9,0,0); calls 0x256678(world+0x6c,10,self->f_4) (named Field_Gadget_AddAndTriggerCommand in N_022); on 0 sets self->f_2a3=0, else triggers 0x460274."
+ },
+ {
+  "address": "0x0018130C",
+  "name": "maybe_Ui_DestroySubObject",
+  "signature": "void maybe_Ui_DestroySubObject(uint32_t* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Destructor helper: runs the small-object destructor on the embedded object at self+0x254, releases its sprite (0x335DAC) and frees the block.",
+  "confidence": 0.35,
+  "evidence": "0x17C334(self+0x95*4) -> obj, then 0x335DAC(obj-0x254), 0x10F6CC(). 0x181330 is the same without the free."
+ },
+ {
+  "address": "0x00181330",
+  "name": "maybe_Ui_DestroySubObjectNoFree",
+  "signature": "void maybe_Ui_DestroySubObjectNoFree(uint32_t* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Same as 0x18130C but does not free the outer block (used when the object is embedded in a larger allocation).",
+  "confidence": 0.35,
+  "evidence": "0x17C334(self+0x254) then 0x335DAC(obj-0x254); no 0x10F6CC call."
+ },
+ {
+  "address": "0x00181724",
+  "name": "maybe_Field_SceneObject_Register",
+  "signature": "void maybe_Field_SceneObject_Register(FieldSceneObject* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Registers the scene object's current transform with the field renderer when it is visible and has a model: sets +0x264, and calls 0x5F58D0(self, world+0x54->f_1c->f_4) once, then clears the pending flag +0x265.",
+  "confidence": 0.4,
+  "evidence": "sets f_264=1; checks f_15c/f_15d/f_310/f_265; reads world+0x54->f_1c (the field camera/scene object), uses its +4 word (or g_001817bc), calls 0x5F58D0(self,value) and f_265=0."
+ },
+ {
+  "address": "0x001818F4",
+  "name": "maybe_Field_CheckObjectState",
+  "signature": "bool maybe_Field_CheckObjectState(FieldObject* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Checks a world/field state flag (0x636AFC) and, when it is clear, calls the object's vtable+0xc4; returns whether the flag was set.",
+  "confidence": 0.35,
+  "evidence": "iVar2=0x636AFC(world+0x6c); if iVar2==0 (**(self vtable+0xc4))(self); return iVar2!=0."
+ },
+ {
+  "address": "0x0018193C",
+  "name": "maybe_Field_SceneObject_Release",
+  "signature": "void maybe_Field_SceneObject_Release(FieldSceneObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases a field scene object's attached effect and actor resources: destroys the effect at +0x384 (0x3F422C->vtable+0x88), releases the attached object (0x5F58BC) and clears the party/window reference.",
+  "confidence": 0.45,
+  "evidence": "if *(int*)(arg1+900)!=-1 resolves 0x5F708C and calls 0x225BF4; 0x3F422C(self->f_370) -> vtable+0x88; then 0x5F58BC(self). Same helpers as 0x181C14."
+ },
+ {
+  "address": "0x001819D0",
+  "name": "maybe_Field_SceneObject_UpdateShadow",
+  "signature": "void maybe_Field_SceneObject_UpdateShadow(FieldSceneObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Updates the scene object's shadow/billboard: resolves the shadow definition for the object id (+0x258), places it with 0x17CB7C and copies the resulting size/offset into the actor's shadow fields (+0x364..+0x36c), then shifts the child shadows by the height delta.",
+  "confidence": 0.4,
+  "evidence": "allocates via 0x627308 pool, 0x5EB3A0 builds the query, 0x6282D0/0x6368EC resolve the object, 0x17CB7C(manager,0,def,&pos,&offset,query) places it; loops self->f_250 children at self+0x230 setting f_304..f_318."
+ },
+ {
+  "address": "0x00181C14",
+  "name": "maybe_Field_SceneObject_UpdateVisibility",
+  "signature": "void maybe_Field_SceneObject_UpdateVisibility(FieldSceneObject* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Visibility/animation update for a field scene object: if the attached effect exists and is not hidden, calls its vtable+0x84 with the new value, then lets the actor system apply it (0x5F6000).",
+  "confidence": 0.42,
+  "evidence": "if *(int*)(arg1+900)!=-1 -> 0x5F708C/0x225BF4; 0x3F422C(self->f_370) and if *(char*)(obj+0x51)==0 calls (**(vtable+0x84))(obj,arg2); then 0x5F6000(self,arg2)."
+ },
+ {
+  "address": "0x00181D60",
+  "name": "maybe_Field_Actor_CreateSprite",
+  "signature": "void maybe_Field_Actor_CreateSprite(FieldActor* self, uint32_t arg2, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Creates the actor's billboard/sprite representation: picks the sprite definition for the actor's type (0x66A74C/0x628EE0/0x63EE68), allocates a 0x70-byte sprite through 0x4C6B28, attaches it with 0x5F7E60, and optionally creates the collision proxy named 'collision' (0x4C3E38).",
+  "confidence": 0.48,
+  "evidence": "builds a sprite descriptor from g_00182118.. and the actor id f_36, uses 0x66A74C/0x628EE0; special ids 0x219..0x21c tweak the colour/scale; allocates 0x70 bytes, 0x4C6B28(block,&desc,&ctx,self), 0x5F7E60(self,sprite); if f_350!=0 allocates 0x6c bytes and 0x4C3E38(...,\"collision\") with g_00182154."
+ },
+ {
+  "address": "0x0018233C",
+  "name": "maybe_Field_Actor_UpdateModel",
+  "signature": "void maybe_Field_Actor_UpdateModel(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame model update for a field actor: resolves its object handle by type (0x1C8EDC), applies ground/effect offsets (0x30A0E0/0x30AC50), drives the model's animation/transform (0x6289CC/0x223C84/0x1D5C94) and updates the actor's collision position (0x2E7F08).",
+  "confidence": 0.45,
+  "evidence": "0x5E7598 first; 0x1C8EDC(world+0x54,f_36,0) -> self[0x98]; if f_2c4? calls 0x30A0E0; vtable+0xd0; switches on model->f_120 (0xdc/0xdd/0xab etc.) to offset the model; 0x6289CC, 0x223C84(model,&offset), 0x30AC50, 0x1D5C94(model+0x52c); 0x2E7F08 for the collision position."
+ },
+ {
+  "address": "0x001827B8",
+  "name": "Model_Equip_UpdateActorEquipment",
+  "signature": "void Model_Equip_UpdateActorEquipment(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the actor's visible equipment: resolves the model set (0x1C7EA4 / 0x35EB98), updates both equipment rows through 0x40BA94/0x4062F0-style calls, then applies the accessory slots (Model_Equip_ApplyAccessorySlots 0x40AE18), grip state (0x40B748) and final model refresh (0x40AC10).",
+  "confidence": 0.55,
+  "evidence": "0x1C7EA4(self->f_36) -> f_e5; 0x40BA94(model,type); for each of two rows resolves 0x6292F0/0x640068 and calls (**(model vtable+8))(&self->f_e3,&row,0); then 0x40BA78, 0x40B748(model,0,1), 0x40AE18(model,1,model->f_68), 0x40AC10. Explicit Model_Equip_* callees from N_022."
+ },
+ {
+  "address": "0x00182A28",
+  "name": "maybe_Field_Actor_PlayIdleAnimation",
+  "signature": "int maybe_Field_Actor_PlayIdleAnimation(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the actor's idle/extra animation selected by its type (+0x313) via 0x5F7948, falling back to the default animation, and adjusts the actor's size (+0x374) through 0x5F7784 when a height mismatch is detected.",
+  "confidence": 0.45,
+  "evidence": "0x5F7948(self,g_00182ac0[f_313]) then fallback 0x5F7948(self,*g_00182ac0); if f_374>=0 calls 0x66A244(self), compares the converted height and calls 0x5F7784(self,delta,0); clears f_160->f_555/f_550/f_556."
+ },
+ {
+  "address": "0x00182B2C",
+  "name": "maybe_Camera_UpdateFollowPosition",
+  "signature": "void maybe_Camera_UpdateFollowPosition(FieldCamera* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Computes the field camera's follow position: if a rail/route table is attached (+0x314) it takes the current route point's position and rotation, otherwise it searches up to ten candidate positions along the target direction (using the level collision query 0x2E7F08) and stores the first clear spot in +0x328..+0x330.",
+  "confidence": 0.48,
+  "evidence": "when f_314==0: uses target f_318 (position f_c/f_10, radius f_18/f_28, angle f_30), 0x51B1FC random, 0x6731EC/0x672E44 sin/cos, 0x574548 rotate, 0x2E7F08 collision test, stores f_328/f_32c/f_330; else reads route entry f_314[f_340] (0x28 bytes) and 0x572D94/0x574548 for the rotation, stores f_334..f_33c. f_324 selects forward/backward."
+ },
+ {
+  "address": "0x00182F0C",
+  "name": "maybe_Field_Actor_CreateBillboard",
+  "signature": "uint32_t maybe_Field_Actor_CreateBillboard(FieldActor* self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Creates the actor's floating billboard/marker (name plate, quest icon or damage text): fills the 0x224-byte billboard descriptor with colour/scale/font fields, allocates it through 0x3F4510, registers it with the actor (0x1235A4) and stores the handle in +0x370. Also rebuilds the billboard's rotation matrix.",
+  "confidence": 0.35,
+  "evidence": "0x3F42B0(&local_80,arg2) prepares the descriptor (many immediates 0x78/200/0x10), 0x109DC8(0x224,self->f_48,4), 0x3F4510(block,&desc), then vtable+0xc(desc), 0x1235A4(world+0x140,...,obj) registers; self->f_370=obj[1]; 0x3F422C() then 0x5F56A0(...) updates the matrix. 0x3F422C/0x3F42B0 are the billboard/2D-sprite APIs."
+ },
+ {
+  "address": "0x00183484",
+  "name": "maybe_Field_UpdateCullingFlag",
+  "signature": "void maybe_Field_UpdateCullingFlag(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Distance culling: when the actor is not hidden, compares its distance to the player with g_00183568 (and its own +0x25c threshold) and sets/clears bit 1 of the culling flags (+0x50) so the renderer can skip far actors.",
+  "confidence": 0.42,
+  "evidence": "if f_219==0 calls 0x5F7888; if world->f_44==0 and f_50==0 and g_00183568<=f_25c: 0x63451C gives the player position, computes squared distance including the f_25c term, sets f_50 |= 2 or &= 0xfd."
+ },
+ {
+  "address": "0x001835AC",
+  "name": "maybe_Field_RegisterRailActors",
+  "signature": "void maybe_Field_RegisterRailActors(FieldActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates actors for the entries of the actor's rail/animation table (+0x314) that became active since the last frame: resolves each entry with 0x33D99C and registers it via 0x17C054.",
+  "confidence": 0.35,
+  "evidence": "same structure as 0x180B94 but the table is self->f_314 with 0x28-byte entries and indices f_354..f_358; requires world->f_44==0."
+ },
+ {
+  "address": "0x00183984",
+  "name": "maybe_Field_SpawnObjectRecordA",
+  "signature": "void maybe_Field_SpawnObjectRecordA(FieldObject* self, uint32_t* rec, uint32_t arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec",
+   "param_3": "arg3"
+  },
+  "summary": "Initialises a field object from the first placement-record layout: copies position (rec[0..2]), extra transform words, model id and scale, sets the default talk/name entry ('defaultTalk'), creates the model (0x5F6C4C) and the sprite (0x336054), then applies the object's single talk-text row through 0x181D60.",
+  "confidence": 0.42,
+  "evidence": "writes f_2f8..f_30c from rec[0..5], f_9c/a0/a4=position, f_118=1, 0x5F6C4C(self,rec+3,1); string \"defaultTalk\" via 0x6F44B0; 0x336054(self,&desc,&self->f_268,0); 0x181D60(self,arg3,0); f_15c/f_313/f_360 from rec; 0x3361D8 when rec[2]>0."
+ },
+ {
+  "address": "0x00183C90",
+  "name": "maybe_Field_SpawnObjectRecordB",
+  "signature": "void maybe_Field_SpawnObjectRecordB(FieldObject* self, int* rec, uint32_t arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec",
+   "param_3": "arg3"
+  },
+  "summary": "Second placement-record layout (position at rec[4..6], model/colour ids at rec[6..0x10]): creates the model and two text/sprite children (0x336054/0x3361D8), resolves the talk name, and initialises the animation/shadow set via 0x182960.",
+  "confidence": 0.42,
+  "evidence": "copies rec[4..0x10] into f_2f8..f_313/f_380/f_218/f_219; 0x5F6C4C(self,rec+7,1); 0x336054(self,&desc,&self->f_268) / 0x3361D8(self,rec+2,&self->f_2b0); string g_0018404c; 0x182960(self,self->f_313); matches the record strides of 0x183984 but shifted by 4 words."
+ },
+ {
+  "address": "0x00184168",
+  "name": "maybe_Field_SpawnObjectRecordC",
+  "signature": "void maybe_Field_SpawnObjectRecordC(FieldObject* self, int* rec, uint32_t arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec",
+   "param_3": "arg3"
+  },
+  "summary": "Third placement-record layout (position at rec[8..10], type/colour at rec[0x15..0x17]): same model/sprite creation as the other spawn variants, with the additional 'visible/quest' flags at rec[0x1e]/rec[0x1f] and two sprite children at rec[2].",
+  "confidence": 0.42,
+  "evidence": "copies rec[8..0xd] into f_2f8..f_30c, f_9c/a0/a4=rec[8..10], 0x5F6C4C(self,&rec->f_b,1); 0x336054(self,&desc,&self->f_268) / 0x3361D8(self,rec+2,&self->f_2b0); sets f_310/f_312/f_348/f_34c from rec[0x17..0x12]; 0x182960(self); string g_001845a4."
+ },
+ {
+  "address": "0x001846EC",
+  "name": "maybe_Field_SpawnObjectWithEffect",
+  "signature": "void maybe_Field_SpawnObjectWithEffect(FieldObject* self, int* rec, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec",
+   "param_3": "arg3"
+  },
+  "summary": "Compact placement spawn: sets position/model ids from the record, creates the camera follow point (Camera_UpdateFollowPosition), spawns the model/sprite (0x181D60), and when the record requests an effect, creates the billboard (0x182F0C) and starts its animation (vtable+0x3c/+0x40).",
+  "confidence": 0.45,
+  "evidence": "writes f_2f8..f_313 from rec+4..; 0x5F6C4C(self,rec+0x10,1); f_350=1; 0x182B2C(self); 0x181D60(self,0); if rec->f_1f: 0x182F0C(self,rec->f_1f,rec->f_20) and 0x3F422C()->vtable+0x40(4)/+0x3c(4) with 0x1836A0; 0x182960(self,f_313)."
+ },
+ {
+  "address": "0x001848B8",
+  "name": "maybe_Field_ReleaseEffectHandle",
+  "signature": "void maybe_Field_ReleaseEffectHandle(FieldObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the attached effect/billboard object at +0x388 through its vtable+4 and clears the handle; also lets the actor system clean up (0x336938).",
+  "confidence": 0.42,
+  "evidence": "0x336938(); if self->f_388 != NULL -> (**(vtable+4))(); self->f_388=0."
+ },
+ {
+  "address": "0x00184958",
+  "name": "maybe_Field_RegisterRailActors2",
+  "signature": "void maybe_Field_RegisterRailActors2(int self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Third instance of the rail/table actor registration loop (0x1835AC style), entering at a different point (decompiled with unaff registers): walks self->f_314 entries from the cursor and registers each via 0x17C054.",
+  "confidence": 0.3,
+  "evidence": "loop over unaff_r4->f_314 (0x28-byte entries, indices unaff_r5..f_358), calls 0x33D99C(world+0x58, entry) then 0x17C054(obj); on expiry sets f_354=f_358. Same code as 0x1835AC; Ghidra lost the argument registers (coprocessor_movefromRt/frame artifacts)."
+ },
+ {
+  "address": "0x001849F0",
+  "name": "maybe_Field_SpawnObjectRecordD",
+  "signature": "void maybe_Field_SpawnObjectRecordD(int self, uint32_t arg2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2"
+  },
+  "summary": "Fourth placement/spawn variant, decompiled with unaff registers: duplicates the tail of Field_SpawnObjectRecordC (colour/anim resolution, 0x18215C/0x181D60, talk flags, 0x182960). Treat as the same spawn family until the argument setup is recovered.",
+  "confidence": 0.3,
+  "evidence": "contains the same 0x66A74C/0x628EE0/0x63E2BC/0x62B540 colour-id chain and 0x18215C/0x181D60/0x182960 calls as 0x184168, but Ghidra shows unaff_r4/unaff_r5 for the object and record (entry point inside/next to 0x184168)."
+ },
+ {
+  "address": "0x00184CA4",
+  "name": "maybe_Field_ObjectDestroyThunk",
+  "signature": "void maybe_Field_ObjectDestroyThunk(void)",
+  "params": {},
+  "summary": "Destructor thunk for a field object: runs 0x184CB4 and frees the block (0x10F6CC).",
+  "confidence": 0.35,
+  "evidence": "body: func_00184CB4(); func_0010F6CC()."
+ },
+ {
+  "address": "0x00184CB4",
+  "name": "maybe_Field_DestroyObjectHandles",
+  "signature": "void maybe_Field_DestroyObjectHandles(uint32_t* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the field object's registered handle (0x1C7570 on world+0x54) and destroys the two embedded sub-objects at self+0x2b0/-0x48 through 0x17C334 and 0x336B3C.",
+  "confidence": 0.38,
+  "evidence": "0x1C7570(world+0x54,self[0xdc]); 0x17C334(self+0xac) -> obj, 0x17C334(obj-0x48), 0x336B3C(obj-0x268); same helper chain as the destructor thunks."
+ },
+ {
+  "address": "0x00184E84",
+  "name": "maybe_Field_ObjectDestructor",
+  "signature": "void maybe_Field_ObjectDestructor(uint32_t* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the object's 0x50-byte × 0xc table through 0x100BE0, destroys the embedded sub-object (0x1A6768) and frees the block. Generic field-object destructor.",
+  "confidence": 0.38,
+  "evidence": "0x100BE0(self+0x13,g_00184ebc,0x50,0xc) (memset-like), 0x1A6768(self), 0x10F6CC(). 0x184EC0 is the same without the free."
+ },
+ {
+  "address": "0x00184EC0",
+  "name": "maybe_Field_ObjectCleanup",
+  "signature": "void maybe_Field_ObjectCleanup(uint32_t* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-freeing variant of 0x184E84: clears the 0x50×0xc table and destroys the embedded sub-object but leaves the outer allocation to the caller.",
+  "confidence": 0.38,
+  "evidence": "0x100BE0(self+0x13,g_00184ef4,0x50,0xc), 0x1A6768(self); no 0x10F6CC."
+ },
+ {
+  "address": "0x00185720",
+  "name": "Script_ParseAssignmentExpression",
+  "signature": "void Script_ParseAssignmentExpression(ScriptCompiler* comp, uint32_t* lhs, uint32_t mode)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "lhs",
+   "param_3": "mode"
+  },
+  "summary": "Assignment/ternary expression parser of the Squirrel compiler: handles '=' (0x3d) and '?' (0x3f) including the short-jump fixups for the ternary branches, brackets/parentheses around the value, and emits the assignment opcode plus line-info records. Recurses into itself for nested assignments.",
+  "confidence": 0.5,
+  "evidence": "token comparisons against '=' 0x3d, '?' 0x3f, '[' 0x5b, ')' 0x28, '.' 0x2e and keywords 0x119/0x121/0x12f/0x130/0x13d..0x13f; calls func_005FC86C (the lexer) and func_001BDD50 to emit opcodes (0x1a/0x18/0x21/0x2c/0xe); uses func_001BE454/0x1BCE5C/0x1BE384 for line/column fixups. Called by 0x186150 (postfix parser) for index/call arguments."
+ },
+ {
+  "address": "0x00185E18",
+  "name": "Script_ParseBitwiseExpression",
+  "signature": "void Script_ParseBitwiseExpression(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Bitwise operator parser: loops over '&' (0x26), '^' (0x5e) and '|' (0x7c), calls the next-level expression parser through the compiler's operator table (comp->f_18/f_10/f_8) and emits the bitwise opcode (0x12 with sub-op 0/3/2).",
+  "confidence": 0.52,
+  "evidence": "three while loops comparing *arg1 against 0x26, 0x5e, 0x7c; calls (*comp->f_18/f_10/f_8) with the operator index and emits opcode 0x12 plus sub-op 0,3,2 via 0x1BDD50; obtains line/column with 0x1BE454/0x1BCE5C. Squirrel compiler uses exactly this operator-table indirection."
+ },
+ {
+  "address": "0x00186020",
+  "name": "Script_ParseUnaryExpression",
+  "signature": "void Script_ParseUnaryExpression(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Unary prefix parser: while the current token is 0x10f (unary operator, e.g. '-'/'!'/'~'/'++'), parses the operand recursively, emits the unary opcode (0x2c) and patches the line info; otherwise falls through to the binary expression parser (0x186B28).",
+  "confidence": 0.5,
+  "evidence": "if (*arg1 == 0x10f) { emit opcode 0x2c; lexer 0x5FC86C; recurse func_00186020; } else func_00186B28; line fixups via 0x1BE454/0x1BE384. 0x10f is the unary-operator keyword id used by the same compiler."
+ },
+ {
+  "address": "0x00186150",
+  "name": "Script_ParsePostfixExpression",
+  "signature": "void Script_ParsePostfixExpression(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Postfix expression parser: handles member access '.' (0x2e), indexing '[' ... ']' (0x5b/0x5d) and calls '(' ... ')' (0x28/0x29). For calls it counts the arguments (opcode 6 with the arg count), for indexing it emits the index opcode (0x21/0x1/0xe), and for member access it resolves the field name through the compiler table. Also inserts line-break records when a newline appears inside brackets.",
+  "confidence": 0.55,
+  "evidence": "handles tokens 0x5b '[' / 0x5d ']' / 0x2e '.' / 0x28 '(' / 0x29 ')' and 0x2c ','; emits opcode 6 with the argument count via 0x1BDD50; 0x185720 is called for the index/argument expressions; 0x1874EC consumes the closing tokens; 0x187780 starts the parse; line markers g_001868e8/ec/f0/f4/f8/fc."
+ },
+ {
+  "address": "0x00186904",
+  "name": "maybe_Script_ParseBitwiseAnd",
+  "signature": "void maybe_Script_ParseBitwiseAnd(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Lowest-level bitwise-and parser: while the token is '&' (0x26) it calls the operand parser through the compiler table (comp->f_18) and emits the bitwise opcode (0x12). Sub-parser of the 0x186B28/0x1869C4 chain.",
+  "confidence": 0.45,
+  "evidence": "single while loop on *arg1==0x26 calling (*comp->f_18)() and emitting opcode 0x12 via 0x1BDD50; identical body shape to the first loop of 0x185E18, which is the combined bitwise parser."
+ },
+ {
+  "address": "0x001869C4",
+  "name": "maybe_Script_ParseBitwiseXor",
+  "signature": "void maybe_Script_ParseBitwiseXor(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Bitwise-xor level parser: loops on '&' then '^' (0x26/0x5e), calling the operand parser and emitting opcode 0x12 with sub-op 3 for xor. Sits between 0x185E18 and 0x186904 in the operator chain.",
+  "confidence": 0.45,
+  "evidence": "two while loops on 0x26 and 0x5e, both calling the compiler operator table (f_18/f_10) and emitting 0x12 with sub-ops 0/3 via 0x1BDD50; no other side effects."
+ },
+ {
+  "address": "0x00186B28",
+  "name": "maybe_Script_ParseBinaryExpression",
+  "signature": "void maybe_Script_ParseBinaryExpression(ScriptCompiler* comp, uint32_t* expr)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "expr"
+  },
+  "summary": "Middle-level binary expression parser: parses a bitwise expression (0x185E18), then loops on the comparison/equality keyword tokens 0x10e, 0x118 and 0x137, emitting the corresponding jump/patch opcodes (0x2b/0x2a) and delegating to 0x1889EC for the two-operand forms. Recurses for the right-hand side.",
+  "confidence": 0.42,
+  "evidence": "starts with 0x185E18; while(*arg1==0x10e) emits opcode 0x2b and recurses 0x186B28; for 0x118 -> 0x1889EC(comp,0x29,...), for 0x137 -> 0x1889EC(comp,0x2a,...); line fixups 0x1BE454/0x1BE384. Called by 0x186020 (unary) and 0x185720 (assignment)."
+ },
+ {
+  "address": "0x00187140",
+  "name": "maybe_Script_ParseStatementList",
+  "signature": "void maybe_Script_ParseStatementList(ScriptCompiler* comp, uint32_t separator, uint32_t terminator)",
+  "params": {
+   "param_1": "comp",
+   "param_2": "separator",
+   "param_3": "terminator"
+  },
+  "summary": "Statement-list/block parser of the Squirrel compiler: parses statements until the terminator token, accepting ';' (0x3b) or ',' as separators, and handles leading '[' (0x5b), keyword tokens 0x140/0x142, 0x11d/0x136 and the function/closure forms. Also inserts a line record after every parsed statement (0x3c opcode).",
+  "confidence": 0.48,
+  "evidence": "while (*comp != terminator): if separator==0x3b handles [ / 0x140/0x142; for 0x11d/0x136 calls 0x1BD318 & 0x1BD000, emits opcode 0x3c; calls 0x1874EC, 0x185720, 0x186CB4, 0x189228; 0x1BE384 patches the statement extent. This is the top-level statement dispatcher used by 0x185720/0x186150."
+ }
+]

@@ -61,7 +61,7 @@ pub struct Dirs {
 impl Dirs {
     pub fn detect() -> Self {
         let root = project_root();
-        let reference = PathBuf::from(r"..\reference project");
+        let reference = PathBuf::from(r"..\3DS_Translate");
         let local = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
         let assets = root.join("game_assets");
         let choose = |new: PathBuf, old: PathBuf| if new.exists() { new } else { old };
@@ -79,8 +79,9 @@ impl Dirs {
             build: root.join("build"),
             raw: root.join("game_data").join("romfs"),
             dialogue_db: reference.join("workspace/project.db"),
-            level2d: reference.join("workspace/extracted/romfs/level2d"),
-            level3d: reference.join("workspace/extracted/romfs/level3d"),
+            // this project's own RomFS first; the translation workspace only as a fallback
+            level2d: choose(root.join("game_data/romfs/level2d"), reference.join("workspace/extracted/romfs/level2d")),
+            level3d: choose(root.join("game_data/romfs/level3d"), reference.join("workspace/extracted/romfs/level3d")),
             thumbs: PathBuf::from(local).join("DQXI_Explorer/thumbs_rs"),
             root,
         }

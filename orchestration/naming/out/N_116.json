@@ -1,0 +1,1804 @@
+[
+ {
+  "address": "0x00535580",
+  "name": "maybe_Ui_Animator_ReleaseBindings",
+  "signature": "u32 maybe_Ui_Animator_ReleaseBindings(UiAnimator* self)",
+  "params": {
+   "self": "animator/animation owner; +0x2c animation resource, +0x30 pane tag list, +0x14 layout context"
+  },
+  "summary": "Releases every animation binding owned by an animation player: clears each bound pane/texture-pattern entry, notifies the layout context through 0x00534BF4, then clears the 'animations bound' flag and drops the animation resource. Returns 0x80000010 if the resource is already marked as in-use-by-someone-else (bit 2), which is the standard 'busy' error of this UI library.",
+  "confidence": 0.4,
+  "evidence": "Only callers are the two scene destructors in this batch (0x0056DD6C, 0x0056EEB8) where f_2c!=0 triggers it. Body walks self->f_30 (u16 count at +0, entries with +0x34 array of 0x2c-byte records, +0x38 count) and resets fields 0x8c..0xa0 of each record, then calls 0x00534BF4(self, self->f_14, self->f_2c->f_34>>2) and clears bit 1 of self->f_2c->f_40. Error 0x80000010 mirrors other 'resource still in use' paths in this region."
+ },
+ {
+  "address": "0x00535E50",
+  "name": "Fs_Sarc_Open",
+  "signature": "int Fs_Sarc_Open(FsSarcReader* reader, const void* data)",
+  "params": {
+   "reader": "SARC reader/slot (stride 0x20 in the caller's 8-slot table)",
+   "data": "pointer to the SARC image in memory"
+  },
+  "summary": "Validates a Nintendo SARC archive already in memory and sets up the reader: magic 'SARC', header size 0x14, BOM 0xFFFE/0xFEFF, version 0x0100, then locates the SFAT node table at header+0x14. On success stores the archive base and the SFAT pointer in the reader and returns 1.",
+  "confidence": 0.75,
+  "evidence": "Literal pool at 0x0072FAAC/0x0072FAB4/0x0072FABC holds the ASCII magics 'SARC', 'SFAT', 'SFNT' and the code compares exactly these words against [arg2], [arg2+0x14] and later the data block. Header checks: ldrh [r1,#6] BOM (0xff/0xfe), ldrheq [r1,#0x10]==0x100 (version), [r1,#4]==0x14 (header size), and the standard SARC name hashing*key at SFAT+8 is used by the sibling function 0x00535FA4. Caller 0x002F79C0 opens one of eight 0x20-byte archive slots."
+ },
+ {
+  "address": "0x00535E74",
+  "name": "Fs_Sarc_ParseFatNodes",
+  "signature": "int Fs_Sarc_ParseFatNodes(FsSarcReader* reader, const void* data)",
+  "params": {
+   "reader": "SARC reader",
+   "data": "SARC image"
+  },
+  "summary": "Second stage of SARC opening: checks the SFAT header size (0xC), rejects node counts >= 0x4000, then walks to the data block and verifies the SFNT header (size 8). Interior label of the SARC open routine, kept as a separate entry because the function seeds list it separately.",
+  "confidence": 0.55,
+  "evidence": "Continues 0x00535E50 with no new prologue (starts with the bl to 0x00123660, Ghidra reports halt_baddata). Compares [fat+4]==0xc and ldrh [fat+6] < 0x4000 (SFAT node count), computes data block address from the archive and node offset, then memcmp against 0x0072FABC ('SFNT') and checks [block+4]==8."
+ },
+ {
+  "address": "0x00535EDC",
+  "name": "maybe_Fs_Sarc_LocateDataBlock",
+  "signature": "int maybe_Fs_Sarc_LocateDataBlock(FsSarcReader* reader, const void* data, u32 index)",
+  "params": {
+   "reader": "SARC reader",
+   "data": "SARC image",
+   "index": "node index (from the SFAT table)"
+  },
+  "summary": "Resolves one SFAT node's data offset: reads the node count limit, adds the archive header size and the node stride (0x10) to reach the stored name/offset pair and stores the resulting data pointer in the reader (+0x0c). Interior label of 0x00535E50.",
+  "confidence": 0.45,
+  "evidence": "Follows 0x00535E74 inline; uses ldrh [r0,#6] (node count), [r3,#4] (header size 0xc) and shifts the node index by 4 (0x10 stride = SFAT node size), stores to [r4,#0xc] and validates with another memcmp of size 4 and a +4==8 header check."
+ },
+ {
+  "address": "0x00535F50",
+  "name": "maybe_Fs_Sarc_ValidateArchiveEnd",
+  "signature": "int maybe_Fs_Sarc_ValidateArchiveEnd(FsSarcReader* reader, const void* data, const void* end)",
+  "params": {
+   "reader": "SARC reader",
+   "data": "SARC image",
+   "end": "candidate end of the name/data block"
+  },
+  "summary": "Final consistency check of SARC opening: computes end-minus-base and compares it with the 32-bit file size stored at [arc+0xc], returning failure (0) when the block runs past the archive. Interior label of 0x00535E50.",
+  "confidence": 0.45,
+  "evidence": "Tail of 0x00535E50: ldr r0,[r4]; ldr r2,[r0,#0xc] (SARC file size); sub r0,r1,r0; cmp/ble; on success stores [base+size] into reader+0x14 and returns 1."
+ },
+ {
+  "address": "0x00535FA4",
+  "name": "Fs_Sarc_FindFile",
+  "signature": "int Fs_Sarc_FindFile(FsSarcReader* reader, const char* name)",
+  "params": {
+   "reader": "SARC reader (data + SFAT pointer)",
+   "name": "file name to look up"
+  },
+  "summary": "Looks a file name up in a SARC archive: hashes the name with the SFAT hash key, binary-searches the node table by hash, then compares the stored C string at data offset (attribute low 24 bits * 4) and returns the node index or -1. This is the classic SARC hash/compare lookup.",
+  "confidence": 0.7,
+  "evidence": "Hash loop uVar9 = uVar9 * *(int*)(*(int*)(self+4)+8) + *p; [self+4] is the SFAT block and +8 is the SFAT hashKey. Binary search over 0x10-byte nodes comparing node[0] (hash); file flag tested as (node[1]>>24) != 0; data offset = node[1] & 0xffffff (unit 4 bytes); final check calls 0x0010540C (strcmp) with arg2. Callers: 0x002F7xxx resource loaders via 0x00536150-style map."
+ },
+ {
+  "address": "0x00536104",
+  "name": "maybe_Fs_Sarc_ReleaseBlock",
+  "signature": "void maybe_Fs_Sarc_ReleaseBlock(u32* slot)",
+  "params": {
+   "slot": "word holding a block pointer plus 2 flag bits"
+  },
+  "summary": "Releases a block previously returned by the SARC/resource loader: queries the allocator hook through 0x006BA1DC and calls it with the aligned pointer, a size/flags word (0x101) and the low two bits of the stored value. Used by the resource-cache destructor when a node owns decompressed data.",
+  "confidence": 0.35,
+  "evidence": "Called from 0x005367BC when entry->f_98 != 0, passing &entry->f_88. func_006BA1DC(0,&fn) is the 'get global handler' idiom used across the tree; then fn((uVar1&3)<<16, 0x00000101 literal at 0x0053614C, 0, uVar1 & ~3) - i.e. pointer tagged with allocation type in the low bits."
+ },
+ {
+  "address": "0x00536150",
+  "name": "Ui_ResourceCache_Insert",
+  "signature": "UiResEntry* Ui_ResourceCache_Insert(UiResCache* cache, const char* name, u32 payload, u8 kind)",
+  "params": {
+   "cache": "name-keyed resource cache (map/tree at cache+4)",
+   "name": "resource name (copied, max 0x7f chars)",
+   "payload": "resource object/value stored at +0x88",
+   "kind": "small type flag stored at +0x8c"
+  },
+  "summary": "Allocates a 0x90-byte named cache entry, copies the name into it, stores the payload pointer and a type byte, and links it into the name-keyed cache at cache+4. Called when a resource lookup misses and the object has just been created.",
+  "confidence": 0.55,
+  "evidence": "Allocates 0x90 via 0x0053CF14, name copied with the same 0x7f clamp as the destructor siblings, result[0x22]=arg3 (payload at +0x88), byte +0x8c=arg4, then 0x0011FCF8(cache, cache+4, entry) inserts into the tree. Caller 0x002F7A24 registers a freshly created resource after a cache miss."
+ },
+ {
+  "address": "0x005361E0",
+  "name": "Ui_ResourceCache_FreeNode",
+  "signature": "void Ui_ResourceCache_FreeNode(UiResCache* cache, UiResEntry* entry)",
+  "params": {
+   "cache": "resource cache",
+   "entry": "entry to destroy"
+  },
+  "summary": "Destroys one cache entry: unlinks it from the cache, invokes and frees the attached object at +0x88 when the kind byte at +0x8c is set, then frees the entry itself.",
+  "confidence": 0.5,
+  "evidence": "0x0011FCBC(cache, entry) unlink, then if entry->f_8c: call (**(vtbl+4))(obj), 0x0053CEF8(obj), clear f_88, 0x0053CEF8(entry). Same object layout as 0x00536150."
+ },
+ {
+  "address": "0x005362A0",
+  "name": "Ui_ResourceCache_Clear",
+  "signature": "UiResCache* Ui_ResourceCache_Clear(UiResCache* cache)",
+  "params": {
+   "cache": "resource cache"
+  },
+  "summary": "Empties a resource cache: repeatedly unlinks and destroys each entry (including its owned +0x88 object) and returns the cache, i.e. the cache's Clear()/destructor body.",
+  "confidence": 0.5,
+  "evidence": "Loop over the tree rooted at cache while *cache != 0, same unlink/free sequence as 0x005361E0, returns arg1. Sibling 0x005367BC is the same loop for the variant that also releases a SARC block."
+ },
+ {
+  "address": "0x00536328",
+  "name": "maybe_Ui_Res_GetColorValue",
+  "signature": "void maybe_Ui_Res_GetColorValue(u32* out, UiRes* res, int index)",
+  "params": {
+   "out": "receives the 32-bit color value",
+   "res": "resource/material whose flags at +0x74 gate texture-pattern colors",
+   "index": "color slot (1..6)"
+  },
+  "summary": "Reads one of the material's 32-bit color values: returns the packed color slot at res+0x6c+index*4 when index==1, otherwise, if the material has the 0x1000 texture-pattern flag, maps index 2..6 through the pattern palette returned by 0x0065DE7C; returns 0xFFFFFFFF when unavailable.",
+  "confidence": 0.45,
+  "evidence": "uVar2 = arg3-2 < 5 range check together with [arg2+0x74] & 0x1000; func_0065DE7C(arg2) returns a table and the index is reduced mod 5 by the 0xcccccccd multiply; final read at arg2+arg3*4+0x6c matches the color bytes 0x6c..0x6f written by 0x00536E78."
+ },
+ {
+  "address": "0x005365E4",
+  "name": "maybe_Ui_AnimObject_Destroy",
+  "signature": "void maybe_Ui_AnimObject_Destroy(UiAnimObject* self)",
+  "params": {
+   "self": "animation object (byte +0x2c is a 'started' flag, +0x0 is an owned block)"
+  },
+  "summary": "Stops and destroys an animation object: clears its running byte, calls 0x00559B08, then hands the owned block at +0 to the global deleter (vtable slot 0x0c of the singleton at 0x0053D344).",
+  "confidence": 0.4,
+  "evidence": "ldrb/strb [r0,#0x2c] (readable shows f_b due to int typing), bl 0x00559B08, then tail branch to 0x0053D32C with r0 = saved *self; 0x0053D32C is the global object's slot 0x0c (delete)."
+ },
+ {
+  "address": "0x00536728",
+  "name": "Ui_ResourceCache_CreateEntry",
+  "signature": "u32* Ui_ResourceCache_CreateEntry(UiResCache* cache, const char* name)",
+  "params": {
+   "cache": "name-keyed resource cache",
+   "name": "resource name (max 0x7f chars)"
+  },
+  "summary": "Creates a 0x9c-byte named cache entry with a zeroed payload region, inserts it into the cache and returns a pointer to the payload area at entry+0x88. Used by the UI sprite/texture loader when a name is not yet cached.",
+  "confidence": 0.5,
+  "evidence": "Alloc 0x9c via 0x0053CF14, same 0x7f name copy as 0x00536150, zeroes +0x8e/+0x96 and returns result+0x22 (0x88). Caller 0x002F7814 (Ui sprite cache lookup-or-load) calls it on a cache miss right before filling the sprite."
+ },
+ {
+  "address": "0x005367BC",
+  "name": "maybe_Ui_ResourceCache_DestroyAll",
+  "signature": "void maybe_Ui_ResourceCache_DestroyAll(UiResCache* cache)",
+  "params": {
+   "cache": "resource cache"
+  },
+  "summary": "Destructor body for a resource cache whose entries may own external blocks: unlinks each entry, releases the block at +0x88 through 0x00536104 when present (+0x98 != 0), then frees the entry.",
+  "confidence": 0.45,
+  "evidence": "Same traversal as 0x005362A0 but the owned-object branch is replaced by 'if (entry->f_98) 0x00536104(&entry->f_88)'. 0x00536104 releases the tagged block."
+ },
+ {
+  "address": "0x0053682C",
+  "name": "maybe_Ui_AnimBinder_Init",
+  "signature": "void maybe_Ui_AnimBinder_Init(UiAnimBinder* self, UiAnimRes* res, void* factory, u32 slotCount)",
+  "params": {
+   "self": "binder object",
+   "res": "animation resource (u16 count at +0xc, offsets at +0x14)",
+   "factory": "object whose vtbl[0x14] creates the per-anim object",
+   "slotCount": "number of (object,tag) pairs to reserve"
+  },
+  "summary": "Initialises an animation binder from a layout animation resource: allocates one animatable object per resource entry (via factory->vtbl[0x14]) and a zeroed array of slotCount 8-byte (object,tag) pairs that 0x00536C48 later fills.",
+  "confidence": 0.45,
+  "evidence": "Stores res at +0xc, allocates res->f_c*4 with 0x0053CF14, loops calling (**(vtbl+0x14))(factory, res + res->f_c[i] + 0x14), then allocates arg4<<3 zeroed pairs at +0x1c and stores u16 arg4 at +0x22. 0x00536C48 appends into exactly this +0x1c/+0x20/+0x22 structure."
+ },
+ {
+  "address": "0x00536C48",
+  "name": "Ui_Animator_AppendBinding",
+  "signature": "u32 Ui_Animator_AppendBinding(UiAnimator* self, void* target, LayoutAnimTag* tag)",
+  "params": {
+   "self": "binder (u16 count +0x20, capacity +0x22, array +0x1c)",
+   "target": "pane/material the tag applies to",
+   "tag": "decoded anim tag record (1-byte count, 0x10-byte sub-records)"
+  },
+  "summary": "Adds a (target, tag) pair to the binder's fixed array if the tag is compatible with the target, checking the tag's block type against the target's material/animation flags and against the resource's animatable objects. Returns 0 when the array is full or the tag belongs to an already-bound target.",
+  "confidence": 0.5,
+  "evidence": "Count/capacity guard (self->f_20 >= self->f_22 -> 0), array write at self->f_1c + f_20*8 of (arg2,arg3), tag constants g_00536E70 (+0x2f20000, +0x3000000, 0xc0000 offsets) and flag tests [arg2+0x74]&0x200/0x8000/0xf and [arg2+0x76]&3. Called by 0x005375DC with the same binder."
+ },
+ {
+  "address": "0x00536E78",
+  "name": "Ui_Animator_ApplyTagData",
+  "signature": "void Ui_Animator_ApplyTagData(UiAnimator* self, UiPane* pane, const LayoutAnimTag* tag)",
+  "params": {
+   "self": "binder (animatable objects at +0x18, current frame float +0x10)",
+   "pane": "target pane (packed material fields +0x74/+0x76, data block +0x78)",
+   "tag": "tag record with up to N sub-blocks"
+  },
+  "summary": "Evaluates one animation tag at the current frame and writes the results into the pane: interpolates keyframe tables, applies texture-pattern / texcoord / color / rotate / scale entries into the pane's packed material arrays and clears the dirty bit. This is the per-tag 'sampling' pass of the layout animator.",
+  "confidence": 0.55,
+  "evidence": "Per-tag loop over arg3->f_1c with sub-blocks at +0x20; keyframe search with binary search over float pairs (func_0053779C decodes the curve); writes to (arg2->f_78 + packed index) using the same bitfields as 0x0054054C; g_005371dc.. globals are float lerp constants; calls 0x0053E220 and clears bit 0x08 of arg2->f_7c."
+ },
+ {
+  "address": "0x005375DC",
+  "name": "Ui_Animator_BindByName",
+  "signature": "void Ui_Animator_BindByName(UiAnimator* self, UiAnimGroup* group)",
+  "params": {
+   "self": "binder",
+   "group": "animation group (u16 count +0xe, names at +0x10, list head +0x10)"
+  },
+  "summary": "Binds a layout animation group to the binder: for each unbound group entry it matches the entry's name against the pane-name list and appends the pair; entries with sub-ids go through the object's vtbl[0x30] matcher and 0x00536C48. This is what makes named BFLAN animations drive their panes.",
+  "confidence": 0.5,
+  "evidence": "Outer loop over group->f_e with entry stride 4 (offsets into the group); 0x18-byte (0x17+1) name compare against *(int*)(list->next+0x80) exactly like 0x005383F4; else calls (**(vtbl+0x30))(obj, entry, 0) and 0x00536C48(self, obj, entry); writes self->f_1c[f_20*2] = (obj, entry)."
+ },
+ {
+  "address": "0x00537AE8",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelA",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelA(void)",
+  "params": {},
+  "summary": "Interior label of the 2D SRT-to-matrix builder that starts around 0x005378xx (the code that turns a pane's translate/rotate/scale into an 8-float matrix via its vtbl). Not a real function entry - the function seed table contains this jump-table label; the C is a halt stub.",
+  "confidence": 0.3,
+  "evidence": "asm at 0x00537AE8..0x00537AE4 is mid-body (bl 0x0012515c with r0=sp, r2=pane+0x74); the enclosing builder vstr's 8 floats and calls 0x0012515c/0x0012540a on the matrix; seed mode is wrongly 'thumb' so Ghidra produced halt_baddata; next real prologue is at 0x00537B50-ish region label."
+ },
+ {
+  "address": "0x00537B50",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelB",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelB(void)",
+  "params": {},
+  "summary": "Interior label of the same SRT-to-matrix builder: copies the finished 8-float matrix to the output pointer and returns. Seed-table label, not a function entry.",
+  "confidence": 0.3,
+  "evidence": "asm 0x00537B54-0x00537B9C copies [sp..sp+0x1c] to [r4..r4+0x1c] then pops {r4,r5,r6,r7,r8,sb,sl,fp,pc} - the return-by-value epilogue of the matrix builder; no prologue at the seed address."
+ },
+ {
+  "address": "0x00537C4C",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelC",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelC(void)",
+  "params": {},
+  "summary": "Interior label of the same matrix builder (alternate transform path that calls 0x001252e8 before 0x0012515c and jumps back to the common epilogue at 0x00537adc).",
+  "confidence": 0.3,
+  "evidence": "asm 0x00537C4C: bl 0x001252e8; bl 0x0012515c; b 0x00537adc - a tail block inside the builder; no push at the seed address."
+ },
+ {
+  "address": "0x00537C5C",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelD",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelD(void)",
+  "params": {},
+  "summary": "Interior label of the same matrix builder for the second input case (uses [arg1+0xc]/[arg1+0x1c] offsets, otherwise identical float math).",
+  "confidence": 0.3,
+  "evidence": "asm 0x00537C6C onward is the alternate branch of the SRT math (vldr s9,[r1,#0xc]; vldr s12,[r1,#0x1c]) ending in 'b 0x00537adc'; continues the code from 0x00537B50 without prologue."
+ },
+ {
+  "address": "0x00537D48",
+  "name": "maybe_Ui_Animator_AdvanceSlot30",
+  "signature": "int maybe_Ui_Animator_AdvanceSlot30(UiAnimChannel* self, LayoutAnimTag* tag)",
+  "params": {
+   "self": "anim channel (+0x4 current time/state, +0x8 limit, +0xc layout object)",
+   "tag": "tag being played (+0x44 flags, +0x45 bool, +0x46 'has value' byte)"
+  },
+  "summary": "Advances one animation channel: when the tag carries a value it calls the layout object's vtbl[0x30] with (layout, self->f_4, tag, self->f_8) and stores the returned time back into self->f_4. Returns 0 (stop) when the tag's loop flag is clear and its 'finished' byte is set.",
+  "confidence": 0.45,
+  "evidence": "Three identical wrappers at 0x00537D48/0x00537DA0/0x00537DF8 differ only in vtbl slot 0x30/0x2c/0x28; the pattern ldrb [tag+0x46] gate then self->f_4 = call(self->f_c, self->f_4, tag, self->f_8) suggests per-property animator channels; final test (tag->f_44 & 2)==0 || tag->f_45 != 0."
+ },
+ {
+  "address": "0x00537DA0",
+  "name": "maybe_Ui_Animator_AdvanceSlot2C",
+  "signature": "int maybe_Ui_Animator_AdvanceSlot2C(UiAnimChannel* self, LayoutAnimTag* tag)",
+  "params": {
+   "self": "anim channel",
+   "tag": "tag being played"
+  },
+  "summary": "Same channel-advance wrapper as 0x00537D48 but through layout vtable slot 0x2C (a second animated property). Returns whether the channel should keep running.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical body to 0x00537D48 except the vtbl offset 0x2c; asm shows ldr ip,[r2,#0x2c]."
+ },
+ {
+  "address": "0x00537DF8",
+  "name": "maybe_Ui_Animator_AdvanceSlot28",
+  "signature": "int maybe_Ui_Animator_AdvanceSlot28(UiAnimChannel* self, LayoutAnimTag* tag)",
+  "params": {
+   "self": "anim channel",
+   "tag": "tag being played"
+  },
+  "summary": "Same channel-advance wrapper as 0x00537D48 but through layout vtable slot 0x28 (a third animated property).",
+  "confidence": 0.45,
+  "evidence": "Byte-identical body to 0x00537D48 except the vtbl offset 0x28; asm shows ldr ip,[r2,#0x28]."
+ },
+ {
+  "address": "0x005383F4",
+  "name": "Ui_LayoutPane_FindByName",
+  "signature": "UiPane* Ui_LayoutPane_FindByName(UiPane* self, const char* name, int recurse)",
+  "params": {
+   "self": "pane (name buffer at +0x80, children list head +0x14)",
+   "name": "pane name to find",
+   "recurse": "non-zero to search child panes too"
+  },
+  "summary": "Finds a pane by name: compares up to 0x18 characters with the pane's own name buffer, and on mismatch optionally walks the child list calling each child's vtbl[0x4c] (recursive FindPaneByName). Returns the matching pane or 0.",
+  "confidence": 0.6,
+  "evidence": "0x18-byte name compare at self+0x80 (offset reused by 0x00538494/0x005385CC/0x00538648/0x00538F2C); child walk over the intrusive list at self->f_14 with (**(vtbl+0x4c))(child, name); return self on full match."
+ },
+ {
+  "address": "0x00538494",
+  "name": "Ui_LayoutPane_FindByNameEx",
+  "signature": "UiPane* Ui_LayoutPane_FindByNameEx(UiPane* self, const char* name, int recurse)",
+  "params": {
+   "self": "pane container",
+   "name": "pane name",
+   "recurse": "also consult the extended pane list"
+  },
+  "summary": "Extended pane lookup: iterates the container's indexed children through vtbl[0x24] (count) and vtbl[0x28] (get-by-index) comparing names, then optionally scans the second list at +0x14 with vtbl[0x50].",
+  "confidence": 0.55,
+  "evidence": "Calls (**(vtbl+0x24))(self) for a count and (**(vtbl+0x28))(self,i) for each child, name compare at child+0x80 up to 0x1b, fallback loop over arg1[5] list with vtbl[0x50]. Same family as 0x005383F4."
+ },
+ {
+  "address": "0x005385CC",
+  "name": "Ui_LayoutPane_FindByNameRecursive",
+  "signature": "UiPane* Ui_LayoutPane_FindByNameRecursive(UiPane* self, const char* name)",
+  "params": {
+   "self": "pane",
+   "name": "pane name"
+  },
+  "summary": "Unconditional recursive variant of the pane-by-name search: own-name compare first, then always walks the children list through vtbl[0x4c].",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x005383F4 with the arg3 test removed; child loop over self->f_14, name compare at self+0x80, 0x18 limit."
+ },
+ {
+  "address": "0x00538648",
+  "name": "Ui_LayoutPane_FindByNameRecursiveEx",
+  "signature": "UiPane* Ui_LayoutPane_FindByNameRecursiveEx(UiPane* self, const char* name)",
+  "params": {
+   "self": "pane container",
+   "name": "pane name"
+  },
+  "summary": "Unconditional variant of 0x00538494: indexed-child scan then extended-list scan, both always performed.",
+  "confidence": 0.5,
+  "evidence": "Same as 0x00538494 without the arg3 gate: vtbl[0x24]/[0x28] enumeration plus unconditional +0x14 list walk with vtbl[0x50]."
+ },
+ {
+  "address": "0x00538E78",
+  "name": "Container_Tree_Destroy",
+  "signature": "void* Container_Tree_Destroy(Container* self)",
+  "params": {
+   "self": "intrusive tree/map (head at +0x10, vtable written first)"
+  },
+  "summary": "Destructor of a small intrusive container: installs the base vtable (0x007813A4), walks the node list at +0x10 unlinking each node through 0x0011AD60 and freeing it with 0x0053CEF8.",
+  "confidence": 0.5,
+  "evidence": "*arg1 = g_00538ecc (vtable), loop over arg1[4] comparing against arg1+4, 0x0011AD60(arg1+3, node) then 0x0053CEF8(node); returns self - standard std::-style container dtor."
+ },
+ {
+  "address": "0x00538F2C",
+  "name": "Ui_LayoutPane_FindChildByName",
+  "signature": "UiPane* Ui_LayoutPane_FindChildByName(UiPane* self, const char* name)",
+  "params": {
+   "self": "pane container",
+   "name": "child pane name"
+  },
+  "summary": "Indexed child lookup without recursion/fallback: enumerates children via vtbl[0x24]/vtbl[0x28] and compares the 0x18-byte name at child+0x80.",
+  "confidence": 0.55,
+  "evidence": "Identical to 0x00538648 minus the extended-list walk; only vtbl[0x24] count and vtbl[0x28] getter; 0x1b/0x18 name length limit."
+ },
+ {
+  "address": "0x0053ADA0",
+  "name": "maybe_Ui_TextBox_SetLineColors",
+  "signature": "u32 maybe_Ui_TextBox_SetLineColors(UiTextBox* self, u32 color, int convert, u32 color2)",
+  "params": {
+   "self": "text box (three color slots at +0x634/+0x654/+0x674)",
+   "color": "packed color value",
+   "convert": "non-zero to convert through 0x0055861C",
+   "color2": "value written to all three slots"
+  },
+  "summary": "Sets the three per-line color slots of a text box to arg4 (typically the default text color) and, when requested, converts the incoming packed color through 0x0055861C before returning it. Sits next to Ui_LayoutText_* code (0x00539xxx-0x0053cxxx) and TextBox_AllocBuffer (0x0053F344).",
+  "confidence": 0.4,
+  "evidence": "str r3,[r0,#0x634]/[+0x654]/[+0x674] (three 0x20-byte line records), optional bl 0x0055861C(arg2); returns arg2/arg1. 0x0053F078 later reads f_b4/f_c0/f_c4/f_d0 for the same text box draw path."
+ },
+ {
+  "address": "0x0053CD74",
+  "name": "maybe_Ui_TextLayout_InsertRun",
+  "signature": "u32 maybe_Ui_TextLayout_InsertRun(u32 layout, UiTextRun* run, UiTextLine* line, UiTextBox* box)",
+  "params": {
+   "layout": "layout/context id passed to the sorter",
+   "run": "text run to insert (may be 0)",
+   "line": "line whose +0x10 payload is the sort key",
+   "box": "text box owning +0xb0/+0xc0 bookkeeping"
+  },
+  "summary": "Inserts a text run into the box's sorted run list: when both the run and the line payload exist it stores the line in box+0xb0, builds an insertion record (callback at 0x0072FB2C) and calls the list sorter 0x006EF5AC, then clears box+0xb0. Returns the run pointer.",
+  "confidence": 0.35,
+  "evidence": "Guards arg2!=0 && box->f_c0 && line->f_10; sets box->f_b0 = line (restored to 0 after), stack record {g_0053cddc, run, box, layout}; bl 0x006EF5AC with line->f_10 - a sorted-insert/for-each helper used by the text layout code."
+ },
+ {
+  "address": "0x0053CED4",
+  "name": "Mem_DeleteObject",
+  "signature": "void Mem_DeleteObject(void* obj)",
+  "params": {
+   "obj": "polymorphic object to delete"
+  },
+  "summary": "Deletes a polymorphic object: calls its virtual destructor through vtbl[0], then returns it to the global heap via the singleton's slot 0x0c. This is the library's `delete` helper used throughout the UI text code.",
+  "confidence": 0.55,
+  "evidence": "(**(code**)*arg1)(arg1); then (**(code**)(*(int*)*g_0053cf10 + 0xc))(*g_0053cf10, arg1). 0x0053CF10 holds the allocator singleton (0x0053CEF8/0x0053CF14 are its free/alloc wrappers)."
+ },
+ {
+  "address": "0x0053D228",
+  "name": "maybe_Ui_LayoutPlayer_CreateFromName",
+  "signature": "void* maybe_Ui_LayoutPlayer_CreateFromName(UiTextBox* self, u32 name, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "text box (+0x24 = resource manager)",
+   "name": "name/id formatted into the resource name",
+   "arg3": "extra draw parameter",
+   "arg4": "extra draw parameter"
+  },
+  "summary": "Creates a UI layout/animation player for a named .bflyt layout: formats '%s.bflyt' into a buffer, loads it through the manager at self+0x24 (vtbl[0xc]), allocates a 0x3c-byte player, installs vtable 0x0078144C, initialises its two intrusive lists and calls its init slot vtbl[0x38] with the loaded handle.",
+  "confidence": 0.49,
+  "evidence": "Format string at 0x0072FB50 is '%s.bflyt', passed to 0x0051D03C(buf,0x48,0x47,fmt,arg2); (**(vtbl+0xc))(self->f_24, g_0053d31c, buf, 0) loads the layout; 0x0053CF10 allocates 0x3c bytes; vtable g_0053d324 resolves to 0x0078144C; the two list heads at +8 and +0x2c match the player objects released by 0x0053D57C/0x0053D718; final (**(vtbl+0x38))(obj,handle,self->f_24,arg4,arg3)."
+ },
+ {
+  "address": "0x0053D474",
+  "name": "maybe_Mem_DeleteObjectWithUnlink",
+  "signature": "void maybe_Mem_DeleteObjectWithUnlink(void* owner, void* obj)",
+  "params": {
+   "owner": "object owning the list at owner+4",
+   "obj": "object to unlink and delete"
+  },
+  "summary": "Unlinks an object from the list rooted at owner+4, calls its virtual destructor and then frees it through the global heap. Used by the UI text layout code for child records.",
+  "confidence": 0.45,
+  "evidence": "0x0011FCBC(arg1+4, arg2+4) unlink, then (**(code**)(*arg2+4))(arg2) and the same allocator-singleton free as 0x0053CED4 (ldr from 0x007813F0 area)."
+ },
+ {
+  "address": "0x0053D57C",
+  "name": "maybe_Ui_Layout_ReleaseChildren",
+  "signature": "void maybe_Ui_Layout_ReleaseChildren(UiLayout* self, float value)",
+  "params": {
+   "self": "layout element (+8 child list, +0x2c second list)",
+   "value": "float forwarded to the second list's vtbl[0x2c]"
+  },
+  "summary": "Releases a layout element's children: for the list at +8 it calls vtbl[0x14] (detach) and vtbl[0x0c] (destroy) on each node, then for the list at +0x2c it calls vtbl[0x2c] with the incoming float (typically setting alpha/rate).",
+  "confidence": 0.4,
+  "evidence": "Two intrusive-list walks; blx [vtbl+0x14]/[vtbl+0xc] for the first, and blx [vtbl+0x2c] with s0 = incoming float for the second (asm vmov.f32 s16,s0 then vmov.f32 s0,s16 before the call)."
+ },
+ {
+  "address": "0x0053D718",
+  "name": "maybe_Ui_Layout_ResetChildren",
+  "signature": "void maybe_Ui_Layout_ResetChildren(UiLayout* self)",
+  "params": {
+   "self": "layout element (+8 and +0x2c lists)"
+  },
+  "summary": "Destructor-side variant of 0x0053D57C: detaches (vtbl[0x14]) every node of the +8 list and calls vtbl[0x24] on every node of the +0x2c list, without the float parameter.",
+  "confidence": 0.4,
+  "evidence": "Same two list walks as 0x0053D57C; second call uses vtable offset 0x24 instead of 0x2c and no s0 setup."
+ },
+ {
+  "address": "0x0053E2B8",
+  "name": "Ui_TextRun_Copy",
+  "signature": "UiTextRun* Ui_TextRun_Copy(UiTextRun* self, const UiTextRun* src)",
+  "params": {
+   "self": "destination 0x14-byte run record",
+   "src": "source record or 0"
+  },
+  "summary": "Copy-constructs a text-run/character record: copies the 32-bit tag, two u16 fields, style/type bytes and a 32-bit payload, then recomputes the derived flags through 0x0053E004. Type byte 0x0e/0x90 marker indicates a font glyph run.",
+  "confidence": 0.5,
+  "evidence": "Field-by-field copy of 0x14 bytes: *arg1, u16 +4, u16 +6, u8 +9, bits 0x30000 of +8 from src+9, +0xc, u16 +0x10, u16 +0x12; both paths call 0x0053E004(self) (recompute/commit)."
+ },
+ {
+  "address": "0x0053E344",
+  "name": "Ui_TextRun_InitDefault",
+  "signature": "UiTextRun* Ui_TextRun_InitDefault(UiTextRun* self)",
+  "params": {
+   "self": "0x14-byte run record"
+  },
+  "summary": "Default-constructs a text-run record: zeroes all fields, marks it as type 0x0e with the 0x90 flag bits and commits it through 0x0053E004.",
+  "confidence": 0.5,
+  "evidence": "strb #0xe at +9, zero stores at +0,+4,+6,+0xc,+0x10,+0x12, +8 = (+8 & ~0x3007f) | 0x90, then bl 0x0053E004 - mirror image of 0x0053E2B8."
+ },
+ {
+  "address": "0x0053E3BC",
+  "name": "Ui_Pane_FindByNameExtended",
+  "signature": "UiPane* Ui_Pane_FindByNameExtended(UiPane* self, const char* name, void* arg3)",
+  "params": {
+   "self": "pane (+0xd4 cached child, +0xcd count, +0xd0 array)",
+   "name": "pane name",
+   "arg3": "optional matcher forwarded to children"
+  },
+  "summary": "Pane lookup with a fast path for the cached child at +0xd4 and an array scan at +0xd0 (0x8-byte entries, names at +0x80), falling back to the child list with vtbl[0x30].",
+  "confidence": 0.5,
+  "evidence": "Compare loop identical to the other FindByName functions (0x1b/0x18 limit, name at obj+0x80); first checks *(self+0xd4), then self->f_cd entries of self->f_d0 with +4 as pane; fallback list at self->f_14 with (**(vtbl+0x30))(child,name,arg3)."
+ },
+ {
+  "address": "0x0053EA10",
+  "name": "maybe_Ui_Pane_UpdateTexPatternAnim",
+  "signature": "void maybe_Ui_Pane_UpdateTexPatternAnim(UiPane* self)",
+  "params": {
+   "self": "pane (+0xa4 material/animation state, +0x3c/+0x40 texcoord scale)"
+  },
+  "summary": "Advances the texcoord/pattern animation of a pane: when the material's pattern index and UV index are behind the animated ones it copies the record through 0x0053E2B8, bumps the pattern counters (with wrap), marks the material dirty and resamples the texcoord scale into +0x3c/+0x40. This is the per-frame BFLAN texture-pattern swap.",
+  "confidence": 0.4,
+  "evidence": "Reads [f_a4+0x74]/+0x76 packed pattern fields, compares (f_76&3)<(f_74&3) and (f_76&0x3f)>>4, calls 0x0053E2B8 with the material's pattern record, rotates f_76 bits, clears bit 3 of f_7c, calls 0x00541BB8(&self->f_b8, patternIdx) and updates f_3c/f_40 from the record's u16s (0x65D3B8 is not used here; u16/float conversion)."
+ },
+ {
+  "address": "0x0053EED4",
+  "name": "Ui_TextLayout_MeasureAndPlaceRun",
+  "signature": "void Ui_TextLayout_MeasureAndPlaceRun(UiTextLayout* self, UiTextRun* run, UiTextRunAttr* attr)",
+  "params": {
+   "self": "layout (+0x29/+0x3e buffers)",
+   "run": "run to measure/place (+0x14 callback provider, +0x18/+0x1c/+0x3c)",
+   "attr": "attributes (u16 width/height at +0xc/+0x10, flags bit 1)"
+  },
+  "summary": "Measures and places one text run: optionally lets the run's provider callback (vtbl[8]) adjust the metrics, then calls layout vtbl[0x78] to measure and vtbl[0x58] to set the line advance, and finally draws the run with vtbl[0x6c] when it has payload and measurement succeeded.",
+  "confidence": 0.5,
+  "evidence": "arg2->f_14 vtbl[8](obj,&local, self[0x2a], arg2->f_18, self, attr[1]) then (**(vtbl+0x78))(self,arg2,&local); width = max(attr->f_c, attr->f_10); vtbl[0x58](self,width,run->f_3c); vtbl[0x6c](self,attr[2],0,height) on success."
+ },
+ {
+  "address": "0x0053F078",
+  "name": "Ui_TextLayout_BuildDrawParams",
+  "signature": "void Ui_TextLayout_BuildDrawParams(UiTextLayout* self, UiDrawParams* out)",
+  "params": {
+   "self": "text layout (+0xac..+0xd4 draw state)",
+   "out": "18-word draw parameter block"
+  },
+  "summary": "Fills the per-run draw parameter block from the text layout: default colors, texture scale/offset from the loaded font material (0x0055730C), text scale, and flip/rotate flags decoded from +0xd0/+0xd1 into the packed out[0x10] word.",
+  "confidence": 0.5,
+  "evidence": "Writes out[4],out[5]=g_0053f17c (0x3f800000 1.0f pair), out[9]=self->f_b4, calls 0x0055730C(arg2) (which divides by the font texture width/height), copies f_c0/f_c4 to out[0xe]/out[0xd], and packs flags 1/2/0x10/0x20/0x100/0x200 from (f_d0&3) and (f_d1&3)."
+ },
+ {
+  "address": "0x0053F184",
+  "name": "Ui_TextLayout_FreeBuffers",
+  "signature": "void Ui_TextLayout_FreeBuffers(UiTextLayout* self)",
+  "params": {
+   "self": "text layout (+0xf8 quad buffer, +0xa4 glyph records, +0xfc font)"
+  },
+  "summary": "Frees the text layout's dynamic buffers: the glyph quad array at +0xf8 (and its sub-buffer at +0xc), the glyph record block at +0xa4 and the font's auxiliary block at +0xfc+8.",
+  "confidence": 0.55,
+  "evidence": "Three free paths via 0x0053CEF8: [self+0xf8] (freeing [f_f8+0xc] first), [self+0xa4] plus clearing +0xcc/+0xce, and ((int*)self->f_fc)[2] set to 0. Matches the buffers allocated in 0x00541B38/0x0054054C."
+ },
+ {
+  "address": "0x0053F208",
+  "name": "maybe_Ui_TextLayout_DrawScaled",
+  "signature": "void maybe_Ui_TextLayout_DrawScaled(UiTextLayout* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "text layout",
+   "arg2": "draw target/x",
+   "arg3": "scale numerator",
+   "arg4": "clip/height"
+  },
+  "summary": "Computes the text scale from the layout's font (0x005573A4) and forwards the draw call to layout vtbl[0x60] with the converted parameters.",
+  "confidence": 0.45,
+  "evidence": "uVar1 = 0x005573A4(arg3, self[0x3f]!=0, arg3, arg4, arg4); then (**(vtbl+0x60))(self,arg2,arg3,uVar1,arg4). Same vtbl[0x60] as the draw entry used by 0x0053EED4's family."
+ },
+ {
+  "address": "0x0053F7FC",
+  "name": "Ui_TextLayout_DrawString",
+  "signature": "u32 Ui_TextLayout_DrawString(UiTextLayout* self, UiTextRun* run, UiStringSpan* span)",
+  "params": {
+   "self": "text layout",
+   "run": "run owning the draw state",
+   "span": "string span (u16* at +0, char count +4, explicit width +8)"
+  },
+  "summary": "Draws one UTF-16 string span: measures the string when no explicit length is given, sets the line width through vtbl[0x58] and submits the characters through vtbl[0x6c]. Returns 1 when something was drawn.",
+  "confidence": 0.55,
+  "evidence": "psVar1 = *arg3 walks u16 until 0 when arg3[1]&0xffff==0; width = arg3[2] or measured count; (**(vtbl+0x58))(self,width,run->f_3c); then (**(vtbl+0x6c))(self,*arg3,0,count) when self[0x29] (draw buffer) is set."
+ },
+ {
+  "address": "0x0053F940",
+  "name": "Ui_TextBuffer_AppendChars",
+  "signature": "u32 Ui_TextBuffer_AppendChars(UiTextBuffer* self, const u16* text, u32 offset)",
+  "params": {
+   "self": "text buffer (+0xb4 enabled, +0xa4 u16* buffer, +0xcc capacity, +0xce length, +0xd0 flags)",
+   "text": "UTF-16 string to append",
+   "offset": "start character index in the string"
+  },
+  "summary": "Appends UTF-16 characters to the text box's character buffer at the given string offset, clamping to the free space and to the buffer capacity, terminating the buffer and marking it dirty (bit 2 of +0xd0). Returns the number of characters copied.",
+  "confidence": 0.6,
+  "evidence": "0x00100B74(arg2) is a UTF-16 strlen; guards self->f_b4 && self->f_a4; capacity limit = (f_cc - 1) if non-zero; memcpy 0x00125640(dst + offset*2, src, count*2); writes terminator, sets f_ce = copied end, sets f_d0 |= 4."
+ },
+ {
+  "address": "0x0053F9EC",
+  "name": "Ui_TextBuffer_WriteCharsAt",
+  "signature": "u32 Ui_TextBuffer_WriteCharsAt(UiTextBuffer* self, const u16* text, u32 index, u32 count)",
+  "params": {
+   "self": "text buffer",
+   "text": "source UTF-16 characters",
+   "index": "destination character index",
+   "count": "maximum number of characters"
+  },
+  "summary": "Writes characters into the middle of the text buffer at a given index, clamping to the buffer length, terminating and marking the buffer dirty. Returns the number of characters written.",
+  "confidence": 0.6,
+  "evidence": "Same buffer/length fields as 0x0053F940 (f_b4/f_a4/f_cc); limit = (u16)(f_cc-1); memcpy 0x00125640(buf + index*2, src, count*2); updates f_ce and sets bit 4 of f_d0."
+ },
+ {
+  "address": "0x0053FFD4",
+  "name": "Ui_AnimValue_UpdateScroll",
+  "signature": "void Ui_AnimValue_UpdateScroll(UiAnimValue* self, float delta)",
+  "params": {
+   "self": "scrolling value (+0x10 current, +0x24 target, +0x28 wrap mode, +0x2c state bits, +0x2c/+0x3c layout)",
+   "delta": "per-frame step (s0)"
+  },
+  "summary": "Integrates a scrolling/animated value toward its target: advances by delta, handles the three wrap modes (stop, loop using the layout animation length from 0x0065D3B8, ping-pong by negating the target) and flags the value as changed. This is the smooth-scroll helper of the text box.",
+  "confidence": 0.5,
+  "evidence": "self->f_10 += self->f_24 * s0; mode byte f_28 == 0/1/2 selects stop/loop/reflect; 0x0065D3B8(self) returns the layout/animation length in unsigned units converted with VectorUnsignedToFloat; state flags at +0x2c are set (bits 1/2/4) and the unchanged case clears them (f_2c &= ~7)."
+ },
+ {
+  "address": "0x005401DC",
+  "name": "Ui_AnimValue_SetTarget",
+  "signature": "void Ui_AnimValue_SetTarget(UiAnimValue* self, float target, int mode)",
+  "params": {
+   "self": "scrolling value (+0x10 current, +0x24 target, +0x28 mode, +0x2c state)",
+   "target": "new target value (s0)",
+   "mode": "wrap mode 0..2"
+  },
+  "summary": "Sets a scroll value's target/mode and snaps the current value when the target is outside the animated range: takes the layout length from 0x0065D3A0/0x0065D3B8 and resets the value to 0 or the animation length accordingly.",
+  "confidence": 0.5,
+  "evidence": "Same fields as 0x0053FFD4; modes stored at +0x28; funcs 0x0065D3A0/0x0065D3B8 fetched; self->f_10 set to g_0054029c (0.0f) or the layout length; state bits f_2c &= ~7."
+ },
+ {
+  "address": "0x0054054C",
+  "name": "maybe_Ui_Pane_ConfigureTextureLayout",
+  "signature": "u32 maybe_Ui_Pane_ConfigureTextureLayout(UiPane* self, u32 patternCount, u32 uvCount, u32 texCount, u32 texCoordCount, u32 flag9, u32 flag10, u32 paletteCount, u32 unk8, u32 alphaCount, u32 flag, u32 oneBit)",
+  "params": {
+   "self": "pane whose packed material layout lives at +0x74/+0x76 and data block at +0x78",
+   "patternCount": "number of texture patterns (bits 0-1 of +0x74)",
+   "uvCount": "number of UV sets (bits 2-3)",
+   "texCount": "number of textures (bits 4-5)",
+   "texCoordCount": "texcoord entries (bits 6-8)",
+   "flag9": "single-bit material flag (bit 9)",
+   "flag10": "single-bit material flag (bit 10)",
+   "paletteCount": "palette entries (bits 10-11)",
+   "unk8": "reserved entry count",
+   "alphaCount": "alpha/compare entries (bits 13-14)",
+   "flag": "single-bit material flag (bit 15)",
+   "oneBit": "1-bit field selecting the 0xC vs 0x4 per-pattern stride"
+  },
+  "summary": "Rebuilds a pane's packed material/texture layout: compares the requested counts with the currently packed bitfields, frees and reallocates the data block with the exact size formula (pattern*0x20 + uv*0x14 + tex*8 + ...), then re-initialises the per-pattern, texcoord, palette and alpha sub-arrays. Returns 0 when the allocation fails.",
+  "confidence": 0.4,
+  "evidence": "Packed comparisons against self->f_74 masks 3,0xf>>2,0x3f>>4,0x1ff>>6,bit9,0xfff>>10,bit15; free via 0x0053CEF8 and 0x00540B70(self,&f_74/&f_76); allocation size = 0xc/0x4 * arg5 + arg2*0x20 + arg3*0x14 + arg4*8 + arg6*8 + arg7*4 + 0x1c + arg9*0x14 + arg10*8; writes defaults from g_00540a2c/g_00540a30 (0.0f/1.0f) and 0x50400 sentinels. Consumed by 0x00536E78's index math (same bitfields)."
+ },
+ {
+  "address": "0x00541A30",
+  "name": "maybe_Ui_TextBlock_Dtor",
+  "signature": "u32* maybe_Ui_TextBlock_Dtor(u32* self)",
+  "params": {
+   "self": "text/glyph block (+0x78 owned buffer, vtable at +0)"
+  },
+  "summary": "Destructor of a glyph/quad block: installs the base vtable (0x007816C0) and frees the buffer at +0x78.",
+  "confidence": 0.45,
+  "evidence": "*arg1 = g_00541a60 (vtable); if arg1[0x1e] (offset 0x78) free via 0x0053CEF8 and zero it. The block is the one filled by 0x00541B38/0x00541BB8."
+ },
+ {
+  "address": "0x00541B38",
+  "name": "Ui_GlyphQuadArray_Reserve",
+  "signature": "void Ui_GlyphQuadArray_Reserve(UiGlyphQuadArray* self, u32 capacity)",
+  "params": {
+   "self": "quad array (u8 capacity +0, u8 used +1, u32* data +4, stride 0x20)",
+   "capacity": "requested number of glyphs"
+  },
+  "summary": "Grows the glyph quad array when the requested capacity exceeds the current one: frees the old buffer, allocates capacity*0x20 bytes and resets count/position.",
+  "confidence": 0.55,
+  "evidence": "if (*arg1 < arg2): free *(int*)(arg1+4) via 0x0053CEF8, zero bytes +4..+7 and +0/+1, alloc arg2<<5 via 0x0053CF14, store at +4, set *arg1 = arg2. Consumer 0x00541BB8 writes 0x20-byte entries at index*0x20."
+ },
+ {
+  "address": "0x00541BB8",
+  "name": "Ui_GlyphQuadArray_AppendQuads",
+  "signature": "void Ui_GlyphQuadArray_AppendQuads(UiGlyphQuadArray* self, u32 count)",
+  "params": {
+   "self": "quad array (capacity +0, used +1, data +4, stride 0x20)",
+   "count": "number of glyphs to append"
+  },
+  "summary": "Appends `count` glyph quads to the quad array by copying the four 2-word UV/position templates from the global g_00541cf8 table into each 0x20-byte entry, then records the new used count. Asserts when the capacity is exceeded.",
+  "confidence": 0.55,
+  "evidence": "Asserts via 0x0010009C(g_00541cf4) when arg2 > *arg1; copies 4 times 8 bytes from g_00541cf8 into data + (oldUsed+i)*0x20 + j*8 for j=0..3; finally arg1[1] = arg2. Called by 0x0053EA10 with the new pattern count."
+ },
+ {
+  "address": "0x00541E44",
+  "name": "maybe_Ui_Layout_DispatchSlot10",
+  "signature": "u8 maybe_Ui_Layout_DispatchSlot10(void* self, u32 a1, u32 a2, u8 a3)",
+  "params": {
+   "self": "polymorphic layout object",
+   "a1": "first argument",
+   "a2": "second argument",
+   "a3": "byte in a vararg slot"
+  },
+  "summary": "Thin vararg wrapper: packs the byte argument into a stack slot and tail-calls the object's vtbl[0x10]. Used as an adapter where a callback expects a u8 parameter.",
+  "confidence": 0.4,
+  "evidence": "asm: strb r3,[sp,#4]; str r3,[sp]; ldr ip,[r0]; ldr ip,[ip,#0x10]; blx ip; and r0,r0,#0xff. The readable C loses the vararg setup."
+ },
+ {
+  "address": "0x00541FAC",
+  "name": "maybe_Ui_TextRun_AttachOwner",
+  "signature": "void maybe_Ui_TextRun_AttachOwner(UiTextRunHolder* self, UiTextRun* run)",
+  "params": {
+   "self": "holder (+0 run pointer)",
+   "run": "run to attach"
+  },
+  "summary": "Attaches a text run to its holder: stores the run pointer, re-registers it through 0x00546E28/0x00546E1C when it belongs to a list, and writes the holder pointer back into run+8.",
+  "confidence": 0.4,
+  "evidence": "str r1,[r0]; if (0x00546E28(arg2)) 0x00546E1C(arg2); then *(int**)(*arg1+8) = arg1 (back-pointer). 0x00546E4C (also in this batch) initialises the value range at +0x68 of a similar object."
+ },
+ {
+  "address": "0x005421D0",
+  "name": "maybe_Container_List_RemoveNode",
+  "signature": "int maybe_Container_List_RemoveNode(Container* self)",
+  "params": {
+   "self": "object with an intrusive node at +0x18 and a size word at +0x1c"
+  },
+  "summary": "Removes the object's embedded list node and returns the remaining payload size (record size minus 0x1c). Used by the text run list.",
+  "confidence": 0.45,
+  "evidence": "ldr r1,[r0,#0x1c]; add r0,r0,#0x18; sub r4,r1,#0x1c; bl 0x0011AD60 (list unlink); return r4."
+ },
+ {
+  "address": "0x00542830",
+  "name": "maybe_Ui_TextRenderer_InitDefaults",
+  "signature": "void maybe_Ui_TextRenderer_InitDefaults(void)",
+  "params": {},
+  "summary": "Initialises the global text renderer object: obtains the singleton storage from 0x00541EBC, installs the vtables (0x007816F8/0x00781720), zeroes the counters and sets the six default 0.0f scale/offset values and the three state bytes (1/0/1).",
+  "confidence": 0.45,
+  "evidence": "0x00541EBC returns the storage; stores g_00542888 (vtable), g_00542888+0x24 (secondary vtable), s0 from 0x00542890 (0.0f) into +0x6c..+0x80, bytes +0x84=1,+0x85=0,+0x86=1; sibling dtor 0x00542890 restores the same vtable and calls 0x00114C58."
+ },
+ {
+  "address": "0x00542910",
+  "name": "maybe_Ui_TextColorRange_Init",
+  "signature": "u8* maybe_Ui_TextColorRange_Init(u8* self)",
+  "params": {
+   "self": "0x0b+ byte color/range record"
+  },
+  "summary": "Default-constructs a small text color/range record: zeros the flag bytes, sets the palette index 0x7f and limit 0x40, sets a 0..0 range through 0x00111384 and clears the u16 at +5.",
+  "confidence": 0.45,
+  "evidence": "Stores 0,0,0,0,0x7f at +0..+4, 0x40 at +7, 0 at +8..+0xa, calls 0x00111384(self+0xb, 2, -1) (range/iterator init), strh 0 at +5."
+ },
+ {
+  "address": "0x00542BDC",
+  "name": "maybe_Ui_Layout_DrawGlyphSlot10",
+  "signature": "u32 maybe_Ui_Layout_DrawGlyphSlot10(void* self, u32 a1, UiDrawState* state)",
+  "params": {
+   "self": "polymorphic draw object",
+   "a1": "draw argument",
+   "state": "draw state (+0x18 flags)"
+  },
+  "summary": "Builds a fixed 8-float quad/vertex block (1.0f, 0.0f..., 0x01000000) and calls vtbl[0x10] to draw it; the flag word is OR-ed with 0xFF000000 when bit 1 of the state is set. Returns 0.",
+  "confidence": 0.4,
+  "evidence": "Stack block: s1=g_00542c4c (=1.0f) at +8/+0xc, s0=g_00542c50 (=0.0f) at +0x10..+0x20, zero words +0x24..+0x2c; ip=0x01000000 |= 0xff000000 when (state->f_18 & 2); then (**(vtbl+0x10))()."
+ },
+ {
+  "address": "0x00542E44",
+  "name": "maybe_Ui_Layout_DrawFlagsSlot10",
+  "signature": "void maybe_Ui_Layout_DrawFlagsSlot10(void* self, u32 a1, UiDrawState* state, float value)",
+  "params": {
+   "self": "polymorphic draw object",
+   "a1": "draw argument",
+   "state": "draw state (+0x18 flags, +0x29 bool)",
+   "value": "float forwarded to the draw call"
+  },
+  "summary": "Draws with a flag mask assembled from the state's flag bits (1/2/4/8/0x10 plus 0x20 when the bool at +0x29 is set) and forwards one float argument to vtbl[0x10].",
+  "confidence": 0.4,
+  "evidence": "asm tests r4 bits 1,2,4,8,0x10 and ldrb [r2,#0x29] -> orr ip,#0x20; stores mask at [sp], float at [sp,#4]; calls [r0]->vtbl[0x10]."
+ },
+ {
+  "address": "0x00542FB8",
+  "name": "maybe_Ui_Layout_ForwardSlot0C",
+  "signature": "u32 maybe_Ui_Layout_ForwardSlot0C(void* self, u32 a1, u32 a2, u32 a3)",
+  "params": {
+   "self": "object owning a renderer at +0x18",
+   "a1": "argument 1",
+   "a2": "argument 2",
+   "a3": "argument 3"
+  },
+  "summary": "Forwards a 3-argument call to the renderer object at self+0x18 through its vtbl[0x0c], returning 0 when no renderer is attached.",
+  "confidence": 0.45,
+  "evidence": "ldr r0,[r0,#0x18]; if 0 return 0; ldr ip,[r0]; ldr ip,[ip,#0xc]; blx ip with (renderer, a1, a2, a3)."
+ },
+ {
+  "address": "0x00542FF0",
+  "name": "maybe_Ui_Layout_ForwardSlot08",
+  "signature": "void maybe_Ui_Layout_ForwardSlot08(void* self, u32 a1, u32 a2, u32 a3)",
+  "params": {
+   "self": "object owning a renderer at +0x18",
+   "a1": "argument 1",
+   "a2": "argument 2",
+   "a3": "argument 3"
+  },
+  "summary": "Forwards a 4-argument call (self plus three values) to the renderer at self+0x18 through its vtbl[0x08].",
+  "confidence": 0.45,
+  "evidence": "ldr r0,[r0,#0x18]; store r3 on stack; ldr ip=vtbl[8]; blx ip with r0=renderer, r1=self, r2/r3=args."
+ },
+ {
+  "address": "0x005434E8",
+  "name": "maybe_Ui_Scene_Ctor",
+  "signature": "void maybe_Ui_Scene_Ctor(UiScene* self, u32 owner)",
+  "params": {
+   "self": "scene object (+0 owner, +4/+8 zero, +0xc subobject)",
+   "owner": "owner/title id"
+  },
+  "summary": "Constructs the UI scene object: stores the owner id, zeroes the base fields, constructs the embedded subobject through 0x0054B328 and installs the two scene vtables (0x00781B48 and +0x20).",
+  "confidence": 0.4,
+  "evidence": "stm r0,{r1,r4(0)} / str 0,[r0,#8]!; bl 0x0054B328(r0+0xc); ldr r1=0x00781B48; str r1+0x20 at obj and r1 at obj-0xc; zero +0x20c/+0x21c."
+ },
+ {
+  "address": "0x00543528",
+  "name": "maybe_Ui_Scene_DeleteSubobject",
+  "signature": "void maybe_Ui_Scene_DeleteSubobject(void* subobject)",
+  "params": {
+   "subobject": "pointer to the scene's embedded subobject"
+  },
+  "summary": "Returns the subobject's base (0x54B34C result minus 0xc) and deletes it with the global operator delete (0x0010F6CC).",
+  "confidence": 0.45,
+  "evidence": "bl 0x0054B34C; sub r0,r0,#0xc; b 0x0010F6CC (operator delete) - mirror of the ctor 0x005434E8."
+ },
+ {
+  "address": "0x00543AEC",
+  "name": "maybe_Ui_FindComponentByType",
+  "signature": "void** maybe_Ui_FindComponentByType(void** out, void* object)",
+  "params": {
+   "out": "receives the found component",
+   "object": "object whose RTTI/type chain is walked"
+  },
+  "summary": "Walks the object's type chain (first word) looking for the scene type id 0x0078 1B7C and, on a match, stores it in *out, calls vtbl[0x18] and vtbl[0x1c] when non-zero, and records a back-pointer at component+0x3040.",
+  "confidence": 0.45,
+  "evidence": "for (t = *object; t; t = *t) if (t == g_00543b7c) { *out = object; if ((**(vtbl+0x18))()) (**(vtbl+0x1c))(); *(int**)(object+0x3040) = out; } - classic 'find component of type' pattern."
+ },
+ {
+  "address": "0x00546D4E",
+  "name": "maybe_Ui_TextCursor_AdvanceLine",
+  "signature": "void maybe_Ui_TextCursor_AdvanceLine(UiTextCursor* self)",
+  "params": {
+   "self": "cursor (+0xc0 max, +0xc4 current)"
+  },
+  "summary": "Advances the text cursor to the next line when it is still below the maximum line/row count. Interior label of the cursor update routine (seed-table entry).",
+  "confidence": 0.35,
+  "evidence": "asm: ldr r1,[r0,#0xc4]; ldr r2,[r0,#0xc0]; cmp; addlt r1,r1,#1; strlt; bx lr - no prologue, so an interior label; fields match 0x00546D62's cursor record."
+ },
+ {
+  "address": "0x00546D62",
+  "name": "maybe_Ui_TextCursor_SetScroll",
+  "signature": "void maybe_Ui_TextCursor_SetScroll(UiTextCursor* self, float value)",
+  "params": {
+   "self": "cursor (+0xc8 scroll value)",
+   "value": "candidate scroll/row value (s0)"
+  },
+  "summary": "Clamps an incoming float against the constant at 0x00546D78 (0.0f) and stores it as the cursor's scroll value. Interior label of the cursor update routine.",
+  "confidence": 0.35,
+  "evidence": "asm: vldr s1,[pc,#0x10] (0.0f at 0x00546D80); vcmpe s0,s1; vmovlo s0,s1; vstr s0,[r0,#0xc8]; bx lr - no prologue (interior label of the 0x00546D28 update function)."
+ },
+ {
+  "address": "0x00546E4C",
+  "name": "Ui_ValueRange_Init",
+  "signature": "void Ui_ValueRange_Init(UiValueRange* self, u32 value)",
+  "params": {
+   "self": "value range object (+0x68 min/max floats, +0x70 current, +0x74 state)",
+   "value": "initial value stored at +0x70"
+  },
+  "summary": "Initialises a 0.0f..1.0f value range used for fades/scroll ratios: stores the default min/max, resets through 0x0011CBD4 and then sets the current value and clears the state word. Also used as the pair-initialiser for text run interpolation.",
+  "confidence": 0.5,
+  "evidence": "str s0=g_00546e98 (0.0f) at +0x68/+0x6c, zeros +0x70/+0x74, bl 0x0011CBD4(self+0x68) (clamp/reset), then +0x68=0.0f, +0x6c=g_00546e9c (1.0f), +0x70=arg2, +0x74=0."
+ },
+ {
+  "address": "0x00547740",
+  "name": "maybe_Ui_TextSystem_GetInstance",
+  "signature": "void* maybe_Ui_TextSystem_GetInstance(u32* flag)",
+  "params": {
+   "flag": "singleton state word (bit 0 = initialised)"
+  },
+  "summary": "Lazy singleton accessor for the UI text system: when the state word has bit 0 clear it performs the one-time init (via 0x0010009C) and returns the object at 0x007ECCD8C; otherwise returns the same object immediately.",
+  "confidence": 0.45,
+  "evidence": "tst [arg1],#1; if clear blx 0x0010009C(g_005477a8); initialises g_007ECCD8C fields (flag byte +4, list heads +8/+0x10, bytes +0x14/+0x15); returns g_007ECCD8C. 0x00547FB4 is the same accessor for its sibling object."
+ },
+ {
+  "address": "0x00547B0C",
+  "name": "Ui_TextScroller_Step",
+  "signature": "void Ui_TextScroller_Step(UiTextScroller* self)",
+  "params": {
+   "self": "scrolling text object (+0x3050..+0x3084 four value pairs)"
+  },
+  "summary": "Per-frame scroll step: looks up the object's flag word in the global table g_00547bc0 and increments each of the four (current,max) counters whose enable bit is set. Used to slide text lines/windows in and out.",
+  "confidence": 0.5,
+  "evidence": "bl 0x00546D28 (base update); uVar1 = ((u16*)g_00547bc0)[self]; bits 0..3 gate self+0x3054/+0x3064/+0x3074/+0x3084 increments while below +0x3050/+0x3060/+0x3070/+0x3080."
+ },
+ {
+  "address": "0x00547BC4",
+  "name": "Ui_DrawList_InsertByDepth",
+  "signature": "void Ui_DrawList_InsertByDepth(UiTextScroller* self)",
+  "params": {
+   "self": "object inserted into the sorted draw list (+0x9d depth, +0x50 offset, +0xf8 list node)"
+  },
+  "summary": "Re-positions the object inside a depth-sorted display list: computes its sort key from +0x9d/+0x50 (clamped to 0..0x7f), unlinks the node and re-inserts it before the first entry with a larger key.",
+  "confidence": 0.5,
+  "evidence": "base = *(int*)(g_00547c68 + self); 0x0011FCBC(base+8, &self->f_f8) unlink; walk base->f_c list comparing key = u8[node-0x5b] + node[-0x2a] clamped 0..0x7f; 0x0011FCF8(base+8, position, &self->f_f8) insert."
+ },
+ {
+  "address": "0x00547FB4",
+  "name": "maybe_Ui_TextScroller_GetInstance",
+  "signature": "void* maybe_Ui_TextScroller_GetInstance(u32* flag)",
+  "params": {
+   "flag": "singleton state word"
+  },
+  "summary": "Lazy singleton accessor and allocator for the text-scroller manager: initialises a ~0x10000-byte object (0x100050 allocator) at 0x007ECCA0 with its lists/flags on first use and returns it.",
+  "confidence": 0.45,
+  "evidence": "tst [arg1],#1; blx 0x0010009C(g_0054804c); blx 0x00100050(0x... , 0xc, 3) allocates the object; zeroes +0x24,+0x28,+0x2c..+0x34,+0x3c,+0x40,+0x44,+0x48,+0x4c,+0x50,+0x64,+0x68; returns g_007ECCA0. Same shape as 0x00547740."
+ },
+ {
+  "address": "0x005481D8",
+  "name": "maybe_Ui_Pair_GetField",
+  "signature": "int maybe_Ui_Pair_GetField(u32 value)",
+  "params": {
+   "value": "index/argument for the field lookup"
+  },
+  "summary": "Two-step accessor that enables the global guard (0x0012032C) and returns 0x00120368(value) minus 0x38, i.e. it converts a handle/index into the address of an embedded 0x38-byte sub-object.",
+  "confidence": 0.4,
+  "evidence": "bl 0x0012032C (lock/init); bl 0x00120368(arg1); sub r0,r0,#0x38. Called by 0x00548204-family ctor helpers."
+ },
+ {
+  "address": "0x00548204",
+  "name": "maybe_Ui_Pair_Init",
+  "signature": "u32 maybe_Ui_Pair_Init(u32 self)",
+  "params": {
+   "self": "pair/record to initialise"
+  },
+  "summary": "Constructs a 2-word record by calling 0x005481F4 (which zeroes the two words) and returns the record pointer.",
+  "confidence": 0.4,
+  "evidence": "mov r4,r0; bl 0x005481F4; mov r0,r4; pop - trivial ctor thunk; 0x005481F4 is 'str 0,[r0]; str 0,[r0,#4]; bx lr'."
+ },
+ {
+  "address": "0x00548438",
+  "name": "Ui_TextBuffer_Release",
+  "signature": "void Ui_TextBuffer_Release(UiTextBuffer* self)",
+  "params": {
+   "self": "text box/buffer (+0x34 reader, +0x50 length, +0x51 enabled)"
+  },
+  "summary": "Releases the text box's line buffer: when enabled and non-empty it calls the destructor hook (0x0011C814) if the flag bit is set, frees the buffer through 0x00505040 and clears the length.",
+  "confidence": 0.5,
+  "evidence": "if (self->f_51 && self->f_50): p = self->f_34; if (*(p+4) & ~1) { if (*(p+4)&1) 0x0011C814(); 0x00505040(*(p+4)&~1); *(p+4)=0; } self->f_50 = 0."
+ },
+ {
+  "address": "0x005487EC",
+  "name": "maybe_Ui_TextBuffer_Init",
+  "signature": "u32 maybe_Ui_TextBuffer_Init(u32 self)",
+  "params": {
+   "self": "text buffer record"
+  },
+  "summary": "Constructs a text-buffer record by calling 0x005487BC and returning it; the two-word init used by the text run/line structures.",
+  "confidence": 0.4,
+  "evidence": "mov r4,r0; bl 0x005487BC; mov r0,r4 - ctor thunk. 0x005487BC is called from many ctors in this region (e.g. 0x0054EC70, 0x00554910, 0x00556B5C)."
+ },
+ {
+  "address": "0x00548F68",
+  "name": "maybe_Ui_TextWindow_Reset",
+  "signature": "void maybe_Ui_TextWindow_Reset(UiTextWindow* self)",
+  "params": {
+   "self": "text window (+0x118 value, +0x120/+0x121 flags)"
+  },
+  "summary": "Resets a text window to its initial state: runs the base initialiser 0x005468B8 and clears the current value while enabling the 'visible/active' and clearing the 'closing' bytes.",
+  "confidence": 0.45,
+  "evidence": "bl 0x005468B8; str 0,[r4,#0x118]; strb 1,[r4,#0x120]; strb 0,[r4,#0x121]. 0x005545xx-0x005548xx are the text window update/close paths."
+ },
+ {
+  "address": "0x00549038",
+  "name": "maybe_Ui_DrawList_InsertByDepth2",
+  "signature": "void maybe_Ui_DrawList_InsertByDepth2(UiTextScroller* self)",
+  "params": {
+   "self": "object inserted into the sorted display list (+0x11c list owner, +0x9d depth, +0x50 offset, +0xf8 node)"
+  },
+  "summary": "Variant of 0x00547BC4 that takes the owning list from self->f_11c instead of the global table: computes the clamped depth key and re-inserts the node into the sorted display list.",
+  "confidence": 0.45,
+  "evidence": "identical body/key math to 0x00547BC4 (UnsignedSaturate on f_9d+f_50, key = node[-0x2a] + u8[node-0x5b]) but base = self->f_11c."
+ },
+ {
+  "address": "0x00549324",
+  "name": "maybe_Ui_TextElement_Init",
+  "signature": "void maybe_Ui_TextElement_Init(u32* self, u32 vtable)",
+  "params": {
+   "self": "text element (+0x128 subobject)",
+   "vtable": "vtable pointer written at -0x128 relative to the subobject"
+  },
+  "summary": "Initialises a text element: stores the vtable, constructs the embedded subobject through 0x00555B5C and sets the element type byte (+0x9f) to 3.",
+  "confidence": 0.4,
+  "evidence": "str r1,[r0],#0x128 (self->f_128 = vtable, then self += 0x128); bl 0x00555B5C; str vtable at [r0,#-0x128]; strb 3 at [r0,#0x9f]. Mirrors 0x00556F04."
+ },
+ {
+  "address": "0x00549354",
+  "name": "maybe_Cbnk_ParseHeader",
+  "signature": "void maybe_Cbnk_ParseHeader(FontResource** out, int* header)",
+  "params": {
+   "out": "receives the parsed resource (ptr, data, flag)",
+   "header": "raw resource header (magic at +0, version at +8)"
+  },
+  "summary": "Validates and prepares a CBNK binary resource (a game-owned chunk container): accepts only the magic CBNK (0x4B4E4243, bytes 43 42 4E 4B) with version 0x01000000..0x01000100, then stores the header plus the block pointer (0x00662DE0()+8) in the small descriptor and marks it parsed.",
+  "confidence": 0.49,
+  "evidence": "g_0054939c holds 0x4B4E4243 = ASCII 'CBNK' (verified in original/exefs/code.decompressed.bin at 0x0054939C: 43 42 4E 4B). (arg2[2]-0x1000000) <= 0x100 is the version range check; 0x00662DE0 resolves the block and +8 skips its header; arg1[2]=1 marks 'parsed'. Sibling 0x0054BB78 parses the related 'CWAR'/'CWAT' header the same way."
+ },
+ {
+  "address": "0x00549518",
+  "name": "Fs_BufferedStream_Read",
+  "signature": "u32 Fs_BufferedStream_Read(FsBufferedStream* self, void* dst, u32 size, u32 arg4)",
+  "params": {
+   "self": "buffered reader (+0x14 buffer, +0x18/+0x1c window, +0x20 stream vtbl, +0x24/+0x28 sizes)",
+   "dst": "destination buffer",
+   "size": "requested byte count",
+   "arg4": "unused/priority"
+  },
+  "summary": "Reads from a buffered file stream: serves the request from the internal window when it overlaps, otherwise seeks the underlying stream and refills the buffer, falling back to a direct read for requests larger than the window. Returns the number of bytes produced or the stream error.",
+  "confidence": 0.55,
+  "evidence": "Window fields: arg1[6]=buffer, arg1[7]=size, arg1[8]=window start, arg1[9]=cursor; memcpy 0x00116A14; stream calls (**(vtbl+0x24)) read, (**(vtbl+0x40)) seek, (**(self vtbl+0x54)) fill; negative result sets arg1[8] = -1."
+ },
+ {
+  "address": "0x00549664",
+  "name": "Fs_BufferedStream_Seek",
+  "signature": "void Fs_BufferedStream_Seek(FsBufferedStream* self, int offset, int mode)",
+  "params": {
+   "self": "buffered reader",
+   "offset": "offset to seek to",
+   "mode": "0=absolute, 1=relative, 2=from end"
+  },
+  "summary": "Seeks a buffered stream by adjusting the buffer cursor or forwarding the seek to the underlying stream, with the three standard whence modes (absolute, current, end where the end is obtained from vtbl[0x3c]).",
+  "confidence": 0.55,
+  "evidence": "mode 0: arg1[9]=offset; mode 1: arg1[9]+=offset; mode 2: vtbl[0x3c](self) - offset; when the buffered reader is inactive forwards (**(vtbl+0x40))(stream, offset). Same fields as 0x00549518."
+ },
+ {
+  "address": "0x0054972C",
+  "name": "Fs_BufferedStream_ReadCached",
+  "signature": "u32 Fs_BufferedStream_ReadCached(FsBufferedStream* self, void* dst, u32 size)",
+  "params": {
+   "self": "buffered reader (+0x14 buffer, +0x18 size, +0x1c cursor)",
+   "dst": "destination",
+   "size": "requested bytes"
+  },
+  "summary": "Copies bytes out of the already-buffered window, clamped to the available data, advancing the cursor; returns the number copied. Used by the stream reader after a refill.",
+  "confidence": 0.5,
+  "evidence": "result = self->f_18 - self->f_1c; if (arg3 <= result) result = arg3; memcpy 0x00116A14(dst, self->f_14 + self->f_1c, result); self->f_1c += result."
+ },
+ {
+  "address": "0x0054B568",
+  "name": "maybe_Container_List_DestroyNodes",
+  "signature": "u32 maybe_Container_List_DestroyNodes(u32 list)",
+  "params": {
+   "list": "intrusive list head at +4; nodes at offset -0x110"
+  },
+  "summary": "Destructor helper for a list of large objects: unlinks each node (subtracting the 0x110-byte header) through 0x00123588 and returns the list head.",
+  "confidence": 0.45,
+  "evidence": "loop: node = *(int**)(arg1+4); 0x00123588(node - 0x110, arg1); compare with arg1+4. Called by ctors that build lists at +4."
+ },
+ {
+  "address": "0x0054B6B4",
+  "name": "maybe_Ui_TextConsole_GetInstance",
+  "signature": "void* maybe_Ui_TextConsole_GetInstance(u32* flag)",
+  "params": {
+   "flag": "singleton state word at +4 of the caller's object"
+  },
+  "summary": "Lazy singleton accessor with one-time init for the text console/renderer object, returning the constant instance 0x007E84B0.",
+  "confidence": 0.4,
+  "evidence": "tst [arg1+4],#1; blx 0x0010009C(g_0054b6fc); bl 0x0011B958(init); returns g_007E84B0. Same lazy-init shape as 0x00547740/0x00547FB4."
+ },
+ {
+  "address": "0x0054B804",
+  "name": "maybe_Ui_TextConsole_Ctor",
+  "signature": "void maybe_Ui_TextConsole_Ctor(u32* self, u32 owner)",
+  "params": {
+   "self": "text console object",
+   "owner": "owner id"
+  },
+  "summary": "Constructs a text console variant: stores the owner, zeroes the base, constructs the embedded object through 0x0054B328, installs vtables 0x00781AE4/+0x20 and sets the two 'ready' bytes at +0x260/+0x261.",
+  "confidence": 0.4,
+  "evidence": "stm r0,{r1,r4(0)}; bl 0x0054B328(self+0xc); ldr r2=0x00781AE4; str r2+0x20 at obj, r2 at obj-0xc; strb 0,[r0,#0x260]; strb 1,[r0,#0x261]. Sibling dtor 0x0054B844 restores the vtable."
+ },
+ {
+  "address": "0x0054BB78",
+  "name": "maybe_Cwar_ParseHeader",
+  "signature": "void maybe_Cwar_ParseHeader(FontTexture** out, void* header, int withPalette)",
+  "params": {
+   "out": "descriptor (ptr, data, flag, palette ptr at +8)",
+   "header": "resource header",
+   "withPalette": "non-zero to look for the trailing palette block"
+  },
+  "summary": "Validates and prepares a CWAR binary resource: requires magic CWAR (0x52415743) and version 0x01000000, stores the payload pointer (0x0065F3F4()+8) and, when requested, resolves the CWAT sub-block (0x0065F420 + 4) whose magic is checked against CWAT (0x54415743).",
+  "confidence": 0.49,
+  "evidence": "Literals at 0x0054BC10/0x0054BC14 are the byte strings 'CWAR' and 'CWAT' (verified in original/exefs/code.decompressed.bin). *arg2 == g_0054bc10 ('CWAR'); arg2[2] == 0x1000000; arg1[1]=0x0065F3F4(arg2)+8; when arg3 != 0 and *(arg2+0x0065F420(arg2)) == g_0054bc14 ('CWAT') then arg1[2] = 0x0065F420+4+arg2. Same descriptor layout as 0x00549354."
+ },
+ {
+  "address": "0x0054BF38",
+  "name": "maybe_Font_GetLineHeightFloat",
+  "signature": "float maybe_Font_GetLineHeightFloat(void)",
+  "params": {},
+  "summary": "Returns 0x0054C050() converted from unsigned to float; a small accessor used by the glyph-page setup (the float conversion is emitted inline by the compiler).",
+  "confidence": 0.3,
+  "evidence": "bl 0x0054C050; vmov s0,r0; vcvt.f32.u32; bx lr. Seed for this address is mid-block (raw bytes include a vector constant pool), so the C is a decompiler artifact."
+ },
+ {
+  "address": "0x0054D86C",
+  "name": "maybe_Font_GlyphCache_GetInstance",
+  "signature": "void* maybe_Font_GlyphCache_GetInstance(u32* flag)",
+  "params": {
+   "flag": "singleton state word"
+  },
+  "summary": "Lazy singleton accessor for the glyph cache: initialises the cache object at 0x007E7578 through 0x0054DFC8 on first use and returns it.",
+  "confidence": 0.45,
+  "evidence": "tst [arg1],#1; blx 0x0010009C(g_0054d8b0); bl 0x0054DFC8(ctor of the 0x208-byte object); returns g_007E7578. 0x0054DFC8 is in this batch and initialises the lists the glyph functions use."
+ },
+ {
+  "address": "0x0054DFC8",
+  "name": "Font_GlyphCache_Ctor",
+  "signature": "u32* Font_GlyphCache_Ctor(u32* self)",
+  "params": {
+   "self": "glyph cache (lists at +0x1d4/+0x1e0, state bytes +0x1f5..+0x1f7)"
+  },
+  "summary": "Constructs the glyph cache: zeroes the header, sets the 1.0f defaults at +0xc/+0x10, clears the two intrusive list heads at +0x1d4 and +0x1e0, zeroes the state bytes and the statistics words.",
+  "confidence": 0.5,
+  "evidence": "self[0x6b]=0; self[0x75]=self+0x75; self[0x74]=0; self[0x76]=self+0x75 (list head idiom); same for +0x1e0; 0x00116AE0(self+6,0x194) memset; bytes +0x1f5/6/7=0; words +0x1d0..+0x204=0. The cache is queried/allocated by 0x0056CA44/0x0056D028."
+ },
+ {
+  "address": "0x0054E084",
+  "name": "maybe_Font_GlyphFader_SetEnabled",
+  "signature": "void maybe_Font_GlyphFader_SetEnabled(FontGlyphFader* self, int enabled, int duration)",
+  "params": {
+   "self": "glyph fader (+0x7b flag, list head +0x130)",
+   "enabled": "visibility to fade to",
+   "duration": "fade duration in frames"
+  },
+  "summary": "Starts a fade for every glyph node in the cache: records the target visibility byte, snapshots the current alpha, computes the fade length from the duration and resets the per-node progress counter.",
+  "confidence": 0.45,
+  "evidence": "self->f_7b = arg2; for node = self->f_130; node; node = node->f_1ac: target = arg2?0:0xff; if node->f_184 < node->f_182 then interpolate 0x0011CD80((node->f_181-node->f_180)*node->f_184) + f_180; node->f_180=current; node->f_181=target; node->f_182=(u16)((duration+4)*0xCCCCCCCD>>34); node->f_184=0. Same node layout as 0x0054E2B0."
+ },
+ {
+  "address": "0x0054E2B0",
+  "name": "Font_GlyphList_SetVisible",
+  "signature": "void Font_GlyphList_SetVisible(FontGlyphCache* self, u32 visible)",
+  "params": {
+   "self": "glyph cache (+0x130 node list)",
+   "visible": "new visibility flag"
+  },
+  "summary": "Propagates a visibility change to every glyph node in the cache that opts in (+0x139), updating the node flag and notifying its renderer through 0x0054D450.",
+  "confidence": 0.5,
+  "evidence": "for (n = self->f_130; n; n = n->f_1ac) if (n->f_139 && (n->f_138 != 0) != arg2) { n->f_138 = arg2; 0x0054D450(n->f_1a8, arg2); }. 0x0054D450 is the per-node visibility setter."
+ },
+ {
+  "address": "0x0054E714",
+  "name": "maybe_Font_GlyphList_UnlinkNode",
+  "signature": "void maybe_Font_GlyphList_UnlinkNode(FontGlyphCache* owner, int mode, FontGlyphNode* node)",
+  "params": {
+   "owner": "cache owning the +0x130 list",
+   "mode": "0/2 triggers the extra notify path",
+   "node": "node to unlink"
+  },
+  "summary": "Unlinks a glyph node from the cache's singly-linked list (and notifies the renderer at node+300), handling the head and middle cases. Used when a glyph is evicted.",
+  "confidence": 0.45,
+  "evidence": "if (mode==0||mode==2) 0x00555DA4(); if (owner->f_130 != node) walk prev until prev->f_1ac == node then prev->f_1ac = node->f_1ac; else owner->f_130 = node->f_1ac. Node list field f_1ac matches 0x0054E084/0x0054E2B0."
+ },
+ {
+  "address": "0x0054EC70",
+  "name": "maybe_Text_Style_Ctor",
+  "signature": "void maybe_Text_Style_Ctor(TextStyle* self)",
+  "params": {
+   "self": "text style/console record (+0xac four 0x10-byte subobjects, color table +0x10c)"
+  },
+  "summary": "Default-constructs a text style/console record: sets all colors to 0x7f/0xff, spacing defaults (0x40/0x3c), builds four 0x10-byte sub-records through 0x005487BC and fills the 16-entry color index table with 0xffff (unset).",
+  "confidence": 0.45,
+  "evidence": "Large field initialiser: bytes 0x7f at +0x8c/+0x8d/+0x92/+0x93/+0xff, +0xf1=2, +0xf5=0x40, +0xf6=0x3c, +0xf8..+0xfc=0xff, floats 0.0/1.0; loop i<4 calling 0x005487BC(self+i*0x10+0xac); loop 16 entries writing 0xffff at +0x10c/+0x10e. Same layout consumed by 0x0055359C."
+ },
+ {
+  "address": "0x0054EF94",
+  "name": "maybe_Text_System_GetInstance",
+  "signature": "void* maybe_Text_System_GetInstance(u32* flag)",
+  "params": {
+   "flag": "singleton state word"
+  },
+  "summary": "Lazy singleton accessor for the text system object at 0x007E8100, initialising its four list heads and state bytes on first use.",
+  "confidence": 0.4,
+  "evidence": "tst [arg1],#1; blx 0x0010009C(g_0054efe4); zeroes g_007E8100, sets list heads at +4/+0xc (each +8), +0x10=0, +0x14=0; returns g_007E8100. Same pattern as 0x00547740."
+ },
+ {
+  "address": "0x0054F7C0",
+  "name": "maybe_Text_NotifySlotList",
+  "signature": "void maybe_Text_NotifySlotList(u32 value, int x, u32 index)",
+  "params": {
+   "value": "value forwarded to each listener",
+   "x": "coordinate forwarded to listeners",
+   "index": "slot index (0..0xff) into the per-slot table"
+  },
+  "summary": "Notifies the listeners of one text slot: looks the slot record up in the table at g_0054F878 (stride 0xc), calls each listener's vtbl[0x10] with a fixed 6-argument parameter list and finally stores the cursor delta for the slot.",
+  "confidence": 0.35,
+  "evidence": "software_interrupt(0x28) is a decompiler artifact around the table access; table g_0054f878 + arg3*0xc, list head at +0x58, calls (**(vtbl+0x10))(node-1, count, arg1, arg2, 2, mode); writes 32-bit deltas at g_0054f878+arg3*8+0x280/0x284."
+ },
+ {
+  "address": "0x0054FD20",
+  "name": "maybe_Text_IsIdle",
+  "signature": "int maybe_Text_IsIdle(void)",
+  "params": {},
+  "summary": "Returns 1 when the text engine reports no pending work (0x0011E5C4() == 0). Small polling helper used by the text tick.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0011E5C4; cmp r0,#0; movne r0,#0; moveq r0,#1; identical to 0x005548B4."
+ },
+ {
+  "address": "0x0054FD50",
+  "name": "maybe_Text_Style_Ctor2",
+  "signature": "void maybe_Text_Style_Ctor2(TextStyle* self)",
+  "params": {
+   "self": "text style record (colors at +0x60/+0x88, spacing +0x5e, state +0x5c/+0x5d)"
+  },
+  "summary": "Second text-style constructor variant: calls the shared base init 0x00550780 and sets the color (1.0f), spacing 0x40, palette index 0x7f/0xff, a -1 sentinel and zeroes the remaining state.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00550780; stores g_0054fdcc (1.0f) at +0x60/+0x88, bytes +0x5e=0x40, +0x93=0x7f, +0x5f=0xff, +0x6c=-1, +0xa1=1; calls 0x005487BC(&self->f_78)."
+ },
+ {
+  "address": "0x005501A8",
+  "name": "maybe_Text_StopSlotAnimation",
+  "signature": "void maybe_Text_StopSlotAnimation(u32 self, int mode, TextStyle* style)",
+  "params": {
+   "self": "text object",
+   "mode": "0/2 triggers the extra notify path",
+   "style": "style whose +0x9c animation state is cleared"
+  },
+  "summary": "Stops a text slot's animation: for mode 2 it first runs the shared notify helper 0x00555DA4, then clears the animation state word at style+0x9c.",
+  "confidence": 0.35,
+  "evidence": "if (arg2 == 2) bl 0x00555DA4; arg3->f_9c = 0. Nearest anchors: 0x0054E714 uses the same 'mode==0||mode==2' notify convention."
+ },
+ {
+  "address": "0x005501C4",
+  "name": "maybe_Text_FlushFrame",
+  "signature": "void maybe_Text_FlushFrame(TextStyle* self)",
+  "params": {
+   "self": "text style/box (+0xa2 pending draw list, +0x50 list node, +0xd dirty flag)"
+  },
+  "summary": "Finishes a text frame: marks the style as updated, flushes the pending draw list at +0xa2 through the singleton's unlink helper and clears the dirty flag.",
+  "confidence": 0.4,
+  "evidence": "self->f_f = 1; if (self->f_a2) { uVar1 = 0x0054D868(); 0x0011FCB0(uVar1, &self->f_50); self->f_a2 = 0; } if (self->f_d) self->f_d = 0."
+ },
+ {
+  "address": "0x005508A4",
+  "name": "maybe_Text_CreateDefaultStyle",
+  "signature": "void* maybe_Text_CreateDefaultStyle(void)",
+  "params": {},
+  "summary": "Obtains the text engine's default style object (0x0054EDF0) and installs vtable 0x00781BF4 on it, returning the object.",
+  "confidence": 0.45,
+  "evidence": "puVar1 = 0x0054EDF0(); *puVar1 = g_005508b8 (=0x00781BF4). Called by 0x00555D18 to attach a renderer callback."
+ },
+ {
+  "address": "0x005508C4",
+  "name": "Text_StringView_Init",
+  "signature": "void Text_StringView_Init(TextStringView* self, u32 owner, const u16* text, u32 length)",
+  "params": {
+   "self": "string view (ptr +0, owner +4, offset +8, length +0xc, cursor +0x10/+0x14)",
+   "owner": "owning object",
+   "text": "UTF-16 text pointer",
+   "length": "character count"
+  },
+  "summary": "Initialises a UTF-16 string view over a text buffer: stores owner/pointer/length, converts the length into a byte/char offset with 0x0011CFAC (masked to 0x20) and clears the read cursor and flags.",
+  "confidence": 0.5,
+  "evidence": "arg1[1]=arg3; arg1[3]=arg4; *arg1=arg2; uVar1=0x0011CFAC(arg3,arg4); arg1[2]=uVar1 & 0xffffffe0; arg1[4]=0; arg1[5]=0."
+ },
+ {
+  "address": "0x00550B7C",
+  "name": "maybe_Ui_TextSystem_GetInstance2",
+  "signature": "void* maybe_Ui_TextSystem_GetInstance2(u32* flag)",
+  "params": {
+   "flag": "singleton state word"
+  },
+  "summary": "Lazy singleton accessor for another text-system instance at 0x007E8640, initialising its flag byte and two list heads on first use.",
+  "confidence": 0.4,
+  "evidence": "tst [arg1],#1; blx 0x0010009C(g_00550bd8); sets byte +0=0, list head +4/+8, +0xc, +0x10/+0x14; returns g_007E8640. Same accessor shape as 0x00547740."
+ },
+ {
+  "address": "0x00551AEC",
+  "name": "maybe_Ui_TextElementList_Release",
+  "signature": "void maybe_Ui_TextElementList_Release(UiTextElementList* self)",
+  "params": {
+   "self": "element list (+0x88 list, +0x84 unlink base, +0x90 free-list)"
+  },
+  "summary": "Releases all finished text elements from the typed list at +0x88: unlinks each node whose type byte is 3, calls its virtual destructor and returns it to the free list at +0x90.",
+  "confidence": 0.45,
+  "evidence": "for (n = self->f_88; n != &self->f_88; n = next) { elem = n - 0x14; if (elem->f_2c != 3) return; 0x0011FCBC(&self->f_84, n); if (elem) { (**(code**)*elem)(elem); 0x00556C38(&self->f_90, elem); } }."
+ },
+ {
+  "address": "0x0055359C",
+  "name": "Ui_TextLayout_BuildFromStyle",
+  "signature": "void Ui_TextLayout_BuildFromStyle(UiTextLayout* self, TextGlyphStyle* style)",
+  "params": {
+   "self": "text layout (+0x2c forced width, +0x30 x offset, +0x100 advance, +0x104 tracking)",
+   "style": "glyph style record (fixed-point size/colour fields, count at +0xc, string offsets at +4)"
+  },
+  "summary": "Builds the layout for one styled string: converts the style's fixed-point size/spacing fields into floats, computes the per-character advance including kerning through 0x00661634, then lays out and draws each glyph run of the style (0x0054C7xx/0x0054Dxxx) with the requested colour.",
+  "confidence": 0.55,
+  "evidence": "Reads bytes +0xd/+0x13/+0x15 as sizes, +0xe/+0xf/+0x10..0x12 as fixed-point scale, +0x11/+0x12 multiplied by g_00553888; arg2[0xc] = glyph count, offsets table at arg2+4; inner loop calls 0x0054D7CC/0x0054D76C/0x0054C738/0x0054CC94/0x0054C7E8/0x0054D790/0x0054D490/0x0054CC70 and 0x00661634 (advance). Called by 0x0055425C for each pending style."
+ },
+ {
+  "address": "0x00553F5C",
+  "name": "Ui_TextBlock_SetVisible",
+  "signature": "void Ui_TextBlock_SetVisible(UiTextBlock* self, int visible, u8 animate)",
+  "params": {
+   "self": "text block (+0xe visible, +0x54 active, +0x55 animating, +0x220 line count, +0x22c line array stride 0x3c8)",
+   "visible": "requested visibility",
+   "animate": "non-zero keeps the fade-in flag"
+  },
+  "summary": "Sets a text block's visibility and propagates the change to all its line objects: compares the effective state with +0x54 and calls each line's visibility setter 0x0054D450 when it changes.",
+  "confidence": 0.5,
+  "evidence": "self->f_e = arg2; if (arg2) self->f_55 = 1; uVar3 = arg2!=0 || self->f_55; if (self->f_54 != uVar3) { for i < self->f_220: 0x0054D450(*(self+i*0x3c8+0x22c), uVar3); self->f_54 = uVar3; }."
+ },
+ {
+  "address": "0x0055425C",
+  "name": "Ui_TextBlock_Update",
+  "signature": "void Ui_TextBlock_Update(UiTextBlock* self)",
+  "params": {
+   "self": "text block (+0x18 element list, +0xd pending, +0x55 animating, +0x57 close flag, +0x88 line count, +0x89 style count)"
+  },
+  "summary": "Per-frame update of a text block: releases finished elements, lays out every pending style once the first free line is available, and when the fade-in animation ends it finishes once, updates all line visibility and clears the close request.",
+  "confidence": 0.5,
+  "evidence": "0x00551AEC(self[0x18]) release; if (self+0xd): find a line with byte +0x8b == 0 -> call vtbl[0x14] and set self+0xf=1; else loop self[0x89] calling 0x0055359C(self, self + i*9 + 0x81a) (stride 0x24); then if (self+0x55 && 0x0066169C(self[0x18])==0) update self+0x15 and all 0x0054D450(line, visible); if (self+0x57) self+0x57=0."
+ },
+ {
+  "address": "0x005548B4",
+  "name": "maybe_Text_IsIdle2",
+  "signature": "int maybe_Text_IsIdle2(void)",
+  "params": {},
+  "summary": "Second copy of the 'text engine idle' poll (0x0011E5C4() == 0), used by the other text block variant.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0011E5C4; returns (r0 == 0); byte-identical to 0x0054FD20."
+ },
+ {
+  "address": "0x00554910",
+  "name": "maybe_Text_Style_Ctor3",
+  "signature": "void maybe_Text_Style_Ctor3(TextStyle* self)",
+  "params": {
+   "self": "text style (+0x5c state, +0x60/+0x68 colors, +0x74..+0x80 spacing, +0x90 color table, +0xd0 color indices)"
+  },
+  "summary": "Third text-style constructor variant: calls the shared base 0x00550780 and applies the default colours (1.0f), spacings 0x78/0x30, palette index 0x7f, 16-entry -1 color table and the two state bytes.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00550780; g_005549e4 (1.0f) at +0x60/+0x64, g_005549e8 at +0x68/+0x70; bytes +0x74=0x40,+0x75=0x30,+0x76=0x78,+0x78/+0x79=0x7f; loop 16 entries 0xffff at +0xd0/+0xd2; loop 16 words 0 at +0x90; +0x165=1,+0x166=0."
+ },
+ {
+  "address": "0x00554C1C",
+  "name": "maybe_Text_SubmitRect20",
+  "signature": "void maybe_Text_SubmitRect20(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x20/+0x24"
+  },
+  "summary": "Forwards the rectangle stored at rect+0x20/+0x24 to the shared 2D blit/rect function 0x006EF7D8 (ldrd pair). One of six tiny adapters that feed different rectangle fields.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x20]; bl 0x006EF7D8. Siblings at 0x00554D38 (+0x18), 0x00554D90 (+0x10), 0x00554DAC (+0x30), 0x00554E58 (+0x40), 0x00554FA4 (+0x28)."
+ },
+ {
+  "address": "0x00554D38",
+  "name": "maybe_Text_SubmitRect18",
+  "signature": "void maybe_Text_SubmitRect18(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x18/+0x1c"
+  },
+  "summary": "Same rect adapter as 0x00554C1C but forwards the pair at rect+0x18/+0x1c.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x18]; bl 0x006EF7D8."
+ },
+ {
+  "address": "0x00554D76",
+  "name": "maybe_Text_CharWidthTable_Lookup_Label",
+  "signature": "void maybe_Text_CharWidthTable_Lookup_Label(void)",
+  "params": {},
+  "summary": "Interior label of the small 'lookup u16 by index' helper that precedes it: returns the address of a per-character u16 width for index < 0x10 (record+0xd0) or 0x10..0x1f (global table +2*index-0x20), else 0. Not a real function entry.",
+  "confidence": 0.3,
+  "evidence": "asm shows 'cmp r1,#0x10; addlt r0,r0,r1,lsl #1; addlt r0,r0,#0xd0; ... cmp r1,#0x20; ldrlt r0,[pc,#0xc]; addlt r0,r0,r1,lsl #1; sublt r0,r0,#0x20; movge r0,#0' - tail of the previous leaf; the seed starts mid-instruction so Ghidra emitted halt_baddata."
+ },
+ {
+  "address": "0x00554D90",
+  "name": "maybe_Text_SubmitRect10",
+  "signature": "void maybe_Text_SubmitRect10(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x10/+0x14"
+  },
+  "summary": "Rect adapter forwarding the pair at rect+0x10/+0x14 to 0x006EF7D8.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x10]; bl 0x006EF7D8."
+ },
+ {
+  "address": "0x00554DAC",
+  "name": "maybe_Text_SubmitRect30",
+  "signature": "void maybe_Text_SubmitRect30(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x30/+0x34"
+  },
+  "summary": "Rect adapter forwarding the pair at rect+0x30/+0x34 to 0x006EF7D8.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x30]; bl 0x006EF7D8."
+ },
+ {
+  "address": "0x00554E58",
+  "name": "maybe_Text_SubmitRect40",
+  "signature": "void maybe_Text_SubmitRect40(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x40/+0x44"
+  },
+  "summary": "Rect adapter forwarding the pair at rect+0x40/+0x44 to 0x006EF7D8.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x40]; bl 0x006EF7D8."
+ },
+ {
+  "address": "0x00554FA4",
+  "name": "maybe_Text_SubmitRect28",
+  "signature": "void maybe_Text_SubmitRect28(u32 a1, u32 a2, TextRect* rect)",
+  "params": {
+   "a1": "destination/context",
+   "a2": "destination/context",
+   "rect": "record with x/y at +0x28/+0x2c"
+  },
+  "summary": "Rect adapter forwarding the pair at rect+0x28/+0x2c to 0x006EF7D8.",
+  "confidence": 0.4,
+  "evidence": "ldrd r2,r3,[r2,#0x28]; bl 0x006EF7D8."
+ },
+ {
+  "address": "0x00555104",
+  "name": "Ui_Text_DrawGlyphRun",
+  "signature": "void Ui_Text_DrawGlyphRun(TextGlyphRun* self, void* target, TextGlyphStyle* style)",
+  "params": {
+   "self": "glyph run (+0x88 draw callback, +0x8c arg, +0xd0 metric block)",
+   "target": "draw target passed to the callback",
+   "style": "style whose byte +0x24 is temporarily preserved"
+  },
+  "summary": "Draws one glyph run: when the run has a callback it builds a parameter block (metrics at self+0xd0, glyph index from 0x0054E294, the style's +0x24 byte) and calls the callback as callback(target, block, self->f_8c), restoring the style byte afterwards.",
+  "confidence": 0.5,
+  "evidence": "if (self->f_88) { local block = { self+0xd0, g_00555170, 0x0054E294(style,0), style->f_24 }; (*self->f_88)(arg2, &block, self->f_8c); style->f_24 = saved; }. Callback installed by 0x00555D18."
+ },
+ {
+  "address": "0x005551B8",
+  "name": "maybe_Text_SetStyleIndex",
+  "signature": "void maybe_Text_SetStyleIndex(TextGlyphRun* self, u32 styleIndex)",
+  "params": {
+   "self": "glyph run (+0xe style index, +0x90 16 sub-objects)",
+   "styleIndex": "new style index"
+  },
+  "summary": "Sets the run's style index and forwards it to all 16 sub-objects through 0x0054E2B0; the loop bound is 0xf so the 16th entry is skipped (matches the asm's 'i < 0x10' with i starting at 0).",
+  "confidence": 0.45,
+  "evidence": "for (i=0;i<0x10;i++) if (i<0x10 && *(int*)(arg1+i*4+0x90)) 0x0054E2B0(obj,arg2); arg1->f_e = arg2."
+ },
+ {
+  "address": "0x00555BA0",
+  "name": "maybe_Text_System_GetInstance3",
+  "signature": "void* maybe_Text_System_GetInstance3(u32* flag)",
+  "params": {
+   "flag": "singleton state word"
+  },
+  "summary": "Lazy singleton accessor for a third text/console system instance at 0x007EF590; the seed address is inside a Thumb-marked block so the readable C is a halt stub, but the asm shows the same lazy-init + fixed instance return as its siblings.",
+  "confidence": 0.35,
+  "evidence": "asm 0x00555BA0: ldr r0,[r0]; tst r0,#1; blx 0x0010009C(g_00555be8); then zeroes the instance fields (words +4/+8/+0xc, bytes +0x10) and returns g_007E2590/0x007E.... Seed mode 'thumb' makes Ghidra's C useless."
+ },
+ {
+  "address": "0x00555D18",
+  "name": "maybe_Text_AttachRenderer",
+  "signature": "void maybe_Text_AttachRenderer(TextGlyphRun* self, void* renderer)",
+  "params": {
+   "self": "glyph run (+8 element list owner, +4 arg)",
+   "renderer": "callback/object stored at +0x12c of the found run"
+  },
+  "summary": "Attaches a renderer callback to the text element found through 0x00556C48: stores it at +0x12c and copies self+4 to +0x134 when the element exists.",
+  "confidence": 0.45,
+  "evidence": "iVar1 = 0x00556C48(arg1+8); if (iVar1 && (iVar1 = 0x005508A4())) { *(u32*)(iVar1+300)=arg2; iVar1->f_134 = *(u32*)(arg1+4); }. 0x00555104's callback field f_88 is the natural counterpart."
+ },
+ {
+  "address": "0x00556A24",
+  "name": "maybe_Text_GlyphRenderer_Setup",
+  "signature": "void maybe_Text_GlyphRenderer_Setup(void)",
+  "params": {},
+  "summary": "Initialises the global glyph-renderer dispatch table: memsets the storage and installs five function pointers (0x0054BFD8, 0x0054BF74, 0x0054BFD4, 0x0054BF58, 0x0054BF38) at 0x007E8120.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00116AE0 (memset); *g_00556a5c = 0x0054BFD8; +4 = 0x0054BF74; +8 = 0x0054BFD4; +0xc = 0x0054BF58; +0x10 = 0x0054BF38. The five entries are the vector-helper functions around 0x0054BF38."
+ },
+ {
+  "address": "0x00556B3E",
+  "name": "maybe_Text_InsertSorted_Label",
+  "signature": "void maybe_Text_InsertSorted_Label(void)",
+  "params": {},
+  "summary": "Interior label of the sorted-insert routine for display-list entries: computes the key from node[-0x2a] + u8[node-0x5b] clamped to 0x7f and calls 0x0011FCF8 to insert before the first larger entry. Ghidra's C for this label is register garbage.",
+  "confidence": 0.3,
+  "evidence": "Body matches 0x00547BC4/0x00549038 key computation; func_0011FCF8(unaff_r5+8, arg2, unaff_r4+0xf8); the readable C shows unaff_r4/unaff_r6 and SBORROW artifacts, i.e. a mid-function label."
+ },
+ {
+  "address": "0x00556B5C",
+  "name": "maybe_Text_Range_Ctor",
+  "signature": "int maybe_Text_Range_Ctor(TextRange* self)",
+  "params": {
+   "self": "range record (+0x10 min, +0x14 max, +0x18 current, +0x1c/+0x1d flags)"
+  },
+  "summary": "Constructs a small text range/value record: calls the shared 0x005487BC init and sets min 0.0f, max 1.0f, current 0 and the two flag bytes 0.",
+  "confidence": 0.45,
+  "evidence": "bl 0x005487BC; g_00556b90 (0.0f) at +0x14? actually +0x14=uVar1, +0x18=uVar2 (1.0f), +0x10=0,+0x1c=0,+0x1d=0."
+ },
+ {
+  "address": "0x00556D58",
+  "name": "maybe_Text_Scroller_Reposition2",
+  "signature": "void maybe_Text_Scroller_Reposition2(TextScroller* self)",
+  "params": {
+   "self": "scroller (+0x11c list owner, +0x9d depth, +0x50 offset, +0xf8 node)"
+  },
+  "summary": "Third copy of the depth-sorted reposition routine (identical to 0x00549038): unlink and reinsert the node before the first larger key in the list owned by self->f_11c.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical readable C to 0x00549038 (UnsignedSaturate(f_9d+f_50,7), loop over f_11c->f_c, 0x0011FCBC/0x0011FCF8)."
+ },
+ {
+  "address": "0x00556F04",
+  "name": "maybe_Text_Element_Init2",
+  "signature": "void maybe_Text_Element_Init2(u32* self, u32 vtable)",
+  "params": {
+   "self": "text element (+0x124 subobject)",
+   "vtable": "vtable written at subobject-0x124"
+  },
+  "summary": "Second text-element initialiser variant: stores the vtable, constructs the embedded subobject through 0x00550740 and sets the type byte (+0x9f) to 3.",
+  "confidence": 0.4,
+  "evidence": "str r1,[r0],#0x124; bl 0x00550740; str vtable at [r0,#-0x124]; strb 3,[r0,#0x9f]. Mirror of 0x00549324 with the other base ctor."
+ },
+ {
+  "address": "0x0055730C",
+  "name": "Ui_Text_CalcScreenScale",
+  "signature": "void Ui_Text_CalcScreenScale(TextLayout* self, float x, float y)",
+  "params": {
+   "self": "layout (+0x24 screen/font object, +8/+0xc resulting scales)",
+   "x": "horizontal extent to normalise",
+   "y": "vertical extent to normalise"
+  },
+  "summary": "Converts a pixel extent into the layout's normalised scale by dividing by the screen/font dimensions obtained from the object's vtbl[0x0c] and vtbl[0x10]; stores the two reciprocal scales at +8 and +0xc. Called from the draw-parameter builder.",
+  "confidence": 0.5,
+  "evidence": "uVar1 = (**(vtbl+0xc))(self->f_24) converted to float; in_s0 /= that; f_c = in_s1 / (**(vtbl+0x10))(self->f_24). Called by 0x0053F078 right after copying the default 1.0f pair."
+ },
+ {
+  "address": "0x00558F88",
+  "name": "maybe_Ui_GlyphRenderer_Ctor",
+  "signature": "void maybe_Ui_GlyphRenderer_Ctor(UiGlyphRenderer* self, u32 owner)",
+  "params": {
+   "self": "glyph renderer (+2 subobject, +0x5e4..+0x5f0 floats)",
+   "owner": "owner id"
+  },
+  "summary": "Constructs the glyph renderer: stores the owner, zeroes the base, constructs the embedded object at +0x10 (two-step 0x0051D024 init), sets the six state bytes and four 0.0f fields at +0x5e4..+0x5f0.",
+  "confidence": 0.4,
+  "evidence": "stm r0,{r1,0}; bl 0x0051D024(self+2); add r0,r0,#0x10; bl 0x0051D024; sub r0,r0,#0x14; bytes +0x28,+0x29,+0x30..+0x35=0; g_00558ff0 (0.0f) at +0x5e4,+0x5e8,+0x5ec,+0x5f0; +0x60c=0."
+ },
+ {
+  "address": "0x00559D50",
+  "name": "maybe_Text_Descriptor_Init",
+  "signature": "void* maybe_Text_Descriptor_Init(u32* self, u32 value)",
+  "params": {
+   "self": "descriptor (word +0, byte +4, byte +5)",
+   "value": "value stored at +0"
+  },
+  "summary": "Initialises a tiny descriptor: stores the value, sets the two flag bytes to 1 and returns self. Used to build the inline 'object + flags' records passed to the text engine.",
+  "confidence": 0.4,
+  "evidence": "str r1,[r4]; strb 1,[r4,#4]; strb 1,[r4,#5]; mov r0,r4; ldr r1=0x0004016A? (literal 0x0400016A at 0x00559D80 is a touchscreen register constant, not part of the return); returns self."
+ },
+ {
+  "address": "0x0055A914",
+  "name": "Text_ReleaseBuffer",
+  "signature": "void Text_ReleaseBuffer(TextGlyphRun* self)",
+  "params": {
+   "self": "glyph run (+0x28 allocated block, header 8 bytes before)"
+  },
+  "summary": "Releases the run's heap block: when +0x28 is set it subtracts the 8-byte header and calls the global operator delete, clearing the field.",
+  "confidence": 0.5,
+  "evidence": "if (self->f_28) { 0x0010F69C(self->f_28 - 8); self->f_28 = 0; }. 0x0010F69C/0x0010F6CC are the allocator delete paths used across the tree."
+ },
+ {
+  "address": "0x00566560",
+  "name": "maybe_Ui_TextObject_Dtor",
+  "signature": "void maybe_Ui_TextObject_Dtor(UiObject* self)",
+  "params": {
+   "self": "large UI object (+0x65/+0x5b owned blocks, three intrusive lists at +8/+0x14/+0x20)"
+  },
+  "summary": "Destructor of a large text/UI object (three intrusive lists, two owned heap blocks): installs the base vtables, runs two cleanup passes (0x0057C570), frees the blocks at +0x65/+0x5b, unlinks the three embedded list nodes and finally deletes the object.",
+  "confidence": 0.45,
+  "evidence": "*arg1 = g_005665f0; 0x0057C570(arg1); free arg1[0x65], arg1[0x5b] via 0x0010F69C; *arg1 = g_005665f4; 0x0057C570 again; then three times: prev->next=..., next->prev=...; 0x0010F6CC(arg1)."
+ },
+ {
+  "address": "0x0056ABC8",
+  "name": "maybe_Text_DrawBlock_Label",
+  "signature": "void maybe_Text_DrawBlock_Label(void)",
+  "params": {},
+  "summary": "Interior label of the text/console draw routine: builds a 0x1f4-byte stack request, initialises it through 0x00509638/0x00657E28 and submits it to 0x00568BB4. Seed-table label, not a function entry (the C is a halt stub).",
+  "confidence": 0.3,
+  "evidence": "asm 0x0056ABC8 starts with 'bl 0x00658050' (no prologue), sets many stack bytes to 0 at sp+0x98..+0x138, calls 0x00657E28 and 0x00568BB4, then pops {r4..sl,fp,pc} restoring sp+0x1f4 - the tail of the enclosing draw function."
+ },
+ {
+  "address": "0x0056C4D8",
+  "name": "maybe_Font_CallGlyphSlots18",
+  "signature": "void maybe_Font_CallGlyphSlots18(FontGlyphTable* self)",
+  "params": {
+   "self": "glyph/slot table (count +0x10, array +0x14)"
+  },
+  "summary": "Calls vtbl[0x18] on every registered glyph handler (array at +0x14, count at +0x10) - one of six broadcast helpers used to push a state change to every glyph slot.",
+  "confidence": 0.45,
+  "evidence": "for (i=0;i<self->f_10;i++) (**(code**)(**(int**)(self->f_14+i*4)+0x18))(); array/count used identically by 0x0056C518/0x0056C558/0x0056C5D4/0x0056C664/0x0056C6C0."
+ },
+ {
+  "address": "0x0056C518",
+  "name": "maybe_Font_CallGlyphSlots1C",
+  "signature": "void maybe_Font_CallGlyphSlots1C(FontGlyphTable* self)",
+  "params": {
+   "self": "glyph/slot table (count +0x10, array +0x14)"
+  },
+  "summary": "Broadcast helper calling vtbl[0x1c] on every glyph handler.",
+  "confidence": 0.45,
+  "evidence": "Identical loop to 0x0056C4D8 with vtable offset 0x1c."
+ },
+ {
+  "address": "0x0056C558",
+  "name": "maybe_Font_DispatchGlyphEvent",
+  "signature": "void maybe_Font_DispatchGlyphEvent(FontGlyphTable* self, u32 a2, u32 code, u32 a4)",
+  "params": {
+   "self": "glyph/slot table",
+   "a2": "event payload",
+   "code": "character code queried through vtbl[0x24]",
+   "a4": "event payload"
+  },
+  "summary": "Dispatches a glyph event to the first handler that claims the given character code: calls vtbl[0x24](handler, code) and, on a match, tail-calls vtbl[0x0c](handler, a2, code, a4).",
+  "confidence": 0.45,
+  "evidence": "for each handler: if ((**(vtbl+0x24))(handler,arg3)) return (**(vtbl+0xc))(handler,arg2,arg3,arg4); array/count fields as in 0x0056C4D8."
+ },
+ {
+  "address": "0x0056C5D4",
+  "name": "Font_FindHandlerForCode",
+  "signature": "int Font_FindHandlerForCode(FontGlyphTable* self, u32 code, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "self": "glyph/slot table",
+   "code": "character code",
+   "a3": "query payload",
+   "a4": "query payload",
+   "a5": "query payload"
+  },
+  "summary": "Finds the glyph handler responsible for a character code by checking the handler's [min,max] range (fields +8/+0xc) and then calling its vtbl[8]; returns the handler's result or 0.",
+  "confidence": 0.5,
+  "evidence": "for each handler piVar1: compare code against piVar1[2] and piVar1[3] (range), then result = (**(vtbl+8))(handler,code,a3,a4,a5); returns first non-zero. Range fields match the per-font dispatch table."
+ },
+ {
+  "address": "0x0056C664",
+  "name": "maybe_Font_QueryGlyphHandler",
+  "signature": "int maybe_Font_QueryGlyphHandler(FontGlyphTable* self, u32 a2, u32 code)",
+  "params": {
+   "self": "glyph/slot table",
+   "a2": "query payload",
+   "code": "character code"
+  },
+  "summary": "Queries every glyph handler with vtbl[0x10](handler, a2, code) and returns the first non-zero answer.",
+  "confidence": 0.45,
+  "evidence": "loop over self->f_10 calling (**(vtbl+0x10))(handler,arg2,arg3), returning the first non-zero result."
+ },
+ {
+  "address": "0x0056C6C0",
+  "name": "maybe_Font_BroadcastGlyphDraw",
+  "signature": "void maybe_Font_BroadcastGlyphDraw(FontGlyphTable* self, u32 a2, u32 a3, u32 a4, float a5)",
+  "params": {
+   "self": "glyph/slot table",
+   "a2": "draw payload",
+   "a3": "draw payload",
+   "a4": "draw payload",
+   "a5": "float argument (sp+0x28)"
+  },
+  "summary": "Broadcasts a draw/render call (four register arguments plus one float) to every glyph handler through vtbl[0x20], ignoring the results.",
+  "confidence": 0.4,
+  "evidence": "vstr s16,[sp]; loop calling (**(vtbl+0x20))(handler,arg2,arg3,arg4,arg5); the float arrives on the stack (s16 = [sp+0x28])."
+ },
+ {
+  "address": "0x0056CA44",
+  "name": "Font_GlyphCache_AllocSpan",
+  "signature": "FontGlyphCell* Font_GlyphCache_AllocSpan(FontGlyphCache* self, u32 size)",
+  "params": {
+   "self": "glyph page cache (+0x14 page count, +0x1c page array, 0x58-byte entries)",
+   "size": "requested span size in pixels/texels"
+  },
+  "summary": "Allocates a free span of `size` texels in the glyph page cache: rounds the request up to the page's allocation granularity (computed with the popcount trick), scans the 0x58-byte page/block descriptors for a free run whose accumulated width reaches the request, then splits the block (and trims following free blocks) so the returned cell has exactly the requested size. Returns 0 when nothing fits.",
+  "confidence": 0.55,
+  "evidence": "Power-of-two/granularity computation from g_0056CE44..g_0056CE4C masks and 0x400 thresholds; page loop with stride 0x58 (f_50 in-use, f_51 dirty/used, f_52 quality/priority, f_54 size) and coalescing of consecutive free blocks; splits with 0x0011CD80 alignment and writes f_54 sizes. The 0x58-stride table is read/written by 0x0056CF18, 0x0056D028, 0x0056D138, 0x0056D1E4 - the glyph atlas code."
+ },
+ {
+  "address": "0x0056CF18",
+  "name": "Font_GlyphCache_FreeSpan",
+  "signature": "void Font_GlyphCache_FreeSpan(FontGlyphCache* self, u32 offset, int end)",
+  "params": {
+   "self": "glyph page cache (+0x10 granularity, +0x18 base, +0x1c page array)",
+   "offset": "span start",
+   "end": "span end"
+  },
+  "summary": "Frees the glyph cell containing the given offset and merges it with the following free cells: marks the cell unused, clears its state, then repeatedly folds the next free cell's size into it.",
+  "confidence": 0.55,
+  "evidence": "index = 0x0011CD80(end - self->f_18, self->f_10); cell = self->f_1c + index*0x58; cell->f_50=0; then either clears f_44/f_48/f_4c/f_52 or sets f_51=1; then loops merging cells with f_50==0 && f_51==0 by adding f_54."
+ },
+ {
+  "address": "0x0056D028",
+  "name": "Font_GlyphCache_AddGlyph",
+  "signature": "int Font_GlyphCache_AddGlyph(FontGlyphCache* self, u32 code, u32 size, const char* name, u32 owner)",
+  "params": {
+   "self": "glyph page cache",
+   "code": "character code",
+   "size": "requested cell size",
+   "name": "glyph/font key string (copied into the cell)",
+   "owner": "owner/usage tag stored at +0x4c"
+  },
+  "summary": "Creates a glyph atlas entry for a character: allocates a cell of the requested size, marks it used with quality 0xff, copies the glyph key string (up to 0x3f chars) plus the 13 metric words into the cell, and returns the cell's pixel offset.",
+  "confidence": 0.5,
+  "evidence": "index = 0x0011CFAC(arg2-1+self->f_10); 0x0056CA44(self,index); cell->f_50=1; cell->f_52=0xff; result = (cell - self->f_1c)/0x58 * self->f_10 + self->f_18 (g_0056d12c magic); 0x0011142C copies arg4 string, 0x0011CCA0 gives length; then copies the 0x40-byte block to +4..+0x40 and sets +0x44/+0x48/+0x4c."
+ },
+ {
+  "address": "0x0056D138",
+  "name": "Font_GlyphCache_FindGlyph",
+  "signature": "FontGlyphCell* Font_GlyphCache_FindGlyph(FontGlyphCache* self, const char* key, u32 owner)",
+  "params": {
+   "self": "glyph page cache",
+   "key": "glyph key string to match (0x40-byte compare)",
+   "owner": "owner tag matched against +0x4c"
+  },
+  "summary": "Looks up an existing glyph cell by key string and owner tag, marking it used (and quality 0xff) when found; returns 0 otherwise. Used to avoid re-rasterising a glyph that is still cached.",
+  "confidence": 0.5,
+  "evidence": "loop i over self->f_14: cell = self->f_1c + i*0x58; if (!cell->f_50 && cell->f_51 && cell->f_4c==arg3) { 0x0011CCA0(arg2); if (0x00123660(cell+4, arg2, 0x40)==0) { cell->f_50=1; cell->f_52=0xff; return cell; } }."
+ },
+ {
+  "address": "0x0056D1E4",
+  "name": "maybe_Font_GlyphPage_FillTexels",
+  "signature": "void maybe_Font_GlyphPage_FillTexels(FontGlyphCache* self, u32 x, int* cursor, u32 scale, int height)",
+  "params": {
+   "self": "glyph cache (+0x14 page count, +0x1c page array, 0x58-byte cells)",
+   "x": "destination x in the atlas",
+   "cursor": "current y/offset cell",
+   "scale": "scale numerator (fixed point)",
+   "height": "line height"
+  },
+  "summary": "Rasterises the cached glyph cells of a page into the atlas texture band: walks the cell list, converts each cell's fixed-point boxes to pixels, selects the coverage/colour value for used/dirty/free cells (0xff/0x80 and packed colour words) and advances the destination cursor. This is the atlas upload/fill pass.",
+  "confidence": 0.45,
+  "evidence": "Heavy float math with VectorSignedToFloat and g_0056D538..g_0056D540 constants (0.5/1.0); per cell reads f_50/f_51/f_52 and builds packed words like uVar9|0xffffff00 / 0xff000000 / 0xff00ff00 / 0xff0000; writes into *(arg3) as the running row offset and returns it updated ('*arg3 = arg5*local_40 + *arg3')."
+ },
+ {
+  "address": "0x0056D85C",
+  "name": "maybe_Font_GlyphCache_MarkFree",
+  "signature": "void maybe_Font_GlyphCache_MarkFree(FontGlyphCache* self, u32 offset, int end)",
+  "params": {
+   "self": "glyph page cache (+0x18 base, +0x10 granularity, +0x1c page array)",
+   "offset": "cell start",
+   "end": "cell end"
+  },
+  "summary": "Releases the 0x54-byte glyph cell that contains the given offset without coalescing: clears the in-use flag and, unless the global 'keep data' byte g_0056D8C0 is set, clears the cell's state.",
+  "confidence": 0.45,
+  "evidence": "index = 0x0011CD80(end - self->f_18, self->f_10); cell = self->f_1c + index*0x54 (rsb/add sequence *3+... = 0x54); cell->f_50=0; if (*g_0056d8c0==0) clear +4/+0x44/+0x48/+0x4c/-0x52 else cell->f_51=1."
+ },
+ {
+  "address": "0x0056D8C4",
+  "name": "Font_GlyphCache_AllocSlot",
+  "signature": "int Font_GlyphCache_AllocSlot(FontGlyphCache* self, u32 size, u32 a3, const char* key, u32 owner)",
+  "params": {
+   "self": "glyph page cache (+0x10 granularity, +0x18 base, +0x1c 0x54-byte cells)",
+   "size": "requested cell size",
+   "a3": "unused",
+   "key": "glyph key string copied into the cell",
+   "owner": "owner/usage tag"
+  },
+  "summary": "Allocates a glyph cell from the simpler 0x54-byte cell table: prefers the first completely free cell, otherwise the free cell with the best quality byte, marks it used, copies the key string and metrics, and returns the cell's pixel offset.",
+  "confidence": 0.5,
+  "evidence": "Scans self->f_14 cells of 0x54 bytes; free cell with no data (+4==0) gives the offset immediately; else tracks the largest f_52 quality; then sets f_48=arg2, f_44=offset, f_4c=arg5 and copies the 0x40-byte key block exactly like 0x0056D028."
+ },
+ {
+  "address": "0x0056DA5C",
+  "name": "Font_GlyphCache_Find",
+  "signature": "FontGlyphCell* Font_GlyphCache_Find(FontGlyphCache* self, const char* key, u32 owner)",
+  "params": {
+   "self": "glyph page cache (0x54-byte cells)",
+   "key": "glyph key string",
+   "owner": "owner tag matched against +0x4c"
+  },
+  "summary": "Finds a cached glyph cell in the 0x54-stride table by key string and owner tag, marking it used on a hit; returns 0 when absent.",
+  "confidence": 0.5,
+  "evidence": "Same loop as 0x0056D138 but stride 0x54 (rsb r0,r5,r5,lsl #3 then *0x? - the readable C uses i*0x54) and sets f_50=1 with f_52=0."
+ },
+ {
+  "address": "0x0056DD6C",
+  "name": "maybe_Text_Renderer_Dtor",
+  "signature": "void maybe_Text_Renderer_Dtor(TextRenderer* self)",
+  "params": {
+   "self": "text renderer (+0x2c anim resource, +0x34/+0x3c/+0x40 owned objects)"
+  },
+  "summary": "Destructor of a text renderer: releases the animation bindings (0x00535580), releases the two render objects through their vtbl[4], frees the font/texture buffer at +0x3c/+0x40 and clears the state byte.",
+  "confidence": 0.45,
+  "evidence": "if (self->f_2c) { save f_c/f_18/f_78; 0x00535580(self); } if (self->f_34) { (**(vtbl+4))(self->f_34,f_18); (**(vtbl+4))(self->f_34,f_78); self->f_34=0; } if (self->f_3c) 0x0010E66C(); else if (self->f_40) 0x0056562C(self->f_40,f_c); self->f_44=0. 0x0056EEB8 is the sibling variant."
+ },
+ {
+  "address": "0x0056ED9C",
+  "name": "Fs_Stream_ReadFromBuffer",
+  "signature": "int Fs_Stream_ReadFromBuffer(FsStream* self, void* dst, u32 size)",
+  "params": {
+   "self": "stream (+0x14 buffer, +0x1c length, +0x20 read cursor)",
+   "dst": "destination",
+   "size": "requested bytes"
+  },
+  "summary": "Consumes up to `size` bytes from the stream's in-memory buffer (limited by the remaining length), copies them to the destination and advances the cursor; returns the number of bytes consumed, 0 when nothing is left.",
+  "confidence": 0.55,
+  "evidence": "remaining = self->f_1c - self->f_20; take = min(size, remaining); if (take > 0) { memcpy 0x00116A14(dst, self->f_14 + self->f_20, take); 0x0051CD3C(&self->f_1c, take, 1); } return take."
+ },
+ {
+  "address": "0x0056EEB8",
+  "name": "maybe_Text_Renderer_Dtor2",
+  "signature": "void maybe_Text_Renderer_Dtor2(TextRenderer* self)",
+  "params": {
+   "self": "text renderer variant (+0x2c anim, +0x34/+0x38 objects)"
+  },
+  "summary": "Second text renderer destructor: releases the animation bindings and both render objects (+0x34 and +0x38) through their vtbl[4], then clears the state byte. The +0x38 variant suggests a second surface/page.",
+  "confidence": 0.45,
+  "evidence": "if (self->f_2c) { save f_18/f_1c; 0x00535580(self); } release f_34 with f_18, f_38 with f_1c; f_44=0. Same shape as 0x0056DD6C minus the buffer-free branch."
+ }
+]

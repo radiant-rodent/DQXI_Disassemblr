@@ -1,0 +1,712 @@
+[
+  {
+    "address": "0x0060E79C",
+    "name": "Gfx_Screen_ForwardFadeOut",
+    "signature": "void Gfx_Screen_ForwardFadeOut(int self, u32 screenIndex, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "screenIndex",
+      "param_3": "arg"
+    },
+    "summary": "Tail-call forwarder: picks the per-screen fade window (self+4 for screen 0, self+8 for screen 1) and jumps to its fade-out entry 0x0017BD1C (Ui_Bar_StartFadeOut).",
+    "confidence": 0.5,
+    "evidence": "asm: `cmp r1,#0; ldreq r0,[r0,#4]; ldrne r0,[r0,#8]; mov r1,r2; b #0x17bd1c` - a 20-byte forwarder, not a getter. 0x0017BD1C is the real entry of Ui_Bar_StartFadeOut (0x0017BD2C is a mid-function split), and self+4/+8 are the two fade windows created by maybe_Gfx_Screen_BindTarget (0x0060E73C) through Ui_CreateFadeWindow.",
+    "previous_name": "maybe_Gfx_Screen_GetTarget",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0060E7B0",
+    "name": "Gfx_Screen_ForwardSetAlphaVariant",
+    "signature": "void Gfx_Screen_ForwardSetAlphaVariant(int self, u32 screenIndex, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "screenIndex",
+      "param_3": "arg"
+    },
+    "summary": "Tail branch of the identical 20-byte forwarder at 0x0060E7A0: selects the per-screen fade window and jumps to its alpha-variant entry 0x0017BDC8 (Ui_Bar_SetAlphaVariant).",
+    "confidence": 0.5,
+    "evidence": "asm: the word at 0x0060E7B0 is `b #0x17bdc8`, the last instruction of the thunk at 0x0060E7A0 (`cmp r1,#0; ldreq r0,[r0,#4]; ldrne r0,[r0,#8]; mov r1,r2`), so it is code, not a VFP literal; 0x0017BDC8 is the real entry of Ui_Bar_SetAlphaVariant (0x0017BDD0 is a split symbol).",
+    "previous_name": "maybe_Data_VfpLiteral0060E7B0",
+    "previous_confidence": 0.2,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0060E810",
+    "name": "Gfx_Screen_GetClearColorByMode",
+    "signature": "u32 Gfx_Screen_GetClearColorByMode(int self, u32 screenIndex, u32 mode)",
+    "params": {
+      "param_1": "self",
+      "param_2": "screenIndex",
+      "param_3": "mode"
+    },
+    "summary": "Continuation of Gfx_Screen_GetClearColor (real entry 0x0060E7FC): reads the selected screen's fade value, then switches on colour mode 0..6 and returns the matching global colour word with its bytes swapped into the engine's RGBA order.",
+    "confidence": 0.55,
+    "evidence": "asm: 0x0060E7FC is the entry (`cmp r1,#0; push {r4,lr}; ldreq r0,[r0,#4]; ldrne r0,[r0,#8]; mov r4,r2`), so this symbol starts at its `bl #0x17bc6c`; then `cmp r4,#7; ldrlo pc,[pc,r4,lsl#2]` with 7 cases that each load a global colour and byte-swap it before `pop {r4,pc}`. It RETURNS a colour, so the old 'SetClearColor' verb was wrong.",
+    "previous_name": "maybe_Gfx_Screen_SetClearColorByIndex",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0060EEDC",
+    "name": "Gfx_SpriteObject_Dtor_Part2",
+    "signature": "void Gfx_SpriteObject_Dtor_Part2(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second half of the sprite-object destructor at 0x0060EE9C: tears down the child object at self+0x24C, unlinks self from the list at self+0x234, runs the Field object base destructor and frees the object.",
+    "confidence": 0.5,
+    "evidence": "asm: 0x0060EE9C installs vtables 0x0075EE80/0x0075EE30 at +0x22C and constructs the array at +0x298, then falls through here: `bl #0x17c330` on &self->f_24C, `ldm r1,{r1,r2}; str r1,[r2,#4]; str r2,[r1,#8]` unlinks self from the list at +0x234, `bl #0x335dac` (Field_Object_DtorBase), `b #0x10f6cc` (allocator free). Not a screen clear; the listed Ui_* callers are nearest-symbol artifacts.",
+    "previous_name": "maybe_Gfx_Screen_Clear",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00613350",
+    "name": "Save_SetNameBuffer_Tail",
+    "signature": "void Save_SetNameBuffer_Tail(int self, void* src)",
+    "params": {
+      "param_1": "self",
+      "param_2": "src"
+    },
+    "summary": "Tail branch of Save_SetNameBuffer (0x00613324): copies 0x40 bytes from src into self+0xFA and jumps to the CRT memcpy helper.",
+    "confidence": 0.5,
+    "evidence": "asm: 0x00613324 is a 44-byte function (`push {r4,r5,r6,lr}; add r0,r0,#0x8800; add r0,r0,#0xfa; mov r1,#0x80; bl #0x1113ec; mov r1,r4; mov r0,r5; pop {r4,r5,r6,lr}; mov r2,#0x40`) that ends exactly here, so this word is its `b #0x100a6c` memcpy tail, not a level-map cell initialiser.",
+    "previous_name": "maybe_Field_LevelMap_InitCell",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006135F8",
+    "name": "Field_LevelMap_AddCell_Part2",
+    "signature": "u32 Field_LevelMap_AddCell_Part2(int self, void* cell)",
+    "params": {
+      "param_1": "self",
+      "param_2": "cell"
+    },
+    "summary": "Continuation of Field_LevelMap_AddCell (real entry 0x006135E4): rejects names of 7 or more wchars and scans the 0x32 cell records at self+0x5FE4 (stride 0x8C) for a free slot.",
+    "confidence": 0.55,
+    "evidence": "asm: 0x006135E4 is the entry (`push {r4..sl,lr}; mov r7,r1; mov sb,r0; mov r0,r1; blx #0x100b74` = wcslen), so this symbol starts at that wcslen call; it then checks `cmp r0,#7; bhs` and starts the 0x32-iteration scan (`rsb r0,r5,r5,lsl#3; add r0,r0,r0,lsl#2` = i*35, `lsl#2` = stride 0x8C).",
+    "previous_name": "maybe_Field_LevelMap_GetCell",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00613638",
+    "name": "Field_LevelMap_AddCell_Part3",
+    "signature": "u32 Field_LevelMap_AddCell_Part3(int self, void* cell)",
+    "params": {
+      "param_1": "self",
+      "param_2": "cell"
+    },
+    "summary": "Rest of Field_LevelMap_AddCell: finishes the free-slot scan, memcpy's 0x84 bytes of the new cell record into the slot, copies the +0x84/+0x85/+0x88 fields and returns 1 (0 when the table is full). The 696-byte symbol also covers the unrelated routine that starts at 0x006136BC.",
+    "confidence": 0.5,
+    "evidence": "asm: continues the function entered at 0x006135E4 - the loop `cmp r5,#0x32; blt` then `memcpy(cell, src, 0x84)` via 0x00116C10 and `strb/str` of +0x84/+0x85/+0x88, returning sl=1; a new function starts at 0x006136BC (`push {r4,r5,r6,r7}`), so the 696-byte symbol is a Ghidra lump, not a 'load cells' routine.",
+    "previous_name": "maybe_Field_LevelMap_LoadCells",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00619D28",
+    "name": "Object_DeletingDtor",
+    "signature": "void Object_DeletingDtor(void* object)",
+    "params": {
+      "param_1": "object"
+    },
+    "summary": "Scalar deleting destructor: resets the object's vtable to the base-class vtable 0x00758AE0 (0x00193E40) and frees the allocation through the engine allocator (0x0010F6CC).",
+    "confidence": 0.5,
+    "evidence": "asm: `push {r4,lr}; bl #0x193e40; pop {r4,lr}; b #0x10f6cc`; 0x00193E40 is `ldr r1,[pc,#4]; str r1,[r0]; bx lr` with the literal 0x00758AE0 (base vtable install) and 0x0010F6CC is the allocator free (reads the header at ptr-8 and calls its slot +4). Same body as 0x00619FC4.",
+    "previous_name": "maybe_Object_DtorThunk_619D28",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00619FC4",
+    "name": "Object_DeletingDtorB",
+    "signature": "void Object_DeletingDtorB(void* object)",
+    "params": {
+      "param_1": "object"
+    },
+    "summary": "Second copy of the scalar deleting destructor (same body as 0x00619D28): base-vtable reset via 0x00193E40, then allocator free via 0x0010F6CC.",
+    "confidence": 0.5,
+    "evidence": "asm: byte-identical to 0x00619D28 (`push {r4,lr}; bl #0x193e40; pop {r4,lr}; b #0x10f6cc`). The old 'Container_DestroyObjectRefB' subsystem was wrong: the Ui_Bar_* callers listed for it actually call 0x0061A0F8, an internal entry of this 496-byte region (the UI animation-slot colour setter), not this thunk.",
+    "previous_name": "maybe_Container_DestroyObjectRefB",
+    "previous_confidence": 0.4,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00622020",
+    "name": "Ui_Widget_ReleaseGpuBufferEx_Tail",
+    "signature": "void Ui_Widget_ReleaseGpuBufferEx_Tail(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Tail of the widget GPU-buffer release routine at 0x00621FB4: releases the sub-object at self+4 through 0x0036B514 and frees the allocation that starts 4 bytes before the returned pointer.",
+    "confidence": 0.5,
+    "evidence": "asm: 0x00621FB4 is the entry (`push {r4,lr}; sub sp,sp,#8; mov r4,r0; str r1,[r0]`) and ends exactly here; this word is its tail `add r0,r4,#4; bl #0x36b514; add sp,sp,#8; sub r0,r0,#4; pop {r4,lr}; b #0x10f6cc`, i.e. a free of the sub-object, not a standalone virtual delete thunk.",
+    "previous_name": "maybe_Ui_ReleaseObjectThunk",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0062209E",
+    "name": "maybe_Code_MisalignedSymbol0062209E",
+    "signature": "void maybe_Code_MisalignedSymbol0062209E(void)",
+    "params": {},
+    "summary": "Misaligned symbol: the address falls inside the ARM instruction at 0x0062209C (`ldrlt r0,[r4,#0x10]`) of the string-append routine that starts at 0x00622038, so Ghidra's Thumb decode produced coprocessor garbage. There is no function here.",
+    "confidence": 0.3,
+    "evidence": "asm: 0x00622090..0x006220BC decodes as one coherent ARM routine (`add r1,r4,#0x10; ldm r1,{r1,r2}; cmp r1,r2; ldrlt r0,[r4,#0x10]; blt; str r0,[r4,#0x10]; add r2,r0,#1; ldr r1,[pc,#0x38]; mov r0,sp; bl #0x6f0e1c`), so 0x0062209E is not an instruction boundary; the coprocessor_function in the C is the damaged Thumb decode, not a UI flag setter.",
+    "previous_name": "maybe_Ui_Part_SetFlagBit",
+    "previous_confidence": 0.4,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00623134",
+    "name": "Sq_ObjectPtr_ReleaseTemp_Tail",
+    "signature": "void Sq_ObjectPtr_ReleaseTemp_Tail(void* temp)",
+    "params": {
+      "param_1": "temp"
+    },
+    "summary": "Tail of the routine at 0x00623114 that assigns a null Squirrel value to self+0x28: releases the temporary SQObject - if its type word has the refcounted tag 0x08000000 it decrements the refcount at +4 and calls the object's vtable slot +8 when it reaches zero.",
+    "confidence": 0.5,
+    "evidence": "asm: 0x00623114 is the entry (`ldr r1,[pc,#0x58]; str lr,[sp,#-4]!; sub sp,sp,#0xc; mov r3,#0; stm sp,{r1,r3}; mov r2,sp; mov r1,r3; add r0,r0,#0x28; bl #0x710938`) and ends exactly here; this symbol is its release tail (`ldr r0,[sp]; tst r0,#0x8000000; ldr r1,[r1,#4]; subs r1,r1,#1; str r1,[r0,#4]; blx [vtable+8]`). The 0x08000000 refcounted tag and the vtable/refcount layout are Squirrel's SQObject, not a container slot array. The readable C is damaged (unaff_/flag registers), so the disassembly quoted above is the ground truth.",
+    "previous_name": "maybe_Container_FreeSlotArray",
+    "previous_confidence": 0.45,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00623178",
+    "name": "Script_Object_Dtor",
+    "signature": "void Script_Object_Dtor(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Destructor of a script-bound object: installs vtable 0x00780258, detaches from the owner at self+0x14 (0x00245C40), releases the four Squirrel object members at self+0x34/+0x2C/+0x24/+0x1C, then installs the base vtable 0x0075A728 and unlinks the object from its list.",
+    "confidence": 0.5,
+    "evidence": "asm: `ldr r0,[pc,#0xc0]; str r0,[r4]` installs 0x00780258; `tst r1,#0x80000000` guards the 0x00245C40 detach; then four copies of the SQObject release sequence (`tst r0,#0x8000000; ldr r1,[r0,#4]; subs r1,r1,#1; str r1,[r0,#4]; blx [vtable+8]`) walk backwards through the members; finally `str r2,[r4,#-0x18]` installs 0x0075A728 and clears the list links. Not a model part-visibility routine. The readable C is damaged (unaff_/flag registers), so the disassembly quoted above is the ground truth.",
+    "previous_name": "maybe_Model_ApplyPartVisibility",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00623258",
+    "name": "Script_Value_Dtor",
+    "signature": "void Script_Value_Dtor(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Destructor of a 0x14-byte script value: detaches the shared buffer at self+0x10 when the type word at self+0xC is refcounted, calls the virtual destructor in vtable slot 0, then frees the block with the sized deallocator 0x00147AEC(size 0x14).",
+    "confidence": 0.5,
+    "evidence": "asm: `ldr r0,[r0,#0xc]; tst r0,#0x8000000; ldr r1,[r4,#0x10]; mov r0,#0; str r0,[r1,#8]; ldr r0,[r4]; ldr r1,[r0]; mov r0,r4; blx r1; mov r0,r4; pop {r4,lr}; mov r1,#0x14; b #0x147aec`. The old summary said 0x18 bytes; the immediate is 0x14.",
+    "previous_name": "maybe_Container_DestroyValueC",
+    "previous_confidence": 0.45,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00625778",
+    "name": "maybe_Ui_ListWindow_GetSubObject",
+    "signature": "int maybe_Ui_ListWindow_GetSubObject(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Notifies the owner pointer at self+0x2C (calls 0x003ECEEC with self when its +0x170 field is zero) and then returns the address of the sub-object at self+0x5A4. The epilogue is odd: `pop {r4,lr}` is followed by the return-value setup, so the exact return convention is not certain.",
+    "confidence": 0.35,
+    "evidence": "asm: `ldr r0,[r0,#0x2c]; cmp r0,#0; ldr r1,[r0,#0x170]; cmp r1,#0; moveq r1,r4; bleq #0x3eceec; add r0,r4,#0x400; mov r1,r4; pop {r4,lr}; add r0,r0,#0x1a4` - the routine ends by forming self+0x5A4, which is a sub-object address, not an input dispatcher. The neighbouring symbols are Ui_ListWindow_DispatchInput (0x006257B0) and Ui_ListWindow_SelectEntry (0x006258B0), so the Ui_ListWindow_ prefix is kept but the operation stays uncertain.",
+    "previous_name": "maybe_Ui_ListWindow_ResolveDispatcher",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0062A488",
+    "name": "maybe_NameEntry_IsValid",
+    "signature": "u32 maybe_NameEntry_IsValid(int entry)",
+    "params": {
+      "param_1": "entry"
+    },
+    "summary": "Shared tail entered from 0x0062A480 with entry = self+0x8668: returns a value (1/0) - 1 when the 7-wchar name at entry+4 is non-empty and shorter than 7 characters, 0 otherwise. 0x0062A320 performs the same check for the entry at self+0x8630.",
+    "confidence": 0.4,
+    "evidence": "asm: 0x0062A480 `add r0,r0,#0x268; adds r0,r0,#0x8400` sets the flags that the `beq` at 0x0062A48C consumes, so this is a fall-through tail, not a standalone measurement; it then does `add r4,r0,#4; blx wcslen; cmp r0,#7; movhs r0,#0; ldrh r0,[r4]; cmp r0,#0; movne r0,#1`. It returns a value (1/0), so the void signature in the old doc is Ghidra's dropped return. Not a speaker-name measurement.",
+    "previous_name": "maybe_Ui_Message_MeasureSpeakerName",
+    "previous_confidence": 0.3,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0062DA24",
+    "name": "Camera_BuildVisibleTargetLists_Tail",
+    "signature": "u32 Camera_BuildVisibleTargetLists_Tail(int self, u32 index)",
+    "params": {
+      "param_1": "self",
+      "param_2": "index"
+    },
+    "summary": "Epilogue of Camera_BuildVisibleTargetLists (0x0062D930, 244 bytes): finishes the sin/cos interpolation, indexes the 0x80-byte-stride table at r7 with r4 and returns the 4-byte entry at [r7 + r4*0x80 + (r5+1)*4].",
+    "confidence": 0.5,
+    "evidence": "asm: 0x0062D930 is 244 bytes and ends exactly at 0x0062DA24, so this symbol is its split epilogue: `bl #0x51b1fc` (std_FastSinCos), `add r1,r5,#1`, `bl #0x11cd80`, `add r0,r7,r4,lsl#7; ldr r0,[r0,r1,lsl#2]; add sp,sp,#0x124; pop {r4,r5,r6,r7,r8,sb,pc}`. It is code, not a misparsed data seed.",
+    "previous_name": "maybe_Data_MisparsedSeed0062DA24",
+    "previous_confidence": 0.25,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0062DBC0",
+    "name": "maybe_Camera_FindVisiblePathEntry_Tail",
+    "signature": "u32 maybe_Camera_FindVisiblePathEntry_Tail(int self, u32 index)",
+    "params": {
+      "param_1": "self",
+      "param_2": "index"
+    },
+    "summary": "Epilogue of maybe_Camera_FindVisiblePathEntry (0x0062DA68, 344 bytes): finishes the sin/cos interpolation and returns the 4-byte entry at [r8 + (r4+1)*4].",
+    "confidence": 0.45,
+    "evidence": "asm: 0x0062DA68 is 344 bytes and ends exactly at 0x0062DBC0, so this symbol is its split epilogue: `bl #0x51b1fc` (std_FastSinCos), `add r1,r4,#1`, `bl #0x11cd80`, `ldr r0,[r8,r1,lsl#2]; add sp,sp,#0xa8; vpop {d8}; pop {r4,r5,r6,r7,r8,sb,sl,pc}`. It is code, not a misparsed data seed; the containing function's own name is still a maybe_, hence the low confidence.",
+    "previous_name": "maybe_Data_MisparsedSeed0062DBC0",
+    "previous_confidence": 0.25,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00630A4C",
+    "name": "maybe_Ui_SceneFlow_CanAdvance",
+    "signature": "u32 maybe_Ui_SceneFlow_CanAdvance(int self, u32 handle)",
+    "params": {
+      "param_1": "self",
+      "param_2": "handle"
+    },
+    "summary": "Returns a value (1/0): 1 when the object referenced by the handle is still transitioning - it resolves the handle through 0x00630B04, then reports 1 if either of the two float-progress checks 0x00649B80 (self+0x930, self+0x8E0+0x50) is unfinished or the state byte at self+0x8E0+0x1C is non-zero.",
+    "confidence": 0.4,
+    "evidence": "asm: `bl #0x630b04; cmp r0,#0; beq return0; add r4,r5,#0x8e0; add r0,r5,#0x930; bl #0x649b80; ... ldrsb r0,[r0,#0x1c]; ... mov r0,#1; pop {r4,r5,r6,r7,r8,sb,pc}` / `mov r0,#0`. It returns a value (1/0), so the void signature in the old doc is Ghidra's dropped return. 0x00649B80 compares a float delta against a threshold, so the routine is a 'still busy' test; the exact subsystem (scene flow vs battle action) is not proven, hence kept as maybe_.",
+    "previous_name": "maybe_Ui_SceneFlow_CanAdvance",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0063349E",
+    "name": "maybe_Code_MisalignedSymbol0063349E",
+    "signature": "void maybe_Code_MisalignedSymbol0063349E(void)",
+    "params": {},
+    "summary": "Misaligned symbol: the address falls inside the ARM instruction at 0x0063349C (`ldrblt r0,[r0,#0x7c]`) of the small getter `cmp r1,#0x18; addlt r0,r0,r1; ldrblt r0,[r0,#0x7c]; movge r0,#0xff; bx lr`. There is no function here.",
+    "confidence": 0.3,
+    "evidence": "asm: 0x00633494..0x006334A4 is one coherent ARM getter (`cmp r1,#0x18; addlt r0,r0,r1; ldrblt r0,[r0,#0x7c]; movge r0,#0xff; bx lr`), so 0x0063349E is not an instruction boundary; the 10-byte Thumb symbol is a Ghidra artifact.",
+    "previous_name": "maybe_Data_MisparsedSeed0063349E",
+    "previous_confidence": 0.25,
+    "change": "corrected"
+  },
+  {
+    "address": "0x00636E44",
+    "name": "Container_GetPooledEntry",
+    "signature": "u8* Container_GetPooledEntry(int self, u32 index)",
+    "params": {
+      "param_1": "self",
+      "param_2": "index"
+    },
+    "summary": "Resolves index in the record pool reached through self+0x11E8 -> +0x10: rejects index >= 0x13 and index >= pool->f_60, then returns &pool->f_58->f_24[index] + pool->f_58->f_24[index] - the classic relative-offset pool lookup. The same body exists at 0x00713C7C without the +0x11E8 indirection and is called from 241 sites.",
+    "confidence": 0.5,
+    "evidence": "asm: `add r0,r0,#0x1000; ldr r0,[r0,#0x1e8]; cmp r1,#0x13; bhs; ldr r0,[r0,#0x10]; cmp r0,#0; beq; ldrge r2,[r0,#0x60]; cmpge r2,r1; ble; ldr r0,[r0,#0x58]; ldr r2,[r0,#0x24]!; cmp r2,#0; moveq r0,#0; addne r0,r0,r2; adds r0,r0,r1,lsl#2; ldrne r1,[r0]; cmpne r1,#0; addne r0,r0,r1`. The identical body at 0x00713C7C is reached from 241 call sites in field, battle, script and UI code, so the helper is generic. Not an animation motion-condition check. The readable C is damaged (unaff_/flag registers), so the disassembly quoted above is the ground truth.",
+    "previous_name": "maybe_Anim_CheckMotionCondition",
+    "previous_confidence": 0.4,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0063A0A4",
+    "name": "maybe_Ui_Record_GetField2CKind13",
+    "signature": "s32 maybe_Ui_Record_GetField2CKind13(u32 arg1, u32 arg2, int record)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "arg2",
+      "param_3": "record"
+    },
+    "summary": "Getter: returns the sign-extended byte at record->f_4->f_2C, but only when record->f_4 exists and its kind byte at +0x29 equals 13; otherwise returns 0.",
+    "confidence": 0.45,
+    "evidence": "asm: `mov r4,r2; mov r0,r2; bl #0x66c950; cmp r0,#0; moveq r0,#0; moveq r1,r0; beq; ldr r0,[r4,#4]; cmp r0,#0; ldrbne r0,[r0,#0x2c]; asr r1,r0,#0x1f; pop {r4,pc}`. 0x0066C950 is `ldr r0,[r0,#4]; ldrb r0,[r0,#0x29]; cmp r0,#0xd; moveq r0,#1`, so the gate is the kind byte 13. It returns a value, not an update; the subsystem is not proven, hence maybe_.",
+    "previous_name": "maybe_Ui_Panel_UpdateText",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0063A6D4",
+    "name": "maybe_Ui_Record_GetField2CKind12",
+    "signature": "s32 maybe_Ui_Record_GetField2CKind12(u32 arg1, u32 arg2, int record)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "arg2",
+      "param_3": "record"
+    },
+    "summary": "Getter: returns the sign-extended byte at record->f_4->f_2C, but only when record->f_4 exists and its kind byte at +0x29 equals 12; otherwise returns 0.",
+    "confidence": 0.45,
+    "evidence": "asm: `mov r4,r2; mov r0,r2; bl #0x66c978; cmp r0,#0; moveq r0,#0; moveq r1,r0; beq; ldr r0,[r4,#4]; cmp r0,#0; ldrbne r0,[r0,#0x2c]; asr r1,r0,#0x1f; pop {r4,pc}`. 0x0066C978 is `ldr r0,[r0,#4]; ldrb r0,[r0,#0x29]; cmp r0,#0xc; moveq r0,#1`, so the gate is the kind byte 12. It returns a value, not an update; the subsystem is not proven, hence maybe_.",
+    "previous_name": "maybe_Ui_Panel_UpdateTextB",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0063E064",
+    "name": "Container_GetPooledEntryThunk",
+    "signature": "u8* Container_GetPooledEntryThunk(int container, u32 index)",
+    "params": {
+      "param_1": "container",
+      "param_2": "index"
+    },
+    "summary": "12-byte forwarder to 0x00713C7C, the relative-offset record-pool lookup (count at container+0x60, offset array at container+0x58+0x24, entry = &offsets[index] + offsets[index]). It has 241 call sites across field, battle, script and UI code, so the helper is generic, not UI-specific. The 3212-byte symbol is a Ghidra lump that also covers the unrelated routines after 0x0063E070.",
+    "confidence": 0.5,
+    "evidence": "asm: `push {r4,lr}; bl #0x713c7c; pop {r4,pc}` and the next function starts at 0x0063E070, so the symbol is a 12-byte thunk plus a lump. 0x00713C7C is `ldr r0,[r0]; cmp r0,#0; ldrge r2,[r0,#0x60]; cmpge r2,r1; ldr r0,[r0,#0x58]; ldr r2,[r0,#0x24]!; ...` - the same offset-table lookup as 0x00636E44. The batch file still carries the stale first-pass name maybe_Data_InitRecordTables (the readable file is now maybe_Thunk_Call00713C7C_0063e064.c from R_T01); either way the body is a forwarder, not a record-table initialiser.",
+    "previous_name": "maybe_Data_InitRecordTables",
+    "previous_confidence": 0.25,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E59C4",
+    "name": "Ui_ScrollList_ScrollBy",
+    "signature": "void Ui_ScrollList_ScrollBy(int self, int delta, u32 arg3, u32 wrap)",
+    "params": {
+      "param_1": "self",
+      "param_2": "delta",
+      "param_3": "arg3",
+      "param_4": "wrap"
+    },
+    "summary": "Adds delta to the page index at self+0x4C, computes the page count as (vtable[0x64](self) - 1) / 3 + 1, and - when wrap is non-zero - wraps the index into [0, pages-1] (negative becomes pages-1, past-the-end becomes 0).",
+    "confidence": 0.5,
+    "evidence": "asm: `ldr r0,[r4,#0x4c]; add r0,r0,r1; str r0,[r4,#0x4c]; ldr r1,[r4]; ldr r1,[r1,#0x64]; blx r1; ldr r1,[pc,#0x198]` (0x66666667) `smull`/`asr #1`/`sub ... asr #31` = signed divide by 3, `add r0,r0,#1`; then `cmp r5,#0; beq` skips the wrap, `sublt r1,r0,#1; strlt r1,[r4,#0x4c]` and `cmp r1,r0; movge r0,#0; str r0,[r4,#0x4c]`. The same wrap block is duplicated at 0x006E6460, confirming the template. The callers maybe_Ui_MessagePanel_ExecStateA and maybe_Ui_Window_AdvanceScrollPage use it as a page scroll.",
+    "previous_name": "maybe_Ui_ScrollList_ScrollBy",
+    "previous_confidence": 0.4,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x006D6060",
+    "name": "Pack_CollectNumberedEntries",
+    "signature": "void Pack_CollectNumberedEntries(int out, int index, char* baseName)",
+    "params": {
+      "param_1": "out",
+      "param_2": "index",
+      "param_3": "baseName"
+    },
+    "summary": "Collects the numbered split resources that share baseName: looks up baseName through 0x0053D4C4, stores each hit in out+4..out+0x84 (32 slots), and bumps the two ASCII digits at baseName+6/+7 from '00' up to '31' until a lookup misses.",
+    "confidence": 0.5,
+    "evidence": "asm: `add r0,r0,#4; add r1,r0,#0x80; cmp r0,r1; str r0,[r5,#0x84]; movlo r8,#0x31; movlo r7,#0x30; str r0,[r5,#0x88]; bhs end` then the loop `bl #0x53d4c4; str r0,[r1]; add r0,r0,#4; ldrsb r0,[r4,#7]; cmp r0,#0x39; ldrbeq r0,[r4,#6]; strbeq r7,[r4,#7]; add r0,r0,#1; strbeq r0,[r4,#6]; strbne r0,[r4,#7]` with the bound `add r1,r1,#0x80; cmp r0,r1; blo`. The 32-slot buffer and the '0'/'1' digit constants confirm the numbered-suffix collection. The readable C is damaged (unaff_/flag registers), so the disassembly quoted above is the ground truth.",
+    "previous_name": "maybe_Pack_CollectNumberedEntries",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x006E2014",
+    "name": "Ui_Object_DtorThunk2_Tail",
+    "signature": "void Ui_Object_DtorThunk2_Tail(void* object)",
+    "params": {
+      "param_1": "object"
+    },
+    "summary": "Tail branch of the 12-byte deleting-destructor thunk at 0x006E2008: jumps to the engine allocator free 0x0010F6CC with the object still in r0.",
+    "confidence": 0.5,
+    "evidence": "asm: 0x006E2008 is Ui_Object_DtorThunk2, 12 bytes, ending exactly at 0x006E2014; this word is its `b #0x10f6cc` (the allocator free that reads the header at ptr-8 and calls its slot +4). It is a real branch instruction, not 4 bytes of alignment padding.",
+    "previous_name": "maybe_Data_PaddingArtifact_006E2014",
+    "previous_confidence": 0.45,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E5A26",
+    "name": "maybe_Code_MisalignedSymbol006E5A26",
+    "signature": "void maybe_Code_MisalignedSymbol006E5A26(void)",
+    "params": {},
+    "summary": "Misaligned symbol: the address falls inside the ARM instruction at 0x006E5A24 (`strlt r1,[r4,#0x4c]`) of Ui_ScrollList_ScrollBy (0x006E59C4), so Ghidra's Thumb decode produced the damaged body. There is no function here.",
+    "confidence": 0.3,
+    "evidence": "asm: 0x006E5A20..0x006E5A34 is one coherent ARM sequence (`sublt r1,r0,#1; strlt r1,[r4,#0x4c]; cmp r1,r0; movge r0,#0; blt; str r0,[r4,#0x4c]`), so 0x006E5A26 is not an instruction boundary; the 374-byte Thumb symbol is a Ghidra artifact inside the scroll routine.",
+    "previous_name": "maybe_Ui_List_ScrollByDeltaAndApply",
+    "previous_confidence": 0.42,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E6466",
+    "name": "maybe_Code_MisalignedSymbol006E6466",
+    "signature": "void maybe_Code_MisalignedSymbol006E6466(void)",
+    "params": {},
+    "summary": "Misaligned symbol: the address falls inside the ARM instruction at 0x006E6464 (`strlt r1,[r4,#0x4c]`) of a second copy of the Ui_ScrollList_ScrollBy wrap block, so Ghidra's Thumb decode produced the damaged body. There is no function here.",
+    "confidence": 0.3,
+    "evidence": "asm: 0x006E6460..0x006E647C is the same coherent ARM wrap block as 0x006E5A20 (`sublt r1,r0,#1; strlt r1,[r4,#0x4c]; cmp r1,r0; movge r0,#0; blt; str r0,[r4,#0x4c]; mov r0,#8; str r0,[sp,#8]`), so 0x006E6466 is not an instruction boundary; the 398-byte Thumb symbol is a Ghidra artifact.",
+    "previous_name": "maybe_Ui_List_ApplyScrollParams",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E662C",
+    "name": "maybe_Gfx_EffectNode_AttachAndApplyA",
+    "signature": "void maybe_Gfx_EffectNode_AttachAndApplyA(int self, u32 arg1, u32 arg2, u32 arg3, float s0, float s1)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg1",
+      "param_3": "arg2",
+      "param_4": "arg3"
+    },
+    "summary": "Template copy (vtable slot 5 of the class table 0x0076E3EC): calls vtable[0x3C](self, 4) to set the mode word, resolves the node handle through 0x003D9780, then forwards (self, arg1, arg2, arg3, s0, s1) to 0x005F539C, which itself dispatches vtable[0x7C].",
+    "confidence": 0.45,
+    "evidence": "asm: `ldr r0,[r0]; mov r1,#4; ldr ip,[r0,#0x3c]; blx ip; mov r0,r4; bl #0x3d9780; vmov.f32 s1,s16; vmov.f32 s0,s17; mov r3,r5; mov r2,r6; mov r1,r7; mov r0,r4; pop {r4,r5,r6,r7,r8,lr}; b #0x5f539c`. The body is verified, but 0x003D9780 is a handle-to-object resolver (hash lookup on self+0x220), so the 'Attach' half of the inherited name is not proven - kept as maybe_.",
+    "previous_name": "maybe_Gfx_EffectNode_AttachAndApplyA",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E66C4",
+    "name": "maybe_Gfx_EffectNode_AttachAndApplyB",
+    "signature": "void maybe_Gfx_EffectNode_AttachAndApplyB(int self, u32 arg1, u32 arg2, u32 arg3, float s0, float s1)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg1",
+      "param_3": "arg2",
+      "param_4": "arg3"
+    },
+    "summary": "Template copy of maybe_Gfx_EffectNode_AttachAndApplyA (vtable slot 5 of the class table 0x0076E4A4): vtable[0x3C](self, 4), node handle resolution via 0x003D9780, then 0x005F539C(self, arg1, arg2, arg3, s0, s1).",
+    "confidence": 0.45,
+    "evidence": "Same 96-byte body as 0x006E662C (verified in asm: `mov r1,#4; ldr ip,[r0,#0x3c]; blx ip; bl #0x3d9780; ... b #0x5f539c`); the previous pass placed it in vtable slot 5 of 0x0076E4A4. The operation name is inherited and 0x003D9780 is a handle resolver, so it stays maybe_.",
+    "previous_name": "maybe_Gfx_EffectNode_AttachAndApplyB",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E675C",
+    "name": "maybe_Gfx_EffectNode_AttachAndApplyC",
+    "signature": "void maybe_Gfx_EffectNode_AttachAndApplyC(int self, u32 arg1, u32 arg2, u32 arg3, float s0, float s1)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg1",
+      "param_3": "arg2",
+      "param_4": "arg3"
+    },
+    "summary": "Template copy of maybe_Gfx_EffectNode_AttachAndApplyA (vtable slot 5 of the class table 0x0076E55C): vtable[0x3C](self, 4), node handle resolution via 0x003D9780, then 0x005F539C(self, arg1, arg2, arg3, s0, s1).",
+    "confidence": 0.45,
+    "evidence": "Same 96-byte body as 0x006E662C (verified in asm); the previous pass placed it in vtable slot 5 of 0x0076E55C. The operation name is inherited and 0x003D9780 is a handle resolver, so it stays maybe_.",
+    "previous_name": "maybe_Gfx_EffectNode_AttachAndApplyC",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E67F4",
+    "name": "maybe_Gfx_EffectNode_AttachAndApplyD",
+    "signature": "void maybe_Gfx_EffectNode_AttachAndApplyD(int self, u32 arg1, u32 arg2, u32 arg3, float s0, float s1)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg1",
+      "param_3": "arg2",
+      "param_4": "arg3"
+    },
+    "summary": "Template copy of maybe_Gfx_EffectNode_AttachAndApplyA (vtable slot 5 of the class table 0x0076E614): vtable[0x3C](self, 4), node handle resolution via 0x003D9780, then 0x005F539C(self, arg1, arg2, arg3, s0, s1).",
+    "confidence": 0.45,
+    "evidence": "Same 96-byte body as 0x006E662C (verified in asm); the previous pass placed it in vtable slot 5 of 0x0076E614. The operation name is inherited and 0x003D9780 is a handle resolver, so it stays maybe_.",
+    "previous_name": "maybe_Gfx_EffectNode_AttachAndApplyD",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E6854",
+    "name": "Gfx_EffectNode_InitFromName",
+    "signature": "void Gfx_EffectNode_InitFromName(int self, char* name)",
+    "params": {
+      "param_1": "self",
+      "param_2": "name"
+    },
+    "summary": "Initialises the node from a resource name (0x005F541C sets the ready byte at self+0x41 and parses the name), then sets the mode word through vtable slot +0x40 with constant 4.",
+    "confidence": 0.5,
+    "evidence": "asm: `push {r4,lr}; mov r4,r0; bl #0x5f541c; ldr r0,[r4]; mov r1,#4; ldr r2,[r0,#0x40]; mov r0,r4; pop {r4,lr}; bx r2`. 0x005F541C is `push {r4..sl,lr}; sub sp,sp,#0x38; mov r4,r0; mov sb,r1; bl #0x5e73a4; mov r0,#1; strb r0,[r4,#0x41]; ldrb r0,[sb]` - a name-driven setup, not a release. The readable C body (a string-hash lookup) is a misparse; the disassembly is the ground truth. The readable C is damaged (unaff_/flag registers), so the disassembly quoted above is the ground truth.",
+    "previous_name": "maybe_Ui_Object_ReleaseWithReason4",
+    "previous_confidence": 0.4,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E688C",
+    "name": "maybe_Gfx_EffectNode_AttachAndApplyE",
+    "signature": "void maybe_Gfx_EffectNode_AttachAndApplyE(int self, u32 arg1, u32 arg2, u32 arg3, float s0, float s1)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg1",
+      "param_3": "arg2",
+      "param_4": "arg3"
+    },
+    "summary": "Template copy of maybe_Gfx_EffectNode_AttachAndApplyA (vtable slot 5 of the class table 0x0076E6CC): vtable[0x3C](self, 4), node handle resolution via 0x003D9780, then 0x005F539C(self, arg1, arg2, arg3, s0, s1).",
+    "confidence": 0.45,
+    "evidence": "Same 96-byte body as 0x006E662C (verified in asm); the previous pass placed it in vtable slot 5 of 0x0076E6CC. The operation name is inherited and 0x003D9780 is a handle resolver, so it stays maybe_.",
+    "previous_name": "maybe_Gfx_EffectNode_AttachAndApplyE",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E75FC",
+    "name": "Container_Value_Dtor",
+    "signature": "void Container_Value_Dtor(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Destructor of the variant-value class (vtable 0x00781004): installs the vtable, releases the owned member through 0x0050E5D8, then chains the base destructor Container_ObjectDtor (0x0011EE0C).",
+    "confidence": 0.5,
+    "evidence": "asm: `push {r4,lr}; mov r4,r0; ldr r0,[pc,#0x14]; str r0,[r4]` (literal at 0x006E7620 = 0x00781004), `bl #0x50e5d8`, `pop {r4,lr}; b #0x11ee0c`. The same vtable is installed by 0x006E76B0 and the class is the one Container_Value_Set (0x006E7744) writes, so the 'Script_Table' subsystem of the old name was wrong.",
+    "previous_name": "maybe_Script_Table_DtorDelete",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E76B0",
+    "name": "Container_Value_DtorB",
+    "signature": "void Container_Value_DtorB(int self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second copy of the variant-value destructor (same body as 0x006E75FC): installs vtable 0x00781004, releases the owned member via 0x0050E5D8, chains Container_ObjectDtor. The 148-byte symbol also covers the tag setters at 0x006E76D4 (tag 4) and 0x006E76F0 (tag 3).",
+    "confidence": 0.5,
+    "evidence": "asm: byte-identical to 0x006E75FC (`ldr r0,[pc,#0x14]; str r0,[r4]` with 0x00781004, `bl #0x50e5d8`, `b #0x11ee0c`); the next real code at 0x006E76D4 is `mov r3,#4; strb r3,[r0,#4]; strb r2,[r0,#6]; ldr r1,[r1]; str r1,[r0]; bx lr`, a tag setter, so the Regex_* callers listed for this address are nearest-symbol artifacts.",
+    "previous_name": "maybe_Script_Value_DtorDelete",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x006E7744",
+    "name": "Container_Value_Set",
+    "signature": "u32 Container_Value_Set(int value, int node, u32* source, int owner)",
+    "params": {
+      "param_1": "value",
+      "param_2": "node",
+      "param_3": "source",
+      "param_4": "owner"
+    },
+    "summary": "Stores a variant value according to the type tag at node+4: tag 1 copies a word, tag 2 copies a 16-bit value, tag 3 copies a word and re-parents the child list (releasing the old children through 0x0051435C), tag 4 takes the other branch; returns 1.",
+    "confidence": 0.5,
+    "evidence": "asm: `mov ip,#1; ldrb r4,[r1,#4]; cmp r4,#1; beq; cmp r4,#2; beq; cmp r4,#3; beq; cmp r4,#4; bne end` then per-case `strb ip,[r0,#4]; str r1,[r0]` / `ldrh r1,[r1,#6]; mov r3,#2; strb r3,[r0,#4]; strh r1,[r0,#6]`. The tag switch and the copies match the previous description exactly.",
+    "previous_name": "maybe_Container_Value_Set",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x006E972E",
+    "name": "maybe_Anim_CurveEvalCase_6E972E",
+    "signature": "void maybe_Anim_CurveEvalCase_6E972E(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E972C (`ldrblt r2,[r0,#8]`), the curve-type switch of the keyframe evaluator that starts at 0x006E96E4. Kept as a marker for the first template copy of that evaluator.",
+    "confidence": 0.45,
+    "evidence": "asm: 0x006E96E4 is the evaluator entry (`push {r4,r5}; ldrh r5,[r0,#0xe]; ldr r2,[r0,#0x20]; ldr ip,[r1]; vmov.f32 s1,s0; ... cmp ip,r5; cmpne ip,r2; bne`) with float constants 1.0/-2.0/2.0/3.0 at 0x006E96D4..0x006E96E0; 0x006E972C is `ldrblt r2,[r0,#8]` (4 bytes), so 0x006E972E is mid-instruction and the Thumb decode is garbage. The 'curve evaluator' context is real, the exact case label is not.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E972E",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9862",
+    "name": "maybe_Anim_CurveEvalCase_6E9862",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9862(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9860 (`ldrblt r2,[r0,#8]`) of the second template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9860 (4 bytes) and the next is `beq #0x6e9874` at 0x006E9864, so 0x006E9862 is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9862",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9942",
+    "name": "maybe_Anim_CurveEvalCase_6E9942",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9942(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9940 (`ldrblt r2,[r0,#8]`) of the third template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9940 (4 bytes) and the next is `beq #0x6e995c` at 0x006E9944, so 0x006E9942 is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9942",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9A4A",
+    "name": "maybe_Anim_CurveEvalCase_6E9A4A",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9A4A(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9A48 (`ldrblt ip,[r0,#8]`) of the fourth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt ip,[r0,#8]` at 0x006E9A48 (4 bytes) and the next is `beq #0x6e9a5c` at 0x006E9A4C, so 0x006E9A4A is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9A4A",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9B1E",
+    "name": "maybe_Anim_CurveEvalCase_6E9B1E",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9B1E(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9B1C (`ldrblt r2,[r0,#8]`) of the fifth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9B1C (4 bytes) and the next is `beq #0x6e9b38` at 0x006E9B20, so 0x006E9B1E is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body (the readable C shows its 12-bit fixed-point keyframe binary search).",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9B1E",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9C5A",
+    "name": "maybe_Anim_CurveEvalCase_6E9C5A",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9C5A(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9C58 (`ldrblt r2,[r0,#8]`) of the sixth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9C58 (4 bytes) and the next is `beq #0x6e9c6c` at 0x006E9C5C, so 0x006E9C5A is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9C5A",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9D3E",
+    "name": "maybe_Anim_CurveEvalCase_6E9D3E",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9D3E(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9D3C (`ldrblt r2,[r0,#8]`) of the seventh template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9D3C (4 bytes) and the next is `beq #0x6e9d58` at 0x006E9D40, so 0x006E9D3E is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9D3E",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9E7A",
+    "name": "maybe_Anim_CurveEvalCase_6E9E7A",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9E7A(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9E78 (`ldrblt r2,[r0,#8]`) of the eighth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9E78 (4 bytes) and the next is `beq #0x6e9e8c` at 0x006E9E7C, so 0x006E9E7A is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9E7A",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006E9F62",
+    "name": "maybe_Anim_CurveEvalCase_6E9F62",
+    "signature": "void maybe_Anim_CurveEvalCase_6E9F62(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006E9F60 (`ldrblt r2,[r0,#8]`) of the ninth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006E9F60 (4 bytes) and the next is `beq #0x6e9f7c` at 0x006E9F64, so 0x006E9F62 is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6E9F62",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006EA076",
+    "name": "maybe_Anim_CurveEvalCase_6EA076",
+    "signature": "void maybe_Anim_CurveEvalCase_6EA076(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006EA074 (`ldrblt ip,[r0,#8]`) of the tenth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt ip,[r0,#8]` at 0x006EA074 (4 bytes) and the next is `beq #0x6ea088` at 0x006EA078, so 0x006EA076 is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6EA076",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006EA14E",
+    "name": "maybe_Anim_CurveEvalCase_6EA14E",
+    "signature": "void maybe_Anim_CurveEvalCase_6EA14E(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006EA14C (`ldrblt r2,[r0,#8]`) of the eleventh template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006EA14C (4 bytes) and the next is `beq #0x6ea168` at 0x006EA150, so 0x006EA14E is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6EA14E",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x006EA28E",
+    "name": "maybe_Anim_CurveEvalCase_6EA28E",
+    "signature": "void maybe_Anim_CurveEvalCase_6EA28E(void)",
+    "params": {},
+    "summary": "Not a function entry: the address falls inside the ARM instruction at 0x006EA28C (`ldrblt r2,[r0,#8]`) of the twelfth template copy of the keyframe evaluator. Kept as a marker for that copy.",
+    "confidence": 0.45,
+    "evidence": "asm: the preceding instruction is `ldrblt r2,[r0,#8]` at 0x006EA28C (4 bytes) and the next is `beq #0x006EA2A0` at 0x006EA290, so 0x006EA28E is mid-instruction; the surrounding code repeats the 0x006E96E4 evaluator body.",
+    "previous_name": "maybe_Anim_CurveEvalCase_6EA28E",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  }
+]

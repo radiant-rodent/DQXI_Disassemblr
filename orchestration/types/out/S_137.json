@@ -1,0 +1,407 @@
+[
+  {
+    "class": "Ui_DirectionIndicator",
+    "type": "UiDirectionIndicator",
+    "summary": "Four-way character facing/direction indicator: draws the arrow sprite for each set direction bit using the text-layer key at +0x28, then idles itself by setting the blink timer at +0x98 to -1.",
+    "size": 156,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Ui_DirectionIndicator_Draw/Update share the 156-byte layout and the FUN_001a6680(layerKey<<16, pane) text-layer key pattern with Ui_TextBlink (0x00229BF4), whose +0x98 is a countdown reset to 0x1E; here the same word is set to 0xFFFFFFFF when the indicator finishes.",
+    "fields": [
+      {
+        "offset": 40,
+        "name": "textLayerId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.65,
+        "evidence": "Draw: func_001A6680(self,(u32)self->f_28 << 0x10,&self->f_50) and Update do the same; the same u16-at-+0x28 is the high half of the text-layer key in Ui_TextBlink_Update and Ui_ItemGrid_RefreshPage."
+      },
+      {
+        "offset": 152,
+        "name": "blinkTimer",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "Draw/Update store 0xFFFFFFFF (stop/idle sentinel) at +0x98; the identical 156-byte Ui_TextBlink uses +0x98 as a frame countdown that is decremented and reset to 0x1E."
+      }
+    ]
+  },
+  {
+    "class": "Ui_Drawable",
+    "type": "UiDrawable",
+    "summary": "Polymorphic head of the base 2D drawable widget (vtable 0x007602E0): its destructor restores the vptr and then tears down a large embedded widget/container tree at offsets up to 0xD84+, so the 8-byte batch record only proves the polymorphic head.",
+    "size": 8,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Ui_Drawable_Dtor (0x002CF644) stores 0x007602E0 at +0, clears +0xD84 and releases handles/lists up to +0xD88; Ui_Drawable_DtorDelete frees the object. Vtable 0x007602E0 slot 0/1 are the dtor pair, so +0 is definitely the vtable.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ui_Drawable_Dtor starts with '*self = 0x007602E0' and the vtable 0x007602E0 has maybe_Ui_Drawable_Dtor / maybe_Ui_Drawable_DtorDelete at slots 0 and 1."
+      },
+      {
+        "offset": 4,
+        "name": "unknown_04",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "Only recorded access is 'param_2[1] = unaff_r7' in the damaged Thumb maybe_Ui_Drawable_ReleaseMembers; no real +4 access exists in Ui_Drawable_Dtor, so the purpose cannot be recovered."
+      }
+    ]
+  },
+  {
+    "class": "Ui_EquipPart",
+    "type": "UiEquipPart",
+    "summary": "56-byte helper record used by the message-window control-code path: it stores the applied control state in bytes +8/+9 and caches the 8-byte control-handler descriptor (entry 8 of table 0x0072B810) at +0x30.",
+    "size": 56,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_EquipPart_SetStateIndex (0x00284F8C) is called by Ui_MessageWindow_ApplyControlCode (0x00284E84); after comparing self+9 with 7/8 it memcpy's 0x48 bytes of table 0x0072B810 and stores the last descriptor at self+0x30 with a single strd.",
+    "fields": [
+      {
+        "offset": 48,
+        "name": "maybe_controlHandler",
+        "type": "void (*)(void)",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "strd r0,r1,[r4,#0x30] copies the last 8-byte row of the handler table at 0x0072B810; that row is 0x00284DF8, a code pointer in the middle of the message control-code handlers (0x00284DF8/0x00284E84/0x00284F68...)."
+      },
+      {
+        "offset": 52,
+        "name": "maybe_handlerArg",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.3,
+        "evidence": "Second word of the same 8-byte table row, always zero in table 0x0072B810 (shown as '.word 0x00000000' after every handler pointer); copied but never read."
+      }
+    ]
+  },
+  {
+    "class": "Ui_Event",
+    "type": "UiEvent",
+    "summary": "UI event/overlay dispatcher: event ids 3..8 lazily create or destroy the title-loop (0x1E4-byte) and item-info (0x26C-byte) overlay children, while the helper methods advance a screen state sequence once a save/load task completes.",
+    "size": 16,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "Ui_Event_HandleMessage (0x00241D0C) switches on *event (3,4,5,6,7,8) and creates children at self+0x90/+0x94; maybe_Ui_Event_WaitSoundThenAdvanceA/B (0x002857D0/0x00285B90) drive the state machine stored at self+0xC. The recorded 16-byte size is only the strong-field span; HandleMessage touches self+0x90..",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "unknown_00",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "All four recorded accesses are '*param_2' (the event argument: 'if (*param_2 == 5)', 'if (*param_2 == 3 || *param_2 == 4)'), not self+0; no genuine self+0 access exists in the readable body."
+      },
+      {
+        "offset": 12,
+        "name": "maybe_stateSequence",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "maybe_Ui_Event_WaitSoundThenAdvanceA/B call vtable slots +0x10 (advance) and +0x14(state) on the object at self+0xC with state ids 3/7/0xE/0xF; Ui_WindowState+0x11C uses the same slot pattern for its screen state sequence."
+      }
+    ]
+  },
+  {
+    "class": "Ui_EventLog",
+    "type": "UiEventLog",
+    "summary": "Sorted 21-entry event/quest log (8-byte records starting at +0x4C); Ui_EventLog_InsertSorted inserts an event id ordered by the priority field of the quest table row.",
+    "size": 84,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "Ui_EventLog_InsertSorted (0x0043EEB4) walks 21 records at self+0x4C, reads record +0x50 as the sort key (table 0x0063E05C(id)->f_1C), memcpy-shifts the tail and writes the u16 id at +0x4C and key at +0x50.",
+    "fields": [
+      {
+        "offset": 76,
+        "name": "entryId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.7,
+        "evidence": "'*(short *)(param_1 + 0x4c) = (short)param_2' after finding the insert position; it is the low 16 bits of the event/quest id, first field of the 8-byte record."
+      },
+      {
+        "offset": 80,
+        "name": "entrySortKey",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "'*(undefined4 *)(param_1 + 0x50) = *(undefined4 *)(iVar2 + 0x1c)' where iVar2 = func_0063E05C(dm,id); the +0x1C field of the quest/event row is used as the ascending sort key."
+      }
+    ]
+  },
+  {
+    "class": "Ui_FadeAnimator",
+    "type": "UiFadeAnimator",
+    "summary": "Small fade/curve animator derived from Ui_CurveAnimator: two constructor variants install vtable 0x0077F6B4 or 0x0077F6FC and add one zero-initialised byte at +0x80.",
+    "size": 132,
+    "base": "Ui_CurveAnimator",
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_FadeAnimator_InitCurveA/B (0x005F8F20/0x005F9740) call Ui_CurveAnimator_Ctor (0x005F9CCC) and store vtable 0x0077F6B4 / 0x0077F6FC at +0; InitCurveA also clears byte +0x80. Both constructors are still maybe_ in the naming pass.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ui_FadeAnimator_InitCurveA writes 0x0077F6B4 and InitCurveB writes 0x0077F6FC at offset 0 immediately after Ui_CurveAnimator_Ctor."
+      },
+      {
+        "offset": 128,
+        "name": "maybe_curveState",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.3,
+        "evidence": "InitCurveA stores 0 at puVar1+0x20 (= offset 0x80), one byte past the 0x80-byte Ui_CurveAnimator base; no reader is present in the three recovered methods."
+      }
+    ]
+  },
+  {
+    "class": "Ui_GlyphRenderer",
+    "type": "UiGlyphRenderer",
+    "summary": "Header of the glyph renderer/cache object built at 0x00558F88: the constructor stores one incoming pointer at +0, zeroes +4, then zero-fills a large glyph-state block (bytes +8..+0x60C+), so only the first two words are recorded here.",
+    "size": 8,
+    "base": null,
+    "confidence": 0.25,
+    "evidence": "Disassembly at 0x00558F88: push {r4,lr}; mov r4,#0; stm r0!,{r1,r4}; two 0x51D024 (16-byte zero-fill) calls; then byte clears at +0x28..+0x60C. The class noun comes only from the M1 name and no readable file was exported.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "maybe_source",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.35,
+        "evidence": "The constructor's first instruction pair 'stm r0!, {r1,r4}' stores the incoming r1 argument verbatim at offset 0 before any zero-fill; the argument's identity is not visible in the recovered body."
+      },
+      {
+        "offset": 4,
+        "name": "unknown_04",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "The same store writes register r4 (mov r4,#0) to +4; no other access to +4 exists in the constructor and there is no exported body to check readers."
+      }
+    ]
+  },
+  {
+    "class": "Ui_GlyphSlot",
+    "type": "UiGlyphSlot",
+    "summary": "Embedded two-glyph slot inside a text layout (derived from Ui_GlyphNode): holds the packed glyph handle for the second character at +0xC plus the first/second character ids, and recreates the glyph node when a character id changes.",
+    "size": 52,
+    "base": "Ui_GlyphNode",
+    "confidence": 0.55,
+    "evidence": "Ui_GlyphSlot_Reset (0x004EE2F0) releases the handles at +8 and +0xC and sets the u16 ids at +2/+4/+6 to 0xFFFF; Ui_GlyphSlot_SetCharCode (0x004EE3A8) creates a new glyph node and stores it at self+0xC; SetFirstCharCode does the same for self+8.",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "secondGlyphHandle",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "SetCharCode calls Ui_GlyphNode_CreateFromCharCode(self,charCode,...) and assigns the result to self->f_C; Reset and the 0xFFFF path release it through Effect_ReleaseHandle(...,self->f_C,0)."
+      },
+      {
+        "offset": 48,
+        "name": "unknown_30",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "Every recorded line for this offset actually accesses +0xC (e.g. '* (undefined4 *)(param_1 + 0xc) = uVar4'); no +0x30 access exists in the three readable bodies, so this is an aliased/mistyped offset cluster."
+      }
+    ]
+  },
+  {
+    "class": "Ui_IconRequest",
+    "type": "UiIconRequest",
+    "summary": "Small icon-request record processed by a state machine: pointers at +0xC/+0x10 reference the windows whose byte +0x94 is cleared and whose byte +0x12C selects the icon action (1..7), with +0x12D/+0x12E carrying the frame colour.",
+    "size": 20,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_IconRequest_Update (0x00310680) reads *(u8*)(self+0xC)+0x12C as the action kind, clears byte +0x94 of both +0xC and +0x10 targets, and uses +0x12D/+0x12E as RG values for Gfx_SetFrameColorParam; it calls Ui_ApplyFaceIconToWork for kind 2.",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "maybe_sourceWindow",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "ldr r0,[r4,#0xc]; ldrb r1,[r0,#0x12c] (action kind) then strb r1,[r0,#0x94] (hidden flag) - an object with a kind byte at +0x12C and a bool at +0x94, consistent with a Ui_ListWindow."
+      },
+      {
+        "offset": 16,
+        "name": "maybe_secondaryWindow",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "'if (self->f_10 != 0) { self->f_10->f_94 = 0; }' - a second optional window hidden together with the source window; no other field of it is read."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ItemGrid",
+    "type": "UiItemGrid",
+    "summary": "Seven-cell item grid page: resolves the party member from the index at +0x50 and fills cells page*7.. with item names and equipped-state marks; one recovered method (0x004AE4A4) actually belongs to Ui_PartyListWindow.",
+    "size": 84,
+    "base": null,
+    "confidence": 0.45,
+    "evidence": "Ui_ItemGrid_RefreshPage (0x004AE1F8) uses page self[0x13] (*7 cells) and func_0035EB98(work,(char)self[0x14]) for the member; the second function 0x004AE4A4 is documented as Ui_PartyListWindow_SetVisible, so the class grouping is partly wrong.",
+    "fields": [
+      {
+        "offset": 76,
+        "name": "pageIndex",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "iVar8 = self[0x13] * 7 and page label func_006F0E5C(...,self[0x13] + 1) in Ui_ItemGrid_RefreshPage."
+      },
+      {
+        "offset": 80,
+        "name": "memberIndex",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "uVar2 = func_0035EB98(*work,(char)self[0x14]) resolves the party member record whose inventory the grid displays; only the low byte is used."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ItemSlot",
+    "type": "UiItemSlot",
+    "summary": "One item/equipment slot widget: SetEntry binds the item icon, category icon, the seven highlight panes at +0xAC and the equipped/rare state icons; the deleting destructor restores the base vptr and clears the owned word at +0x60.",
+    "size": 100,
+    "base": null,
+    "confidence": 0.55,
+    "evidence": "Ui_ItemSlot_SetEntry (0x004B37E8) indexes seven panes at *(self+4)+0xAC and draws icons; Ui_ItemSlot_DtorDelete (0x004B3624) stores the base vptr at +0, clears +0x60 and calls func_005799D4 + func_0010F6CC. SetEntry's pane array at +0xAC shows the real object is larger than 100 bytes.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Ui_ItemSlot_DtorDelete begins with 'str r1,[r0]' storing the base-class vptr argument at offset 0; the rest of the dtor is the standard base-vptr-restore + free sequence."
+      },
+      {
+        "offset": 96,
+        "name": "maybe_childObject",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.3,
+        "evidence": "'self[0x18] = 0' (offset 0x60) immediately before the embedded teardown call func_005799D4 and the free; the word is cleared like an owned pointer but no reader or setter is recovered."
+      }
+    ]
+  },
+  {
+    "class": "Ui_LayoutPicture",
+    "type": "UiLayoutPicture",
+    "summary": "BFLYT 'pic1' Picture layout pane (nw::lyt::Picture): installs vtable 0x007814F4 and constructs four 0x20-byte quad records at +0xA8 for the picture's texture/vertex mapping.",
+    "size": 172,
+    "base": "Ui_AnimClip",
+    "confidence": 0.7,
+    "evidence": "Ui_LayoutPicture_Ctor (0x0053EB98) runs Ui_LayoutPane_InitFromRes, stores 0x007814F4 at +0 and std_ConstructArray(+0xA8, 0x0051CF40, 4); the identical pattern in Ui_LayoutTextBox_Ctor constructs its 4 quads at +0xB4.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ui_LayoutPicture_Ctor stores 0x007814F4 at offset 0 after Ui_LayoutPane_InitFromRes; Ui_LayoutPicture_InitAnimation also stores 0x007814F4 at +0."
+      },
+      {
+        "offset": 168,
+        "name": "quadArray",
+        "type": "UiGlyphQuadArray",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "std_ConstructArray(puVar1+0x2a,0x0051CF40,4) constructs four 0x20-byte records starting at +0xA8; Ui_GlyphQuadArray is 0x20 bytes and its Reserve/AppendQuads helpers are called by the same pane constructors."
+      }
+    ]
+  },
+  {
+    "class": "Ui_LoopPane",
+    "type": "UiLoopPane",
+    "summary": "Looping damage-number popup pane: owns a Ui_AnimRef at +0x4C bound to the 'loop' pane animation; the two destructors tear down the base action element and free the widget.",
+    "size": 80,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Ui_LoopPane_Init (0x004C43A8) calls Ui_AnimRef_Bind(self+0x4C, layout, 'loop' @0x4C43EC, 0) then Ui_AnimShake_Update(self+0x4C,1); Ui_LoopPane_DtorDelete/DeleteDtor (0x004C4398/0x004C4400) free the object. The batch size 80 only covers the head of a larger widget.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Ui_LoopPane_DeleteDtor stores its vtable argument with '*self = vtable'; the sibling Ui_LoopPane_DtorDelete is vtable slot 0 of 0x00777EC0."
+      },
+      {
+        "offset": 76,
+        "name": "animRef",
+        "type": "UiAnimRef",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "Ui_AnimRef_Bind(self+0x4c,*(u32*)(self+4),0x706F6F6C,0) and Ui_AnimShake_Update(self+0x4c,1) in Ui_LoopPane_Init; the same +0x4C Ui_AnimRef is used by Ui_LoopPane3_Init and the Ui_AnimRef_Bind API."
+      }
+    ]
+  },
+  {
+    "class": "Ui_LoopPane3",
+    "type": "UiLoopPane3",
+    "summary": "Third looping-pane widget variant, isomorphic to Ui_LoopPane: binds a Ui_AnimRef at +0x4C to the 'loop' pane animation and frees the base action element in its destructor.",
+    "size": 80,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_LoopPane3_Init (0x004D647C) is byte-for-byte the same bind sequence as Ui_LoopPane_Init with the 'loop' literal at 0x004D64C0; Ui_LoopPane3_DeleteDtor (0x004D64D4) has the same shape as 0x004C4400.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Ui_LoopPane3_DeleteDtor begins with '*self = vtable' (str r1,[r0]), the standard vptr restore for the deleting destructor."
+      },
+      {
+        "offset": 76,
+        "name": "animRef",
+        "type": "UiAnimRef",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "maybe_Ui_LoopPane3_Init calls Ui_AnimRef_Bind(self+0x4c,*(u32*)(self+4),0x706F6F6C,0) then Ui_AnimShake_Update(self+0x4c,1), identical to Ui_LoopPane_Init."
+      }
+    ]
+  },
+  {
+    "class": "Ui_MenuItem",
+    "type": "UiMenuItem",
+    "summary": "Menu item/row entry: shows its child widget only when the game-progress flag selected by the kind byte at +0x2C8 is set; used by title/menu lists to gate entries on story progress.",
+    "size": 716,
+    "base": null,
+    "confidence": 0.45,
+    "evidence": "maybe_Ui_MenuItem_UpdateEnabledByFlag (0x004EFFE0) switches on self->f_2C8 (0/1/2 -> work+0x27508+0x1A8/0x1A7/0x1A9) and calls vtable slot +0x18 of self->f_4C with 1 or 0 to show/hide the child. Class name comes from the M1/refine pass.",
+    "fields": [
+      {
+        "offset": 76,
+        "name": "maybe_targetWidget",
+        "type": "Ui_Widget*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "(**(code **)(**(int **)(param_1 + 0x4c) + 0x18))(*(int **)(param_1 + 0x4c),1/0) - a widget whose virtual slot +0x18 is the show/hide setter; both the +4C pointer and slot index are used consistently."
+      },
+      {
+        "offset": 712,
+        "name": "enableFlagIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.55,
+        "evidence": "cVar1 = *(char*)(param_1 + 0x2c8); value 0 -> work flag at +0x27508+0x1A8, 1 -> +0x1A7, 2 -> +0x1A9; any other value skips the enable path. This selects which story-progress flag gates the item."
+      }
+    ]
+  }
+]

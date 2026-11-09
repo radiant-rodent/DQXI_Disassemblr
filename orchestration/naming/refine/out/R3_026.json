@@ -1,0 +1,738 @@
+[
+ {
+  "address": "0x00519224",
+  "name": "Snd_ForceAdvanceFrameCounter",
+  "signature": "void Snd_ForceAdvanceFrameCounter(SndFrameTick* slot)",
+  "params": {
+   "param_1": "slot"
+  },
+  "summary": "Unconditional twin of Snd_AdvanceFrameCounter: waits on the slot's sync handle (svcWaitSynchronization1), re-arbitrates it (svc 0x19) and bumps the transfer frame byte at +0x131D without testing whether a frame period elapsed. Sound_GetDisplayTime and Sound_WaitForDisplayTime call it when they must advance the transfer frame immediately.",
+  "confidence": 0.55,
+  "evidence": "The sibling 0x005191B4 is now the confirmed Snd_AdvanceFrameCounter (0.50, R3_025) and its body is this one plus the 0x400000 frame-period test; both share the same two named callers (Sound_GetDisplayTime, Sound_WaitForDisplayTime) and the same svc 0x24 / svc 0x19 / +0x131D increment. So the function advances the frame counter unconditionally and never resets anything, which is what the old ResetFrameCounter name claimed.",
+  "previous_name": "maybe_Snd_ResetFrameCounter",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051A4D8",
+  "name": "Sound_Channel_SetPlayState",
+  "signature": "void Sound_Channel_SetPlayState(SoundChannelPage* self, int state)",
+  "params": {
+   "param_1": "self",
+   "param_2": "state"
+  },
+  "summary": "Applies a three-value play state to one DSP channel: stores the state byte at +0xD, and for state 1 issues Sound_DspChannel_Start, clears the pending byte at +3 and issues Sound_DspChannel_Flush (a restart), while state 2 only issues Start. All five callers are sound or movie-track paths, so this is the single place that turns a logical play state into DSP commands.",
+  "confidence": 0.55,
+  "evidence": "All five callers are now named sound paths (Sound_Channel_Allocate, Sound_Voice_ApplyPendingParams, Sound_Voice_UpdatePlayState, Gfx_MovieTrack_Start, Gfx_MovieTrack_UpdateAll) and the two callees are the confirmed Sound_DspChannel_Start / Sound_DspChannel_Flush. The body is a plain switch on the state value, so SetStateSimple was vague rather than wrong; the name now says which state it sets.",
+  "previous_name": "maybe_Sound_Channel_SetStateSimple",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051A5E4",
+  "name": "Svc_UnlinkSharedEntry",
+  "signature": "void* Svc_UnlinkSharedEntry(u32 handle)",
+  "params": {
+   "param_1": "handle"
+  },
+  "summary": "Looks the handle up in the global shared-resource list at 0x007F2358 under its monitor, unlinks the matching entry from the intrusive prev/next list and returns it (NULL when absent). It frees nothing itself: both callers release the returned entry afterwards.",
+  "confidence": 0.5,
+  "evidence": "The body is a complete intrusive doubly-linked-list unlink: Os_LockMonitor/Os_UnlockMonitor around the sentinel at 0x007F2358+0x18, prev/next at entry+4/+8, the handle compared against entry+0xC, and the sentinel repaired when the removed entry was the tail. Both named callers (Svc_ReleaseSharedState, maybe_Svc_ObjectPool_DestroyB) free the returned pointer, which confirms the unlink-only reading.",
+  "previous_name": "maybe_Svc_UnlinkSharedEntry",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051A6C4",
+  "name": "Os_Ipc_SendRequestA0040",
+  "signature": "unsigned int Os_Ipc_SendRequestA0040(unsigned int resourceId)",
+  "params": {
+   "param_1": "resourceId"
+  },
+  "summary": "Sends the fixed IPC command 0x000A0040 with one parameter: writes the header and the resource id into the calling thread's TLS command buffer (TLS+0x80 / TLS+0x84), issues svcSendSyncRequest (svc 0x32) on the session handle at 0x007AF900 and returns the response word on success. The shared-resource release paths use it before freeing an entry.",
+  "confidence": 0.5,
+  "evidence": "Disassembly-level reading of the body: coproc_movefrom_User_R_Thread_and_Process_ID is the mrc p15 TLS read, TLS+0x80 is the IPC command buffer, software_interrupt(0x32) is svcSendSyncRequest and the handle comes from the global 0x007AF900. The old mechanical SvcCommandA0040 name described the constant, not the operation; the callers (Svc_ReleaseSharedState, Svc_ReleaseSharedResources, maybe_Svc_ObjectPool_DestroyB) are all teardown paths.",
+  "previous_name": "maybe_Os_SvcCommandA0040",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0053242C",
+  "name": "maybe_Gfx_AllocGraphicsBlockByRegion",
+  "signature": "int maybe_Gfx_AllocGraphicsBlockByRegion(int address, int block, int regionType, unsigned int arg4, int cmdBuf, int force)",
+  "params": {
+   "param_1": "address",
+   "param_2": "block",
+   "param_3": "regionType",
+   "param_4": "arg4",
+   "param_5": "cmdBuf",
+   "param_6": "force"
+  },
+  "summary": "Selects a graphics memory region by kind (1 -> the 0x20000-byte region, 2 -> the 0x30000-byte region), asks that region's allocator (the function pair returned by 0x006BA1DC) for a block and, when a block came back or force is set, submits the resulting transfer through Gfx_CmdQueue_SubmitEntry or SubmitEntryDirect; returns the block pointer. The old Free verb was wrong: the only caller stores the returned pointer.",
+  "confidence": 0.45,
+  "evidence": "The body never releases anything: it calls the region allocator through the function pointer from 0x006BA1DC with the region size (0x20000 / 0x30000) and returns its result, and Gfx_ModelInstance_InitFromResource (the only caller) zeroes the block field, calls this and stores the returned pointer. The region kind is the only thing the two branches change, so the name now says alloc-by-region instead of free-by-type.",
+  "previous_name": "maybe_Mem_FreeGraphicsBlockByType",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00525494",
+  "name": "Gfx_TryConvertBuffer",
+  "signature": "int Gfx_TryConvertBuffer(int handle, int arg2, int arg3, int src, int dst)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "src",
+   "param_5": "dst"
+  },
+  "summary": "Boolean guard around the buffer conversion at 0x00505FD8: rejects a -1 handle or a null source/destination and returns 1 only when the conversion does not report the high-bit error flag. The disassembly shows the whole function is 0x44 bytes, so the 632-byte size is Ghidra merging the following routine.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x00525494..0x005254D4 is only 0x44 bytes (a new function starts at 0x005254D8), and it is a pure success/failure wrapper: cmn r0,#1 / cmpne r3,#0 / cmpne ip,#0 then bl 0x505FD8 and tst r0,#0x80000000. So it reports whether the conversion succeeded rather than copying a buffer, which is what CopyBufferChecked implied.",
+  "previous_name": "maybe_Gfx_CopyBufferChecked",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00543484",
+  "name": "Sound_Stream_QueueTeardown",
+  "signature": "void Sound_Stream_QueueTeardown(SoundArchive* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Queues the sound-stream teardown command: allocates a command buffer, tags it 0x33, stores the stream player as its payload, pushes it on the sound work queue and waits until the queue has consumed it, then clears the player's f_218/f_21C handles. Called from Sound_StreamPlayer_Setup (rollback) and Sound_StreamPlayer_Release.",
+  "confidence": 0.55,
+  "evidence": "Both callers are now named Sound_StreamPlayer_Setup and Sound_StreamPlayer_Release, and the body is the Snd_QueueCommandBuffer + Os_WorkQueue_Push idiom with tag 0x33 and the player as payload; nothing here touches an Fs archive. The Fs_Archive prefix was the wrong subsystem.",
+  "previous_name": "maybe_Fs_Archive_QueueTeardown",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00543028",
+  "name": "maybe_Sound_Stream_CloseRecordTable",
+  "signature": "bool maybe_Sound_Stream_CloseRecordTable(SoundArchive* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the sound stream's record table: when it is open (f_38 != 0) it restores the default state (f_18 = 0x007E7560, f_1C = 0x20, f_20 = 0.9f, f_24 = 0, f_28 = -1), drains the pending record list at f_C, releases the work-buffer blocks through 0x00556C04 and clears f_2C/f_30/f_34/f_38. Its only caller is Sound_StreamPlayer_Release.",
+  "confidence": 0.45,
+  "evidence": "The only caller is now the named Sound_StreamPlayer_Release, so the Fs_Archive prefix was the wrong subsystem; the body is the documented inverse of 0x00542EE4 (same five fields, same 0x20 / 0.9f defaults) plus the work-buffer release. What the table at f_38 actually holds is still unproven, so the confidence stays below 0.5.",
+  "previous_name": "maybe_Fs_Archive_CloseRecordTable",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00547E7C",
+  "name": "maybe_Sound_Stream_QueueWork",
+  "signature": "void maybe_Sound_Stream_QueueWork(SoundWorkItem* item, u32 reserved, u32 reserved2, u32 context)",
+  "params": {
+   "param_1": "item",
+   "param_2": "reserved",
+   "param_3": "reserved2",
+   "param_4": "context"
+  },
+  "summary": "Initialises a sound work item (clears +0x54, self-links +0x7C/+0x80, copies the queue head from +0x14) and enqueues it on the engine's job queue under the queue monitor, signalling the queue afterwards. The readable body overruns into 0x00547EB0 and carries an unaff_r4, so the argument list is not trustworthy.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the only caller (0x005543B0) is still unnamed and the readable body is damaged (unaff_r4) and overruns into the next function. The disassembly cited in the previous pass shows the real function is only 0x34 bytes and ends in a tail call to the engine, which fits the queue-work reading but does not prove the class.",
+  "previous_name": "maybe_Sound_Stream_QueueWork",
+  "previous_confidence": 0.48,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0055C84E",
+  "name": "maybe_Text_BuildGlyphQuadsThumb",
+  "signature": "void maybe_Text_BuildGlyphQuadsThumb(int self, u32 count, float * chars, float * layout)",
+  "params": {
+   "param_1": "self",
+   "param_2": "count",
+   "param_3": "chars",
+   "param_4": "layout"
+  },
+  "summary": "Thumb fragment of the glyph-quad builder: the same per-character transform/UV loop as Text_BuildGlyphQuads (0x0055B984), which appears both as its caller and as its callee, so this is a mid-function split symbol rather than a separate routine. The body is damaged (unaff_r6/unaff_r7, BADSPACEBASE), so nothing beyond glyph-quad code is verifiable.",
+  "confidence": 0.3,
+  "evidence": "The callee list contains 0x0055B984 Text_BuildGlyphQuads, which is also the only caller: the signature of a split symbol inside that function (FACTS.md: mid-function split symbols cause fake truncation). The remaining callees (Font_GetGlyphCell, Font_GetGlyphQuadUV, Text_BuildCharTransform) confirm glyph-quad code and rule out item lookups, but the damaged frame keeps the confidence at 0.3.",
+  "previous_name": "maybe_Text_BuildGlyphQuadsThumb",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0055CE34",
+  "name": "maybe_Gfx_CmdBuf_ValidateSlot",
+  "signature": "void maybe_Gfx_CmdBuf_ValidateSlot(GfxCmdBuf* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Reads the command buffer's current slot (self->f_18 indexed by its own f_18 word, stride 0xC), computes the base + index*0x48 entry address and, when the slot's end index and write index disagree, falls into the 12 x 0x70-byte construct-array path. The readable C stops at that call because the Thumb CRT helper std_ConstructArray is mis-marked noreturn, so the 540-byte body is not covered.",
+  "confidence": 0.4,
+  "evidence": "All three callers are now named command-buffer/overlay routines (Gfx_SubmitSortedElement, Gfx_Overlay_FlushQuads, Gfx_Overlay_SubmitQuad), which fixes the class, but the readable body ends at std_ConstructArray, the known Thumb blx-to-CRT mis-marking (FACTS.md), so the remaining 500 bytes are unread and the verb stays unproven.",
+  "previous_name": "maybe_Gfx_CmdBuf_ValidateSlot",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0059F36C",
+  "name": "maybe_Battle2DUnit_BindPartyMember",
+  "signature": "void maybe_Battle2DUnit_BindPartyMember(void* self, unsigned int arg2, unsigned int arg3, unsigned int dataKey)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "dataKey"
+  },
+  "summary": "Virtual-slot initialiser: clears the unit's slot ids to -1, resolves the action row for self->f_1230 through 0x0063FD24 and, when the row is valid (f_147 != -1), copies the id pair f_122C/f_1230 to f_2A14/f_2A18, rebuilds the embedded FieldParty at +0x17E8 from the shared params at +0x50, runs Battle_Actor_Init on it and raises f_2B63.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the function still has no callers at all, so the class cannot be confirmed. The callee set is now fully named (Game_GetDataManager, FieldParty_InitFromParams, Battle_Actor_Init) and shows it initialises an embedded FieldParty/Battle_Actor from an action row, which is consistent with binding a party member but does not prove the Battle2DUnit owner.",
+  "previous_name": "maybe_Battle2DUnit_BindPartyMember",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005D27F0",
+  "name": "Ui_ObjectList_ResetSlots",
+  "signature": "void Ui_ObjectList_ResetSlots(UiObjectList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the object list and releases its ten 0xC0-byte slots at +0x88, then marks the list as having no owner (f_808 = 0xFF). It is the reset-to-empty form of the confirmed 0x005D1978 Ui_ObjectList_InitSlotArray, which stores an owner pointer instead, and it is called from both Field_Gimmick_Ctor and Field_UiGimmick_Dtor.",
+  "confidence": 0.5,
+  "evidence": "Identical body to the confirmed 0x005D1978 Ui_ObjectList_InitSlotArray (Ui_ObjectList_Clear plus ten Effect_Instance_ReleaseResources calls at self + i*0xC0 + 0x88), differing only in the f_808 store: 0xFF here versus the owner pointer there. Because it runs from both Field_Gimmick_Ctor and Field_UiGimmick_Dtor it is a reset, not an init, so the name was corrected rather than confirmed.",
+  "previous_name": "maybe_Ui_ObjectList_InitSlotArrayB",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005D35B8",
+  "name": "maybe_Field_Gimmick_ReleaseRowHandle",
+  "signature": "void maybe_Field_Gimmick_ReleaseRowHandle(UiObjectList* self, int row, int arg3, Heap* heap)",
+  "params": {
+   "param_1": "self",
+   "param_2": "row",
+   "param_3": "arg3",
+   "param_4": "heap"
+  },
+  "summary": "Damaged decompilation: Ghidra stops at a bad instruction right after Os_GetGameWork, so only the caller set is usable. All three callers are Field_Gimmick row/selection routines, which moves the class from Ui_ObjectList to Field_Gimmick; what it releases per row is unverified.",
+  "confidence": 0.3,
+  "evidence": "The readable body is halt_baddata() after Os_GetGameWork, so the old Ui_ObjectList class was a guess. All three callers are now named Field_Gimmick routines (Field_Gimmick_StepSelection, Field_Gimmick_RebuildRows, maybe_Field_Gimmick_UpdateSelectionCursor), which is the only class evidence available; the name was corrected to that class and the confidence lowered to 0.3.",
+  "previous_name": "maybe_Ui_ObjectList_ReleaseRowHandle",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005D5B3C",
+  "name": "maybe_Field_Gimmick_InitHandlerList3B",
+  "signature": "void maybe_Field_Gimmick_InitHandlerList3B(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Child initialiser embedded by Field_Gimmick_Ctor: installs vtable 0x00783F3C on the sub-object returned by 0x005D7C8C, sets its -0x800 / zero defaults, initialises the member pair through Ui_Object_InitMemberPair and constructs three 0x18-byte listeners with std_ConstructArray.",
+  "confidence": 0.45,
+  "evidence": "The only caller is the named Field_Gimmick_Ctor and the body is the same std_ConstructArray(0x18, 3) shape as 0x005D5274, so the gimmick owner is certain; the handler type behind 0x005D7C8C and the vtable 0x00783F3C are still unnamed, so the name stays a layout description.",
+  "previous_name": "maybe_Field_Gimmick_InitHandlerList3B",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005D6BB0",
+  "name": "maybe_Field_Gimmick_InitSlotArray8",
+  "signature": "void maybe_Field_Gimmick_InitSlotArray8(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Child initialiser embedded by Field_Gimmick_Ctor: installs vtable 0x00783DAC then 0x00783F8C on the sub-object returned by 0x005D7C8C, sets the -0x800 default and constructs eight 0x0C-byte slots at +0x14 through std_ConstructArray with 0x005D65D4.",
+  "confidence": 0.45,
+  "evidence": "The only caller is the named Field_Gimmick_Ctor, so the owner is certain, but the slot type (0x005D65D4) and the two vtables are unnamed, so the name can only describe the layout.",
+  "previous_name": "maybe_Field_Gimmick_InitSlotArray8",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005E1368",
+  "name": "maybe_Field_Gimmick_InitParam32",
+  "signature": "void maybe_Field_Gimmick_InitParam32(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small child initialiser embedded by Field_Gimmick_Ctor: installs vtable 0x00783E74 then 0x007840E8, sets -0x800 at +0x10, the none bytes 0xFF at +0x1C and +0x1E, zero at +0x1D and the default 0x1E at +0x20.",
+  "confidence": 0.45,
+  "evidence": "The only caller is the named Field_Gimmick_Ctor, so the owner is certain; the 0x1E default and the vtable 0x007840E8 are still unidentified, so the name describes only the layout.",
+  "previous_name": "maybe_Field_Gimmick_InitParam32",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005E1C88",
+  "name": "maybe_Field_Gimmick_InitParamBlockB",
+  "signature": "void maybe_Field_Gimmick_InitParamBlockB(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second small parameter-block initialiser embedded by Field_Gimmick_Ctor: installs vtable 0x00783E9C then 0x00784110, sets -0x800 at +0x10, the none bytes 0xFF at +0x19, +0x1B, +0x1C and +0x1E, zero at +0x1A and +0x1D and the default 0x1E at +0x20.",
+  "confidence": 0.45,
+  "evidence": "Same none/default-0x1E pattern as 0x005E1368 with a different vtable and field base, and the only caller is the named Field_Gimmick_Ctor; the parameter's meaning is still unknown, so the name keeps the gimmick owner but not the semantics.",
+  "previous_name": "maybe_Field_Gimmick_InitParamBlockB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005E88D4",
+  "name": "maybe_Game_DataManager_NotifyA",
+  "signature": "void maybe_Game_DataManager_NotifyA(void)",
+  "params": {},
+  "summary": "28-byte thunk: takes an argument from r3, resolves the data manager through Game_GetDataManager and forwards the manager pointer to 0x0063F7BC. The two callers are unrelated (Anim_ClipSlot_InitArcMotion, Field_NpcAction_RunTowardTargetStart), so it is a shared notification helper rather than a field-object one.",
+  "confidence": 0.3,
+  "evidence": "No new evidence: 0x0063F7BC still has no readable file and the argument arrives in an unaff register, so neither the forwarded value nor the notification target is known. The named callee Game_GetDataManager does rule out the old Field_Object_NotifyGlobal subsystem.",
+  "previous_name": "maybe_Game_DataManager_NotifyA",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005E88F0",
+  "name": "maybe_Game_DataManager_NotifyB",
+  "signature": "void maybe_Game_DataManager_NotifyB(void)",
+  "params": {},
+  "summary": "Byte-identical template copy of 0x005E88D4 at a second address: Game_GetDataManager followed by 0x0063F7BC(*manager), with the argument taken from r3. Same two unrelated callers.",
+  "confidence": 0.3,
+  "evidence": "No new evidence: identical body to 0x005E88D4 and the same two callers (Anim_ClipSlot_InitArcMotion, Field_NpcAction_RunTowardTargetStart); 0x0063F7BC is still unnamed, so the notification target stays unknown.",
+  "previous_name": "maybe_Game_DataManager_NotifyB",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005F4DCC",
+  "name": "maybe_Anim_Resource_RebindCurrentFrame",
+  "signature": "void maybe_Anim_Resource_RebindCurrentFrame(AnimOwner* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds a frame parameter block with 0x0011FFD8, zeroes the three words after it and, when the object has an animation resource at +0xB8, binds that block to it through Anim_Resource_Bind. Six unrelated callers use it, so it is the shared re-attach path for a model's animation resource.",
+  "confidence": 0.45,
+  "evidence": "The callee is now the named Anim_Resource_Bind and the six callers span unrelated subsystems (Party_Status_SetMemberValue, Gfx_SpriteActor_StopAttachedEffect, Ui_OverlaySlot_UpdateStateMachine, maybe_Ui_Overlay_ApplyEntryTag, maybe_Field_Actor_BuildFromMapRecord, maybe_Model_ApplyCharacterParam), which fits a shared re-attach helper but does not pin what 0x0011FFD8 fills in.",
+  "previous_name": "maybe_Anim_Resource_RebindCurrentFrame",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005F7F30",
+  "name": "Field_SceneNode_TickChildren",
+  "signature": "void Field_SceneNode_TickChildren(SceneNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update for a scene node: runs the base idle/visibility step and then advances every child through virtual slot +0x18. All eight named callers are per-frame update routines, so this is the node's tick.",
+  "confidence": 0.5,
+  "evidence": "The base call is the confirmed Field_SceneNode_ShowWhenIdle and the loop walks the same f_1E0/f_1E4 child list that Field_SceneNode_HideRendererDeep uses, calling virtual slot +0x18 on each child. The eight named callers are all per-frame updates (Field_Gimmick_SetEmoteState, Field_Action_UpdateNutState, Ui_Layout_PlayNutAnim, Battle_AnimWindow_UpdateAttach, Field_Npc_ApplyFaceFromTalk, Cutscene_OpenMessageForActor, Gfx_SpriteNode_TickLifetime, Field_Smithy_UpdateSparkEffect).",
+  "previous_name": "maybe_Field_SceneNode_TickChildren",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00619F98",
+  "name": "maybe_Field_NpcActionBehavior_Ctor",
+  "signature": "void* maybe_Field_NpcActionBehavior_Ctor(void* mem, void* parent, void* def, const char* name, int flags)",
+  "params": {
+   "param_1": "mem",
+   "param_2": "parent",
+   "param_3": "def",
+   "param_4": "name",
+   "param_5": "flags"
+  },
+  "summary": "Constructor of the NPC-action behaviour object: base-constructs through Gfx_ObjectDesc_Ctor4, installs vtable 0x0077FE30 and sets the default interval 0.26f at +0x2C. Created by Field_SetupNpcActionScript with the packed action name.",
+  "confidence": 0.45,
+  "evidence": "The caller Field_SetupNpcActionScript is named and passes the full (buffer, parent, def, name, flags) tuple, and the vtable 0x0077FE30 sits in the same family as Field_NpcMimicAction_Ctor and Monster_AiBehavior_Ctor; the second caller (Ui_Casino_InitRouletteWheel) does not fit, so the class is plausible but not proven.",
+  "previous_name": "maybe_Field_NpcActionBehavior_Ctor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0062564C",
+  "name": "maybe_Ui_Part_SetupFromActorSprite",
+  "signature": "void maybe_Ui_Part_SetupFromActorSprite(void* part, void* actor)",
+  "params": {
+   "param_1": "part",
+   "param_2": "actor"
+  },
+  "summary": "Mirrors an actor's two sprite objects into a UI part: marks both sprite objects dirty, initialises the part's two sub-objects at +8 and +0x2E from the actor, then stores the outfit/attachment bytes at +6, +7, +0x19, +0x1A and +0x1B, choosing between two byte patterns from the sprite sub-offset.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the callees in this range carry names from other subsystems (Craft_BuildIngredientOwnershipList, Ui_SmithMenu_OpenPage, Ui_SmithMenu_GetRecipeAttrBitmask), so they cannot be used to fix the class, and the function has no callers. The body shape (two sprite objects marked dirty, two sub-objects initialised, five bytes stored) is unchanged.",
+  "previous_name": "maybe_Ui_Part_SetupFromActorSprite",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0062A4BC",
+  "name": "maybe_Monster_CountDistinctRecordedKinds",
+  "signature": "int maybe_Monster_CountDistinctRecordedKinds(int monsterTable)",
+  "params": {
+   "param_1": "monsterTable"
+  },
+  "summary": "Builds a 65-word bitmask over the record field +0x22 of every id present in owner+0x3AE4 (also setting the bits of the three related ids found through the table at 0x007273A4), popcounts it and returns that number clamped to 999.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the two callers (Ui_ShopItemInfo_FillStats, Menu_StatusScreen_InitFaceAndCommands) do not fit a monster walk, and the record accessor 0x0063DCA4 has no readable file, so neither the table identity nor the meaning of field +0x22 is proven. The popcount and the 999 clamp are certain from the body.",
+  "previous_name": "maybe_Monster_CountDistinctRecordedKinds",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00629FEC",
+  "name": "maybe_Monster_SumRecordedCounts",
+  "signature": "int maybe_Monster_SumRecordedCounts(int monsterTable)",
+  "params": {
+   "param_1": "monsterTable"
+  },
+  "summary": "Walks all 0x413 (1043) ids, and for each id whose record has a non-zero field +0x22 adds the per-id counter at owner+0x3AE4+id*4; the total is clamped to 0x1869F (99,999) and returned.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the loop bound 0x413 and the record accessor 0x0063DCA4 are unchanged, and the two callers (Ui_ShopItemInfo_FillStats, Menu_StatusScreen_InitFaceAndCommands) still do not fit a monster walk. The old Battle_Unit_CalcActionRange reading is definitively wrong (no action id, no distance, no float), but what the counter means is still open.",
+  "previous_name": "maybe_Monster_SumRecordedCounts",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006299D4",
+  "name": "maybe_ItemBag_CountValidSlots",
+  "signature": "int maybe_ItemBag_CountValidSlots(u32 bagOwner)",
+  "params": {
+   "param_1": "bagOwner"
+  },
+  "summary": "Counts the slots 0..0x59 (90) for which the first accessor 0x0066B534 returns 0 and the second 0x0066AF08 does not return 0xFF. The 90-slot bound matches the DQXI bag size, but the two accessors are mid-function labels inside other routines, so the owner object is not established.",
+  "confidence": 0.4,
+  "evidence": "No new evidence, and the caller set now argues against the bag reading: two of the three callers are Actor2D routines (Actor2D_ResetPartsIfIdle, maybe_Actor2D_ResetIfRegistered) and only Ui_ShopItemInfo_FillStats is item-side. Both accessors (0x0066B534, 0x0066AF08) are mid-function labels inside 0x0066B264 and 0x0066AE3C rather than function starts, so neither can be named.",
+  "previous_name": "maybe_ItemBag_CountValidSlots",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00629AAC",
+  "name": "maybe_ItemBag_CountItemsOfType",
+  "signature": "int maybe_ItemBag_CountItemsOfType(u32 bagOwner)",
+  "params": {
+   "param_1": "bagOwner"
+  },
+  "summary": "Counts the slots 0..0x59 (90) whose type byte from 0x0066AF08 equals 9, i.e. one specific kind rather than an arbitrary type argument.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the only callee 0x0066AF08 is a mid-function label inside 0x0066AE3C, so the slot array and the meaning of the constant 9 are still unproven; the callers (Ui_ShopItemInfo_FillStats, maybe_Ui_PanelGroup_Push) do not settle it either.",
+  "previous_name": "maybe_ItemBag_CountItemsOfType",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0062DDF0",
+  "name": "maybe_Field_NpcAction_MoveTick",
+  "signature": "void maybe_Field_NpcAction_MoveTick(NpcAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "20-byte forwarder used by the NPC move path: it makes one call to 0x0062D6D8 and returns. That callee is currently named Camera_FindEntryCoveringPosition, which does not fit an NPC move tick, so one of the two names must be wrong.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the body is a single call with no argument evidence, and the conflict is unchanged. 0x0062D6D8 is named Camera_FindEntryCoveringPosition (0.50) yet two of its five callers are these NPC-move routines (Field_NpcUpdateMoveState, Field_NpcAction_Move), so either that name or this one is wrong and neither can be settled from the call graph.",
+  "previous_name": "maybe_Field_NpcAction_MoveTick",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0062DF2C",
+  "name": "maybe_Field_NpcAction_UpdatePath",
+  "signature": "void maybe_Field_NpcAction_UpdatePath(int actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "32-byte forwarder that calls 0x0062D6D8 with mode 3, targetId 0xFFFF and flags 2, i.e. the no-target containment query. Its only caller is Field_NpcAction_UpdateMoveAndStuckCheck.",
+  "confidence": 0.35,
+  "evidence": "No new evidence: the caller Field_NpcAction_UpdateMoveAndStuckCheck is named and the argument tuple (actor, arg2, 3, 0xFFFF, 2) is visible, but the callee still carries the camera name, so whether this updates a path or queries a region is unresolved.",
+  "previous_name": "maybe_Field_NpcAction_UpdatePath",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0062FC04",
+  "name": "maybe_Ui_PokerWindow_GetRowValue",
+  "signature": "u32 maybe_Ui_PokerWindow_GetRowValue(int window, int index)",
+  "params": {
+   "param_1": "window",
+   "param_2": "index"
+  },
+  "summary": "Resolves the poker window's data table through 0x0063DD38 and returns the u16 at +2 of the 4-byte entry selected by the index argument, or the same field from the window's own table at +0x34 when that is set. The readable body returns a value, so the old UpdateAlphaFade verb was wrong.",
+  "confidence": 0.35,
+  "evidence": "The body ends in return (u32)*(u16 *)(iVar2 + 2) on both branches, so it is a getter, not an update; the index argument is compared against the table's count at +0x60 and used as a 4-byte stride, which is why the old delta parameter name was misleading. Three of the four callers are poker-window routines (Ui_PokerWindow_Confirm, Ui_PokerWindow_HandlePayout, maybe_Ui_PokerWindow_SetSelectedItem).",
+  "previous_name": "maybe_Ui_Window_UpdateAlphaFade",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00634114",
+  "name": "maybe_Field_Actor_CanPlaceAtCell",
+  "signature": "u32 maybe_Field_Actor_CanPlaceAtCell(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns 0 when the actor cannot stand where it is: in 2D view when the map cell under it has attribute 9, and in any view when the attached object's kind byte is 13 or 14; otherwise 1.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the only caller is Actor_UpdateModelOnStateChange and the callee names in the 0x0062Cxxx range are unreliable (Ui_Overlay_HasReachedTarget, Ui_HitTestRows, Ui_HitTest_FindCell on Field2D map-cell helpers), so the cell-attribute reading rests on the constant 9 alone. The second condition (object kind 13/14) is not a cell test, which is why the name stays below 0.5.",
+  "previous_name": "maybe_Field_Actor_CanPlaceAtCell",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00634C3C",
+  "name": "maybe_Ui_Overlay_GetSlotScaleY",
+  "signature": "float maybe_Ui_Overlay_GetSlotScaleY(void)",
+  "params": {},
+  "summary": "Returns the global float at 0x007A724C multiplied by a per-mode scale: 7.0f when the mode byte at (work+8)->f_48 + 0x281 is 0, otherwise the +8 field of the record returned by 0x0063D6B8 for that mode. The sibling at 0x00634D74 does the same with +4 and 1.75f.",
+  "confidence": 0.4,
+  "evidence": "Disassembly 0x00634C3C..0x00634C98 is only 0x60 bytes and shows the exact shape: vldr s16 = 7.0f, ldrb r4 = [overlay+0x281], if non-zero vldr s16 = [0x0063D6B8(dm, mode) + 8], then vmul s0 = [0x007A724C] * s16. The two callers (Field_Actor_UpdateWalkInput, DBc) do not fit a UI overlay getter, so the class is unproven even though the arithmetic is now certain.",
+  "previous_name": "maybe_Ui_Overlay_GetSlotScaleY",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0064DF88",
+  "name": "maybe_Ui_BagList_SetLabel",
+  "signature": "void maybe_Ui_BagList_SetLabel(UiBagList* self, int row, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "row",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Labels one list row: when the row is below the active party-member count it takes the member's name through Party_GetMemberActorDataB, otherwise it emits the fixed label id 0xD (tool bag) or 0xE (equipment bag) chosen by the object's +5 flag.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the callees are now named (Party_GetActiveMemberCount, Party_GetMemberActorDataB, Ui_GetCore) and the two text ids 0xD/0xE are visible, but the function has no callers and the emission target 0x00633560 is still unnamed, so whether it sets a label or returns one cannot be settled.",
+  "previous_name": "maybe_Ui_BagList_SetLabel",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0064E054",
+  "name": "Ui_List_IsCursorAtPartyEndRow",
+  "signature": "bool Ui_List_IsCursorAtPartyEndRow(UiList* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "True when the list cursor index equals the number of alive party members, i.e. the cursor sits on the first row after the party rows. A duplicate of the Ui_ListCursor_IsAtPartyEndRow family at 0x0063B5E4.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x0064E054..0x0064E078 is only 0x28 bytes and is exactly bl 0x63A794 (cursor index) / bl 0x63A8A0 (Party_GetActiveMemberCount, now confirmed at 0.65) / cmp / moveq 1 / movne 0, so the 520-byte size is Ghidra merging the following routines. The body is identical to the confirmed Ui_ListCursor_IsAtPartyEndRow family (0x0063B5E4, 0x0063B60C, 0x0063B638).",
+  "previous_name": "maybe_Ui_List_IsCursorAtPartyEndRow",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0063AB0C",
+  "name": "Ui_ListCursor_GetFirstRowAfterParty",
+  "signature": "int Ui_ListCursor_GetFirstRowAfterParty(UiListCursor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns the index of the first row after the party rows: the alive party-member count plus 1, or plus 2 when the extra-row flag at +4 is set.",
+  "confidence": 0.5,
+  "evidence": "Same object and same Party_GetActiveMemberCount call as the confirmed Ui_ListCursor_IsAtPartyEndRow family (0x0063B5E4/0x0063B60C/0x0063B638), which all compare the cursor index against the alive-member count; this one returns count+1, or count+2 when the flag at +4 is set, so GetFirstFreeRow was vague about which row it is.",
+  "previous_name": "maybe_Ui_ListCursor_GetFirstFreeRow",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0063B590",
+  "name": "Party_GetRowCountPlusThree",
+  "signature": "int Party_GetRowCountPlusThree(void)",
+  "params": {},
+  "summary": "Returns the alive party-member count plus 3, the row index of a fixed extra row appended by the bag/equipment list builders.",
+  "confidence": 0.5,
+  "evidence": "Party_GetActiveMemberCount is now confirmed (0.65: Game_GetWork then Party_CountAliveMembers) and the whole 16-byte body is that call plus 3. There is still no caller, so which extra row the +3 addresses cannot be proven and the name states only the arithmetic.",
+  "previous_name": "maybe_Party_GetRowCountPlusThree",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00648BEC",
+  "name": "Party_GetRowCountPlusOne",
+  "signature": "int Party_GetRowCountPlusOne(void)",
+  "params": {},
+  "summary": "Returns the alive party-member count plus 1, i.e. the index of the first row after the party rows.",
+  "confidence": 0.5,
+  "evidence": "Party_GetActiveMemberCount is now confirmed (0.65) and the whole 16-byte body is that call plus 1, which also confirms the previous pass's correction from GetRowCountPlusTwo. There is still no caller, so which list appends that row stays open.",
+  "previous_name": "maybe_Party_GetRowCountPlusOne",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0064DFF0",
+  "name": "Ui_List_GetRowCount",
+  "signature": "int Ui_List_GetRowCount(UiList* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Returns the number of rows a party list needs: the alive party-member count plus one when the extra-row flag at +4 is set.",
+  "confidence": 0.5,
+  "evidence": "Party_GetActiveMemberCount is now confirmed (0.65) and the body is that count plus (flag at +4 != 0); the sibling 0x0063AB0C uses the same flag to return count+1/count+2, so the pair is row count and first row after the rows. No caller exists, so the display bound is still unproven, which is why the old GetDisplayedRowCount wording was dropped.",
+  "previous_name": "maybe_Ui_List_GetRowCount",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0063ECF0",
+  "name": "maybe_Item_IsRecipeCraftable",
+  "signature": "u32 maybe_Item_IsRecipeCraftable(WorkData * self, int recipeIndex, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "recipeIndex",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Checks one crafting recipe against the player's storage: takes the 0x10-byte recipe entry (material count plus a relative pointer to the u16 material ids) and returns 0 as soon as Item_GetStoragePointer cannot resolve one of the materials. The 1856-byte symbol also contains a second entry point at 0x0063EEAC, which is what most of the listed callers actually call.",
+  "confidence": 0.45,
+  "evidence": "The 155 xref callers do not call 0x0063ECF0: the asm shows a separate entry at 0x0063EEAC (after the bx lr at 0x0063EEA8) that reads [r3,#0x2EC] and is the real target of those bl instructions, so Ghidra merged two routines into one symbol and the caller count neither supports nor contradicts the recipe reading. The 0x0063ECF0 entry itself walks a 0x10-byte row of u16 material ids through Item_GetStoragePointer, which is the recipe check.",
+  "previous_name": "maybe_Item_IsRecipeCraftable",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00646BB4",
+  "name": "maybe_Ui_BagCategory_FilterAvailable",
+  "signature": "void maybe_Ui_BagCategory_FilterAvailable(u32* out, BagListOwner* owner, int category)",
+  "params": {
+   "param_1": "out",
+   "param_2": "owner",
+   "param_3": "category"
+  },
+  "summary": "Keeps only those of the seven category bytes that have a matching entry in the owner, packing the survivors into the 7-byte result list: it fills a 7-byte list through 0x00646C4C, pre-fills the output with 0xFF and copies each byte whose membership test 0x003AA574 succeeds.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the membership test 0x003AA574 is still named SkillPanel_CanUnlockSkill and the list filler 0x00646C4C is still maybe_Ui_Part_BuildAnimSlotList, both from other subsystems, so the bag-category reading rests on the 7-byte width and the 0xFF fill. The two callers (Ui_PlateWidget_BindEntry, Ui_ItemRows_RefreshRows) are UI-side and consistent with it.",
+  "previous_name": "maybe_Ui_BagCategory_FilterAvailable",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00647F90",
+  "name": "maybe_DataTable_IsIndexValidB",
+  "signature": "bool maybe_DataTable_IsIndexValidB(int* plate)",
+  "params": {
+   "param_1": "plate"
+  },
+  "summary": "Table accessor: when the style byte at plate[0] is below 0x1F it fetches the table header with 0x0063F93C and returns 0 if the sub-index at plate+0x10 is beyond the header's limit at +8; otherwise 1.",
+  "confidence": 0.4,
+  "evidence": "No new evidence, and the header getter 0x0063F93C is a mid-function label inside 0x0063F6D4 (Ui_ListRow_SumRowHeights, 1176 bytes), so the table-header reading rests on a merged symbol. The four callers are Party_* routines (Party_GetActorNoForCharacter, Party_BuildUsedCharacterList, Party_FindEntryByType, maybe_Battle_Group_BuildFromString_Tail), which points at a party/character table but does not name it.",
+  "previous_name": "maybe_DataTable_IsIndexValidB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00647FD0",
+  "name": "maybe_DataTable_GetEntryB",
+  "signature": "void* maybe_DataTable_GetEntryB(int* plate)",
+  "params": {
+   "param_1": "plate"
+  },
+  "summary": "Table accessor: resolves the header with 0x0063F93C, follows the +0xC relative pointer of the header and returns the 5-byte entry selected by the sub-index at plate+0x10.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the body returns a pointer into a 5-byte-stride array and writes nothing, which definitively rules out the old SetRightMargin name, but the header getter 0x0063F93C is a mid-function label inside 0x0063F6D4 and the section at +0xC is unnamed, so which table this is stays open.",
+  "previous_name": "maybe_DataTable_GetEntryB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00648008",
+  "name": "maybe_DataTable_IsIndexValidA",
+  "signature": "bool maybe_DataTable_IsIndexValidA(int* plate)",
+  "params": {
+   "param_1": "plate"
+  },
+  "summary": "Table accessor: when the style byte at plate[0] is below 0x1F it fetches the header with 0x0063F93C and returns 0 if the sub-index at plate+0x10 is beyond the header's first limit word; otherwise 1.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: like its sibling 0x00647F90 this is a bounds check against the 0x0063F93C header (limit at +0), not a SetTopMargin, and the predicate returns 1/0 (the void signature in the header is Ghidra dropping the return). The header getter is a mid-function label inside 0x0063F6D4, so the table identity is unproven.",
+  "previous_name": "maybe_DataTable_IsIndexValidA",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00648048",
+  "name": "maybe_DataTable_GetEntryA",
+  "signature": "void* maybe_DataTable_GetEntryA(int* plate)",
+  "params": {
+   "param_1": "plate"
+  },
+  "summary": "Table accessor: resolves the header with 0x0063F93C, follows its +4 relative pointer and returns the 5-byte entry selected by the sub-index at plate+0x10.",
+  "confidence": 0.4,
+  "evidence": "No new evidence: the body returns a pointer into a 5-byte-stride array from the header's +4 section and never writes a margin, so the old SetBottomMargin name was wrong; the header getter is a mid-function label inside 0x0063F6D4, so the section's meaning stays unknown.",
+  "previous_name": "maybe_DataTable_GetEntryA",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00652ED8",
+  "name": "maybe_Battle_Ui_TargetGroup_ScaleBounds",
+  "signature": "void maybe_Battle_Ui_TargetGroup_ScaleBounds(void* self, void* bounds)",
+  "params": {
+   "param_1": "self",
+   "param_2": "bounds"
+  },
+  "summary": "Scales the target group's bounds: multiplies self+0x28 by the model scale at (self+0x2C)+0x15C and a constant, calls 0x00673DC8 with that float, then walks the float pairs of the bounds struct and divides each by the scale.",
+  "confidence": 0.4,
+  "evidence": "Disassembly 0x00652ED8 shows real float work, not an init: vldr s1 = [r0,#0x28], vldr s2 = [[r0,#0x2C]+0x15C], vmul s1 = s1*s2, vmul s0 = s1*const, bl 0x673DC8, then ldrb [r4] / vldmia {s1,s2} / vadd / vmul / vcmpe / vdiv over the bounds struct. All three callers are named battle target-group routines (UpdateCornerAnimA, UpdateCornerAnimB, CalcGroupBounds), so the class holds but the verb was wrong.",
+  "previous_name": "maybe_Battle_Ui_TargetGroup_InitBounds",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x006541E0",
+  "name": "maybe_Ui_ListWindow_GetRowFlag",
+  "signature": "u8 maybe_Ui_ListWindow_GetRowFlag(void * self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns the flag byte of the row under the cursor of a list: index = (cursorTarget->f_C * 10 + rowIndex) - firstVisibleRow(vtable+0x68), read from the 10-byte row records at self+0x78.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the 10-byte row stride at +0x78 and the vtable+0x68 first-visible-row helper are the same layout Ui_ListWindow_UpdateScroll works on, but the six callers split between the tactics window (Ui_SakusenWindow_UpdateCounter, Ui_SakusenWindow_Confirm) and casino slot init (Ui_CasinoSlotQueen_Init, Ui_CasinoSlotFreeSpin_Init, Ui_CasinoSlotMetalChange_Init), so the class is not established.",
+  "previous_name": "maybe_Ui_ListWindow_GetRowFlag",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006650F4",
+  "name": "maybe_Font_Atlas_FindPageForGlyph",
+  "signature": "void maybe_Font_Atlas_FindPageForGlyph(FontAtlasSet* self, u32 target, char* outPage, u8* outCell)",
+  "params": {
+   "param_1": "self",
+   "param_2": "target",
+   "param_3": "outPage",
+   "param_4": "outCell"
+  },
+  "summary": "Selects the page and cell whose stored byte is the nearest value at or below target (ties keep the current best), scanning every page's eleven values; with no pages it returns page 0 / cell 10 untouched.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the page resolver 0x006638D8 is still unnamed and the two callers (Anim_Clip_Build, Ui_List_FindRowIdAtPoint) do not fit a font atlas, so the glyph reading is an assumption. The body only maps a numeric value to a (page, cell) pair by nearest-value search, which is why the summary says value rather than glyph.",
+  "previous_name": "maybe_Font_Atlas_FindPageForGlyph",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00667B40",
+  "name": "Field2D_MapChip_ResolvePositionAtOffsetAlt",
+  "signature": "void Field2D_MapChip_ResolvePositionAtOffsetAlt(Field2DPosition* out, Field2DObject* obj, u32 offset)",
+  "params": {
+   "param_1": "out",
+   "param_2": "obj",
+   "param_3": "offset"
+  },
+  "summary": "Maps a chip offset to a world position: takes the object's cell position, checks the neighbouring chip, adds the per-offset pixel delta from 0x005C0A30 and transforms the point through Field2D_Actor_TransformPosition; fills x/y or zeroes the output when the neighbour check fails.",
+  "confidence": 0.5,
+  "evidence": "Both callers are now named Field2D map-chip routines (Field2D_MapChip_QueryCollisionAt, Field2D_MapChip_FindReachablePath) and all three callees are Field2D (Field2D_Sprite_CheckNeighbour, Field2D_Actor_TransformPosition, Field2D_MapChip_PackLayerChipIds), so the subsystem is certain; the body reads the cell position, adds the offset delta and transforms it, writing x/y or zeroing the output.",
+  "previous_name": "maybe_Field2D_MapChip_ResolvePositionAtOffsetAlt",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x006713D4",
+  "name": "maybe_Field2D_Map_SetVariantCallback",
+  "signature": "void maybe_Field2D_Map_SetVariantCallback(MapRoot* self, u32 arg2, u32 variant, int mode, int apply)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "variant",
+   "param_4": "mode",
+   "param_5": "apply"
+  },
+  "summary": "Installs or clears the per-variant callback of a 2D map node: modes 0 and 1 build the map-specific callback descriptor (0x0070D2CC with 0x006720F0 or 0x00672070) and call Field2D_SpriteNode_SetCallback, mode 2 rebuilds the variant object through 0x005C03C4, and every non-apply branch releases the old object at +0xA0 first.",
+  "confidence": 0.45,
+  "evidence": "No new evidence: the function has no callers, and although three of the four branches end in the confirmed Field2D_SpriteNode_SetCallback / ResetCallback, mode 2 rebuilds the variant object through 0x005C03C4, so the function does more than set a callback and the name stays below 0.5.",
+  "previous_name": "maybe_Field2D_Map_SetVariantCallback",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ }
+]

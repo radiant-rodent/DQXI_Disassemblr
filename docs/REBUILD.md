@@ -5,14 +5,14 @@
 The retail baseline is immutable. Verify it with:
 
 ```powershell
-python tools/verify.py
+python -m tools.verify
 ```
 
 `build/code.bin`, `build/code.compressed.bin`, and `build/DQXI.3ds` are produced by:
 
 ```powershell
-python tools/build.py
-python tools/recompile_game.py
+python -m tools.build
+python -m tools.recompile_game
 ```
 
 `recompile_game.py` refuses to pass unless every hash matches retail.
@@ -23,7 +23,7 @@ python tools/recompile_game.py
 2. Rebuild the PACK and a modified ROM:
 
 ```powershell
-python tools/patch_game.py --map b001_101a
+python -m tools.patch_game --map b001_101a
 ```
 
 What it does:
@@ -74,7 +74,7 @@ and grown) all pass this check.
 The assembly tree is still canonical:
 
 ```powershell
-python tools/build.py
+python -m tools.build
 ```
 
 `tools/build.py` reassembles `asm/` and compresses with the CTR BLZ codec. Any source-replacement
@@ -82,15 +82,15 @@ path must keep the same verification gate. See `docs/CODE.md`.
 
 ## Safety
 
-- Work on copies; the retail image and `..\reference project` are read-only.
+- Work on copies; the retail image and `..\3DS_Translate` are read-only.
 - Keep `editor_projects/` under version control for level work.
 - A PACK that grows is appended to the RomFS automatically; boot-test such images in an emulator.
 
 ## Verify the hash tree directly
 
 ```powershell
-python tools/romfs_hash.py --verify original/romfs.bin
-python tools/romfs_hash.py --verify build/patched/romfs.bin
+python -m tools.romfs_hash --verify original/romfs.bin
+python -m tools.romfs_hash --verify out/3ds/romfs.bin
 ```
 
 Expected: `bad_level2=0`, `bad_level1=0`, `bad_master=0`, `ok=True`.
@@ -98,7 +98,7 @@ Expected: `bad_level2=0`, `bad_level1=0`, `bad_master=0`, `ok=True`.
 ## Generic asset patch
 
 ```powershell
-python tools/patch_asset.py --pack 3d/model/ani00000a_h.pack \
+python -m tools.patch_asset --pack 3d/model/ani00000a_h.pack \
   --member ani00000a_h.bch --replacement build\model_patch_test\patched.bch
 ```
 

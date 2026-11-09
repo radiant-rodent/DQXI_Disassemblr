@@ -1,0 +1,1790 @@
+[
+ {
+  "address": "0x005F4034",
+  "name": "Field_SceneObject_RefreshModelAndCellVisibility",
+  "signature": "void Field_SceneObject_RefreshModelAndCellVisibility(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object (f_78/f_7c model/anim ids, f_98/f_9c cached size, f_b4/f_ac/f_b0 map cell, f_1d1 visible flag)"
+  },
+  "summary": "Recomputes the cached sprite size (f_98/f_9c) from the stored model/animation ids, re-applies the current motion/state through 0x5F36E0, and then re-tests the object's map cell: if the cell is missing or considered solid the object is marked hidden (f_1d1 = 0).",
+  "confidence": 0.5,
+  "evidence": "Body is the same f_78/f_7c -> (f_78*8+8, f_7c<<3) or animator-scaled size conversion as Field_SceneObject_SetModelSize (0x5F3500); then func_005F36E0(self,self->f_80,1) (state/anim id setter) and func_002D1814/func_0062F0E0/func_0062CB64/func_0062C23C cell test that clears f_1d1. Callers: Field_SceneObject_ApplyTransform (0x180910), Actor_ApplyModelRecord/Fast (0x28E334/0x28E37C), Field_Actor_RefreshModelVariant (0x3E7254), Field2D sprite bind."
+ },
+ {
+  "address": "0x005F4174",
+  "name": "maybe_Field_SceneObject_ApplyLinkedHeightOffset",
+  "signature": "void maybe_Field_SceneObject_ApplyLinkedHeightOffset(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object with a linked object at f_298"
+  },
+  "summary": "Refreshes the object (via 0x28E37C, which itself re-runs the model/cell refresh) and then adds the fixed-point height field f_10 of the linked object at f_298 to the cached height f_9c, so the object grows by the linked object's extra height.",
+  "confidence": 0.35,
+  "evidence": "func_0028E37C() (ApplyModelRecordFast path) then `VectorSignedToFloat(self->f_298->f_10)` added to self->f_9c (the cached Y size set by 0x5F3500/0x5F4034). No callers found, so it is probably only reached through a vtable slot."
+ },
+ {
+  "address": "0x005F41AC",
+  "name": "Gfx_Trail_UpdateFollowPath",
+  "signature": "void Gfx_Trail_UpdateFollowPath(FieldSceneObject* self, int frameStep, int flags)",
+  "params": {
+   "param_1": "trail/scene object (f_1b0 segment count, f_1b4 curve, f_1b8 samples, f_1c0 sample count, f_1d4..f_1e0 state)"
+  },
+  "summary": "Per-frame update of the model's ribbon/trail: advances the running parameter along the sampled curve, clamps it to the segment length, tests the map cell under the trail origin and updates the trail's active flag and cached width/length values.",
+  "confidence": 0.6,
+  "evidence": "Uses exactly the trail fields described for Gfx_Trail_BuildPath (0x5F308C): self[0x6c]=f_1b0 segment count, self[0x6d]=f_1b4 curve, self[0x6e]=f_1b8 sample table (8 floats/sample = cubic in 2D), self[0x70]=f_1c0 sample count; converts samples with func_0063C838/func_0063C860 (animator space) like 0x5F308C; calls func_002D7BBC map-cell test and sets the moving flag at 0x1c5. Sole caller the class Update vtable func_005F38C4."
+ },
+ {
+  "address": "0x005F48A8",
+  "name": "maybe_Gfx_Trail_ClampProgress",
+  "signature": "void maybe_Gfx_Trail_ClampProgress(FieldSceneObject* self)",
+  "params": {
+   "param_1": "trail/scene object"
+  },
+  "summary": "Small helper used by the trail update: fetches the curve sample array through the object's virtual getter, compares the current progress against the segment length and clamps it, then releases/rebinds the animator frame.",
+  "confidence": 0.3,
+  "evidence": "Only caller is Gfx_Trail_UpdateFollowPath (0x5F41AC). Calls (**(code**)(*arg1+0x70))(arg1) - the same virtual that returns the curve samples in 0x5F41AC - compares self[0x76]/self[0x77] and calls func_002D1AC4(animator,arg1). Ghidra lost control flow here ('bad instruction data'), so only the field usage is certain."
+ },
+ {
+  "address": "0x005F491A",
+  "name": "maybe_Gfx_Trail_UpdateInterpolated",
+  "signature": "void maybe_Gfx_Trail_UpdateInterpolated(int unitIndex, unsigned frame, int flags)",
+  "params": {
+   "param_1": "object index (index*0x10 selects the object)",
+   "param_2": "frame/time value"
+  },
+  "summary": "Second variant of the trail follow-path update: interpolates the trail origin between two frames and recomputes the segment distance and the active flag, mirroring what Gfx_Trail_UpdateFollowPath does for a single frame.",
+  "confidence": 0.3,
+  "evidence": "Callee set is identical to 0x5F41AC (func_002D1814, func_002D7BBC, func_005F33C4, func_005F36E0, func_0063C838, func_0063C860, func_006731EC); body interpolates two positions (in_d8/in_d9, in_s20) with a weight and then does the same SQRT(dx*dx+dy*dy) and f_1c5 flag write. Ghidra marked it thumb with unrecoverable registers."
+ },
+ {
+  "address": "0x005F4E48",
+  "name": "Field_SceneObject_ForceVisible",
+  "signature": "void Field_SceneObject_ForceVisible(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object (f_1d1 visible, f_1d2 remembered visibility)"
+  },
+  "summary": "Saves the current visibility flag (f_1d2 = f_1d1) and forces the object visible (f_1d1 = 1); field-action code calls this so an actor is always drawn while playing its action.",
+  "confidence": 0.55,
+  "evidence": "Body is exactly `f_1d2 = f_1d1; f_1d1 = 1;` after the base-class notify func_005E78CC. 0x5F37A4 and 0x5F4034 compute f_1d1 as 'cell is not solid' (the visible flag), so f_1d1=1 means visible. Callers: Actor_TryPlayActionSeq11 (0x22D1F8), Field_Actor_OnActionEvent (0x3E7728), 0x5E7480 (action start)."
+ },
+ {
+  "address": "0x005F4E94",
+  "name": "maybe_Field_SceneObject_SetSubObjectBc",
+  "signature": "void maybe_Field_SceneObject_SetSubObjectBc(FieldSceneObject* self, void* handle)",
+  "params": {
+   "param_1": "scene object",
+   "param_2": "new sub-object handle (f_bc)"
+  },
+  "summary": "Replaces the attached sub-object/handle stored at f_bc: detaches the old one, stores the new handle and attaches it to the object, then refreshes through the class helper.",
+  "confidence": 0.4,
+  "evidence": "`func_005E785C(self,self->f_bc); self->f_bc = arg2; func_005E7650(self,arg2);` - a textbook detach/store/attach setter. Callers Field_CreateCollisionSprite (0x18057C) and Actor_CreateActionTable (0x22AF9C) pass a collision/action handle, so f_bc is an attached sub-object, not the render model (that is f_b8)."
+ },
+ {
+  "address": "0x005F4ED0",
+  "name": "maybe_Field_SceneObject_ApplyCellLighting",
+  "signature": "void maybe_Field_SceneObject_ApplyCellLighting(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object (f_b4/f_b0 map cell, f_b8 animator)"
+  },
+  "summary": "Looks up the object's current map cell and, when the cell exists, computes a per-cell value (lighting/colour) and stores it into the animator's field 0x128; used when an actor's model changes state so it picks up the new cell's shading.",
+  "confidence": 0.35,
+  "evidence": "Same cell lookup chain as 0x5F4034 (func_0062F0E0 -> func_0062C388(f_b4) -> func_0062C3B0(f_b0)), then `func_0029E41C()` result written to `self->f_b8->f_128`. Callers: Actor_UpdateModelOnStateChange (0x22C3F4) and Ui_Overlay_ApplySlotSetup (0x235E0C) - both places where a model is (re)bound."
+ },
+ {
+  "address": "0x005F4F34",
+  "name": "maybe_Field_SceneObject_SetSubObjectC0",
+  "signature": "void maybe_Field_SceneObject_SetSubObjectC0(FieldSceneObject* self, void* handle)",
+  "params": {
+   "param_1": "scene object",
+   "param_2": "new sub-object handle (f_c0)"
+  },
+  "summary": "Identical to Field_SceneObject_SetSubObjectBc but for the second attached sub-object at f_c0 (a second collision/effect handle): detach old, store new, attach.",
+  "confidence": 0.45,
+  "evidence": "`func_005E785C(self,self->f_c0); self->f_c0 = arg2; func_005E7650(self,arg2);` - the same pattern as 0x5F4E94 but with the sibling field f_c0; both f_bc and f_c0 are dispatched through vtable slot +0x3c in 0x5F362C. Callers: Field_CreateCollisionSprite, Actor_Dtor, Gfx_CreateFColAnimator, Field_CreateCollisionObject."
+ },
+ {
+  "address": "0x005F4F5C",
+  "name": "maybe_Field_SceneObject_SetAnimatorLastFrame",
+  "signature": "void maybe_Field_SceneObject_SetAnimatorLastFrame(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object (f_b8 animator)"
+  },
+  "summary": "When the object has an animator, forces it to the last frame of its current animation (or frame 0xFFFFFFFF when the animation has no length), used to freeze the model on its final pose.",
+  "confidence": 0.45,
+  "evidence": "`if (f_b8) { uVar1 = (f_b8->f_164 == 0) ? 0xFFFFFFFF : func_0063C78C(); func_002D19C8(f_b8,uVar1); }` - func_002D19C8 is the animator frame/owner tick routine. Callers are all 'stop/finish effect' paths: Gfx_Effect_Update, Gfx_Sprite2D_StopAnim, Field_Marker_UpdatePickupState, Field_Object_PlayDefaultAnim, Actor_StopAttachedEffect."
+ },
+ {
+  "address": "0x005F4FB0",
+  "name": "maybe_Field_SceneObject_SetSubObjectTableValue",
+  "signature": "int maybe_Field_SceneObject_SetSubObjectTableValue(FieldSceneObject* self, int key, int value)",
+  "params": {
+   "param_1": "scene object",
+   "param_2": "key/index to search",
+   "param_3": "value to store"
+  },
+  "summary": "Searches the attached sub-object's table at +0x5C for the entry equal to key and replaces it with value; returns 1 when an entry was updated, 0 otherwise. Used to override a per-slot setting (blend/visibility entry) on the sub-object.",
+  "confidence": 0.35,
+  "evidence": "`piVar2 = &self->f_bc->f_5c; ... if (*piVar2 == arg2) { *piVar2 = arg3; return 1; }` with the end pointer from func_004C3944. Caller Field_Actor_SetMotionBlend (0x3E7CBC) and Field2D_NotifyGlobal (0x5B0238) pass small integer pairs, so this is a table entry replace, not an allocator."
+ },
+ {
+  "address": "0x005F500C",
+  "name": "maybe_Field_SceneObject_SetSubObjectValueAndNotify",
+  "signature": "void maybe_Field_SceneObject_SetSubObjectValueAndNotify(FieldSceneObject* self, int key, int value)",
+  "params": {
+   "param_1": "scene object",
+   "param_2": "key/index",
+   "param_3": "value"
+  },
+  "summary": "Same table-entry replace as 0x5F4FB0 on the f_bc sub-object, but then forwards the change to the derived class through virtual slot +0x78 so the object can react to the new per-slot value.",
+  "confidence": 0.4,
+  "evidence": "Identical search loop over `arg1[0x2f]` (= f_bc) + 0x5c, followed by a tail call `(**(code**)(*arg1 + 0x78))(arg1,arg2,arg3)`; Ghidra notes the indirect jump. Sole caller Gfx_SpriteObject_UpdateFrame (0x4C625C), which sends per-frame values this way."
+ },
+ {
+  "address": "0x005F5078",
+  "name": "Field_SceneObject_FreeModelAndTrail",
+  "signature": "void Field_SceneObject_FreeModelAndTrail(FieldSceneObject* self)",
+  "params": {
+   "param_1": "scene object (f_1b4/f_1b8/f_1bc trail buffers)"
+  },
+  "summary": "Finaliser for the scene object: runs the base-class teardown and, when the object was initialised, drops the render model (f_b8) and frees the three trail buffers (curve, sample table, width table), zeroing the sample count.",
+  "confidence": 0.6,
+  "evidence": "func_005E7AA4() is the base detach/teardown; then f_b8=0 and `func_0010F69C()` (free) on f_1b4, f_1b8, f_1bc plus f_1c0=0 - precisely the trail fields used by Gfx_Trail_BuildPath (0x5F308C). Called from Actor_DetachModelChild / Field_Object_ReleaseChildList."
+ },
+ {
+  "address": "0x005F533C",
+  "name": "maybe_Gfx_EffectPart_ReattachAndApplyParams",
+  "signature": "void maybe_Gfx_EffectPart_ReattachAndApplyParams(GfxEffectPart* self, int a, int b, int c, float s0, float s1)",
+  "params": {
+   "param_1": "effect part (vtable at +0x00, parent actor at f_160, effect id at f_220)",
+   "param_2": "first integer param (passed to vtable+0x70)",
+   "param_3": "second integer param",
+   "param_4": "third integer param",
+   "param_5": "first float param",
+   "param_6": "second float param"
+  },
+  "summary": "Puts the effect part into state 4, re-attaches it to the node derived from its effect id/owner character, and then forwards the original (int,int,int,float,float) parameters to the derived class's apply slot (vtable+0x70).",
+  "confidence": 0.35,
+  "evidence": "Disassembly 0x5F533C: `ldr r0,[r0]; ip=[r0,#0x3c]; r1=4; blx ip` (state 4), `bl 0x3D9780` (func_003D9780 checks the resource id f_220 and owner f_160->f_11c and attaches the node), then `pop; ... bx ip` to vtable+0x70 with the preserved r1/r2/r3/s0/s1. Ghidra could not recover the tail jump (0x5F53F0)."
+ },
+ {
+  "address": "0x005F539C",
+  "name": "maybe_Gfx_EffectPart_ApplyParamsFromVirtual",
+  "signature": "void maybe_Gfx_EffectPart_ApplyParamsFromVirtual(GfxEffectPart* self, int a, int b, int c, float s0, float s1)",
+  "params": {
+   "param_1": "effect part",
+   "param_2": "integer param",
+   "param_3": "integer param",
+   "param_4": "integer param",
+   "param_5": "float param",
+   "param_6": "float param"
+  },
+  "summary": "Asks the object for a derived value through virtual slot +0x7C and immediately applies the caller's (int,int,int,float,float) parameters together with that value through virtual slot +0x70.",
+  "confidence": 0.35,
+  "evidence": "Disassembly 0x5F539C: `ldr r0,[r0]; ip=[r0,#0x7c]; blx ip` then `ldr r2,[r4]; r1=r0; ip=[r2,#0x70]; ... bx ip` with s0/s1 and r2/r3 preserved. Called from the effect/talk code at 0x6E5xxx; the calls there pass a single value, so Ghidra's 4-argument signature is only partly right."
+ },
+ {
+  "address": "0x005F56A0",
+  "name": "maybe_Gfx_EffectPart_BindByName",
+  "signature": "void maybe_Gfx_EffectPart_BindByName(GfxEffectPart* self, GfxNode* source, const char* name, const unsigned* params)",
+  "params": {
+   "param_1": "effect part (f_174 source, f_17c..f_19c inline name, f_1a0..f_1cc params[12], f_1d0..f_1d8 defaults)",
+   "param_2": "source node whose ref-counted resource at f_1e0 is shared",
+   "param_3": "resource/part name",
+   "param_4": "12-word parameter block"
+  },
+  "summary": "Initialises a named effect part: shares the source node's resource block, stores the part name (std::string built from the name argument) inline, resolves the part id for the source's owner, copies the 12-word parameter block and resets the 4-word default block.",
+  "confidence": 0.45,
+  "evidence": "func_001235A4 copies the ref-counted block from arg2->f_1e0 to self->f_74; func_006F4528(auStack,arg3) builds a std::string from the char* name and its 8 words are copied into f_17c..f_198; f_19c = func_00633C38(arg2->f_160,arg3) or g_005F5744; arg4[0..11] -> f_1a0..f_1cc; g_005f5748 -> f_1d0..f_1d8; f_1dc=0. Callers create billboards/effects (Field_Actor_CreateBillboard, Model_CreateBillboardPart, Ui_CasinoJackpot_InitModels, Field_Actor_SpawnAttachedEffect)."
+ },
+ {
+  "address": "0x005F574C",
+  "name": "Gfx_EffectPart_ResetToDefault",
+  "signature": "void Gfx_EffectPart_ResetToDefault(GfxEffectPart* self, int releaseSource)",
+  "params": {
+   "param_1": "effect part",
+   "param_2": "non-zero to release the shared source resource"
+  },
+  "summary": "Resets an effect part back to its defaults: releases the shared source node when asked, clears the part name to the empty string, restores the default part id and copies the built-in default 12-word and 4-word parameter blocks.",
+  "confidence": 0.5,
+  "evidence": "`if (self->f_174 != 0 && arg2 != 0) func_0010EBE4(&self->f_174->f_1e0, &self->f_74)` (release share); func_006F4528(auStack,&g_005f57e8) where 0x5F57E8 holds 4 zero bytes = empty string; f_19c = g_005f57ec; f_1a0..f_1cc = g_005f57f0 block; f_1d0..f_1d8 = g_005f57f4; f_1dc = 3; f_174 = 0. Counterpart of 0x5F56A0, called from detach/stop paths (Model_Actor_StopAttachmentSounds, Ui_Window_CloseExtraSlots, Field_SceneObject_SpawnBreakEffect, 0x5F7F98 release)."
+ },
+ {
+  "address": "0x005F58D0",
+  "name": "maybe_Gfx_EffectPart_SetTargetObject",
+  "signature": "void maybe_Gfx_EffectPart_SetTargetObject(GfxEffectPart* self, unsigned objectHandle)",
+  "params": {
+   "param_1": "effect part (f_160 owner actor, f_144 mode, f_154 target handle)",
+   "param_2": "handle of the object to follow"
+  },
+  "summary": "Points the effect part at the object identified by the handle: extracts the object's transform, converts it into the part's local space and applies it, then stores the handle and switches the part to mode 3 (follow object).",
+  "confidence": 0.45,
+  "evidence": "Handle table lookup `g_005f59e0 + (arg2 & mask)*8` with tag check `arg2>>0xb` (same handle encoding used elsewhere in the game); takes piVar3->f_27/f_29 and calls virtual +0x8C (matrix) + func_00574548 (transform multiply) + func_005F7298 (aim/offset toward point), then `f_154 = arg2; f_144 = 3`. Callers: Field_SceneObject_Register, Field_Action_SetMoveSpeed, Model_Actor_PlayStateAnimation."
+ },
+ {
+  "address": "0x005F59E4",
+  "name": "Gfx_EffectPart_SetTargetPoint",
+  "signature": "void Gfx_EffectPart_SetTargetPoint(GfxEffectPart* self, const float* worldPoint)",
+  "params": {
+   "param_1": "effect part (f_160 owner, f_144 mode, f_148..f_150 stored point)",
+   "param_2": "3D target point"
+  },
+  "summary": "Points the effect part at an explicit world position: applies the point through the aim helper, stores it and switches the part to mode 1 (fixed target point).",
+  "confidence": 0.5,
+  "evidence": "`func_005F7298(self,arg2); self->f_144 = 1; self->f_148/f_14c/f_150 = arg2[0..2]`. The same f_160->f_4d1 'effect dirty' flag as 0x5F58D0. Callers are all attachment updates: FieldParty_UpdateActorAttachments, Gfx_Actor_UpdateMotion, Actor_UpdateTurnAnimation, Actor_UpdateAimPoseIK."
+ },
+ {
+  "address": "0x005F5B94",
+  "name": "Field_Actor_PlayTalkMotionFromTable",
+  "signature": "void Field_Actor_PlayTalkMotionFromTable(FieldActor* self, int motionIndex)",
+  "params": {
+   "param_1": "field actor (f_160 = owner actor)",
+   "param_2": "index into the per-character talk-motion name table (0x24-byte entries)"
+  },
+  "summary": "Builds a talk-motion resource name by concatenating a per-character prefix ('cbla' or 'cbha', chosen from the actor's character id) with the 32-byte entry at motionIndex of the talk-motion table, then asks the actor to play that motion.",
+  "confidence": 0.5,
+  "evidence": "func_006F4528(auStack, \"cbla\"/\"cbha\") at 0x5F5CDC/0x5F5CE4 (verified bytes in code.decompressed.bin), func_00100990 (=strncat) copies 0x20 bytes from `iVar1 + arg2*0x24 + 4`, then func_00222A38(self->f_160, name) plays it. Nearby rodata holds the suffixes \"_yes\", \"_no\", \"_lookaround\", \"_talk0\" (0x5F5C6C..0x5F5CD8). Callers: Sound_PlayActorSeFixed and Gfx_ReleaseTrackedHandles (talk start/end)."
+ },
+ {
+  "address": "0x005F5CEC",
+  "name": "maybe_Gfx_Node_ReleaseChildren",
+  "signature": "void maybe_Gfx_Node_ReleaseChildren(GfxNode* self)",
+  "params": {
+   "param_1": "node (child list head f_1e0 / tail f_1e4)"
+  },
+  "summary": "Detaches the node through the base class and then walks the node's child list calling virtual slot +0x28 (child release) on every child, removing all attached sub-nodes.",
+  "confidence": 0.45,
+  "evidence": "`func_005E74C8()` (base detach) then `for (p=f_1e4; *p != f_1e0; p=p[1]) (**(*p)->vtable[0x28])()`. The same f_1e0/f_1e4 list is iterated in 0x5F6018 (slot 0x20), 0x5F7F30 (0x18) and 0x5F8120 (0x14). Sole caller Model_SyncAttachmentVisibilityByState."
+ },
+ {
+  "address": "0x005F5DF8",
+  "name": "Gfx_Node_FaceObject",
+  "signature": "void Gfx_Node_FaceObject(GfxNode* self, unsigned objectHandle, int applyToMatrix)",
+  "params": {
+   "param_1": "node (orientation quaternion f_120, rotation f_8c..f_98)",
+   "param_2": "handle of the object to look at",
+   "param_3": "non-zero to also copy the resulting rotation into the node matrix"
+  },
+  "summary": "Makes the node face another object: resolves the handle, verifies it is a render node, computes the normalised direction from its position to this node's position and converts it into the orientation quaternion; optionally writes the resulting rotation matrix back.",
+  "confidence": 0.5,
+  "evidence": "Handle-table decode (`g_005f5f20`/`g_005f5f24`, tag `arg2>>0xb`), node-chain walk via `(**(code**)*puVar2)()` / f_c, direction `(obj->f_b0 - self->f_9c, obj->f_b8 - self->f_a4)`, scale by g_005f5f30/SQRT, then func_00614B98(&self->f_120, dir, arg3) and func_00573144(...,&self->f_120,...) -> f_8c..f_98. f_120 is the quaternion set by Gfx_Node_SetEulerRotation (0x5F6C4C)."
+ },
+ {
+  "address": "0x005F6018",
+  "name": "maybe_Gfx_Node_UpdateChildren",
+  "signature": "void maybe_Gfx_Node_UpdateChildren(GfxNode* self)",
+  "params": {
+   "param_1": "node (parent f_174, child list f_1e0/f_1e4)"
+  },
+  "summary": "Per-frame node update: when the node has no parent it first refreshes its own geometry (0x5F6558), then ticks every child through virtual slot +0x20.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_174 == 0) func_005F6558(self); for (... f_1e4 list ...) (**(*p)->vtable[0x20])()`. Same list and pattern as the other node-list routines. Callers: Actor_UpdateDirectionBlend, Field_Object2D_PlaceEffectInFrontOfCamera, Gfx_SpriteNode_UpdateFollowOffset."
+ },
+ {
+  "address": "0x005F6AA0",
+  "name": "Gfx_Node_ApplyTransformMatrix",
+  "signature": "void Gfx_Node_ApplyTransformMatrix(GfxNode* self, const float* matrix)",
+  "params": {
+   "param_1": "node (position f_9c..f_a4, rotation f_8c..f_98, quaternion f_120)",
+   "param_2": "row/column-major transform to apply"
+  },
+  "summary": "Applies a 3x4/4x4 transform to the node: builds the node's own matrix, multiplies it with the incoming matrix, adds the resulting translation to the cached position and derives the new orientation quaternion.",
+  "confidence": 0.5,
+  "evidence": "Copies arg2 rows into locals, func_00573144 (matrix build), func_00574548 (Math_MatrixMultiply), adds the result to `self->f_9c/f_a0/f_a4`, then builds a quaternion from f_8c..f_98 and calls func_00614B98(&self->f_120, quat, 1) + func_00573144 back into f_8c..f_98; sets f_118 (transform dirty flag). Sole caller Model_UpdatePatternTransformA."
+ },
+ {
+  "address": "0x005F6C4C",
+  "name": "Gfx_Node_SetEulerRotation",
+  "signature": "void Gfx_Node_SetEulerRotation(GfxNode* self, const float* eulerAngles, int blend)",
+  "params": {
+   "param_1": "node (quaternion f_120, rotation matrix f_8c..f_98)",
+   "param_2": "Euler angles (x,y,z) in radians",
+   "param_3": "non-zero to update the node matrix as well"
+  },
+  "summary": "Converts an Euler-angle triple into a normalised quaternion (with the game's half-angle helpers) and sets it as the node's orientation, optionally rebuilding the node's rotation matrix from it.",
+  "confidence": 0.55,
+  "evidence": "For each of arg2[0..2]: multiply by g_005f6e18, func_006731EC (floor) / func_00672E44 (fraction), SQRT(1 - s*s) with the g_005f6e28 sign test = sin/cos of half angle; the three half-angle pairs are combined into the quaternion at local_50..fStack_44, normalised by SQRT of its length, then func_00614B98(&self->f_120,&quat,arg3) and func_00573144(...,&self->f_120,g_005f6e30) -> f_8c..f_98. Same field layout as 0x5F6AA0."
+ },
+ {
+  "address": "0x005F747C",
+  "name": "maybe_Gfx_Node_ReleaseEffectSlots",
+  "signature": "void maybe_Gfx_Node_ReleaseEffectSlots(GfxNode* self, int mode)",
+  "params": {
+   "param_1": "node (4 effect-handle slots at 0x204..0x210)",
+   "param_2": "release mode passed to the effect system"
+  },
+  "summary": "Releases the node's four attached effect handles: allocates the shared effect-owner object once (lazily, guarded by a global flag), then for each of the four slots stops the effect and marks the slot free (0xFFFFFC00).",
+  "confidence": 0.45,
+  "evidence": "Loop `i<4`, slot at `arg1 + i*4` field 0x204, call func_0035FC84(handle, slotValue, arg2, arg4, g_005f755c, arg1) then `slot = 0xFFFFFC00`; the lazy init uses g_005f7554/g_005f7558/g_005f7560 and allocates 0x1c bytes with func_0011FE8C + func_0011CFAC. Called from every effect-detach path (Actor_CreateBehaviourTasks, Field_Action_ResetActor, Field_ActorAction_ApplyTransforms, 0x5F7F98 dtor) and from Sound_SetActorSeEnabled."
+ },
+ {
+  "address": "0x005F7578",
+  "name": "Gfx_Node_DrawModel",
+  "signature": "void Gfx_Node_DrawModel(GfxNode* self)",
+  "params": {
+   "param_1": "node (owner actor f_160, scale f_88, position f_9c..f_a4, rotation f_8c..f_98)"
+  },
+  "summary": "Draws the node's model: asks the owner actor for the model matrix, builds the node's world matrix from its position/rotation/scale and submits it to the scene renderer together with the model's motion resource.",
+  "confidence": 0.5,
+  "evidence": "func_00633CAC(self->f_160, &matrix) (Model_ApplyMotionResource), builds locals from f_88/f_9c/f_a0/f_a4/f_8c..f_98, func_00574374 (matrix build) + func_005754C0 (Math_MatrixMultiply), then func_002E7F08 (Gfx_Scene_DrawSpriteVariant) and func_006F202C (render pass). No callers listed: invoked through the node vtable."
+ },
+ {
+  "address": "0x005F784C",
+  "name": "maybe_Gfx_Node_SetCollisionHandle",
+  "signature": "void maybe_Gfx_Node_SetCollisionHandle(GfxNode* self, void* handle)",
+  "params": {
+   "param_1": "node",
+   "param_2": "new collision/controller handle (f_164)"
+  },
+  "summary": "Replaces the node's collision/controller handle at f_164: detach the old handle, store the new one and attach it.",
+  "confidence": 0.4,
+  "evidence": "`func_005E785C(self,self->f_164); self->f_164 = arg2; func_005E7650(self,arg2);` - identical detach/store/attach pattern to the f_bc/f_c0 setters. Callers all create collision objects: Field_SetupEnemyAi, Field_Actor_CreateSprite, Gfx_CollisionProxy_Create, Field_CollisionObject_Init/InitB."
+ },
+ {
+  "address": "0x005F7888",
+  "name": "Gfx_Node_UpdateCullingFlag",
+  "signature": "void Gfx_Node_UpdateCullingFlag(GfxNode* self)",
+  "params": {
+   "param_1": "node (f_219 forced flag, f_80 cull radius, position f_9c/f_a4, flags f_50 bit 1)"
+  },
+  "summary": "Recomputes the node's cull flag: skip if culling is forced off (f_219), otherwise compare the distance from the node to the active camera against the node's cull radius and set/clear bit 1 of f_50 (bit set = needs culling).",
+  "confidence": 0.55,
+  "evidence": "`if (self->f_219) return; if (self->f_80 < g_005f7944) f_50 &= ~2; else { camera = func_006F1EEC()->f_74; dx = camera->f_b0 - f_9c; dz = camera->f_b8 - f_a4; d2 = dx*dx + r*r + dz*dz; if (d2 <= r || d2 < f_80) f_50 &= ~2; else f_50 |= 2; }`. Sole caller Field_UpdateCullingFlag."
+ },
+ {
+  "address": "0x005F7E60",
+  "name": "maybe_Gfx_Node_SetFloorCollisionHandle",
+  "signature": "void maybe_Gfx_Node_SetFloorCollisionHandle(GfxNode* self, void* handle)",
+  "params": {
+   "param_1": "node",
+   "param_2": "new floor-collision (FCol) handle (f_168)"
+  },
+  "summary": "Replaces the node's floor-collision handle at f_168 with the same detach/store/attach sequence used by the other handle setters.",
+  "confidence": 0.4,
+  "evidence": "`func_005E785C(self,self->f_168); self->f_168 = arg2; func_005E7650(self,arg2);`. Callers: Field_Actor_CreateSprite, Gfx_AddFColAnimator, Field_ModelObj_UpdateEffect, Field_MultiPart_CreateSpriteFromResource(A/B) - all floor-collision setups."
+ },
+ {
+  "address": "0x005F7E88",
+  "name": "maybe_Gfx_Node_StopAnimationAndDetachOwner",
+  "signature": "void maybe_Gfx_Node_StopAnimationAndDetachOwner(GfxNode* self)",
+  "params": {
+   "param_1": "node (animation handle f_60, owner f_160, f_6fe finished flag)"
+  },
+  "summary": "Stops the node's model animation (playing its normal end or its loop-end variant), notifies the owner actor's character, clears the finished flag and the owner's animation lock.",
+  "confidence": 0.45,
+  "evidence": "func_005E7598() base tick; if f_60: func_002A86C0(f_60, f_6fe ? 0 : 1, 0) and, when f_6fe, func_0030AC50(self->f_160->f_11c); then f_6fe=0, func_005F7E48(self,0), f_160->f_536=0. Callers absent -> vtable entry."
+ },
+ {
+  "address": "0x005F7F30",
+  "name": "maybe_Gfx_Node_TickChildren",
+  "signature": "void maybe_Gfx_Node_TickChildren(GfxNode* self)",
+  "params": {
+   "param_1": "node (child list f_1e0/f_1e4)"
+  },
+  "summary": "Animation tick for the node: runs the base-class tick and then advances every child through virtual slot +0x18.",
+  "confidence": 0.45,
+  "evidence": "`func_005E7958(); for (p=f_1e4; *p!=f_1e0; p=p[1]) (**(*p)->vtable[0x18])()`. Callers are per-frame actor/window/effect updates (Battle_AnimWindow_UpdateAttach, Gfx_SpriteNode_TickLifetime, Field_Smithy_UpdateSparkEffect, ...)."
+ },
+ {
+  "address": "0x005F7F98",
+  "name": "Gfx_Node_Dtor",
+  "signature": "void Gfx_Node_Dtor(GfxNode* self)",
+  "params": {
+   "param_1": "node (effect part fields f_174..f_1dc, child list f_1e0/f_1e4, owner f_160)"
+  },
+  "summary": "Destructor of the effect/node class: tears the base class down, resets the part to its default name/parameters, resets every child part to the default blocks, frees the child list, clears the owner and releases the four effect slots and the tracked effect map.",
+  "confidence": 0.55,
+  "evidence": "func_005E7AA4 (base teardown) -> func_005F574C(self,1) (reset part) -> loop over f_1e4 writing f_17c..f_1dc from g_005f8104 (empty string) / g_005f80fc / g_005f80f8 and f_1dc=3 -> func_00109600(&f_1e0,f_1e4) (std container destroy) -> f_160=0 -> func_005F747C(self,0) (release effect slots) -> second loop over f_1f8. Called by every release path (Battle_AnimWindow_ReleaseEffects, Field_Actor_ReleaseAttachedEffect, Field_SceneObject_ReleaseEffectSlots, ...)."
+ },
+ {
+  "address": "0x005F8120",
+  "name": "maybe_Gfx_Node_StopIfIdle",
+  "signature": "void maybe_Gfx_Node_StopIfIdle(GfxNode* self)",
+  "params": {
+   "param_1": "node"
+  },
+  "summary": "Asks the derived class whether the node is still busy (virtual +0x44) and, when it reports idle, stops the node through the base class and pauses all children (virtual +0x14).",
+  "confidence": 0.4,
+  "evidence": "`iVar1 = (**(*arg1+0x44))(arg1); if (iVar1 == 0) { func_005E7B40(arg1); for (f_79/f_78 child list) (**(*p)->vtable[0x14])(); }`. func_005E7B40 is the base 'run down counter / stop sub-tasks' routine. Caller Field_Actor_UpdateEffectFade."
+ },
+ {
+  "address": "0x005F87C4",
+  "name": "Ui_Balloon_BindWinParts",
+  "signature": "void Ui_Balloon_BindWinParts(UiBalloon* self, int style, void* layout)",
+  "params": {
+   "param_1": "balloon/result banner object (4 sprite refs + 10 anim refs at +0x24)",
+   "param_2": "style 0 or 1 (normal / win variant)",
+   "param_3": "layout object owning the sprite table"
+  },
+  "summary": "Binds the four sprites (bottom, window, top, win-frame) and the ten animation references of the balloon/result banner for the requested style, selecting the concrete sprite names ('balloon_bottom1', 'balloon1_win', ... or the '2' variants) from the layout's sprite table.",
+  "confidence": 0.65,
+  "evidence": "Two style branches look up the literal names at 0x5F8990 'balloon_bottom1', 0x5F89A0 'balloon1_win', 0x5F89B0 'balloon_top1', 0x5F89C0 'balloon3_win' (style 1 uses the *2 names at 0x5F89D0..0x5F8A00) through vtable+0x2c of layout->f_10, then binds 10 entries with func_003E00CC (Ui_AnimRef_Bind) using the id table g_005f8a10/g_005f8a14. Sole caller Ui_BindFourParts."
+ },
+ {
+  "address": "0x005F8E20",
+  "name": "Ui_Balloon_DestroyAnimRefs",
+  "signature": "void* Ui_Balloon_DestroyAnimRefs(UiBalloon* self)",
+  "params": {
+   "param_1": "balloon object"
+  },
+  "summary": "Destroys the ten animation references owned by the balloon object (10 elements of 0x50 bytes starting at +0x24) and returns the object pointer.",
+  "confidence": 0.6,
+  "evidence": "`func_00100BE0(arg1 + 0x24, g_005f8e44, 0x50, 10)` = std::destroy_range over the same 10 * 0x50 block that 0x5F87C4 binds (self + i*0x50 + 0x24). No callers - used as a destructor helper."
+ },
+ {
+  "address": "0x005F91C0",
+  "name": "Fs_FormatMap2DPackPath",
+  "signature": "void Fs_FormatMap2DPackPath(const char* name, char* out, const char* suffix)",
+  "params": {
+   "param_1": "map/pack name (std::string header, data follows inline)",
+   "param_2": "output buffer",
+   "param_3": "optional suffix, 0 for none"
+  },
+  "summary": "Builds the 2D background pack path for a map: prefix '2d/bg/' + name (+ suffix) + '.pack'.",
+  "confidence": 0.65,
+  "evidence": "Copies the std::string at 0x5F92A4 -> 0x5F93B8 = '2d/bg/', then func_00707A58(dst, fmt, ...) with fmt at 0x5F92B4 '%s%s.pack' (or 0x5F92A8 '%s%s%s.pack' when arg3 != 0). Callers: Field_Level_InitFromRecord and Ui_MessageWindow_SetDateArgs."
+ },
+ {
+  "address": "0x005F92C0",
+  "name": "Fs_FormatMapBg3DPackPath",
+  "signature": "void Fs_FormatMapBg3DPackPath(const char* name, char* out, const char* suffix)",
+  "params": {
+   "param_1": "background name (std::string header)",
+   "param_2": "output buffer",
+   "param_3": "optional suffix, 0 for none"
+  },
+  "summary": "Builds the 3D background pack path for a map: '3d/bg/' + name (+ suffix) + '.pack'.",
+  "confidence": 0.7,
+  "evidence": "func_00707A58(arg2, '3d/bg/%s.pack' (0x5F9320) or '3d/bg/%s%s.pack' (0x5F9310)) with the inline string at arg1. Called by Field_Level_InitFromRecord alongside Fs_FormatMap2DPackPath."
+ },
+ {
+  "address": "0x005F9534",
+  "name": "Math_WeightedRandomIndex",
+  "signature": "int Math_WeightedRandomIndex(const int* weights, int count, unsigned rng, int allowLast)",
+  "params": {
+   "param_1": "array of non-negative weights",
+   "param_2": "number of weights",
+   "param_3": "random source/state object",
+   "param_4": "selects the accumulation variant (0 = default)"
+  },
+  "summary": "Picks a random index proportional to the weights in the array: sums the weights, draws a value in [0,total) from the supplied RNG and walks the array until the running sum exceeds it; returns -1 when the total is non-positive.",
+  "confidence": 0.8,
+  "evidence": "`result = sum of arg1[0..arg2-1]`; if total > 0 it calls func_0051B1FC(arg3,0x7fffffff) (random range) and func_0011CD80(rnd,total+1), then `if (arg1[i] != 0 && (r -= arg1[i]) < 1) return i;` returning -1 otherwise. Callers are all pick-one-of-N tasks: Ui_ItemList_GetSlotRange, Ui_PickSizeStep, Text_LayoutSingleLine/Record, Model_ApplyColorVariant, Battle_PickWeightedValueRange, Battle_Encounter_BuildConditions."
+ },
+ {
+  "address": "0x005F9650",
+  "name": "Math_WeightedRandomIndexDefaultRng",
+  "signature": "int Math_WeightedRandomIndexDefaultRng(const int* weights, int count, int allowLast)",
+  "params": {
+   "param_1": "array of weights",
+   "param_2": "count",
+   "param_3": "accumulation variant"
+  },
+  "summary": "Convenience wrapper around Math_WeightedRandomIndex that lazily creates the shared 0x10-byte default random-source object and passes its embedded RNG state.",
+  "confidence": 0.55,
+  "evidence": "Lazy singleton guarded by g_005f9710/g_005f9714, allocates 0x10 bytes via func_0011CFAC + func_00293A00, then `func_005F9534(arg1,arg2,puVar2[2] + 0x98,arg3)`. Same caller set as Math_WeightedRandomIndex (UI, text, battle)."
+ },
+ {
+  "address": "0x005FA0C4",
+  "name": "Sq_VmReadObjectPtrSlot",
+  "signature": "int Sq_VmReadObjectPtrSlot(SqVM* self, unsigned idx, SqObjectPtr* out)",
+  "params": {
+   "param_1": "Squirrel VM (stack base f_20 / f_2c)",
+   "param_2": "slot index or registry key",
+   "param_3": "destination ObjectPtr"
+  },
+  "summary": "Resolves a Squirrel stack/registry slot and copies the referenced object pointer (as an ObjectPtr) into the destination, releasing the temporary reference it took.",
+  "confidence": 0.5,
+  "evidence": "func_005FFEF4(self->f_18,arg2,&local_18) performs the lookup, then func_001BF7D8(arg3, base + (local_14 & 0xffffff)*0x10 + 8) copies with Script_ObjectPtr_Assign; the refcount is decremented and the object released via vtable+8 when the tag bit 0x8000000 is set. Called from the Squirrel binding helpers at 0x6BB724 / 0x6BD140."
+ },
+ {
+  "address": "0x005FA19C",
+  "name": "Sq_VmWriteObjectPtrSlot",
+  "signature": "int Sq_VmWriteObjectPtrSlot(SqVM* self, unsigned idx, const SqObjectPtr* value)",
+  "params": {
+   "param_1": "Squirrel VM (stack base f_20, alternate base f_2c)",
+   "param_2": "slot index/key",
+   "param_3": "value to store"
+  },
+  "summary": "Inverse of Sq_VmReadObjectPtrSlot: resolves the slot for the given key and assigns the supplied ObjectPtr into the VM stack (base f_2c or f_20 depending on the tag bit), releasing the temporary lookup reference.",
+  "confidence": 0.55,
+  "evidence": "func_005FFEF4(self->f_18,arg2,&local_18) lookup, then func_001BF7D8(self->f_2c + (local_14 & 0xffffff)*0x10 + 8, arg3) - the exact mirror of 0x005FA0C4 which copies in the other direction. Called from Sq_VmExecute and the Squirrel binding helper 0x6BD140."
+ },
+ {
+  "address": "0x005FA484",
+  "name": "Sq_VmReadStackObject",
+  "signature": "int Sq_VmReadStackObject(SqVM* self, unsigned idx, unsigned flags, SqObjectPtr* out)",
+  "params": {
+   "param_1": "Squirrel VM",
+   "param_2": "stack index",
+   "param_3": "access flags",
+   "param_4": "destination ObjectPtr"
+  },
+  "summary": "Resolves a stack index through the VM helper func_00600164 and copies the stack object into the caller's ObjectPtr, taking a reference and releasing the temporary one; returns the raw stack index (or -1).",
+  "confidence": 0.5,
+  "evidence": "`result = func_00600164(self->f_18,0,arg2,arg3,&local_18)`; on success, either the tagged value is copied field-by-field with an extra refcount increment (`if (uVar2 & 0x8000000) *(uVar5+4) += 1`) or func_001BF7D8(arg4, self->f_2c + (local_14 & 0xffffff)*0x10). Sole caller Sq_VmResumeCallable."
+ },
+ {
+  "address": "0x005FA598",
+  "name": "Sq_VmNewStackSlot",
+  "signature": "int Sq_VmNewStackSlot(SqVM* self, unsigned a, unsigned key, SqObjectPtr* value, int force)",
+  "params": {
+   "param_1": "Squirrel VM (stack array f_2c, count f_30, capacity f_34)",
+   "param_2": "owner/table",
+   "param_3": "slot key",
+   "param_4": "initial value",
+   "param_5": "non-zero to force creation"
+  },
+  "summary": "Adds a new slot to the VM object stack: grows the stack array (doubling, minimum 4) when full, appends the value and registers the new index for the key in the VM's registry; returns 0 when the VM is in an invalid state.",
+  "confidence": 0.65,
+  "evidence": "`if (self->f_54) return 0;` then func_005FFEF4 lookup for the key, `if (self->f_34 <= self->f_30) { iVar4 = f_30<<1 ?: 4; f_2c = func_0014CE14(f_2c, f_34<<4, iVar4<<4); f_34 = iVar4; }`, writes two ObjectPtrs into the new `f_2c + f_30*0x10` entry, increments f_30, and calls func_00600768(self->f_18,arg3,...) to record it. Sole caller Sq_VmNewSlot."
+ },
+ {
+  "address": "0x005FAA08",
+  "name": "Sq_VmReleaseObjectTables",
+  "signature": "void Sq_VmReleaseObjectTables(SqObject* self)",
+  "params": {
+   "param_1": "Squirrel object/closure (tables f_20 and f_2c, ref array f_38/f_3c, refs f_18/f_1c, f_44)"
+  },
+  "summary": "Releases the containers owned by a Squirrel object instance: the two ObjectPtr tables at f_20 and f_2c, the reference array at f_38, and the two referenced objects at f_18/f_1c.",
+  "confidence": 0.6,
+  "evidence": "func_001BF7D8(&self->f_44, null); func_00710B24(&self->f_20,0,&tmp) and func_00710B24(&self->f_2c,0,&tmp) (table reset); loop over f_3c entries of f_38 releasing refcounted values; then f_18/f_1c released via vtable+8 and zeroed. Called from Sq_VmDestroyInstance (0x5FB150)."
+ },
+ {
+  "address": "0x005FAC24",
+  "name": "Sq_VmInitInstance",
+  "signature": "SqObject* Sq_VmInitInstance(SqObject* self, int vm, SqClass* cls)",
+  "params": {
+   "param_1": "object storage to initialise",
+   "param_2": "VM/owner",
+   "param_3": "class whose members are copied"
+  },
+  "summary": "Initialises a new Squirrel class instance: installs the instance vtable, clears all fields, allocates the 18-entry member table, and copies the class member descriptors and their default values.",
+  "confidence": 0.6,
+  "evidence": "`*arg1 = g_005fb148` (vtable), zeroing arg1[8..0x16], `arg1[0xe] = func_0014CE14(...,0,0x90)` = 0x12 entries * 8 bytes, `arg1[0x10] = 0x12`; copies class members with func_00710B24 from arg3->f_24 into arg1+8, then loops over arg3->f_24 setting member values. Sole caller Sq_VmInstantiateClass."
+ },
+ {
+  "address": "0x005FB150",
+  "name": "Sq_VmDestroyInstance",
+  "signature": "void Sq_VmDestroyInstance(SqObject* self)",
+  "params": {
+   "param_1": "Squirrel class instance"
+  },
+  "summary": "Tears down a Squirrel class instance: unlinks it from its VM list, releases its object tables, frees the 18-entry member array and the two member/attribute arrays, and resets the vtable.",
+  "confidence": 0.6,
+  "evidence": "`*arg1 = g_005fb384` (vtable), `func_00245C40(arg1[5] + 0x48, arg1)` (unlink), func_005FAA08(arg1) (release tables), then three loops releasing refcounted entries and func_00147AEC(ptr, count<<3 / <<4) frees for arg1[0xe], arg1[0xb], arg1[8]; finally vtable = g_001e9158. Counterpart of Sq_VmInitInstance; no direct callers (vtable destructor)."
+ },
+ {
+  "address": "0x005FB388",
+  "name": "Sq_LexerReadHexNumber",
+  "signature": "int Sq_LexerReadHexNumber(SqLexer* self, int a, int b, int c)",
+  "params": {
+   "param_1": "lexer (input callbacks f_24/f_28, current char f_2c, buffer f_34/f_38/f_3c)",
+   "param_2": "first character",
+   "param_3": "unused/token flags",
+   "param_4": "lexer state"
+  },
+  "summary": "Scans a hexadecimal integer literal ('0x...') for the Squirrel compiler, accumulating digits into the lexer buffer and reporting 'too many digits for an Hex number' when more than 8 digits are seen.",
+  "confidence": 0.8,
+  "evidence": "Checks `uVar8 == '0'` then next char == 'X', pushes digits with the `(c ^ c<<2) & 0x80` hex-digit test, and calls the error callback with the literal at 0x5FB8A8 'too many digits for an Hex number' (verified string in code.decompressed.bin). Sole caller the lexer dispatcher 0x5FC86C."
+ },
+ {
+  "address": "0x005FBAC0",
+  "name": "Sq_LexerReadLiteral",
+  "signature": "int Sq_LexerReadLiteral(SqLexer* self, int terminator, int allowNewline)",
+  "params": {
+   "param_1": "lexer (input callback f_24, error callback f_40, buffer f_34..f_3c)",
+   "param_2": "terminating character (quote)",
+   "param_3": "non-zero to allow newlines"
+  },
+  "summary": "Scans a string or numeric literal for the Squirrel compiler: handles the quoting character, escape sequences and embedded line breaks, reporting 'unfinished string', 'newline in a constant', 'unrecognised escaper char' and 'decimal number expected'; numeric bodies are converted with strtoul.",
+  "confidence": 0.7,
+  "evidence": "Error callback strings at 0x5FBF24 'unfinished string', 0x5FBF38 'newline in a constant', 0x5FBF50 'unrecognised escaper char', 0x5FBF70 'decimal number expected' (verified in the binary); calls std_strtoul (0x00100578) and the varargs helper func_002FF68C for the error formatting. Sole caller the lexer dispatcher 0x5FC86C."
+ },
+ {
+  "address": "0x005FC86C",
+  "name": "Sq_LexerReadToken",
+  "signature": "int Sq_LexerReadToken(SqLexer* self, int flags)",
+  "params": {
+   "param_1": "lexer/parser state (input callbacks f_24/f_28, current token f_2c, token line f_14)"
+  },
+  "summary": "Main Squirrel lexer/tokenizer: skips whitespace and comments, then reads one token (identifier, keyword, number, string, operator) and returns its token code; used by every parser routine in the compiler.",
+  "confidence": 0.75,
+  "evidence": "Callees are Sq_LexerReadHexNumber (0x5FB388) and Sq_LexerReadLiteral (0x5FBAC0) plus the varargs error helper. Callers are the whole Squirrel parser: Script_ParseAssignmentExpression, Script_ParseBitwiseExpression, Script_ParseUnaryExpression, Script_ParsePostfixExpression, Script_ParseStatementList, Script_SqCompiler_Expect/Factor/EmitBinaryExp."
+ },
+ {
+  "address": "0x005FDC24",
+  "name": "Sq_VmInit",
+  "signature": "void Sq_VmInit(SqVM* self, void* allocator, void* printHook, void* errorHook, void* a5, void* a6)",
+  "params": {
+   "param_1": "Squirrel VM object",
+   "param_2": "allocator/state used by the VM",
+   "param_3": "print callback",
+   "param_4": "error callback",
+   "param_5": "extra callback",
+   "param_6": "extra callback context"
+  },
+  "summary": "Initialises a Squirrel VM: stores the allocator and the three callbacks, creates the 0x1A-bucket hash table that maps language keywords to token codes and registers every keyword of the language ('while', 'else', 'break', 'continue', 'return', 'null', 'function', 'local', 'for', 'foreach', 'class', 'extends', 'instanceof', 'typeof', 'constructor', 'delegate', 'clone', 'yield', 'resume', 'throw', 'catch', 'default', 'static', 'vargc', 'vargv', 'parent', 'const', 'false', ...).",
+  "confidence": 0.75,
+  "evidence": "`self->f_30 = arg2; self->f_40 = arg5; self->f_44 = arg6;` then `func_006009E8(new 0x2c, arg2, 0x1a)` creates the table and every keyword is looked up and inserted with func_006111A4 + func_00600768; the literals are the real strings at 0x5FE048 'while', 0x5FE070 'break', 0x5FE4E4 'return', 0x5FE4FC 'function', 0x5FE990 'delegate', 0x5FEE34 'switch', 0x5FF2BC 'class', 0x5FF730 'instanceof', 0x5FF760 'false' (verified in code.decompressed.bin). Called once from the script-VM constructor at 0x163254."
+ },
+ {
+  "address": "0x005FFA30",
+  "name": "Sq_Compiler_SkipToToken",
+  "signature": "void* Sq_Compiler_SkipToToken(SqCompiler* self, int* expectedToken)",
+  "params": {
+   "param_1": "compiler state (token stream at +4)",
+   "param_2": "token/slot to stop at"
+  },
+  "summary": "Reads tokens from the compiler's token stream until the requested token is reached, returning the matching token node (or 0 when the stream ends); used by the parser's 'expect' helper.",
+  "confidence": 0.6,
+  "evidence": "Repeated `func_00600164(*(self+4),0,&cur,&next,&look)` until `local_24 == arg2`, then returns `local_1c + 7` (a field inside the token object). Sole caller Script_SqCompiler_Expect (0x1874EC)."
+ },
+ {
+  "address": "0x005FFC28",
+  "name": "Sq_LexerLookupKeyword",
+  "signature": "int Sq_LexerLookupKeyword(SqLexer* self, const char* word)",
+  "params": {
+   "param_1": "lexer (VM reference at f_30, keyword table at +4)",
+   "param_2": "identifier text"
+  },
+  "summary": "Looks an identifier up in the VM's keyword/token table and returns the registered token code, or the default identifier token when the word is not a keyword.",
+  "confidence": 0.75,
+  "evidence": "func_006111A4(self->f_30,arg2,-1) interns the string, func_005FFEF4(*(self+4),&str,&value) looks it up in the hash table that Sq_VmInit (0x5FDC24) filled with keywords, returns `g_005ffd3c` (the default token value) when not found. Sole caller Sq_LexerReadToken."
+ },
+ {
+  "address": "0x005FFD54",
+  "name": "Sq_VmCleanup",
+  "signature": "void* Sq_VmCleanup(SqVM* self)",
+  "params": {
+   "param_1": "Squirrel VM object (keyword table at +4, buffer f_34/f_3c)"
+  },
+  "summary": "Releases a Squirrel VM: releases the keyword/token table object stored at +4 and frees the temporary token buffer when it was allocated.",
+  "confidence": 0.6,
+  "evidence": "`(**(code**)(**(int**)(self+4) + 8))()` releases the table and `if (self->f_3c != 0) func_00147AEC(self->f_34)` frees it; returns self like a destructor. Called at the end of the script-VM construction path (0x163254/0x1634CC/0x1637F4) after Sq_VmInit."
+ },
+ {
+  "address": "0x005FFE08",
+  "name": "Sq_HashTable_ClearBuckets",
+  "signature": "void Sq_HashTable_ClearBuckets(SqHashTable* self)",
+  "params": {
+   "param_1": "hash table (buckets f_20, count f_24, 0x14-byte buckets)"
+  },
+  "summary": "Resets the key and value ObjectPtr of every bucket in the table to null, without touching the bucket array itself.",
+  "confidence": 0.6,
+  "evidence": "For each of f_24 buckets at f_20 + i*0x14 it stores the null ObjectPtr (g_005ffef0) into both the +0 and +8 slots and releases the previous references. Called from Sq_HashTable_Rebuild (0x600510) and the VM object cleanup path."
+ },
+ {
+  "address": "0x00600010",
+  "name": "Sq_HashTable_FindKey",
+  "signature": "int Sq_HashTable_FindKey(SqHashTable* self, const SqObjectPtr* key, SqObjectPtr* outKey)",
+  "params": {
+   "param_1": "hash table (buckets f_20, mask f_24)",
+   "param_2": "key to find",
+   "param_3": "receives the stored key"
+  },
+  "summary": "Hashes the given key (special-casing integer, float, string and object keys), walks the bucket chain and, when an equal key is found, copies the stored key into outKey and returns 1; returns 0 when absent.",
+  "confidence": 0.6,
+  "evidence": "Tag dispatch on `*key + 0xfefffff8 + g_006000b8` (== 2 float, == 0x300000e string->f_18, else integer>>3), then `bucket = f_20 + (hash & (f_24-1))*0x14` and chain walk comparing +0xc/+8 with key; on match func_001BF7D8(bucket,arg3) copies the stored key. Sole caller Sq_VmGet (0x5B4CA4)."
+ },
+ {
+  "address": "0x00600510",
+  "name": "Sq_HashTable_Rebuild",
+  "signature": "void Sq_HashTable_Rebuild(SqHashTable* self)",
+  "params": {
+   "param_1": "hash table (buckets f_20, capacity f_24, count f_28)"
+  },
+  "summary": "Rebuilds the hash table at its current size: clears every bucket, then re-inserts all live entries, choosing a new capacity when the table is over- or under-loaded.",
+  "confidence": 0.55,
+  "evidence": "Calls Sq_HashTable_ClearBuckets (0x5FFE08), computes a size from `f_24` and the load (`iVar3 - iVar3/4`), calls func_005FFD88 to (re)allocate, then re-inserts each non-null bucket with Sq_HashTable_Set (0x600768) and frees the old array with func_00147AEC. Reached from the VM creation path 0x6BB248."
+ },
+ {
+  "address": "0x00600534",
+  "name": "Sq_HashTable_Resize",
+  "signature": "void Sq_HashTable_Resize(SqHashTable* self, int requestedCapacity)",
+  "params": {
+   "param_1": "hash table",
+   "param_2": "requested capacity, 0 = automatic"
+  },
+  "summary": "Resizes (rehashes) the table to a new bucket count, growing by doubling, halving when sparsely used, or using the requested capacity; all live entries are re-inserted into the new array.",
+  "confidence": 0.55,
+  "evidence": "Same body shape as Sq_HashTable_Rebuild but with `if (arg2 == 0) return; func_005FFD88(self, iVar2)` / `func_005FFD88(self, iVar2/2)` / `func_005FFD88(self, iVar2<<1)` and the re-insert loop with func_00600768. Called from Sq_HashTable_Set and Sq_HashTable_Remove."
+ },
+ {
+  "address": "0x00600698",
+  "name": "Sq_HashTable_Remove",
+  "signature": "void Sq_HashTable_Remove(SqHashTable* self, const SqObjectPtr* key)",
+  "params": {
+   "param_1": "hash table",
+   "param_2": "key to delete"
+  },
+  "summary": "Deletes the entry with the given key: finds its bucket by hash, clears key and value, decrements the element count and lets the table shrink if it became sparse.",
+  "confidence": 0.65,
+  "evidence": "Computes the hash exactly like Sq_HashTable_FindKey, walks the chain, then `func_001BF7D8(bucket+8, null); func_001BF7D8(bucket, null); self->f_28--; func_00600534(self,0);` (Resize with auto). Callers: Sq_VmDeleteSlot, Sq_VmExecute, 0x6BC838."
+ },
+ {
+  "address": "0x00600768",
+  "name": "Sq_HashTable_Set",
+  "signature": "int Sq_HashTable_Set(SqHashTable* self, const SqObjectPtr* key, const SqObjectPtr* value)",
+  "params": {
+   "param_1": "hash table",
+   "param_2": "key",
+   "param_3": "value"
+  },
+  "summary": "Inserts or updates an entry: hashes the key, reuses the existing bucket when the key is present (returning 0), otherwise allocates/recycles a bucket from the free list, links it into the chain, increments the count and grows the table when it gets too full.",
+  "confidence": 0.7,
+  "evidence": "Chain walk over `f_20 + (hash & (f_24-1))*0x14` using the +0x10 next pointer; on a match `func_001BF7D8(bucket,arg3); return 0;`; otherwise takes `self->f_1c` (free list) or the current bucket, inserts, `self->f_28++`, and resizes via 0x600534/0x600510. It is the table write primitive used by Sq_VmInit, Sq_VmNewStackSlot, Sq_VmInitInstance, Script_Registry_* and Text_FormatBuildSegments."
+ },
+ {
+  "address": "0x006009E8",
+  "name": "Sq_HashTable_Init",
+  "signature": "SqHashTable* Sq_HashTable_Init(SqHashTable* self, int allocator, int capacity)",
+  "params": {
+   "param_1": "table storage",
+   "param_2": "allocator/state",
+   "param_3": "minimum capacity"
+  },
+  "summary": "Initialises a Squirrel hash table: installs the vtable, rounds the capacity up to a power of two (minimum 4), allocates the bucket array, zeroes the accounting fields and links the table into the VM's table list.",
+  "confidence": 0.7,
+  "evidence": "`iVar1 = 4; if (4 < arg3) do iVar1 *= 2; while (iVar1 < arg3);` then func_005FFD88(arg1) allocates, `arg1[5] = arg2; func_00245C1C(arg2 + 0x48, arg1)` links it. Callers: Text_FormatBuildSegments, Script_Registry_AddNewTable/GetOrAddId/AddInstance, Script_Vm_RegisterDefaultDelegates, Sq_VmNewSlot, Sq_VmInitInstance, Sq_VmInit (0x5FDC24)."
+ },
+ {
+  "address": "0x00600A54",
+  "name": "Sq_HashTable_Destroy",
+  "signature": "void Sq_HashTable_Destroy(SqHashTable* self)",
+  "params": {
+   "param_1": "hash table"
+  },
+  "summary": "Destroys a Squirrel hash table: installs the base vtable, unlinks it from the VM's table list and releases every key/value pair before freeing the bucket array.",
+  "confidence": 0.65,
+  "evidence": "`*arg1 = g_00600b38; func_001BC750(arg1,0);` unlink via func_00245C40, loop releasing the two ObjectPtrs of each of arg1[9] buckets, `func_00147AEC(arg1[8], count*0x14)`, then resets the vtable to g_001e9158. Companion of Sq_HashTable_Init; no direct callers (vtable destructor)."
+ },
+ {
+  "address": "0x00600D34",
+  "name": "Casino_CalcJackpotPayoutAmount",
+  "signature": "int Casino_CalcJackpotPayoutAmount(unsigned base, const int* range)",
+  "params": {
+   "param_1": "base coin/value amount",
+   "param_2": "5-int parameter block: scale, min%, max%, lower clamp, upper clamp"
+  },
+  "summary": "Calculates the actual coin amount paid out by a jackpot: scales the base amount by a random value between the configured min/max percentages and then clamps the result between the two limits.",
+  "confidence": 0.5,
+  "evidence": "`r = rand(); v = (float)(range[1] + r*(range[2]-range[1])*g_00600e04) * (float)base * range[0]` then picks max(base,v) and clamps against range[3]/range[4]. Called from Casino_AddJackpotPayout/AddJackpotPayoutEx (0x601320/0x60160C)."
+ },
+ {
+  "address": "0x00600E08",
+  "name": "Casino_RollJackpotPayout",
+  "signature": "void Casino_RollJackpotPayout(CasinoJackpotResult* out, const unsigned* coinCount)",
+  "params": {
+   "param_1": "result (out[0] = payout amount, out[1] = rank/kind 0..2)",
+   "param_2": "current coin count"
+  },
+  "summary": "Rolls one jackpot result for the given coin count: selects the coin tier from the jackpot table thresholds, rolls the three grade chances in order (highest grade first) and produces the payout amount plus the grade index.",
+  "confidence": 0.6,
+  "evidence": "Tier selection compares *arg2 against puVar3->f_8/f_c/f_10/f_14 and picks the corresponding chance bytes at offsets 0x31..0x33 / 0x3a..0x43; three successive `func_0051B1FC(rng,0x7fffffff)` + `func_0011CD80(rand,chance)` rolls set local_6c to 2, 1 or 0; the amount is `random between puVar3[8..9] * puVar3[7] ...` clamped by puVar3[0]/puVar3[1] and added to the coin count; writes *arg1 and arg1[1]. Called in a loop by Casino_RefreshJackpotCounters (0x601248)."
+ },
+ {
+  "address": "0x006013AC",
+  "name": "Casino_RollJackpotChance",
+  "signature": "int Casino_RollJackpotChance(int slot)",
+  "params": {
+   "param_1": "payout slot 0..2 (selects rate multiplier f_4C/f_50/f_54)"
+  },
+  "summary": "Performs the random success roll that decides whether a jackpot pays out: chooses the tier from the current coin threshold (f_44..f_4A), multiplies by the slot rate and the game-mode multiplier, and compares against a random value scaled by the configured range.",
+  "confidence": 0.5,
+  "evidence": "Threshold chain on game work +0x27C94 selecting iVar3->f_44/f_46/f_48/f_49/f_4a, `fVar9 = g_00601538 / tier`, `fVar9 *= f_4c/f_50/f_54` by slot, then f_58/f_5c/f_60 by the mode byte at +0x27C98, and finally `return min + rand*range*g_00601540 <= value` (a probability test). Callers: 0x64B448 and Casino_RefreshJackpotCounters."
+ },
+ {
+  "address": "0x00601970",
+  "name": "maybe_Casino_RollJackpotChanceForCoins",
+  "signature": "int maybe_Casino_RollJackpotChanceForCoins(int slot, int coinCount)",
+  "params": {
+   "param_1": "payout slot 0..2",
+   "param_2": "coin count used for the extra threshold"
+  },
+  "summary": "Second jackpot probability roll, identical in shape to Casino_RollJackpotChance but using the second table row (f_A0..F_DC) and an additional coin-count threshold that selects the multiplier f_CC/f_D0/f_D4/f_D8/f_DC.",
+  "confidence": 0.45,
+  "evidence": "Same structure as 0x6013AC with iVar3->f_a0..f_a6 thresholds, f_a8/f_ac/f_b0 slot rates and f_b4/f_b8/f_bc mode multipliers, plus `if (iVar3->f_a0 < arg2) fVar10 = f_cc; ... f_dc`; final `return min + rand*range*g_00601b40 <= fVar9*fVar10`. Sole caller Ui_JackpotScreen_StartPayout."
+ },
+ {
+  "address": "0x00601CCC",
+  "name": "BattleScene_SyncUnitModels",
+  "signature": "void BattleScene_SyncUnitModels(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (four unit slot lists at [0x4298/0x429C] of work+0x5C+n*0x1C)"
+  },
+  "summary": "Reconciles the models of all battle units with the scene: for each of the four sides/rows it walks the unit list, resolves each unit's model id and adds/removes the corresponding model from the event model container (special-casing transformed and boss models).",
+  "confidence": 0.5,
+  "evidence": "Loop over the four `work->f_5c + n*0x1c` slot lists (`f_4298`/`f_429c` sentinel list), model id from `unit[0x1da] & 0xffff`, `func_00604C00` + `Event_ActorModels_AddModel` (0x4B8954), `Event_ActorModels_CreateMonsterModel` (0x4B9FE0), CreateMonsterModelDual (0x4BA12C), with `func_0012416C` releasing handles. Callers: Field_ActorActionSeq_UpdateMain and BattleScene_ApplySceneModels."
+ },
+ {
+  "address": "0x00602098",
+  "name": "maybe_BattleScene_SyncUnitRenderResources",
+  "signature": "void maybe_BattleScene_SyncUnitRenderResources(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (model handle cache at self + 4*8 + 0x504)"
+  },
+  "summary": "Builds/refreshes the render resources of every battle unit slot: caches the enemy model handles per slot (up to 12), loads the battle-2D models and registers their resource entries, then walks the per-unit part lists.",
+  "confidence": 0.45,
+  "evidence": "Same four-list walk, `modelId = *(u32*)(*piVar2 + 0x768) & 0xffff`, `func_0063E5C8`/`func_0063DCA4` model lookups, cache at `self + j*8 + 0x504` with `func_00124D48`/`func_0012416C` handle management, `Battle2D_LoadEnemyModel` (0x5A5144), `func_001BB9FC`/`func_001BBE30` resource-list inserts. Sole caller BattleScene_RebuildScene."
+ },
+ {
+  "address": "0x00602C7C",
+  "name": "BattleScene_RebuildScene",
+  "signature": "void BattleScene_RebuildScene(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (background id f_5d0, state f_5d1, model handles f_588/f_58c)"
+  },
+  "summary": "Rebuilds the battle background: resets the resource lists, refreshes the unit render resources, resolves the background state (normal / battle / special) and loads the matching background models into the scene.",
+  "confidence": 0.6,
+  "evidence": "`func_001BB8BC`/`func_001BC2A8` (Ui_Battle2_OpenResourcePacks and list release) -> maybe_BattleScene_SyncUnitRenderResources -> state resolution with func_00640C64 (scene type), `f_2c & 2` override, `func_0063DF60(id)` mask check, then `func_005A5200(...,f_5d0,f_5d1)` = Battle2D_LoadBackgroundModel into f_588 and, when f_300, f_58c. Sole caller Menu_InitFromParams (scene setup)."
+ },
+ {
+  "address": "0x00602E0C",
+  "name": "BattleScene_ApplySceneModels",
+  "signature": "void BattleScene_ApplySceneModels(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene"
+  },
+  "summary": "Attaches the animation sets to the two background models, syncs the unit models and marks the scene as ready (f_f2 = 1).",
+  "confidence": 0.55,
+  "evidence": "`func_0046782C(&self->f_33c,&self->f_304, animSet, handle)` = Model_AttachAnimationByHandle for f_588 and f_58c, then BattleScene_SyncUnitModels (0x601CCC) and func_00602664, ending with `self->f_f2 = 1`. No callers (vtable/scene callback)."
+ },
+ {
+  "address": "0x00602F00",
+  "name": "BattleScene_SetBackgroundLayer",
+  "signature": "void BattleScene_SetBackgroundLayer(Battle2DScene* self, int layer)",
+  "params": {
+   "param_1": "battle2d scene",
+   "param_2": "0 = first background model, non-zero = second"
+  },
+  "summary": "Switches which of the two background models is active: pauses the animation of the model that becomes invisible (f_6c = 0x80) and clears the pause on the one that becomes visible.",
+  "confidence": 0.55,
+  "evidence": "Looks up the model node by type tag (`func_006647C4(&self->f_304,...)` + virtual tag comparison), calls func_00576E58, then for arg2==0 hides f_348 (f_6c=0x80) and activates f_358 (f_6c=0), and vice versa for arg2!=0. Sole caller BattleScene_ApplySceneModels."
+ },
+ {
+  "address": "0x00603024",
+  "name": "maybe_BattleScene_GetUnitModelSize",
+  "signature": "int maybe_BattleScene_GetUnitModelSize(Battle2DScene* self, int modelId)",
+  "params": {
+   "param_1": "battle2d scene",
+   "param_2": "model id (0x34A = hard-coded default)"
+  },
+  "summary": "Returns the display size of a battle unit's model: special-cases id 0x34A, then consults the unit slot table, then the model record's own size field, then falls back to a category default (0..4).",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 == 0x34a) return (int)*g_0060312c;` else `func_00632778(work->f_5c,arg2)` then `func_0063EEAC(modelId)->f_8c` converted to int, then a switch on `func_002070A8(...)` mapping cases 0..4 to the constants g_00603130..g_00603144. Called by the battle2d animation/keyframe setup functions 0x603148/0x603B9C/0x603E8C/0x603EDC/0x604118/0x604580."
+ },
+ {
+  "address": "0x00603148",
+  "name": "maybe_BattleScene_ApplyUnitAnimTiming",
+  "signature": "void maybe_BattleScene_ApplyUnitAnimTiming(Battle2DScene* self, int slot, int unitIndex, int variant)",
+  "params": {
+   "param_1": "battle2d scene",
+   "param_2": "slot/row index",
+   "param_3": "unit index",
+   "param_4": "variant selector (0 = normal)"
+  },
+  "summary": "Computes the animation keyframe timings for a battle unit: for every model part of the slot it derives the frame position from the unit's model size and writes the keyframes into the unit's animation track.",
+  "confidence": 0.45,
+  "evidence": "Walks `work->f_5c + arg2*0x1c` list, calls virtual +0x10 per part, maybe_BattleScene_GetUnitModelSize (0x603024) for `piVar8[0x1da] & 0xffff`, multiplies by g_00603464 and builds keys with `Anim_TimeTrack_SetKeyframe` (0x43DAC4) / func_004B8A14 into `self + 0x594`. No direct callers (scene callback)."
+ },
+ {
+  "address": "0x00603714",
+  "name": "maybe_BattleScene_DispatchUnitVariant",
+  "signature": "void maybe_BattleScene_DispatchUnitVariant(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (variant byte at work+0x4201)"
+  },
+  "summary": "Chooses the battle-unit variant setup routine from the scene variant byte: 6 -> the first variant builder, 7 -> the second, anything else -> the default builder.",
+  "confidence": 0.4,
+  "evidence": "`if (*(char*)(work + 0x4201) == 6) { func_00605814(arg1); return; } if (... == 7) { func_006050C0(); return; } func_00604580(arg1);`. Caller 'Menu_OpenItemEntryWindow' (0x206C40) is a scene-setup caller, so the menu label from an earlier batch is unreliable."
+ },
+ {
+  "address": "0x006037B0",
+  "name": "BattleScene_SyncAllUnitSlots",
+  "signature": "void BattleScene_SyncAllUnitSlots(Battle2DScene* self, int mode)",
+  "params": {
+   "param_1": "battle2d scene (model container f_304/f_35c, f_4ec)",
+   "param_2": "mode passed to the action-queue update"
+  },
+  "summary": "Synchronises all four unit slot lists with the scene's model container, adding missing unit models and finally advancing the battle action queue.",
+  "confidence": 0.5,
+  "evidence": "`func_004D2374(&self->f_4ec)`, `Event_ActorModels_Update(&self->f_35c,&self->f_304)`, loop i<4 over the slot lists calling `func_00652B6C(&self->f_35c, *piVar3)` and `func_004B8DE4(...,0x36)`, sets f_301, then `Battle_UpdateActionQueue(self,arg2)`. No direct callers (scene callback)."
+ },
+ {
+  "address": "0x00603E8C",
+  "name": "maybe_BattleScene_HasUnitAnimTrack",
+  "signature": "int maybe_BattleScene_HasUnitAnimTrack(Battle2DScene* self, int modelId)",
+  "params": {
+   "param_1": "battle2d scene (unit animation track at +0x594)",
+   "param_2": "model id, 0xFFFF = none"
+  },
+  "summary": "Returns whether the battle scene's unit animation track contains keys for the given model id (used to decide if a unit needs a keyframe track built).",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 == 0xffff) return 0;` func_0043D270() (track reset), maybe_BattleScene_GetUnitModelSize(self,arg2), func_0043CC68(self + 0x594) returns a key count that is collapsed to 0/1. Caller 'Menu_CheckSlotSelectable' (0x20B10C) is really a battle scene setup caller."
+ },
+ {
+  "address": "0x00604064",
+  "name": "maybe_BattleScene_AttachTransformedUnitModels",
+  "signature": "void maybe_BattleScene_AttachTransformedUnitModels(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (model container f_304/f_35c, flag f_301)"
+  },
+  "summary": "For every unit of the four battle sides whose virtual state predicate (+0x1C) is true (transformed / special form), attaches its secondary model and registers it in the model container with kind 0x35; also clears the 'already synced' flag.",
+  "confidence": 0.45,
+  "evidence": "`arg1->f_301 = 0;` then the standard four-list walk, `iVar2 = (**(*unit + 0x1c))(unit); if (iVar2 != 0) { func_004B9290(&f_35c,unit); func_004B8DE4(&f_35c,&f_304,unit,0x35); }`. No callers (scene callback)."
+ },
+ {
+  "address": "0x00604270",
+  "name": "maybe_BattleScene_AttachSceneUnitModels",
+  "signature": "void maybe_BattleScene_AttachSceneUnitModels(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene"
+  },
+  "summary": "Closes the previous battle scene and then attaches the primary model of every unit in all four battle sides to the scene's model container.",
+  "confidence": 0.45,
+  "evidence": "`func_001715C4()` (Battle_CloseBattleScene) then the four-list walk calling `func_004B88CC(arg1 + 0x35c, *piVar3)` (Event_ActorModels_AttachModelA) for each unit. No callers (scene callback)."
+ },
+ {
+  "address": "0x00604528",
+  "name": "maybe_BattleScene_TryUpdateUnitAttachments",
+  "signature": "int maybe_BattleScene_TryUpdateUnitAttachments(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene"
+  },
+  "summary": "Tries the unit model attachment update twice (second time with the 'force' flag) and reports whether either pass decided something changed.",
+  "confidence": 0.35,
+  "evidence": "`iVar1 = func_00604C94(arg1); if (iVar1 == 0 && (iVar1 = func_00604C94(arg1,arg2,arg3,arg4,1), iVar1 == 0)) return 0; return 1;` - a thin wrapper over BattleScene_UpdateUnitModelAttachments with the extra arguments Ghidra lost. No callers."
+ },
+ {
+  "address": "0x00604580",
+  "name": "BattleScene_BuildUnitKeyframes",
+  "signature": "int BattleScene_BuildUnitKeyframes(Battle2DScene* self, int numSides, float* out, void* callback)",
+  "params": {
+   "param_1": "battle2d scene (unit animation track +0x594)",
+   "param_2": "number of sides to process",
+   "param_3": "output values",
+   "param_4": "per-unit callback (0x604940)"
+  },
+  "summary": "Default battle-2D unit setup: walks the unit lists, computes each unit's animation keyframes from the model size and the configured timing constants, writes them into the scene's time track and updates the unit model attachments.",
+  "confidence": 0.5,
+  "evidence": "Four-list walk with `uVar9 * 7` side index, `local_48 = SUB_00604940` (internal callback), constants g_00604934/938/93c/944, and calls to maybe_BattleScene_GetUnitModelSize (0x603024), Anim_TimeTrack_SetKeyframe (0x43DAC4), func_004B8A14 (apply key list) and func_00604C94. Sole caller the variant dispatcher 0x603714."
+ },
+ {
+  "address": "0x00604C94",
+  "name": "BattleScene_UpdateUnitModelAttachments",
+  "signature": "int BattleScene_UpdateUnitModelAttachments(Battle2DScene* self, int side, unsigned a3, int a4, int force)",
+  "params": {
+   "param_1": "battle2d scene",
+   "param_2": "side/row to process",
+   "param_3": "additional argument",
+   "param_4": "additional argument",
+   "param_5": "force update"
+  },
+  "summary": "Decides which battle units need their models (re)attached: for each unit it compares the unit's state/visible flag with the attached model's state, waits for the model's timer to expire and then adds or removes the model from the container.",
+  "confidence": 0.5,
+  "evidence": "Walks `work->f_5c + side*0x1c` lists, skips model type 100 (`*(short*)(modelRec+8) == 100`), calls virtual +0x10 to get the unit state, checks `unit[0x239]` timer against a float constant, then AddModel/ReleaseHandle (0x4B8954 / 0x12416C) accordingly. Called by 0x604528 and 0x604580."
+ },
+ {
+  "address": "0x00604ED2",
+  "name": "maybe_BattleScene_UpdateUnitModelAttachmentsB",
+  "signature": "int maybe_BattleScene_UpdateUnitModelAttachmentsB(Battle2DScene* self, int side, unsigned a3, int a4)",
+  "params": {
+   "param_1": "battle2d scene",
+   "param_2": "side/row",
+   "param_3": "additional argument",
+   "param_4": "additional argument"
+  },
+  "summary": "Second copy of the unit-model attachment update logic (Ghidra decoded this entry as Thumb); same purpose as BattleScene_UpdateUnitModelAttachments with the timer comparison written differently.",
+  "confidence": 0.3,
+  "evidence": "Byte-for-byte equivalent structure to 0x604C94: same `work->f_5c + arg2*4` walk, `modelRec = func_0063DCA4(id & 0xffff)`, `*(short*)(modelRec+8) != 100`, `(**(*(int*)unit + 0x10))(unit)`, `unit[0x239]` timer vs a float, and the same callee set (0x4B8954, 0x12416C, 0x604C00, 0x63DCA4, 0x63EE68). Ghidra reports bad instruction data / unrecovered registers."
+ },
+ {
+  "address": "0x00604F50",
+  "name": "BattleScene_ReleaseUnitSlotHandles",
+  "signature": "void BattleScene_ReleaseUnitSlotHandles(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (per-unit handles at 0x141 pairs, 0x159..0x15E, lists at 0xC1/0xD7)"
+  },
+  "summary": "Releases every packed handle held by the battle-2D unit slots: the 12 per-side handles, the 4 extra handles, the 5 slot handles and the two scene lists, resetting each handle to the null encoding.",
+  "confidence": 0.5,
+  "evidence": "Loops `self[i*2+0x141]` (12 iterations) and `self+i+0x15e` (4) and `self+0x159..0x15e`, each time checking the handle tag `uVar5>>0xc` and calling func_001241D0 (Pack_FreeHandleEntry) before storing the null handle (`& 0xfffff000 | mask`), then func_004B8F98 and func_001BBDDC on the two lists. Caller 'Menu_SumPartyStats' (0x20F480) is really a battle teardown caller."
+ },
+ {
+  "address": "0x006050C0",
+  "name": "maybe_BattleScene_BuildUnitKeyframesVariant",
+  "signature": "void maybe_BattleScene_BuildUnitKeyframesVariant(Battle2DScene* self)",
+  "params": {
+   "param_1": "battle2d scene (unit animation track +0x594)"
+  },
+  "summary": "Variant of the battle-2D keyframe builder used when the scene variant byte is 7: it walks all units, applies the model height and a special case for model id 400, and writes the keyframe list into the scene time track.",
+  "confidence": 0.45,
+  "evidence": "Same four-list walk as 0x604580; `modelId = *(*piVar2 + 0x768) & 0xffff`, `func_0063EEAC(modelId)` gives the height f_88 (`VectorSignedToFloat(-iVar3->f_88)`), `func_004B8A14(&arg1->f_35c,...)` applies the keys, and `if (uVar7 == 400)` adds an extra entry with g_0060524c/g_00605240. Sole caller the variant dispatcher 0x603714."
+ },
+ {
+  "address": "0x0060525C",
+  "name": "maybe_BattleScene_InitScreen",
+  "signature": "void maybe_BattleScene_InitScreen(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (model container f_304/f_35c, state f_134)"
+  },
+  "summary": "Initialises the battle scene: resets the model container, allocates its helper objects, sets the group states of the actor models, plays the screen's sound effects and prepares the scroll/selection state.",
+  "confidence": 0.4,
+  "evidence": "`Event_ActorModels_Update(&self->f_35c,&self->f_304)`, lazy allocation of 0x98-byte objects via func_0011FE8C/func_0011CFAC/func_00627308 (Ui_Object_InitHeader), virtual calls on the object at +0x1c (slots 0x1c/0x24), `func_004B9B28` (Event_ActorModels_SetGroupState), `Sound_PlaySeById` and `Ui_PopupEntry_PlayById`. No callers (screen callback)."
+ },
+ {
+  "address": "0x00605814",
+  "name": "maybe_BattleScene_BuildKeyframes",
+  "signature": "void maybe_BattleScene_BuildKeyframes(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (model container f_35c, unit animation track +0x594)"
+  },
+  "summary": "Variant 6 of the unit keyframe builder: for every visible party member it computes the model's height offset and writes the keyframe list into the screen's time track, with a special case for the model id g_00605920.",
+  "confidence": 0.45,
+  "evidence": "Four-list walk, `modelId = *(*piVar2 + 0x768) & 0xffff`, func_0063EEAC(modelId)->f_88 height, `if (iVar6 == g_00605920 || iVar6 == 0x350) uVar8 = 0x28;` and `func_004B8A14(arg1 + 0x35c)` applies the keys. Sole caller the variant dispatcher 0x603714."
+ },
+ {
+  "address": "0x00605930",
+  "name": "maybe_BattleScene_IsActorModelRegistered",
+  "signature": "int maybe_BattleScene_IsActorModelRegistered(BattleScene* self, BattleMember* entry)",
+  "params": {
+   "param_1": "screen",
+   "param_2": "actor entry (state byte at +0x10)"
+  },
+  "summary": "Returns whether the given actor entry is already registered in the screen's model container, or 1 when the screen's mode byte suppresses the check.",
+  "confidence": 0.4,
+  "evidence": "`cVar1 = *(char*)(g_0060597c + work->f_5c); if (cVar1 == 0) cVar1 = arg2->f_10; if (cVar1 == 0) return func_004B98F8(self + 0x35c, arg2); else return 1;` - func_004B98F8 is the model-container lookup. No callers."
+ },
+ {
+  "address": "0x00605C84",
+  "name": "BattleScene_ResetTimeTracks",
+  "signature": "void BattleScene_ResetTimeTracks(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (4 time tracks at +0x308, stride 0x3C)"
+  },
+  "summary": "Resets the four animation time tracks used by the party models.",
+  "confidence": 0.5,
+  "evidence": "Loop `i<4` calling `func_0043D270(self + i*0x3c + 0x308)` = Anim_TimeTrack_MergeDuplicates/Reset over the same track array that 0x606234 case 3 initialises. Caller 'Menu_AttachActorToWindow' (0x20A63C) is really a screen callback."
+ },
+ {
+  "address": "0x00605CB4",
+  "name": "BattleScene_BuildMemberModel",
+  "signature": "int BattleScene_BuildMemberModel(BattleScene* self, BattleMember* entry, unsigned flags)",
+  "params": {
+   "param_1": "screen",
+   "param_2": "actor entry (f_10 = model data, f_110 = model handle, f_768 = character/equipment id)",
+   "param_3": "flags"
+  },
+  "summary": "Creates the render model for one party member from their equipment/style data: allocates the 0x240-byte model setup block, resolves the character style and grip slots, and builds the model with its animation slots.",
+  "confidence": 0.5,
+  "evidence": "func_00109DC8(0x240,...,4) = Mem_AllocAligned, `func_0063DCA4(*gfx, entry->f_768 & 0xffff)` character record, `Text_GetCharPairStyle` (0x31D178), `Model_Equip_SetGripSlot` (0x40BA78), func_0059F800/func_005A1F58 (battle2d model add), plus a large local descriptor (local_78..local_44) filled with equipment/style ids. Callers: 0x606718, 0x606AEC, 0x608F98, 0x60A824, 0x60C8B4 - all screen model builders."
+ },
+ {
+  "address": "0x00606234",
+  "name": "maybe_BattleScene_UpdateState",
+  "signature": "void maybe_BattleScene_UpdateState(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (state f_f0)"
+  },
+  "summary": "State machine of the battle scene: dispatches the per-state update/setup routines for states 0..7 (intro, list open, status panel, equipment change, etc.) and hides the two helper list widgets when a state does not need them.",
+  "confidence": 0.45,
+  "evidence": "`switch (self->f_f0)` calling 0x608DAC/0x609498 (state 0), 0x60A648/0x609D34 (1), 0x60C014/0x60AF18 (2), 0x608DAC + time-track init + 0x60A468 (3), and the same helper lists at work+0x4254/0x4270 being hidden via func_002AB8C0. Called from the screen's own update plus 0x20E75C."
+ },
+ {
+  "address": "0x006065B0",
+  "name": "Container_ReleaseEntryListFrom",
+  "signature": "void Container_ReleaseEntryListFrom(void* owner, Container* list, int firstIndex, int a4)",
+  "params": {
+   "param_1": "owner object",
+   "param_2": "intrusive list (head f_c / tail f_10)",
+   "param_3": "index from which to release (0 = all)",
+   "param_4": "context"
+  },
+  "summary": "Releases the entries of an intrusive list either entirely (index 0) or from the given index onwards, releasing each entry's model handle and then the entry itself.",
+  "confidence": 0.5,
+  "evidence": "Walks `arg2->f_c`/`arg2->f_10` sentinel list with func_0010EBE4 (list erase), releases `entry[0x44]` through func_001C7570 (model handle free) and calls `(**(*entry + 4))(entry)` (virtual destructor); the `arg3 != 0` branch skips the first arg3 entries. Callers: 0x609480 and 0x609498."
+ },
+ {
+  "address": "0x00606718",
+  "name": "maybe_BattleScene_RefreshModelHandles",
+  "signature": "void maybe_BattleScene_RefreshModelHandles(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (member lists work+0x4260 and work+0x427C)"
+  },
+  "summary": "Re-resolves the render-model handle of every party member in the two member lists and then rebuilds the per-slot models from the refreshed handles.",
+  "confidence": 0.45,
+  "evidence": "Two list walks (`f_4260` max 3 entries, `f_427c` max 1) doing `member->f_110 = func_001C9208(work->f_54, member->f_768)`, then the four-slot loop building each member's model. No callers (screen callback)."
+ },
+ {
+  "address": "0x006068E8",
+  "name": "maybe_BattleScene_LayoutUnitModel",
+  "signature": "void maybe_BattleScene_LayoutUnitModel(BattleScene* self, unsigned handle, int count, int index, int variant)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model handle",
+   "param_3": "entry/party count",
+   "param_4": "index in the list",
+   "param_5": "layout variant (0 = grid slot)"
+  },
+  "summary": "Places a battle unit model on screen: puts it in state 4, then computes its slot position from the entry count and index (staggering rows when several units share a slot) and writes the resulting transform.",
+  "confidence": 0.45,
+  "evidence": "`func_005F5818(handle)` resolves the node, sets f_138/f_13c from g_00606ac8/g_00606acc, calls vtable+0x3c(node,4), then computes `fVar7 = (arg3-1) * g_00606ad0 * g_00606ad4` with the `arg3 < 3 || (arg4 != 1 && arg4 != 2)` branch selecting the offset table and func_001CA3E4 reading the slot list. Callers: 0x606DA4 and 0x60BBB8 (both scene layout refreshes)."
+ },
+ {
+  "address": "0x00606AEC",
+  "name": "maybe_BattleScene_UpdateUnitModelsByState",
+  "signature": "int maybe_BattleScene_UpdateUnitModelsByState(BattleScene* self, BattleMember* member, unsigned a3, int a4)",
+  "params": {
+   "param_1": "battle scene (state f_f0)",
+   "param_2": "member entry being laid out",
+   "param_3": "unused/index",
+   "param_4": "index inside the list"
+  },
+  "summary": "State-dependent unit model update: for the intro/idle states it delegates to the model rebuild, for the list-open state it walks the four unit lists and updates each unit's model and placement.",
+  "confidence": 0.45,
+  "evidence": "`switch (self->f_f0) { case 0: case 4: case 5: return func_00608F98(...); case 1: ... }` then the four-list walk over `work->f_5c + i*0x1c + 0x428c` with func_005797D8/func_002AB62C. Same state enumeration as BattleScene_UpdateState (0x606234)."
+ },
+ {
+  "address": "0x00606C00",
+  "name": "maybe_BattleScene_StartSceneTransition",
+  "signature": "void maybe_BattleScene_StartSceneTransition(BattleScene* self, int forward, unsigned a3)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "0 = open, non-zero = close",
+   "param_3": "extra argument for the close path"
+  },
+  "summary": "Starts the battle-scene open/close transition by writing the two transition state fields (f_300/f_304) and notifying the scene node; the close path also loads the transition layout resource.",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 == 0) { f_304 = 2; f_300 = 3; func_002AEA84(ui,0,&f_300); ... } else { *(u8*)(work+0x4251)=0; f_300 = 2; f_304 = 3; func_002AEA84(...); func_0060B75C(self,arg3); }` - the same f_300/f_304 pair as the other transition helpers (0x608ACC, 0x60ACFC)."
+ },
+ {
+  "address": "0x00606CEC",
+  "name": "BattleScene_ReleaseSceneModels",
+  "signature": "void BattleScene_ReleaseSceneModels(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (handle array f_3FC[9], time tracks at f_308/f_424)"
+  },
+  "summary": "Releases everything the battle scene allocated: stops the battle, frees the nine per-unit model handles, the shared time track and the four animation tracks.",
+  "confidence": 0.55,
+  "evidence": "`func_0016BA4C()` (Battle_ResetCommandQueue), then 0x608CF8 / 0x60865C / 0x6087C0 (member/reserve/unit handle releases), a loop over 9 handles at `self + i*4 + 0x3FC` freeing via func_001C7570, `func_003237A4(self+0x424)`, and 4x `func_0043D9D0(self + j*0x3c + 0x308)` (Anim_TimeTrack_Reset). Caller: Gfx_Scene_Shutdown (0x208BE0)."
+ },
+ {
+  "address": "0x00606DA4",
+  "name": "maybe_BattleScene_RefreshCommandWidgets",
+  "signature": "void maybe_BattleScene_RefreshCommandWidgets(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (widget lists work+0x4254 and work+0x4270)"
+  },
+  "summary": "Refreshes the battle command widgets: for every list item it enables/disables the widget's sub-elements, commits the equipment node changes of the displayed model and lays the units out again.",
+  "confidence": 0.4,
+  "evidence": "func_0016C714 (Battle_RefreshBattleUi), `func_00632644(work->f_5c)` mode check, loops calling `vtable+0xE8(widget,0x9a/0xdb/0x9c)` and `func_00278668(widget,id,1)` (Model_SetSlotState), `Model_Equip_CommitNodeChanges` (0x40A8C4), `Ui_GlyphSlot_Reset` (0x4EE2F0), then BattleScene_LayoutUnitModel (0x6068E8)."
+ },
+ {
+  "address": "0x00607500",
+  "name": "BattleScene_LoadCommonModelResource",
+  "signature": "void BattleScene_LoadCommonModelResource(BattleScene* self, unsigned* outPair, int resourceIndex)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "receives the two resolved values",
+   "param_3": "resource index inside battlecmn.bch"
+  },
+  "summary": "Loads the battle common model archive ('battlecmn.bch') once, retrieves the requested resource and writes its two values (e.g. model id and size) to the output pair.",
+  "confidence": 0.6,
+  "evidence": "Lazy singleton via g_00607638/g_0060763c allocating 0x21c bytes, `func_00124B24(obj,5,g_00607648)` with g_00607648 = 'battlecmn.bch' (verified string at 0x60B8E0), then `func_00193FA0` (Gfx_ResourceList_Attach), `Gfx_ResDesc_GetValueA/GetValueD(res,arg3)` into *arg2. Same pattern as 0x60B75C."
+ },
+ {
+  "address": "0x00607650",
+  "name": "maybe_BattleScene_ResolveModelSize",
+  "signature": "void maybe_BattleScene_ResolveModelSize(BattleScene* self, int modelId)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model id"
+  },
+  "summary": "Resolves the model record and its size/height for a model id via the battle model tables; result is left in the looked-up record (the routine returns nothing).",
+  "confidence": 0.35,
+  "evidence": "`func_002070A8(work->f_5c,arg2)` (model category table) then `func_0063EEAC(modelId)` (model record); the return value is unused, so this is a lookup/cache-warm helper. Called from 0x608F98, 0x609480, 0x609498, 0x60AA38, 0x60D3D8 and FieldParty_RegisterMemberModel."
+ },
+ {
+  "address": "0x006076F4",
+  "name": "BattleScene_WaitForModelHandles",
+  "signature": "int BattleScene_WaitForModelHandles(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (6 handles at f_43C, list at f_424)"
+  },
+  "summary": "Polls the six loading model handles: returns 0 while any handle is still incomplete, and once all are ready releases them and returns 1.",
+  "confidence": 0.5,
+  "evidence": "`func_0032383C(self+0x424,0)` early-out, loop over 6 handles at `self + i*8 + 0x43c` with tag check and `resource->f_78 < 4` (not loaded) -> return 0; after all six, `func_0030C028(self + i*8 + 0x43c)` (Field_HandleIsValid / release) and return 1."
+ },
+ {
+  "address": "0x006077A0",
+  "name": "maybe_BattleScene_NotifySceneNodeState4",
+  "signature": "void maybe_BattleScene_NotifySceneNodeState4(void)",
+  "params": {},
+  "summary": "Small notification helper that sets the battle scene node to state 4.",
+  "confidence": 0.4,
+  "evidence": "`func_002AEA84(*(work+0x74), 4, 0)` - identical shape to 0x607AB0 which passes 5 instead of 4."
+ },
+ {
+  "address": "0x006077C8",
+  "name": "maybe_BattleScene_UpdateWidgetVisibility",
+  "signature": "int maybe_BattleScene_UpdateWidgetVisibility(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (widget f_e4, UI node state at +0x6C)"
+  },
+  "summary": "Enables the scene's extra widget when the UI node is in one of the transitional states (2..6) and a certain battle condition holds; always returns 1.",
+  "confidence": 0.35,
+  "evidence": "`cVar1 = *(char*)(*(work+0x74) + 0x6c); if (cVar1 not in {2,3,4,5,6}) return 1; if (self->f_e4) { func_0062B32C(work->f_54); ... } if (bVar2) (**(*self->f_e4 + 0x14))(self->f_e4,1); return 1;`."
+ },
+ {
+  "address": "0x00607864",
+  "name": "BattleScene_SetTransitionStateByEvent",
+  "signature": "void BattleScene_SetTransitionStateByEvent(BattleScene* self, int eventCode)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "event/animation code (1,3,8,10,11,12,13)"
+  },
+  "summary": "Maps a scene event code to the pair of transition states (f_300/f_304) and notifies the scene node, used to drive the battle intro/outro animations.",
+  "confidence": 0.5,
+  "evidence": "`switch`-like chain on arg3: 1 -> (0xFFFFFFFF,?), 3 -> (1,0), 8 -> (1,2), 10 -> (1,6), 11 -> (7,6), 12 -> (8,f_304), 13 -> (9,f_304), then `f_300/f_304 = ...; func_002AEA84(ui,0,&f_300)`."
+ },
+ {
+  "address": "0x00607924",
+  "name": "BattleScene_PlaySwitchbackAnimation",
+  "signature": "void BattleScene_PlaySwitchbackAnimation(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (four unit lists at work+0x428C)"
+  },
+  "summary": "Starts the 'switchback_start' animation on the model of every unit: looks each unit's node up and plays the named animation with the switch-back flag set.",
+  "confidence": 0.65,
+  "evidence": "Loop i<4 over the unit lists, `func_005F5818(unit->f_110)` resolves the node, `(**(*node + 0x84))(node, \"switchback_start\")` - the literal 'switchback_start' is at 0x6079E0 (verified in code.decompressed.bin) - then `node->f_1bf = 1`."
+ },
+ {
+  "address": "0x006079F4",
+  "name": "BattleScene_IsModelSelectable",
+  "signature": "int BattleScene_IsModelSelectable(BattleScene* self, int modelId)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model id, 0xFFFF = none"
+  },
+  "summary": "Returns whether the given model may be chosen/displayed for the current battle mode: mode 0 delegates to the unit check, mode 1 only accepts ids below 3, mode 2 uses the alternate check.",
+  "confidence": 0.5,
+  "evidence": "`func_006326D8(work->f_5c)` returns 0/1/2; 0 -> func_0060AA38, 1 -> `arg2 != 0xffff && func_002070A8(...) < 3`, 2 -> func_0060D05C. Caller Menu_CheckSlotSelectable (0x20B10C) is a battle-cursor check."
+ },
+ {
+  "address": "0x00607AB0",
+  "name": "maybe_BattleScene_NotifySceneNodeState5",
+  "signature": "void maybe_BattleScene_NotifySceneNodeState5(void)",
+  "params": {},
+  "summary": "Small notification helper that sets the battle scene node to state 5 (the counterpart of state 4).",
+  "confidence": 0.4,
+  "evidence": "`func_002AEA84(*(work+0x74), 5, 0)`."
+ },
+ {
+  "address": "0x00607AE8",
+  "name": "maybe_BattleScene_CheckUnitSide",
+  "signature": "int maybe_BattleScene_CheckUnitSide(BattleScene* self, int characterId, int a3, int side)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "character id stored at unit+0x114",
+   "param_3": "unused",
+   "param_4": "expected side index"
+  },
+  "summary": "Searches all four unit sides for a unit with the given character id and reports whether it is in the expected side (returns 1 when the unit is not found at all).",
+  "confidence": 0.35,
+  "evidence": "Four-list walk comparing `*(u8*)(unit + 0x114) == arg2`; on a hit returns `1` if `i == arg4` else `0`; falls through to `return 1`."
+ },
+ {
+  "address": "0x00607B7C",
+  "name": "maybe_BattleScene_UpdatePartyVisibility",
+  "signature": "void maybe_BattleScene_UpdatePartyVisibility(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (party list work+0x4260, flags f_424)"
+  },
+  "summary": "Updates the visibility/draw state of the party member widgets from their animation and battle states (checks four action flags per member and writes them into a bit mask).",
+  "confidence": 0.45,
+  "evidence": "`func_0016E680()` (Battle_Initialize) then walks the `f_4260` list calling `func_003238BC(self+0x424,1..4)` and `vtable+0x24` / `vtable+0xE8(member,0x6a/0x6b/0x1a)` to build the bit mask at uStack_20 (constants g_00607d20)."
+ },
+ {
+  "address": "0x00607B94",
+  "name": "maybe_BattleScene_UpdatePartyVisibilityEx",
+  "signature": "void maybe_BattleScene_UpdatePartyVisibilityEx(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Same visibility-mask computation as BattleScene_UpdatePartyVisibility but without the battle re-initialisation, used on subsequent frames.",
+  "confidence": 0.45,
+  "evidence": "Identical body to 0x607B7C minus the `func_0016E680()` call; both use func_003238BC and the virtual 0xE8 predicates with g_00607d20. Caller Menu_UpdateSelectionWindow (0x20E75C)."
+ },
+ {
+  "address": "0x00607D24",
+  "name": "BattleScene_Finish",
+  "signature": "void BattleScene_Finish(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Ends the battle scene: finishes the battle and moves the scene state to 7 (finished).",
+  "confidence": 0.6,
+  "evidence": "`func_001714D4()` (Battle_FinishBattleScene) and `arg1->f_46c = 7`."
+ },
+ {
+  "address": "0x00607D3C",
+  "name": "BattleScene_ShowUnitWidgets",
+  "signature": "void BattleScene_ShowUnitWidgets(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (four widget lists at work+0x428C)"
+  },
+  "summary": "Calls the scene's own show hook and then makes all four unit widget lists visible.",
+  "confidence": 0.5,
+  "evidence": "`(**(*arg1 + 0x2c))()` then 4x `func_002AB8C0(work + i*0x1c + 0x428c, 1)` (Container_List_SetParamOnVisible)."
+ },
+ {
+  "address": "0x00607DB4",
+  "name": "maybe_BattleScene_UpdateWidgetsVisibilityByState",
+  "signature": "int maybe_BattleScene_UpdateWidgetsVisibilityByState(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (global battle state bytes at work+0x4210/0x4201/0x4320)"
+  },
+  "summary": "Decides whether the unit widget lists should be hidden or shown from the current battle sub-state, hiding them for most states and only showing them for the visible-battle states.",
+  "confidence": 0.4,
+  "evidence": "Checks `work+0x4320` object and its byte +0x404, then `work+0x4210 == -1` and `work+0x4201 in {3,4,...}`; in the false branch loops 4x `func_002AB8C0(work + i*0x1c + 0x428c, 1)`. Also calls func_0020C198 and func_0062B32C."
+ },
+ {
+  "address": "0x00608104",
+  "name": "BattleScene_LayoutEnemyFormation",
+  "signature": "void BattleScene_LayoutEnemyFormation(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (formation block work+0x4E78..0x4E98)"
+  },
+  "summary": "Places the enemy models according to the current formation block: reads the 9-word formation descriptor (positions, counts, scale) and distributes the enemy units across the screen.",
+  "confidence": 0.5,
+  "evidence": "Calls BattleScene_UpdatePartyVisibility, copies `work->f_4e78`..`f_4e98` (9 words) into locals, uses `f_4e98 & 0xff` as the member count and computes `count * g_00608290 * g_00608294 + g_0060829c` for the layout spacing; loops with g_006082b4."
+ },
+ {
+  "address": "0x006082BC",
+  "name": "maybe_BattleScene_CreateFormationWidgets",
+  "signature": "void maybe_BattleScene_CreateFormationWidgets(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (formation count work+0x4E98)"
+  },
+  "summary": "Creates one status widget per member of the current enemy formation, up to the formation's member count.",
+  "confidence": 0.45,
+  "evidence": "Reads `work->f_4e90/f_4e94/f_4e98`, loops `(char)f_4e98` times allocating 0x98-byte objects via func_0011FE8C/func_0011CFAC/func_00627308 (Ui_Object_InitHeader) and initialising them with the virtual at +0x1c; uses g_00608508/g_0060850c/g_00608510."
+ },
+ {
+  "address": "0x00608538",
+  "name": "BattleScene_SelectMemberEntry",
+  "signature": "int BattleScene_SelectMemberEntry(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (selected member index f_3F8)"
+  },
+  "summary": "Highlights the member entry indicated by the battle's selection index: hides both helper lists, looks the entry up by index and starts its focus animation.",
+  "confidence": 0.5,
+  "evidence": "Reads `*(char*)(work + g_0060864c)` (battle selection index), skips if negative or already selected (`self->f_3f8`), hides work+0x4254/0x4270 with func_002AB8C0, `func_002AB62C(work+0x4254,index)` then `func_005F5818(entry->f_110)` -> `vtable+0x98` and `func_005E7848(node,0x30,0)`."
+ },
+ {
+  "address": "0x0060865C",
+  "name": "BattleScene_ReleaseReserveHandles",
+  "signature": "void BattleScene_ReleaseReserveHandles(void)",
+  "params": {},
+  "summary": "Releases the model handles of the reserve (non-active) party members stored in the work list at +0x427C.",
+  "confidence": 0.5,
+  "evidence": "Walks the global `work->f_427c` list and for each entry frees `entry->f_110` through `func_001C7570(work->f_54, handle)`; identical pattern to 0x608CF8/0x6087C0 but on the reserve list. Sole caller BattleScene_ReleaseSceneModels."
+ },
+ {
+  "address": "0x00608710",
+  "name": "BattleScene_ResetAndInitTimeTracks",
+  "signature": "void BattleScene_ResetAndInitTimeTracks(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (time tracks at +0x308, stride 0x3C)"
+  },
+  "summary": "Resets the four animation time tracks and, in the default battle mode, re-initialises them from the scene's start timestamp.",
+  "confidence": 0.5,
+  "evidence": "4x `func_0043D9D0(self + i*0x3c + 0x308)` then `if (func_006326D8(work->f_5c) == 0) 4x func_0043DC1C(self + i*0x3c + 0x308, i, &{g_006087bc, self->f_b8})`."
+ },
+ {
+  "address": "0x006087C0",
+  "name": "BattleScene_ReleaseUnitHandles",
+  "signature": "void BattleScene_ReleaseUnitHandles(void)",
+  "params": {},
+  "summary": "Releases the model handle of every unit in all four battle sides.",
+  "confidence": 0.55,
+  "evidence": "Four-list walk over `work->f_5c + i*0x1c` lists, tag check on `entry->f_110` and `func_001C7570(work->f_54, entry->f_110)`. Callers: BattleScene_ReleaseSceneModels and 0x60BFF4."
+ },
+ {
+  "address": "0x0060888C",
+  "name": "BattleScene_BuildEnemyModel",
+  "signature": "void BattleScene_BuildEnemyModel(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Creates an enemy unit's render model: fills the model descriptor (equipment/colour/style fields) and instantiates the model through the same path as the party member builder.",
+  "confidence": 0.5,
+  "evidence": "Same 0x240-byte descriptor locals as Menu_Party/BattleScene_BuildMemberModel (0x605CB4) with g_00608aa4/g_00608aa8/g_00608aac, `func_00109DC8(0x240,...)`, `func_005F5818`, `func_005F8174`, `func_001235A4`. Sole caller BattleScene_RefreshModelHandles (0x606718)."
+ },
+ {
+  "address": "0x00608ACC",
+  "name": "maybe_BattleScene_StartTransitionToStatus",
+  "signature": "void maybe_BattleScene_StartTransitionToStatus(BattleScene* self, int forward)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "0 = open, non-zero = close back"
+  },
+  "summary": "Starts the transition between the battle scene and the status/command overlay by writing the two transition state fields and notifying the scene node (with an optional effect on the close path).",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 == 0) { f_304 = 2; f_300 = 5; func_002AEA84(ui,0,&f_300); ... } else { f_300 = 2; f_304 = 5; func_006074F8(self,&local); func_002AEA84(ui,3,&local); }` - the same f_300/f_304 transition pair as 0x606C00 / 0x60ACFC."
+ },
+ {
+  "address": "0x00608BA0",
+  "name": "maybe_BattleScene_StartTransitionWithTarget",
+  "signature": "void maybe_BattleScene_StartTransitionWithTarget(BattleScene* self, int forward, int target, int useTarget)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "0 = open, non-zero = close",
+   "param_3": "target selection",
+   "param_4": "non-zero to use the target"
+  },
+  "summary": "Transition variant that also carries a target selection (used when opening the scene with a specific unit focused); otherwise identical to BattleScene_StartTransitionToStatus.",
+  "confidence": 0.45,
+  "evidence": "Same f_300/f_304 = 2/5 or 5/2 writes and func_002AEA84 notifications, plus `if (arg4 == 0) func_006074F8(self,&local); else if (arg3 != 0) ... func_0030AC64/0030ACDC` (Container_FindEntryByKey) to locate the target entry."
+ },
+ {
+  "address": "0x00608CF8",
+  "name": "BattleScene_ReleaseMemberHandles",
+  "signature": "void BattleScene_ReleaseMemberHandles(void)",
+  "params": {},
+  "summary": "Releases the model handles of the active party members stored in the work list at +0x4260.",
+  "confidence": 0.55,
+  "evidence": "Walks `work->f_4260` with the f_110 handle tag check and `func_001C7570(work->f_54, handle)`. Called from BattleScene_ReleaseSceneModels."
+ },
+ {
+  "address": "0x00608DAC",
+  "name": "BattleScene_LayoutPartyModels",
+  "signature": "void BattleScene_LayoutPartyModels(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (state f_f0 defines the row/grid layout)"
+  },
+  "summary": "Lays out the party member models: chooses the grid from the current screen state, then places every member of the active list (and possibly the reserves) at its slot.",
+  "confidence": 0.5,
+  "evidence": "`switch (arg1->f_f0) { case 3: case 4: ... }` selects the layout, reads the two list counts with `func_002AB6FC(work+0x4254,0)` / `func_005797D8(work+0x4270,0,1)`, then walks `f_4260` calling BattleScene_PlaceUnitModel (0x60A584) per member with the computed slot index."
+ },
+ {
+  "address": "0x00608F98",
+  "name": "BattleScene_BuildPartyModel",
+  "signature": "int BattleScene_BuildPartyModel(BattleScene* self, BattleMember* member, int slot)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "member entry (f_768 = body/equipment id)",
+   "param_3": "slot index"
+  },
+  "summary": "Builds (or rebuilds) the render model of one party member and adds it to the scene: creates the keyframe tracks for its body, applies the slot's position/scale and inserts the animation keys.",
+  "confidence": 0.55,
+  "evidence": "Starts with `if (arg2 == 0) return 0;`, uses `arg2->f_768` (body id), calls BattleScene_BuildMemberModel (0x605CB4), func_00607650, `Anim_TimeTrack_InsertRange`/`MergeDuplicates`/`SetKeyframe`, `func_0043C920`/`func_0043CA0C` and func_00672DB4. Callers: 0x606AEC and 0x60C8B4."
+ },
+ {
+  "address": "0x00609480",
+  "name": "maybe_BattleScene_UpdateScreenState0",
+  "signature": "void maybe_BattleScene_UpdateScreenState0(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Update routine for battle screen state 0: rebuilds the member list, updates the keyframes and positions of the displayed models.",
+  "confidence": 0.45,
+  "evidence": "Near-identical body to 0x609498 (same locals and calls: func_005797D8, ContextRelease list at 0x428C, Anim_TimeTrack_SetKeyframe/Init, BattleScene_PlaceUnitModel 0x60A584, func_00608DAC), but entered without the state dispatch; no callers."
+ },
+ {
+  "address": "0x00609498",
+  "name": "BattleScene_UpdateScreenState0Main",
+  "signature": "void BattleScene_UpdateScreenState0Main(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Main update for battle screen state 0: recomputes each member's position/keyframes from the list layout and refreshes the time tracks.",
+  "confidence": 0.5,
+  "evidence": "`func_005797D8(work+i*0x1c+0x428c,...)` loop, `Anim_TimeTrack_SetKeyframe` (0x43DAC4) and `Anim_TimeTrack_Init` (0x43DC1C), BattleScene_PlaceUnitModel (0x60A584), func_006065B0. Callers: Menu_OpenItemEntryWindow (0x206C40) and the state dispatcher 0x606234."
+ },
+ {
+  "address": "0x00609D34",
+  "name": "maybe_BattleScene_UpdateUnitList0",
+  "signature": "void maybe_BattleScene_UpdateUnitList0(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Refreshes the first unit list: walks the two helper lists, recomputes each unit's screen slot and rebuilds the model when the slot changed.",
+  "confidence": 0.45,
+  "evidence": "Walks `work + i*0x1c + 0x428c` with `func_002AB62C`, reads `unit->f_768`, checks the global slot table `*g_0060a45c` (`local_68`, bytes -1 = free), calls func_0060D3D8 for the rebuild. Callers: 0x206C40 and the state dispatcher."
+ },
+ {
+  "address": "0x0060A584",
+  "name": "BattleScene_PlaceUnitModel",
+  "signature": "void BattleScene_PlaceUnitModel(BattleScene* self, unsigned modelHandle, int count, int index)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model handle",
+   "param_3": "number of units in the row",
+   "param_4": "index of this unit in the row"
+  },
+  "summary": "Places a unit model in its row: computes the horizontal spacing from the row size and index and writes the position into the node's transform.",
+  "confidence": 0.6,
+  "evidence": "`func_005F5818(arg2)` resolves the node, then `fVar2 = g_0060a638; if (arg3-1 < 3 || arg3 > 3) fVar2 = g_0060a640 + (g_0060a63c/(arg3+1))*(arg4+1);` writes `node->f_9c/f_a0/f_a4` (position), `f_118 = 1` (transform dirty) and calls func_005F5F54(node,&pos,1). Callers: 0x608DAC, 0x60C170, 0x60C210, 0x60B8FC family."
+ },
+ {
+  "address": "0x0060A648",
+  "name": "BattleScene_UpdateScreenState1",
+  "signature": "void BattleScene_UpdateScreenState1(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (helper list counts)"
+  },
+  "summary": "Update routine for battle screen state 1: assigns a screen slot to every active party member (up to 5) and positions the model accordingly.",
+  "confidence": 0.5,
+  "evidence": "Reads the two list counts (`func_002AB6FC(work+0x4254)` + `func_005797D8(work+0x4270)`), then walks `f_4260`: `if (count < 5) { *(u8*)(member + 0x114) = index; func_0060B8FC(self, member->f_110, count, index); } else if (index == 0) ...`. Callers: 0x20E75C and the state dispatcher."
+ },
+ {
+  "address": "0x0060A824",
+  "name": "maybe_BattleScene_UpdateUnitModelsB",
+  "signature": "int maybe_BattleScene_UpdateUnitModelsB(BattleScene* self, int a2, int a3)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "argument passed to the per-unit updater",
+   "param_3": "argument passed to the per-unit updater"
+  },
+  "summary": "Second variant of the per-state unit model update: walks all four unit lists, skipping already-handled model ids, and rebuilds/places each unit's model.",
+  "confidence": 0.45,
+  "evidence": "Four-list walk over `work + i*0x1c + 0x428c`, `modelId = unit->f_768 & 0xffff`, skips `g_0060aa2c`, checks `func_002070A8(work->f_5c,modelId) == 3`, then BattleScene_BuildMemberModel (0x605CB4) and 0x60D3D8. No callers (called through the state dispatch)."
+ },
+ {
+  "address": "0x0060AA38",
+  "name": "BattleScene_ValidateModelForUnit",
+  "signature": "int BattleScene_ValidateModelForUnit(BattleScene* self, int modelId)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model id, 0xFFFF = none"
+  },
+  "summary": "Checks that a model id can be used by the currently displayed unit: walks the four unit lists, verifies the id's category and the corresponding animation track is present.",
+  "confidence": 0.5,
+  "evidence": "`if (arg2 != 0xffff)`, four-list walk with `unit->f_768` and `func_002070A8(work->f_5c, id & 0xffff)`, uses `Anim_TimeTrack_InsertRange`/`MergeDuplicates`/`func_0043CC68` to test the track. Sole caller BattleScene_IsModelSelectable (0x6079F4)."
+ },
+ {
+  "address": "0x0060ACFC",
+  "name": "maybe_BattleScene_SetTransitionState4",
+  "signature": "void maybe_BattleScene_SetTransitionState4(BattleScene* self, int forward)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "0 = one direction, non-zero = the other"
+  },
+  "summary": "Writes the transition state pair (2/4 in either order) and notifies the scene node; used for the short battle-UI slide transitions.",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 != 0) { f_304 = 4; f_300 = 2; } else { f_300 = 4; f_304 = 2; } func_002AEA84(ui,0,&f_300);`."
+ },
+ {
+  "address": "0x0060AD6C",
+  "name": "maybe_BattleScene_HideDistantUnits",
+  "signature": "void maybe_BattleScene_HideDistantUnits(void)",
+  "params": {},
+  "summary": "Hides or releases the models of units that are farther than a threshold from the camera, freeing their handles to save resources.",
+  "confidence": 0.4,
+  "evidence": "Four-list walk, `func_005F5818(entry->f_110)` then `func_00669D38()` returns a distance which is compared with g_0060af14 and used to release via func_001C7570 on the f_110 handle; also calls func_00631BA4/func_00631E80 and func_00632778."
+ },
+ {
+  "address": "0x0060AF18",
+  "name": "BattleScene_UpdateUnitModelTransforms",
+  "signature": "void BattleScene_UpdateUnitModelTransforms(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Per-frame update of every unit model's transform: computes the row/column offsets from the list counts, animates the arc keyframes and applies the animation scale to the sprite node.",
+  "confidence": 0.5,
+  "evidence": "Reads both list counts into `local_58`, loops the four unit lists, calls `Anim_TimeTrack_BuildArcKeyframes` (0x43D440), `Anim_TimeTrack_RemoveFirstExpired` (0x43D958), `func_005F5818`, `func_005F5F54`, func_00672E44/func_00673BC8 and 0x60dc10/0x60de14 (sprite2D anim scale/slot assignment)."
+ },
+ {
+  "address": "0x0060B408",
+  "name": "maybe_BattleScene_FindFreeMemberEntry",
+  "signature": "void maybe_BattleScene_FindFreeMemberEntry(BattleScene* self, BattleMember* entries, int count)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "array of member entries (0x24 bytes each)",
+   "param_3": "entry count"
+  },
+  "summary": "Scans the member entry array for the first unused slot (entry->f_10 == 0) with a body id different from the default, resolving its model; aborts through the game's error handler when the array is exhausted.",
+  "confidence": 0.3,
+  "evidence": "`if (2 < *(u8*)(work + 0x4201)) return;` loop `if (*(char*)(*arg2 + 0x10) == 0) { id = *(*arg2 + 0x768) & 0xffff; if (id != g_0060b72c) func_002070A8(work->f_5c,id); }` and the `func_00100050(...,g_0060b730,0x3c,2)` error path. Ghidra lost the loop structure (appears infinite)."
+ },
+ {
+  "address": "0x0060B75C",
+  "name": "BattleScene_LoadTransitionLayout",
+  "signature": "void BattleScene_LoadTransitionLayout(BattleScene* self, unsigned* out)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "receives the resolved resource values"
+  },
+  "summary": "Loads the resource archive used by the battle scene transition and resolves its entry values into the output; the same lazy-singleton pattern as the battlecmn.bch loader.",
+  "confidence": 0.5,
+  "evidence": "Lazy singleton (0x21C bytes) with func_00124B24 + g_0060b8d0/d4/d8, `func_00193FA0` attach, `Gfx_ResDesc_GetValueA/GetValueD`, and `func_002AE6C4`/`func_006F0C50` for the widget setup. Sole caller BattleScene_StartSceneTransition."
+ },
+ {
+  "address": "0x0060B8FC",
+  "name": "BattleScene_ApplyUnitSlotTransform",
+  "signature": "void BattleScene_ApplyUnitSlotTransform(BattleScene* self, unsigned handle, int count, int index)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model handle",
+   "param_3": "count",
+   "param_4": "index"
+  },
+  "summary": "Writes the slot transform for a unit model: sets the scale fields from the slot constants, selects the position from the slot table and applies it.",
+  "confidence": 0.5,
+  "evidence": "`func_005F5818(arg2)` then `node->f_138/f_13c = g_0060bb94/g_0060bb98`, picks `local_34 = *g_0060bba4` in the arg4==0 branch and the g_0060bba0..g_0060bbb0 table otherwise, writes f_9c/f_a0/f_a4 and calls func_005F5F54. Sole caller BattleScene_UpdateScreenState1."
+ },
+ {
+  "address": "0x0060BBB8",
+  "name": "maybe_BattleScene_RefreshUnitLayout",
+  "signature": "void maybe_BattleScene_RefreshUnitLayout(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Hides both helper lists, then re-places every unit model in all four sides according to the current slot table and refreshes the party visibility mask.",
+  "confidence": 0.45,
+  "evidence": "func_002AB8C0(work+0x4254,0) / (work+0x4270,0) hiding, four-list walk with BattleScene_LayoutUnitModel (0x6068E8), `Container_List_CountVisible`/`Ui_Widget_CountChildren` for the counts and func_001CA474. Sole caller 0x608104."
+ },
+ {
+  "address": "0x0060BFF4",
+  "name": "maybe_BattleScene_ReleaseAndFinish",
+  "signature": "void maybe_BattleScene_ReleaseAndFinish(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Releases all unit model handles and then chains to the derived scene destructor through virtual slot +0x30.",
+  "confidence": 0.45,
+  "evidence": "`func_006087C0()` (release unit handles) then `(**(*arg1 + 0x30))(arg1)` tail call. Caller 'Menu_SumPartyStats' (0x20F480) is really a battle teardown caller."
+ },
+ {
+  "address": "0x0060C014",
+  "name": "maybe_BattleScene_UpdateScreenState2",
+  "signature": "void maybe_BattleScene_UpdateScreenState2(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Update routine for battle screen state 2: refreshes the helper list count and the associated layout (decoded incompletely by Ghidra).",
+  "confidence": 0.35,
+  "evidence": "`func_002AB6FC(work + 0x4254, 0)` then a second lookup; Ghidra reports bad instruction data from 0x60C014 on, so only the first list access is reliable. Called from the state dispatcher 0x606234."
+ },
+ {
+  "address": "0x0060C170",
+  "name": "BattleScene_PlaceTwoUnits",
+  "signature": "void BattleScene_PlaceTwoUnits(BattleScene* self, BattleMember* a, BattleMember* b)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "first member",
+   "param_3": "second member"
+  },
+  "summary": "Places exactly two unit models side by side (e.g. attacker and target of a battle action) using the shared slot placement helper.",
+  "confidence": 0.55,
+  "evidence": "`func_0060A584(self, arg2->f_110, 2, 0); func_0060A584(self, arg3->f_110, 2, 1);` with the `switch (self->f_f0)` layout selection at the top."
+ },
+ {
+  "address": "0x0060C210",
+  "name": "BattleScene_PlaceUnitArray",
+  "signature": "void BattleScene_PlaceUnitArray(BattleScene* self, BattleMember** members, unsigned count)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "array of member pointers",
+   "param_3": "number of members"
+  },
+  "summary": "Places an arbitrary number of unit models side by side, used when several units act or are shown together.",
+  "confidence": 0.55,
+  "evidence": "`for (i=0; i<arg3; i++) func_0060A584(self, members[i]->f_110, arg3, i);` preceded by the same state switch. Callers: Ui_SakusenWindow_CommitAndStorePositions/ResetAndCommit (battle tactics window)."
+ },
+ {
+  "address": "0x0060C2C8",
+  "name": "maybe_BattleScene_UpdateUiPlacement",
+  "signature": "void maybe_BattleScene_UpdateUiPlacement(void)",
+  "params": {},
+  "summary": "Very small helper that resolves the game work pointer; Ghidra lost the rest of its body (truncated at a bad instruction), so its exact effect is unknown.",
+  "confidence": 0.25,
+  "evidence": "Only `func_006F1EEC(auStack_38)` survives before `halt_baddata()`; marked as maybe_ because the decoded body is incomplete."
+ },
+ {
+  "address": "0x0060C70C",
+  "name": "BattleScene_UpdateUnitKeyframes",
+  "signature": "void BattleScene_UpdateUnitKeyframes(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (4 time tracks at +0x308)"
+  },
+  "summary": "Rebuilds the per-unit keyframes for all four sides: resets the four time tracks and then writes each unit's model keys with the configured timing values.",
+  "confidence": 0.5,
+  "evidence": "4x `func_0043DC1C(self + i*0x3c + 0x308, i, &{g_0060c898, self->f_b8})`, then four-list walk with func_005797D8/func_002AB62C, `func_0063DCA4` model lookup and func_005F5818/func_005F5F54 for the node. Sole caller the state dispatcher 0x606234."
+ },
+ {
+  "address": "0x0060C8B4",
+  "name": "maybe_BattleScene_BuildUnitModelForAction",
+  "signature": "int maybe_BattleScene_BuildUnitModelForAction(BattleScene* self, BattleMember* member, int slot)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "member/unit entry (f_768 = body id, special 0x360)",
+   "param_3": "slot"
+  },
+  "summary": "Builds a unit model for a battle action, handling the special body id 0x360 (a boss/guest form) before falling back to the normal party/enemy model builder.",
+  "confidence": 0.45,
+  "evidence": "`i = arg2[0x1da]; if (i != 0x360) piVar4 = 0xfffffc9f;` then the shared build path (BattleScene_BuildMemberModel 0x605CB4, func_00608F98, func_00574548/func_00575980, func_0060CC70). No callers (action callback)."
+ },
+ {
+  "address": "0x0060CD5C",
+  "name": "BattleScene_ApplyUnitSlideTransform",
+  "signature": "void BattleScene_ApplyUnitSlideTransform(BattleScene* self, unsigned handle, int step, int index)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model handle",
+   "param_3": "animation step (1 = slide)",
+   "param_4": "index"
+  },
+  "summary": "Applies the slide-in transform used when a unit enters the battle: selects a position from the slide table and animates the node to it.",
+  "confidence": 0.5,
+  "evidence": "`func_005F5818(arg2)` then `if (arg3 == 1) { if (arg4 == 0) { node->f_9c/f_a0/f_a4 = *g_0060ceb8/...[1]/...[2]; node->f_118 = 1; func_005F5F54(node,&pos,0); return; } ... }` with func_005736A0/func_00672E44/func_00673BC8 for the interpolation. Sole caller BattleScene_LayoutUnitModel."
+ },
+ {
+  "address": "0x0060CEC0",
+  "name": "maybe_BattleScene_UpdateUnitKeyframesB",
+  "signature": "void maybe_BattleScene_UpdateUnitKeyframesB(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene"
+  },
+  "summary": "Second keyframe/transform update pass for the battle units, using the alternate timing constants (used for the other battle mode).",
+  "confidence": 0.45,
+  "evidence": "4x `func_0043DC1C(self + i*0x3c + 0x308, i, &{g_0060d050, self->f_b8})`, then the four-list walk with func_005797D8/func_002AB62C/func_005F5818/func_005F5F54 and g_0060d04c..g_0060d058. Sole caller the state dispatcher 0x606234."
+ },
+ {
+  "address": "0x0060D05C",
+  "name": "maybe_BattleScene_CanShowModels",
+  "signature": "int maybe_BattleScene_CanShowModels(BattleScene* self, int modelId)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "model id"
+  },
+  "summary": "Checks whether the battle scene may currently show the given model: verifies the unit exists and that the scene's four time tracks are free/expired.",
+  "confidence": 0.45,
+  "evidence": "Four-list walk with `func_005797D8(work + i*0x1c + 0x428c,...)`, and for an empty side compares the four track sentinels (`f_30c == self+0x308`, `f_348 == self+0x344`, `*(self+900) == self+0x380`, `f_3c0 == self+0x3bc`) returning 1; otherwise uses func_00607AD8 / Anim_TimeTrack_HasExpired. Sole caller BattleScene_IsModelSelectable."
+ },
+ {
+  "address": "0x0060D1AC",
+  "name": "maybe_BattleScene_UpdateActionAnimation",
+  "signature": "int maybe_BattleScene_UpdateActionAnimation(BattleScene* self)",
+  "params": {
+   "param_1": "battle scene (action id f_134)"
+  },
+  "summary": "Drives the per-action battle animation: when the action id changes to the 'attack' code it plays the matching sound/effect for every unit and advances the animation.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_134 == -1) self->f_134 = g_0060d3c4; else if (self->f_134 - 0x38e == 0) ...` then the four-list walk with func_002AB698, `func_005F5818(unit->f_110)`, `Ui_PopupEntry_PlayById`, `func_005E7848` and `Object_IsQueueEmpty`/func_00669DD4."
+ },
+ {
+  "address": "0x0060D3D8",
+  "name": "BattleScene_PositionUnitModelWithAnim",
+  "signature": "void BattleScene_PositionUnitModelWithAnim(BattleScene* self, float time, unsigned handle, int count, int index)",
+  "params": {
+   "param_1": "battle scene",
+   "param_2": "current animation time",
+   "param_3": "model handle",
+   "param_4": "count",
+   "param_5": "index"
+  },
+  "summary": "Advanced per-unit placement that also builds the movement arc: computes the interpolation between the current and target slot, appends the keyframes to the unit's track and applies the resulting transform.",
+  "confidence": 0.5,
+  "evidence": "Uses `Anim_TimeTrack_IsAlive`/`MergeDuplicates`/`AppendKeyframe` (0x43D1F4/0x43D270/0x43D78C), func_005F5818 + func_005F5F54, func_0063EEAC model record, func_00672E44/func_00673BC8 interpolation helpers, func_001CA3E4/func_001CA474 list access and func_00607650. Callers: 0x606AEC, 0x609D34, 0x60A824."
+ }
+]

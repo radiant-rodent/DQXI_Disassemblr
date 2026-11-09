@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 
 # Project root paths
 PROJECT_ROOT = Path(".")
-REFERENCE_PROJECT = Path("../reference project")
+REFERENCE_PROJECT = Path("../3DS_Translate")
 REFERENCE_ROM = REFERENCE_PROJECT / "DQXI.3ds"
 REFERENCE_CODE_BIN = REFERENCE_PROJECT / "workspace" / "extracted" / "exefs" / "code.bin"
 REFERENCE_CODE_DECOMPRESSED = (
@@ -25,6 +25,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 INCLUDE_DIR = PROJECT_ROOT / "include"
 BUILD_DIR = PROJECT_ROOT / "build"
 SYMBOLS_FILE = PROJECT_ROOT / "symbols.json"
+AGENT_LOG_FILE = PROJECT_ROOT / "AGENT_LOG.md"
 SECTIONS_LD_FILE = PROJECT_ROOT / "sections.ld"
 
 # Documented Authoritative Hashes
@@ -193,7 +194,7 @@ def reference_changes_since_start() -> list[str]:
     return out
 
 
-# Pre-existing modifications in reference project before this project was initiated
+# Pre-existing modifications in 3DS_Translate before this project was initiated
 # (kept for reference; the invariant tests use the snapshot above instead)
 BASELINE_TRACKED_MODIFICATIONS = {
     "dq11tool/bflyt.py",

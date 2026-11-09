@@ -1,0 +1,1703 @@
+[
+ {
+  "address": "0x002B0968",
+  "name": "maybe_Ui_TextScrollWindow_DtorDelete",
+  "signature": "void maybe_Ui_TextScrollWindow_DtorDelete(UiTextScrollWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a small (0x30-byte) text/scroll widget: it reinstalls the class vtable at 0x0075EA1C, deletes the child text object held at self+8 through the global engine context, releases the intrusive list at self+0xC and finally frees the object itself through its reference-counted header.",
+  "confidence": 0.4,
+  "evidence": "Vtable store is the first statement (`*self = g_002b09ac`, pool word = 0x0075EA1C). The store address is vtable slot 0 of table 0x0075EA20 (runner-up 0x002B06E8 is the scroll/layout update of the same class). func_0021F8B8(ctx->f_c, self->f_8) is the \"delete owned object\" helper (`if (p) p->vtable[1]()`), func_0036B514 disposes the intrusive list at self+0xC, and func_0010F6CC is the reference-counted free (`[p-8]` = object, `[p-4]` = control block -> vtable[1]()`)."
+ },
+ {
+  "address": "0x002B1A9C",
+  "name": "maybe_Ui_GridCursor_HandleInput",
+  "signature": "void maybe_Ui_GridCursor_HandleInput(UiGridCursor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame input handler for a grid/list cursor: it decodes the widget event flags, asks the grid controller at self+0x420 for the cell in the pressed direction, computes the next valid cell index (0x002B1CC8) and pushes that index into the target cell's animation via func_001D809C. Confirmation events instead set the \"accepted\" state and call the commit callback 0x003D6C18.",
+  "confidence": 0.5,
+  "evidence": "self+0x3770 is a flag word; bit 4 -> 0x006D89DC (sub-widget update at self+0x134), bits 0x142 -> 0x00654078 (returns 0xFF = \"no choice\") then sets f_3778/f_37d4->f_10/f_4f and calls 0x003D6C18 (same commit path seen in the sibling functions of this family). Bits 1 -> direction handling: vtable of self+0x420 slots 0x58 (cell at direction) / 0x5c (current index) / 0x60 (count) / 0x64 / 0x68 (page step), then func_001D809C(cell, index | self->f_448<<16). Calls 0x002B1CC8 (grid step with wrap) and 0x001D809C (bind index to draw object)."
+ },
+ {
+  "address": "0x002B1CC8",
+  "name": "maybe_Ui_GridCursor_CalcNextIndex",
+  "signature": "int maybe_Ui_GridCursor_CalcNextIndex(UiGridController* grid, int dRow, int dCol, int wrap, int* pageStep)",
+  "params": {
+   "param_1": "grid",
+   "param_2": "dRow",
+   "param_3": "dCol",
+   "param_4": "wrap",
+   "param_5": "pageStep"
+  },
+  "summary": "Cursor arithmetic for a two-column list: from the item's grid position (row, column) obtained through func_001D806C it adds the requested delta, wraps at the top/bottom when `wrap` is set, clamps to the item count and returns the new flat index. `*pageStep` is bumped by +1/-1 when the move crosses a page boundary so the caller can scroll the list.",
+  "confidence": 0.5,
+  "evidence": "func_001D806C(grid->f_38, &col, &row) reads the grid position of the current item; the result is `column + 2*row` (note the `result + iVar4*2` at the end) with `(count-1)` clamp, and `*arg5` (+/-1) is the page counter. The same helper is called from 0x002B1A9C (input), 0x002B1B2C and 0x003D84DC - all cursor movement code."
+ },
+ {
+  "address": "0x002B1E44",
+  "name": "maybe_Ui_Gauge_SetValue",
+  "signature": "void maybe_Ui_Gauge_SetValue(UiGauge* self, int delta, int sub)",
+  "params": {
+   "param_1": "self",
+   "param_2": "delta",
+   "param_3": "sub"
+  },
+  "summary": "Updates a gauge/meter value: it adds delta*10 (tenths of a unit) minus `sub` to the counter at self+0x50, clamps it into [1, self+0x4C] and then picks the sprite frame for that value from the 10-entry lookup table at 0x002B1F04 before re-setting the widget frame (func_001A6680).",
+  "confidence": 0.45,
+  "evidence": "self+0x50 is the value, self+0x4C the maximum (`if (max < v) v = max`, and the lower clamp to 1), arg2 is multiplied by 10 so callers pass tenths; func_006F0F1C(&value, table@0x002B1F04) indexes a table and the result +4 becomes the frame id passed to func_001A6680(self, self->f_28<<16, frame). Sits in vtable 0x0075EC2C slot 2 next to the base draw stubs 0x001A619C/0x001A60B8."
+ },
+ {
+  "address": "0x002B3128",
+  "name": "maybe_Anim2D_BindChannelSet",
+  "signature": "void maybe_Anim2D_BindChannelSet(Anim2D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Rebuilds a 2D animation player's channel set: it resets/looks up the shared resource table, walks it for the first free 0x10-byte slot of the right type, stores it at self+0x9F8 and swaps the reference held at self+0x9FC, then binds up to 0x20 animation/effect descriptors into the player (func_003A7D78) and applies their visibility flags (func_003A7F3C).",
+  "confidence": 0.45,
+  "evidence": "Starts with 0x003A7CDC (per-channel teardown: 0x19 channels of 0x50 bytes at +0x48 -> matches the 0x19*0x50 free in 0x003A8200). Then the lazy singleton pattern guarded by 0x007BE33C (array at 0x007BE340, vtable 0x00782A08, count from 0x00833F78), func_00124E5C/func_00124F60 (table slot find/insert), type check against 0x007E7250, reference swap on self+0x9FC (0x001241D0/0x00124DD0/func_0012416C), then func_003A7D78(self,names,end) which fills the 0x20 texture slots at +0x8F4 and func_003A7F3C which sets their flags. Vtable 0x0075EEE0 slot 0."
+ },
+ {
+  "address": "0x002B3378",
+  "name": "maybe_Anim2D_Dtor",
+  "signature": "void maybe_Anim2D_Dtor(Anim2D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor for the 2D animation player: releases the reference-counted channel block at self+0x9FC, tears down the 25 animation slots and the 0x20-byte-tagged base object (0x003A8200) and releases the object's own storage.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = arg2` (vtable install), func_0012416C(self+0x9FC) releases the slot reference that 0x002B3128 installs into the same field, then func_003A8200(self+0x9FC-0x9FC) = 0x003A8200 is the class teardown (frees the 0x19 entries x 0x50 bytes array at +0x48 and calls the base dtor), and func_0010F6CC releases the block."
+ },
+ {
+  "address": "0x002B56E8",
+  "name": "maybe_Res_GetSharedTableAndReset",
+  "signature": "void maybe_Res_GetSharedTableAndReset(char* initFlag)",
+  "params": {
+   "param_1": "initFlag"
+  },
+  "summary": "Lazily creates the module-wide shared table (the \"not initialised\" flag at *initFlag is cleared on first call) and then resets one of its entries (entry 5) by forwarding to 0x002D24BC. Used as the one-time bootstrap for the shared resource/HW table.",
+  "confidence": 0.4,
+  "evidence": "Same literal set as 0x002B3128: g_002b5770 = 0x00833F78 (entry count, BSS), g_002b576c = &0x007BE340 (table pointer), g_002b5774 = vtable 0x00782A08; func_0011FE8C(0x98,0x10)/func_0011CFAC = size rounding, func_00116AE0 = zero fill, func_00627308 = heap alloc. `puVar2[5]` is the object at +0x14 whose reset routine 0x002D24BC is called. 0x002B577C is the same bootstrap with the guard address baked in."
+ },
+ {
+  "address": "0x002B577C",
+  "name": "maybe_Res_GetSharedTableAndCheckSlot",
+  "signature": "u32 maybe_Res_GetSharedTableAndCheckSlot(void* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Variant of the shared-table bootstrap used as a frame callback: after making sure the global table exists it queries the state of resource slot 5 through that slot's virtual `+0x30` getter and, when the slot reports \"in use\", raises a flag on `owner+0x2C8`. Always returns 1 so the caller keeps polling.",
+  "confidence": 0.4,
+  "evidence": "Recovered entry point; identical allocation sequence to 0x002B56E8 (0x98-byte block, vtable 0x00782A08, table at 0x007BE340, count at 0x00833F78). `(**([slot+0xc]+0x30))(slot+0xc, 0)` is the per-slot virtual query, and func_006C767C(owner+0x2c8, 1) sets a boolean member on the owner (return value 1 marks \"keep calling\")."
+ },
+ {
+  "address": "0x002B7858",
+  "name": "maybe_Ui_Window_DtorDelete",
+  "signature": "void maybe_Ui_Window_DtorDelete(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor for the big window object: runs the non-deleting destructor (0x002B7868) and then frees the object through its reference-counted allocation header.",
+  "confidence": 0.45,
+  "evidence": "Two-instruction body that is exactly the deleting-destructor idiom used across the engine (`call dtor; tail-call func_0010F6CC = free object at [p-8]`). Sits in table 0x0075F7F8 slot 1, immediately above slot 0 = the non-deleting destructor 0x002B7868, slot 2 = 0x00291220 (base class)."
+ },
+ {
+  "address": "0x002B7868",
+  "name": "maybe_Ui_Window_Dtor",
+  "signature": "void maybe_Ui_Window_Dtor(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-deleting destructor of the large (0x1F0+ byte) window object: it clears the member at 0x1E4, releases the reference-counted block at 0x1E8, frees the 5 x 0x50-byte pane array at 0x30 and destroys the intrusive node that starts the object.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = LAB_002b78f4` (vtable slot 0, table 0x0075F7F8), then the refcount release sequence on arg1[0x7a] (0x1E8) built from the engine's refcount table (mask 0x000FFFFF, table 0x007BA2D0, tag OR 0xFFFFF000) and func_0012416C; func_00100BE0(base+0x30, 0x003E04BC, 0x50, 5) is the array destructor for 5 objects of 0x50 bytes (0x003E04BC is the generic container destructor), func_001A6768(base) destroys the embedded intrusive list node."
+ },
+ {
+  "address": "0x002B7C6C",
+  "name": "maybe_Ui_WindowFrame_NextStateStep",
+  "signature": "int maybe_Ui_WindowFrame_NextStateStep(UiWindowFrame* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the window-frame skin state machine by one step: increments the 0..6 phase at self+0x5C (wrapping when the next table entry is the 7 sentinel), re-applies the skin and returns 1 only when the phase actually changed.",
+  "confidence": 0.45,
+  "evidence": "Return value is \"did change\" (compares old and new f_5c); phase array is the 7 bytes at self+0x54, sentinel value 7; `f_4c != -1` gates the animation (f_4c is the style/texture id). Calls 0x002B7DAC (which turns the phase into part visibility + textures)."
+ },
+ {
+  "address": "0x002B7DAC",
+  "name": "maybe_Ui_WindowFrame_ApplySkin",
+  "signature": "void maybe_Ui_WindowFrame_ApplySkin(UiWindowFrame* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Turns the current frame phase into pixels: looks up the part id for this and the next phase (7 = none), swaps the two border textures (ids 0xA1/0xA2) when the phase reaches 4/5, and sets the visible bit (bit 0 of +0x44) on each of the 16 border parts held at self+0x60..0xA8 according to the part id. Part ids 4/5 also drive an extra texture lookup on the sprite at self+0x69.",
+  "confidence": 0.5,
+  "evidence": "The 7-byte phase table at self+0x54 plus the sentinel 0xFFFF (g_002b8608) drive `uVar7`; each of the 16 sub-objects gets `obj->f_44 = cond | (obj->f_44 & ~1)` - the same \"visible\" bit convention as 0x003A7F3C. Textures come from func_00633560(ctx->f_10, id) with ids 0xA1/0xA2 and from the 10-entry id table at 0x0072CC98, then func_001A6680(self, frame, texture). The `func_00100050(...)` call is the engine's fatal-error/assert path with 0x00146ABC."
+ },
+ {
+  "address": "0x002BB87C",
+  "name": "maybe_Ui_SetChildWindowVisible",
+  "signature": "void maybe_Ui_SetChildWindowVisible(UiChildWindow* child, int visible)",
+  "params": {
+   "param_1": "child",
+   "param_2": "visible"
+  },
+  "summary": "Sets the enabled/visible flag on a child window by forwarding to the widget's own flag setter at child+4, then does not return (the called routine is the tail of the function).",
+  "confidence": 0.4,
+  "evidence": "One-call body: `func_0029126C(child+4, visible)`; caller 0x0021E29C invokes it as `func_002BB87C(&self->f_e8, 0 < self->f_1470)`, `(&self->f_4a0, 1 < ...)`, ... for five 0x3B8-strided child widgets, i.e. the argument is a boolean enable flag."
+ },
+ {
+  "address": "0x002BBB6C",
+  "name": "maybe_Ui_CreateListWidget_1170",
+  "signature": "UiListWidget* maybe_Ui_CreateListWidget_1170(UiOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Factory that allocates a 0x1170-byte list widget (the class whose 0x418-byte grid controller is built by 0x0019BDC4), registers it with the UI scene manager, starts it (vtable+0x24) and marks it running.",
+  "confidence": 0.35,
+  "evidence": "Mem_AllocAligned(0x1170, heap, 4) then ctor 0x0019BDC4(block, owner+0x30); 0x0021F738(ctx, obj) is the common \"attach to UI manager\" step (also used by every other factory in 0x002BBxxx); `(**(*obj+0x24))(obj)` = start; `obj->f_25 = 1`; then the class-specific init 0x00199128; finally ctx->f_94 = 0xFFFF (clears the \"current cursor\" word). The same ctor 0x0019BDC4 is used by Ui_ShopWindow_CreateSubObjects."
+ },
+ {
+  "address": "0x002BBC3C",
+  "name": "maybe_Ui_CreateChildWidget_11D8",
+  "signature": "UiWidget* maybe_Ui_CreateChildWidget_11D8(UiOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Factory for an 0x11D8-byte child widget (class of ctor 0x002A3E78): allocates it from the engine heap, attaches it to the UI manager, starts it and then initialises its icon/state table via 0x004B7364 (which maps a 0..10 state to a sprite frame).",
+  "confidence": 0.35,
+  "evidence": "Mem_AllocAligned(0x11D8, heap, 4) + ctor 0x002A3E78(block, owner+0x30) (ctor family with vtable 0x0072A600, 17 variants); standard attach (0x0021F738) / start (vtable+0x24) / f_25 = 1 sequence; the distinguishing step is 0x004B7364(obj), which reads a 4-entry state table (0x0072A6E8) and sets the sprite frame at obj+0x238."
+ },
+ {
+  "address": "0x002BBD0C",
+  "name": "maybe_Ui_CreateChildWidget_11D8_State8",
+  "signature": "UiWidget* maybe_Ui_CreateChildWidget_11D8_State8(UiOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Same 0x11D8-byte child-widget factory as 0x002BBC3C, but the post-construction step is 0x002A2560, which drives the widget's 8-state table instead of the 4-state icon table.",
+  "confidence": 0.35,
+  "evidence": "Identical allocation (Mem_AllocAligned 0x11D8) and ctor 0x002A3E78, identical attach/start sequence; only the class init differs: 0x002A2560(self) = func_003836C0(self+0x198, 8) then func_004B7390(self+0x238, value), versus 0x004B7364 which uses 4 and a lookup table."
+ },
+ {
+  "address": "0x002BBDDC",
+  "name": "maybe_Ui_CreateChildWidget_11D8_FromTextId",
+  "signature": "UiWidget* maybe_Ui_CreateChildWidget_11D8_FromTextId(UiOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Third 0x11D8-byte child-widget factory; here the state is taken from the owner's text/message id (owner+0x4E) and applied through 0x002A35A0, i.e. the widget displays the message currently selected by the owner.",
+  "confidence": 0.35,
+  "evidence": "Same Mem_AllocAligned(0x11D8)/ctor 0x002A3E78/attach sequence; `func_002A35A0(result, arg1->f_4e)` passes the owner's 16-bit message id straight into the widget setup (f_4E is also the message id used by 0x002B7DAC for the 0xA1/0xA2 textures)."
+ },
+ {
+  "address": "0x002BBEB0",
+  "name": "maybe_Ui_CreateSmallWidget_594",
+  "signature": "UiWidget* maybe_Ui_CreateSmallWidget_594(UiOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Allocates and attaches a 0x594-byte UI widget (ctor 0x0019CBF4, the small sibling of the 0x1170 list widget), starts it and marks it running.",
+  "confidence": 0.35,
+  "evidence": "Mem_AllocAligned(0x594, heap) (note: 2-argument call without the alignment argument), ctor 0x0019CBF4(block, owner+0x30), then the same attach/start tail as 0x002BBB6C (0x0021F738, vtable+0x24, f_25 = 1, ctx->f_94 = 0xFFFF)."
+ },
+ {
+  "address": "0x002BC32C",
+  "name": "Ui_MainMenu_LoadTextResources",
+  "signature": "void Ui_MainMenu_LoadTextResources(UiMainMenuText* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Opens the three text/message resources the main menu needs - `mainmenu_text.bxon` (entry id 0x53), `mainmenu_msg.bxon` (0x6E) and `item_failure_msg.bxon` - and stores the resource handles plus their reference-counted copies at self+4/0xC/0x14, initialising the list heads at self+0/0x10/0x18 first.",
+  "confidence": 0.65,
+  "evidence": "The three resource names are string literals in the literal pool at 0x002BC6D8/0x002BC6F8/0x002BC70C (`s_mainmenu_text_bxon_...`, `s_mainmenu_msg_bxon_...`, `s_item_failure_msg_bxon_...`). Each is looked up with func_00124E5C(ctx,1,name), type-checked against 0x007E7250, entry id compared (0x53, 0x6E, then only a size check), and the handle copied with the engine refcount table helpers (0x00124F60 / 0x0012416C). Callers are 0x0019608C and 0x002BD064."
+ },
+ {
+  "address": "0x002BC73C",
+  "name": "maybe_Ui_DetachAndReleaseMembers",
+  "signature": "int maybe_Ui_DetachAndReleaseMembers(void* self, u32 value, DetachTarget* target)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value",
+   "param_3": "target"
+  },
+  "summary": "Detach helper: stores `value` into target+8, then releases the three reference-counted members at self+0x14, +0xC and +4 (in that order) and returns `self` (the release helper returns its argument).",
+  "confidence": 0.35,
+  "evidence": "`*(u32*)(target+8) = value;` then three `func_0012416C(x)` calls chained through their return value, each subtracting 8, and the final `return iVar1 - 4` = self. func_0012416C is the refcount release that returns its argument unchanged."
+ },
+ {
+  "address": "0x002BCDFC",
+  "name": "maybe_Ui_MainMenu_UpdateTextState",
+  "signature": "void maybe_Ui_MainMenu_UpdateTextState(UiMainMenuText* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Re-evaluates whether the main-menu text/message resources are usable: it stops the pending load operation (self+0x30), pushes the resulting state (-1 or a value derived from 0x0062F070) into the two owners at self+0x2C/0x1C, asks three engine layers whether they are idle, and lazily creates the shared 0x1F8-byte status object whose flag at +0x1F1 records the result.",
+  "confidence": 0.35,
+  "evidence": "`(**([self->f_30]+8))(&self->f_30)` + `f_40 = 0` = cancel the in-flight request; `self->f_2c->f_10c = 0xffffffff` then 0x0062F070 gives the replacement handle, mirrored into self->f_1c->f_10c; three chained `ctx->f_14->f_10/f_1c/f_28` slot +0x3C queries produce the 0/1 result; the tail is the lazy singleton pattern (guard 0x007BE354, slot 0x007BE358, size 0x1F8, vtable 0x00782220) ending in `->f_1f1 = result`."
+ },
+ {
+  "address": "0x002BD2F8",
+  "name": "maybe_Ui_MainMenuText_DtorDelete",
+  "signature": "void maybe_Ui_MainMenuText_DtorDelete(UiMainMenuText* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the main-menu text/message resource holder: clears the loaded resources (0x002BD308) and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Same two-step deleting-destructor idiom as 0x002B7858; table 0x0075F938 slot 1 between the clear routine (slot 0, 0x002BD308) and the state query (slot 2, 0x002BCDFC)."
+ },
+ {
+  "address": "0x002BD308",
+  "name": "Ui_MainMenuText_ReleaseResources",
+  "signature": "void Ui_MainMenuText_ReleaseResources(UiMainMenuText* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases everything the main-menu text holder owns: the five child resources at self+0x1C..0x2C, the global 0x1F8-byte status object, the intrusive lists at self+0x18/0x60/0x38/0x54 and the three reference-counted members at self+0x10/0x18/0x20, leaving the object in a clean empty state.",
+  "confidence": 0.55,
+  "evidence": "Five `func_0021F8B8(ctx->f_c, self->f_XX); self->f_XX = 0` pairs (the delete-owned-object helper), then the lazy global status object gets flag +0x1F1 = 1 (same singleton as 0x002BCDFC: guard 0x007BE354, size 0x1F8), a vtable is re-installed at self+0x5C (0x0078303C) and self+0x30 (0x00783410), and the list heads at self+0x60/0x54/0x38 are re-spliced to point at themselves. Paired with 0x002BC32C (load) and 0x002BCDFC (query)."
+ },
+ {
+  "address": "0x002BD834",
+  "name": "maybe_Ui_Widget_Dtor",
+  "signature": "void maybe_Ui_Widget_Dtor(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-deleting destructor for a small UI widget: reinstalls its vtable, destroys the embedded animation container at self+0x4C, destroys the intrusive list at self+0 and returns.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = arg2` (vtable), then `func_003E04BC(self+0x13*4)`, `func_001A6768(that-0x4C)` — the same member offsets as 0x002BD858 (its twin without a vtable argument) and 0x002C1B9C."
+ },
+ {
+  "address": "0x002BD858",
+  "name": "maybe_Ui_Widget_Dtor_NoFree",
+  "signature": "void maybe_Ui_Widget_Dtor_NoFree(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor body of the same widget as 0x002BD834 but without the final free; called by the deleting destructor variants.",
+  "confidence": 0.4,
+  "evidence": "Identical body to 0x002BD834 minus the trailing func_0010F6CC, and 0x002BD834's table (0x0075F938-adjacent widget family) uses exactly this split between \"dtor\" and \"dtor + delete\"."
+ },
+ {
+  "address": "0x002C1410",
+  "name": "maybe_Gfx_SceneNode_ValidateChildren",
+  "signature": "void maybe_Gfx_SceneNode_ValidateChildren(GfxSceneNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scene-node vtable slot 7: verifies that the up-to-4 child node slots at self+0x224 still resolve to live nodes, drops the child array if none is valid, and then runs the base-class implementation (0x005F5520).",
+  "confidence": 0.5,
+  "evidence": "Vtable 0x0075FEDC slot 7, whose neighbours are already named (slot 1 = maybe_Gfx_SceneNode_InitChild, slots 2..11 = 0x005F7xxx base-class methods); `func_0064C48C(self->f_224, i)` for i in 0..3 returns each child, `child->f_158` is the \"live\" sub-object, and `func_0040AAF8()` is called when no child survives, followed by the base call 0x005F5520."
+ },
+ {
+  "address": "0x002C1B9C",
+  "name": "maybe_Ui_Panel_Dtor",
+  "signature": "void maybe_Ui_Panel_Dtor(UiPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor for a panel-shaped UI object: reinstalls the vtable, destroys the two 0x50-byte containers at self+0xA0 and self+0x50 and the intrusive list at self+0.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = arg2` then two chained `func_003E04BC` calls 0x50 apart and a final `func_001A6768` 0x50 further down; the same \"container then list\" teardown shape as 0x002BD834/0x002BD858."
+ },
+ {
+  "address": "0x002C1C08",
+  "name": "maybe_Ui_WindowHolder_Ctor",
+  "signature": "UiWindowHolder* maybe_Ui_WindowHolder_Ctor(UiWindowHolder* self, u32 a2, u32 a3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3"
+  },
+  "summary": "Constructor of a tiny holder object (vtable 0x00760004): it clears its two members, allocates a 0x3E0-byte child window (ctor 0x00304DCC), attaches it to the UI manager, configures it with (a2, a3), marks it enabled and starts it.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002c1cb4` (vtable), `arg1[2] = 0`; Mem_AllocAligned(0x3E0, heap, 4) + `func_00304DCC()` (child ctor), 0x0021F738 attach, `func_0032BD88(child, a2, a3)` setup, `*(u8*)(child+0x94) = 1`, `(*(*child+0x24))(child)` start. Twin of 0x002C1CB8 (deleting dtor, same vtable) and caller of the class in 0x002C1BC0."
+ },
+ {
+  "address": "0x002C1CB8",
+  "name": "maybe_Ui_WindowHolder_DtorDelete",
+  "signature": "void maybe_Ui_WindowHolder_DtorDelete(UiWindowHolder* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the window holder: reinstalls the vtable, deletes the child window at self+8 through the engine context and frees the holder.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002c1cf4` (same 0x00760004 vtable as the ctor 0x002C1C08), `func_0021F8B8(ctx->f_c, arg1[2]); arg1[2] = 0`, then func_0010F6CC frees. Table 0x00760008 slot 0, slot 1 = 0x002C1BC0 (non-deleting dtor)."
+ },
+ {
+  "address": "0x002C1D60",
+  "name": "Svc_Timer_RunDue",
+  "signature": "void Svc_Timer_RunDue(EngineTimer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame timer pump: advances the accumulated time by 1/30 s (0x3D088889) and the frame counter, then, if a one-shot callback is armed, fires the callback of the pending timer slot (12 slots of 0x18 bytes at self+0x35C) and finally clears the \"timer pending\" flag in the engine context.",
+  "confidence": 0.6,
+  "evidence": "Literal 0.0333333 = 1/30 s is added to self->f_364 (elapsed) with self->f_368 (frame count) incremented and self->f_36c set to the step; the 12-entry table is `self + 0x35c + self->f_360*0x18` with self->f_360 = current slot index, and the entry's code pointer at +0x34 (or the adjustor at +0x38 selecting from the table at self+0x37C) is called as `fn(slot, 0)`. Tail: `ctx->f_94 = 0`."
+ },
+ {
+  "address": "0x002C1E40",
+  "name": "Svc_Timer_ClearQueue",
+  "signature": "void Svc_Timer_ClearQueue(EngineTimer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Drains the timer queue (keeps pulling entries while the queue reports a positive count) and, when the timer object is in state 2 or 3, resets the corresponding engine subsystem through the global context.",
+  "confidence": 0.5,
+  "evidence": "`while (func_0062F070(self) > 0) func_0010EBD8(self);` is the classic \"pop until empty\" loop for the queue serviced by 0x002C1D60; `self->f_4a8` is the state byte (2/3) and the tail calls func_002D24BC on `ctx->f_14`, the same subsystem reset used by 0x002B56E8."
+ },
+ {
+  "address": "0x002C2BA8",
+  "name": "maybe_Container_DtorAndFree",
+  "signature": "void maybe_Container_DtorAndFree(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor + free for a container-like object: installs the vtable, runs the class teardown at 0x0032C1AC and releases the storage.",
+  "confidence": 0.35,
+  "evidence": "`*arg1 = arg2; func_0032C1AC(arg1); func_0010F6CC();` - teardown-then-free idiom; 0x0032C1AC is a same-family cleanup that itself walks the object's children."
+ },
+ {
+  "address": "0x002C31E0",
+  "name": "maybe_Gfx_Drawable2D_Ctor",
+  "signature": "GfxDrawable2D* maybe_Gfx_Drawable2D_Ctor(void)",
+  "params": {},
+  "summary": "Default constructor of the small 2D drawable/quad class (0x130 bytes): installs the vtable at 0x0076007C, marks the item id at +0x11C as -1 (none), clears the two transform words and installs the sub-object vtable 0x00759378 at +0x128.",
+  "confidence": 0.4,
+  "evidence": "`func_001D8B6C()` is the allocator wrapper used by every 0x76FFD8-class ctor (see 0x0019BDC4/0x002B088C: same `puVar[0x47] = arg2` slot); here the id is set to 0xFFFFFFFF (\"no item\"), `result[0x4a] = 0x00759378` is the vtable of an embedded helper (0x007593A4's table has 0x001A6768 as its first entry). Callers 0x001F0FEC and 0x00379790 both build UI content."
+ },
+ {
+  "address": "0x002C3678",
+  "name": "maybe_Text_MessageStack_Pop",
+  "signature": "u32 maybe_Text_MessageStack_Pop(TextMessageStack* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Removes the last entry from a message stack: if the vector at self+4/+8 is non-empty it clears the message currently shown (0x00644BE4 with id 0x2B), rebinds the message arguments of the new last entry (Message_SetArg calls with indices 2 and 3), notifies the shared message view at 0x007AC834, shifts the remaining 0x2C-byte records down by one and shrinks the vector by one record.",
+  "confidence": 0.5,
+  "evidence": "Record size 0x2C appears in every pointer step (`+0x2c`, `-= 0x2c`) and the compaction copies 0x0E words from `elem+4` and `elem+0x18`; the named engine call 0x001F076C (Message_SetArg, index 2 = text body, index 3 = speaker) is used to re-bind the arguments of the promoted entry; `*(g_007AC834 + 0x848)` + `func_00707C1C(..., msg->f_28)` refreshes the visible message widget with the entry's text id."
+ },
+ {
+  "address": "0x002C4EB4",
+  "name": "maybe_Ui_StoryModel_SelectPage",
+  "signature": "void maybe_Ui_StoryModel_SelectPage(UiStoryModelList* self, u32 unused)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused"
+  },
+  "summary": "Refreshes the 3D story model shown for the current page: clamps the page index at self+0x30 into [0, self+0x31], marks the \"previous\"/\"next\" arrow widgets visible or not (self+0x24/0x28), looks up the page's model entry with 0x0063D434, formats the model name `ui_story/<name>_3d.bch` and loads that BCH through the shared model cache (0x003882F0), replacing the reference at self+0x1C.",
+  "confidence": 0.55,
+  "evidence": "String literal `s_ui_story__s_3d_bch_...` = \"ui_story/%s_%s_3d.bch\", formatted with func_006F0C10 and the per-index offset tables 0x0072A350 / 0x0072A360; the arrows are driven with the visible-bit convention (`obj->f_44 = cond | obj->f_44 & ~1`); 0x0063D434 is the archive lookup, 0x003882F0 the BCH/cache load, 0x00563540 + 0x002C4DA8 handle the \"alternative\" (already-loaded) branch; self+0x2C is a pager object whose virtual +8/+0xC/+0x10 receive the first/last page labels."
+ },
+ {
+  "address": "0x002C5A78",
+  "name": "maybe_Ui_ResourceSet_Dtor",
+  "signature": "void maybe_Ui_ResourceSet_Dtor(UiResourceSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a UI resource bundle: clears its vtable, releases the four reference-counted handles at self+0xC..+0x18 and the one at self+0x1C, and frees the 4-entry handle array.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = g_002c5b20` (vtable 0x00760198), a 4-iteration loop releasing arg1[i+3] through the standard refcount table (mask 0x000FFFFF / table 0x007BA2D0 / tag 0xFFFFF000), then func_0012416C(self+0x1C) and func_00100BE0(base, 0x0012416C, 4) = \"call release on 4 consecutive words\". Callers 0x001BB8A0 / 0x001C3B10 are UI window teardown paths."
+ },
+ {
+  "address": "0x002C5B28",
+  "name": "Ui_Model2D_LoadResource",
+  "signature": "void Ui_Model2D_LoadResource(ResHandle2* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Loads the 2D model table resource `res/model2d.bxon` and keeps a reference to its 0x224 entry: it looks the resource up by name through the pack manager, walks the entry list for type 0x007E7250, validates the entry id and stores the raw pointer plus a reference-counted copy in the two output words.",
+  "confidence": 0.6,
+  "evidence": "String literal `s_res_model2d_bxon_...`, `func_00124FA0` (named maybe_Pack_GetManager) + 0x00124B24 = open-by-name, entry id compared with 0x224, then the standard refcount pair (0x00124F60 copy + 0x0012416C release of the temp). Called from 0x002D6B80 / 0x002D6C54, which use the obtained table to build 2D model instances."
+ },
+ {
+  "address": "0x002C5C78",
+  "name": "maybe_Res_HandleClear",
+  "signature": "void maybe_Res_HandleClear(ResHandle2* h)",
+  "params": {
+   "param_1": "h"
+  },
+  "summary": "Clears a two-word resource handle: drops the reference held in the second word (releasing it through the engine refcount table) and zeroes both words.",
+  "confidence": 0.5,
+  "evidence": "`*arg1 = 0;` then the refcount release block on arg1[1] and `arg1[1] = arg1[1] & 0xFFFFF000 | 0xFFFFF000` (i.e. leave the generation tag but mark the slot free). Twin of the handle producers 0x002C5B28 / 0x002C5C78's caller 0x002D6C54."
+ },
+ {
+  "address": "0x002C5E40",
+  "name": "Gfx_RotBillboard_Update",
+  "signature": "void Gfx_RotBillboard_Update(GfxRotBillboard* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of a rotation-dependent billboard/scene node: after the base node update it counts down the animation timer, picks the model variant for the current facing (0..3 -> suffix \"a\"/\"b\"/\"c\"/\"d\", or a `%s_rot_%d` name), looks the model up through the shared model table and rebinds it (Gfx_BindSingleResource), then advances the two attached sprite animations.",
+  "confidence": 0.55,
+  "evidence": "Table 0x00773D30 slot 7, whose slot 1 is maybe_Gfx_SceneNode_Init and slots 2..11 are the 0x005F7xxx scene-node base methods (so this is a Gfx scene node subclass). Literals 0x61..0x64 = 'a'..'d' selected by self->f_24c (0..3), format \"ui_story/%s_rot_%d\" equivalent (s__rot_3_), 0x00641738 = maybe_Model_FindEntryById, 0x0055E484 = Gfx_BindSingleResource, then two sprite animators at self+0x280 / self+0x2B4 advanced with 0x00564614/0x007122E4."
+ },
+ {
+  "address": "0x002C6BFC",
+  "name": "maybe_Ui_ApplyDisplayModeRect_0xA0",
+  "signature": "void maybe_Ui_ApplyDisplayModeRect_0xA0(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Places a widget using the \"large\" display rectangle: copies the global layout pair g_0072AA0C[0xA0]/[0xA4] into self+0x50/+0x54 and enables the view object at ctx->f_14->f_1C.",
+  "confidence": 0.3,
+  "evidence": "Same three ingredients as its three siblings 0x002C6C48 / 0x002C6F30 / 0x002C6F74: the static parameter block at literal 0x0072AA0C, the two words written to self+0x50/+0x54, and `ctx->f_14->f_1c` virtual +0xC called with 1 (enable view). This variant always uses the +0xA0/+0xA4 pair."
+ },
+ {
+  "address": "0x002C6C48",
+  "name": "maybe_Ui_ApplyDisplayModeRect_0x18",
+  "signature": "void maybe_Ui_ApplyDisplayModeRect_0x18(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Places a widget depending on the view mode: if the view at self+0x4C is absent or reports mode 1 it uses the small rect pair g_0072AA0C[0x18]/[0x1C], otherwise it enables the view and uses the large pair [0xA0]/[0xA4].",
+  "confidence": 0.35,
+  "evidence": "`func_0062F694(&self->f_4c->f_1e18) == 1` is the mode test (the same helper appears in 0x002C6F74); both branches end with `self->f_50/f_54 = pair`."
+ },
+ {
+  "address": "0x002C6F30",
+  "name": "maybe_Ui_ApplyDisplayModeRect_WhenViewReady",
+  "signature": "void maybe_Ui_ApplyDisplayModeRect_WhenViewReady(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant that only applies the large display rect (g_0072AA0C[0]/[1]) when the view object reports \"ready\" through its virtual +0x3C query.",
+  "confidence": 0.3,
+  "evidence": "`(**([ctx->f_14->f_1c]+0x3c))(view, 0)` gates the write of the two words from literal 0x0072AA0C; no self+0x4C check in this variant."
+ },
+ {
+  "address": "0x002C6F74",
+  "name": "maybe_Ui_ApplyDisplayModeRect_0x00",
+  "signature": "void maybe_Ui_ApplyDisplayModeRect_0x00(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Mode-dependent placement sibling of 0x002C6C48, but the fallback rectangle is g_0072AA0C[0]/[1] where 0x002C6C48 uses [0x18]/[0x1C].",
+  "confidence": 0.3,
+  "evidence": "Identical structure to 0x002C6C48 (same func_0062F694 mode test, same view enable call); only the two literal offsets differ."
+ },
+ {
+  "address": "0x002CE318",
+  "name": "maybe_Ui_ListState_Reset",
+  "signature": "void maybe_Ui_ListState_Reset(UiListState* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets a large UI list/scroll state block: clears the counters and flag bytes at 0xE3C4/0x17F0..0x1812, zero-fills the 0x0E-byte tail at 0x1814, re-initialises the hash/cursor table at self+8 with capacity 0x1820 and resets the current index (0x5E), sentinel (-1) and page size (6).",
+  "confidence": 0.4,
+  "evidence": "`func_00105534(self+8)` + `func_0051BB08(self+8, 0x1820, 0xffffffff)` = (re)build a table with 0x1820 capacity and \"no current\" index; the literal 0x1820 matches the table size; `f_e110 = 6` is the per-page count and `f_e0f4 = 0xff` the \"none\" sentinel; `self->f_1828 = 0x5e` (94) is the default cursor row. Called from 0x0025D9B4 / 0x003F3160 / 0x003F3180 when a list is opened or cleared."
+ },
+ {
+  "address": "0x002CE7C8",
+  "name": "Ui_KyoukaiWindow_CreatePanes",
+  "signature": "void Ui_KyoukaiWindow_CreatePanes(UiKyoukaiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the \"win_kyoukai\" window: instantiates the `win_kyoukai_icon` layout (part 0) and the `win_kyoukai_save` layout (part 1) into self+0x2CE and self+0x56, binds the icon/save text widgets from the shared text manager, splices the row list nodes into order and finally calls the widget's own vtable+0x48 to switch it to state 2.",
+  "confidence": 0.55,
+  "evidence": "Two string literals `win_kyoukai_icon` / `win_kyoukai_save` passed to func_001D85EC(layout owner, dest, name, index) - the standard \"load BFLYT part into this widget\" call; the shared text manager is the 0x98-byte singleton (guard 0x007BE33C, table 0x007BE340, vtable 0x00782A08) and its text objects are configured with 0x001C50BC / 0x001C50E0 (named maybe_Ui_Text_SetArgs); func_001235A4 = intrusive-list insert; final `(**(*arg1+0x48))(arg1, 2)` = set widget state 2."
+ },
+ {
+  "address": "0x002CEA08",
+  "name": "maybe_Ui_KyoukaiWindow_Update",
+  "signature": "void maybe_Ui_KyoukaiWindow_Update(UiKyoukaiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of the \"win_kyoukai\" window (vtable slot 1 of the same class as 0x002CE7C8): it pumps the window's animator (self+0x26 slot +0x2C), runs the internal update 0x002CEF08, advances the key animation Ui_AnimSequence_Update(&self->f_2CE), calls the class tick at vtable+0x4C and, when the \"close requested\" flag is set, clears it and releases the shared widget.",
+  "confidence": 0.45,
+  "evidence": "Vtable table 0x0075DF40 slot 1 with slot 0 = 0x002CE7C8 (the pane builder of the same class); `Ui_AnimSequence_Update` is the already-named 0x0021FBC4; the close branch touches the same 0x98-byte global singleton used by the pane builder and clears `puVar2->f_25` plus self->f_4c."
+ },
+ {
+  "address": "0x002CF634",
+  "name": "maybe_Ui_Drawable_DtorDelete",
+  "signature": "void maybe_Ui_Drawable_DtorDelete(UiDrawable* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the base 2D drawable widget: runs 0x002CF644 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "Table 0x007602E0 slot 1 with slot 0 = 0x002CF644 and slot 2 = 0x001D863C (ToD, the class's \"draw/transfer to display\" virtual) - so the class is the 2D drawable base widget."
+ },
+ {
+  "address": "0x002CF644",
+  "name": "maybe_Ui_Drawable_Dtor",
+  "signature": "void maybe_Ui_Drawable_Dtor(UiDrawable* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-deleting destructor of the base 2D drawable widget: it tears down the whole widget tree in reverse member order - release of the refcounted block at 0xD88, the intrusive list at 0x3C, three list heads, two 0x54/0x84-byte list nodes, three 0x50-byte containers, another three 0x50-byte containers (0x330 bytes), the 0xD30 reference and the 0x148 sub-object (0x001D8C2C).",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002cf7a0` = table 0x007602E0; the sequence of `func_0036B514` (list), `func_001A6768` (node), `func_003E04BC` (container), `func_00100BE0(..., 0x330, 3)` (3 containers) and `func_0012416C` (reference) calls each subtracts the member size from the returned pointer, ending on the object base - the standard reverse-order member destruction. Vtable slot 2 is ToD (0x001D863C), the draw-to-display virtual, and slot 0/1 are this dtor pair."
+ },
+ {
+  "address": "0x002CF8C0",
+  "name": "maybe_Ui_BigGridCursor_HandleInput",
+  "signature": "void maybe_Ui_BigGridCursor_HandleInput(UiBigListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Input handler for the large grid/list window variant (fields at 0xC5C/0xC94/0xCAC/0xD88): it decodes the same event flags as the small cursor (bit 4 = update sub-widget, 0x142 = confirm/cancel, bit 1 = direction), moves the cursor through the grid controller at self+0xC5C and commits the selection, and the tail of the function contains an inlined copy of the base drawable teardown.",
+  "confidence": 0.35,
+  "evidence": "Ghidra flags this recovered entry point as having bad instruction data (control flow falls into the base-class destructor body at 0x002CF644, whose offsets 0x3C/0x54/0x84/0x13C/0x990/0x9E0/0xD88/0x9E0 appear verbatim). The real code mirrors 0x002B1A9C: same f_3770 flag tests, `0x006D89DC(&self->f_134)` for the sub-widget, `func_0x00655218(&self->f_c5c)` for the commit value, and grid-controller virtuals +0x58/+0x5C on self+0xC5C."
+ },
+ {
+  "address": "0x002CF950",
+  "name": "maybe_Ui_GridCursor_ApplySelection",
+  "signature": "void maybe_Ui_GridCursor_ApplySelection(UiGridController* grid, int allow, u32 delta, u32* out)",
+  "params": {
+   "param_1": "grid",
+   "param_2": "allow",
+   "param_3": "delta",
+   "param_4": "out"
+  },
+  "summary": "Applies the pending cursor selection: reads the current cell via the controller's +0x58/+0x5C virtuals, computes the new index (0xFFFFFFFF means \"no cell\" -> the inlined teardown path), honours `allow` (arg2) as the wrap flag and writes the new index and cell count into the caller's two-word output before releasing the previous owner.",
+  "confidence": 0.3,
+  "evidence": "Same controller virtuals (+0x58 cell, +0x5C index) as 0x002B1A9C and 0x002CF8C0; the tail is again the inlined 0x002CF644 teardown (literal 0x75C248/0x771AC0 stores and the 0x50/0x330 array destructors). Ghidra reports bad instruction data at the end, so the exact output contract is only partially readable."
+ },
+ {
+  "address": "0x002CF9BE",
+  "name": "maybe_Ui_Drawable_ReleaseMembers",
+  "signature": "void maybe_Ui_Drawable_ReleaseMembers(UiDrawable* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Member-release half of the drawable widget destructor, split out by the decompiler: it releases the 0xD88 reference, the list at 0x3C, three list heads, two list nodes, three 0x50-byte containers, the 0x330-byte container array, the 0xD30 reference and the 0x148 sub-object.",
+  "confidence": 0.4,
+  "evidence": "byte-for-byte the same call chain as 0x002CF644 (0x0012416C -> 0x0036B514 -> 0x001A6768 x2 -> 0x003E04BC x3 -> 0x001A6768 -> 0x00100BE0(...,0x330,3) -> 0x001A6768 -> 0x0012416C -> 0x001D8C2C) with identical literals; the entry point is a mis-detected function start, so treat it as an inlined fragment."
+ },
+ {
+  "address": "0x002D00EC",
+  "name": "maybe_Gfx_Drawable2D_Ctor_Empty",
+  "signature": "GfxDrawable2D* maybe_Gfx_Drawable2D_Ctor_Empty(void)",
+  "params": {},
+  "summary": "Default constructor of the same 2D drawable class as 0x002C31E0 but for an empty slot: installs the vtable at 0x00760480 and sets the item id at +0x11C to 0.",
+  "confidence": 0.4,
+  "evidence": "`func_001D8B6C()` allocator + `puVar2[0x47] = 0` + `*puVar2 = 0x00760480`; the identical shape to 0x002C31E0 (which uses -1 as the id) and 0x0019BDC4. Called from 0x0031481C while filling the drawable array."
+ },
+ {
+  "address": "0x002D0168",
+  "name": "maybe_Ui_SetWidgetEnabled",
+  "signature": "void maybe_Ui_SetWidgetEnabled(UiWidget* self, int enabled)",
+  "params": {
+   "param_1": "self",
+   "param_2": "enabled"
+  },
+  "summary": "Enables/disables a widget: when the widget is not yet marked initialised (self+0x14 == 0) and `enabled` is non-zero it also raises the engine-context flag word at +0x94, then forwards to the widget's own flag setter (0x0029126C) and does not return.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x007604E4 slot 1 (slot 0 = 0x2912E8, slot 2 = 0x1A6460 another flag setter, slot 3 = 0x002D01AC); the tail call is the same `func_0029126C(obj, flag)` used by 0x002BB87C, and the side effect `ctx->f_94 = 1` matches the \"cursor/selection active\" word used by the widget factories."
+ },
+ {
+  "address": "0x002D04C4",
+  "name": "maybe_Ui_Panel_DtorDelete",
+  "signature": "void maybe_Ui_Panel_DtorDelete(UiPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a panel object: installs the vtable, destroys the two 0x50-byte containers at self+0xA0 and self+0x50, the list at self+0 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "Identical member layout and teardown order to 0x002C1B9C (which is the non-deleting variant: same two `func_003E04BC` 0x50 apart + `func_001A6768`), plus func_0010F6CC."
+ },
+ {
+  "address": "0x002D1EA0",
+  "name": "maybe_Ui_ReleaseTwoSubObjects",
+  "signature": "void maybe_Ui_ReleaseTwoSubObjects(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Tears down two owned sub-objects: destroys the embedded animator at self+0xFC (0x002D0F94) and then deletes the two objects at self+0x134 and self+0x138 through 0x003B3C74 + the object's virtual destructor, clearing both pointers.",
+  "confidence": 0.4,
+  "evidence": "Two identical `if (self->f_XXX) { func_003B3C74(); p->vtable[1](); self->f_XXX = 0; }` blocks - the engine's \"release owned object\" pattern (same as func_0021F8B8), preceded by the animator teardown 0x002D0F94(&self->f_fc)."
+ },
+ {
+  "address": "0x002D2538",
+  "name": "maybe_Ui_ClearChildrenAndDeleteSlot",
+  "signature": "void maybe_Ui_ClearChildrenAndDeleteSlot(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Ends the object's child list (0x00215FC8, the \"detach children keeping references\" helper) and deletes the object referenced at self+0x48 through the engine context.",
+  "confidence": 0.35,
+  "evidence": "Calls the already-named maybe_Ui_DetachChildrenKeepRefs (0x00215FC8) on self+0xC, then `func_0021F8D0(ctx->f_c, self->f_48)` - the two-argument delete helper - and returns; used from 0x00624B68 / 0x00626000 which dispose UI objects."
+ },
+ {
+  "address": "0x002D25D8",
+  "name": "maybe_Ui_EnsureSubObject",
+  "signature": "void maybe_Ui_EnsureSubObject(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Lazily creates the helper object at self+0x48 (0x1D4 bytes, ctor 0x00368AE0) the first time it is needed, attaches it to the UI manager and clears its flag byte at +0x94.",
+  "confidence": 0.35,
+  "evidence": "`func_0060E644(&self->f_c)` then `if (self->f_48 == 0)` do Mem_AllocAligned(0x1D4, heap, 4) + ctor 0x00368AE0 + 0x0021F738 attach; `child->f_94 = 0`. Called from 0x00626BC8."
+ },
+ {
+  "address": "0x002D2654",
+  "name": "maybe_Ui_Screen_ReleaseMembers",
+  "signature": "void maybe_Ui_Screen_ReleaseMembers(UiScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases every owned member of a UI screen in order: the animator at +0x34 (0x003D2DFC), the model at +0x38 (0x001B6D98), the title-screen object at +0x3C (Ui_TitleScreen_Dtor), the resource pair at +0x40 (Gfx_Resource_ReleasePair), the owned object at +0x44, the child list at +0xC and the sub-object at +0x48.",
+  "confidence": 0.45,
+  "evidence": "Five `if (self->f_XX) { <class teardown>; func_0010F6CC(); self->f_XX = 0; }` blocks whose teardown functions are already named elsewhere in the project (0x001F1440 Ui_TitleScreen_Dtor, 0x001EFB38 Gfx_Resource_ReleasePair), then maybe_Ui_DetachChildren (0x002161FC) and the delete helper 0x0021F8B8. Called from 0x002D2804 (the screen's deleting destructor) and 0x00626E44."
+ },
+ {
+  "address": "0x002D2804",
+  "name": "maybe_Ui_Screen_DtorDelete",
+  "signature": "void maybe_Ui_Screen_DtorDelete(UiScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the UI screen: installs the base vtable 0x007605D4, releases all members (0x002D2654), installs the two sub-object vtables at self+0xC/self+0x10, destroys the 3 x 0xC-byte entries at self+0x10 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002d2844` (0x007605D4), call 0x002D2654, `arg1[3] = g_002d2848` (0x0075BB68 - the sub-object vtable), `func_00100BE0(arg1+4, 0x0060E9E4, 0xC, 3)` (array destructor), func_0010F6CC."
+ },
+ {
+  "address": "0x002D2850",
+  "name": "Gfx_CharShadowPass_Release",
+  "signature": "void Gfx_CharShadowPass_Release(GfxCharShadowPass* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the character shadow pass: the shadow texture/render target (0x0057E518, 0x0055E21C), the shader pair (0x0055D888), the two vertex buffers (0x00564054/0x00569CB8), the material (0x00579794) and the sampler (0x005644A8), and clears the shared pass state at 0x007AE500.",
+  "confidence": 0.6,
+  "evidence": "Vtable 0x007605F4 slot 1 sits directly next to slot 0 = Gfx_CharShadowPass_Init (0x002D4F28) - the class is therefore the character shadow pass. Each member is released with its type-specific destructor followed by func_0010F6CC, and `g_002d292c->f_10 = 0` clears the global pass slot."
+ },
+ {
+  "address": "0x002D2D9C",
+  "name": "maybe_Gfx_Overlay_BeginDraw",
+  "signature": "void maybe_Gfx_Overlay_BeginDraw(GfxOverlay* self, int halfHeight)",
+  "params": {
+   "param_1": "self",
+   "param_2": "halfHeight"
+  },
+  "summary": "Starts the 2D overlay draw for one screen: flushes the pending 3D work (0x002D3078/0x002D423C), pushes the render state, snapshots the current display list (0x001052C8/0x00508ADC), selects the text/2D command list (0x00626074) and issues the batch commands for the overlay, finishing by storing half of the given screen height in self+0xB0 (a 320-pixel screen gives 160).",
+  "confidence": 0.4,
+  "evidence": "The 0x0050xxxx / 0x0055xxxx / 0x0062xxxx calls are the GPU command-list helpers also used by the shadow pass; `VectorSignedToFloat(arg2 >> 1)` writes self->f_b0, and the caller's arg2 is a screen dimension (0x140 appears as a literal in 0x002D3454). Render-state push/pop pairs (0x00508ADC / 0x005089EC) bracket the block."
+ },
+ {
+  "address": "0x002D3454",
+  "name": "maybe_Gfx_Overlay_DrawContent",
+  "signature": "int* maybe_Gfx_Overlay_DrawContent(GfxOverlay* self, u32 x, u32 y)",
+  "params": {
+   "param_1": "self",
+   "param_2": "x",
+   "param_3": "y"
+  },
+  "summary": "Draws the overlay content into the 320x240 top screen: it sets up the destination rect (0x140 x 0xF0 = 320x240), clamps the given position (0xC0/0xF0), binds the overlay texture (0x00566728 with self+0xA0 and the active flag self+0x94) and, when the \"wide\" flag is set, configures the two 0x140x0xF0 viewport/sub-rect structures at self->f_88+0x1308/0x12BC.",
+  "confidence": 0.4,
+  "evidence": "Literals 0x140 (320) and 0xF0 (240) are the 3DS top-screen size and appear as the rect passed to 0x00563454/0x00655F34 and written into the view structures (f_12e4/f_12e8/f_12d4); `self->f_88->f_1346` is tested for the \"wide/3D offset\" bit (`<<0x1d` sign test) exactly as in 0x002D2D9C; 0x005642C8/0x005642AC fill the two rects."
+ },
+ {
+  "address": "0x002D5A08",
+  "name": "maybe_Ui_SubObject_Ctor",
+  "signature": "UiSubObjectHost* maybe_Ui_SubObject_Ctor(UiSubObjectHost* self, u32 mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Constructor of a small host object that owns one 0x200-byte child panel: it installs the vtable 0x00760628, creates the child (ctor 0x003193BC) through the UI manager, registers itself in the update list with priority 2 and id 0x12F, and tells the child whether it is active depending on `mode`.",
+  "confidence": 0.35,
+  "evidence": "`*arg1 = g_002d5af8` (vtable 0x00760628), `*(u8*)(arg1+1) = 0xFF`, Mem_AllocAligned(0x200,...) + 0x003193BC, 0x0021F738 attach, then func_0036B45C(param_1+5, 2, 0x12F) = register in the priority-2 update list (the same call used by 0x002B088C); the `-0xC`/`-0x10` accesses are the intrusive node header (previous sibling object pointer, mode byte). Very widely used (12 callers incl. 0x00176BAC, 0x00213E44, 0x002175BC)."
+ },
+ {
+  "address": "0x002D5B04",
+  "name": "maybe_Ui_SubObject_DtorDelete",
+  "signature": "void maybe_Ui_SubObject_DtorDelete(UiSubObjectHost* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the sub-object host: installs the vtable, removes the update-list node at self+0x14, deletes the owned child through the engine context and frees the host.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = arg2` then func_0036B514(arg1+5) (unregister from the update list), `func_0021F8B8(ctx->f_c, node->child)` and func_0010F6CC(node-0x14) - the mirror of 0x002D5A08's registration."
+ },
+ {
+  "address": "0x002D6944",
+  "name": "Script_DispatchStateCallback",
+  "signature": "void Script_DispatchStateCallback(ScriptCallSite* site)",
+  "params": {
+   "param_1": "site"
+  },
+  "summary": "Dispatches a stored script callback according to the state byte at site+0x11C: states 0..3 call the fixed native function pointers 0x001492BC / 0x00149204 / 0x00147DC4 / 0x00154BE8 through 0x007230BC, and states 4..9 forward to the VM's indexed native call 0x00722FCC with index 0..5.",
+  "confidence": 0.5,
+  "evidence": "The four literal words 0x001492BC, 0x00149204, 0x00147DC4, 0x00154BE8 are all in the 0x0014xxxx Squirrel-native thunk area (0x00147D94 ClearStatus / 0x00154C00 EndTripDoorEffect are named neighbours); 0x007230BC(vm, arg, fnptr) and 0x00722FCC(vm, arg, index) are the two VM call entry points, and site+0x11C is the state (0..9) selecting them. Called from 0x002D8838 and seven other UI/menu entry points."
+ },
+ {
+  "address": "0x002D8838",
+  "name": "maybe_Ui_ActivateScriptedElement",
+  "signature": "void maybe_Ui_ActivateScriptedElement(UiScriptedElement* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Activates a script-driven UI element: marks its controller at self+0x3570 as active, asks 0x00636C48 for the current state byte, runs the matching script callback (0x002D6944), sets the \"started\" flag at self+0x356C, applies the element's command list (0x00622038) and hands the current cell index to the draw object.",
+  "confidence": 0.35,
+  "evidence": "`self->f_3570->f_30 = 1`, `func_0x00636c48(&self->f_204, ctrl->f_4a4)` returns the next state for that controller, 0x002D6944 dispatches it, `self->f_356c = 1`, `func_00622038(&self->f_2dc, self->f_2d4, 1)`, then the grid controller at self+0x288 virtual +0x58 yields the cell passed to func_001D809C(cell, self->f_2b0 << 16). Recovered entry point."
+ },
+ {
+  "address": "0x002D8A9C",
+  "name": "Ui_ItemListWindow_InitBase",
+  "signature": "void Ui_ItemListWindow_InitBase(UiItemListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructor/base-initialiser of the item list window: it is a pure tail call into the shared initialiser 0x001A6460, which installs the window's vtable, sets its initial flag and binds its background texture.",
+  "confidence": 0.5,
+  "evidence": "Table 0x00760740 slot 0, with slot 1 = Ui_ItemListWindow_InitRows (0x002D8B08) - the same class, so slot 0 is the constructor part that only chains to the base. 0x001A6460 is the already-seen \"set flag + swap the two textures at obj+0x64/0x6C via func_003E043C/func_003DFF34\" base initialiser."
+ },
+ {
+  "address": "0x002DC1DC",
+  "name": "maybe_Ui_ToggleGlobalFlags",
+  "signature": "u32 maybe_Ui_ToggleGlobalFlags(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Subsystem switch: it lazily fetches the global 0x98-byte UI singleton and calls the `+0x28` virtual of its sub-object at +0x1C twice - once enabling with argument 1 and once enabling with arguments (0,1) - then returns its argument.",
+  "confidence": 0.3,
+  "evidence": "The standard 0x98-byte singleton bootstrap (guard 0x007BE33C, slot 0x007BE340, vtable 0x00782A08, count 0x00833F78) followed by two calls of `(*(*(slot+0x1c)+0x28))(slot+0x1c, ...)`; the same singleton/sub-object chain as 0x002B577C (`puVar2[5]+0xc`) and 0x002DF888 (`+0x1c`, virtual +0x1C)."
+ },
+ {
+  "address": "0x002DF888",
+  "name": "maybe_Ui_ToggleGlobalFlags2",
+  "signature": "u32 maybe_Ui_ToggleGlobalFlags2(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Same subsystem switch as 0x002DC1DC but through the `+0x1C` virtual of the singleton's sub-object: called with (1,0) and then with (0) to apply both directions of the toggle.",
+  "confidence": 0.3,
+  "evidence": "Identical singleton bootstrap to 0x002DC1DC; only the virtual slot differs (0x1C instead of 0x28) and the argument shapes are (1,0) / (0)."
+ },
+ {
+  "address": "0x002E0F0C",
+  "name": "maybe_Gfx_Effect_Release",
+  "signature": "void maybe_Gfx_Effect_Release(GfxEffect* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases a 3D effect object: tears down the two sub-emitters at self+0xB0 (0x004C0C2C), the emitter list at self+0xFC (0x004C0B58), runs the class cleanup 0x002E0D60, clears the state word at +0x1D0 and drops the reference at +0x1D4.",
+  "confidence": 0.35,
+  "evidence": "Loop `for (i = 0; i < 2; i++) func_004C0C2C(&self->f_b0, i)` matches the 2-emitter layout, and the refcount release block on self->f_1d4 is the engine's standard reference drop (mask 0x000FFFFF / table 0x007BA2D0 / tag 0xFFFFF000)."
+ },
+ {
+  "address": "0x002E16E0",
+  "name": "maybe_Ui_LargeWindow_Dtor",
+  "signature": "void maybe_Ui_LargeWindow_Dtor(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Large non-deleting destructor of a window object: releases the reference at +0x1D4, unlinks three intrusive list heads, destroys the 0x60-byte container, installs two sub-object vtables, destroys the two 0x24-byte arrays, the list node at -0x174 and finally frees the storage.",
+  "confidence": 0.3,
+  "evidence": "The body is the familiar reverse-order member teardown (`func_0012416C` then repeated `*(next+4)=prev; *(prev+8)=next` list re-splices, `func_003E04BC`, `func_00100BE0(...,0x24,2)` twice, `func_001A6768`) ending in func_0010F6CC; the two `PTR_DAT_`/`PTR_FUN_` stores at -0x2C/-0x28 are vtable installs for embedded sub-objects."
+ },
+ {
+  "address": "0x002E3A24",
+  "name": "maybe_Ui_Widget_Dtor_C",
+  "signature": "void maybe_Ui_Widget_Dtor_C(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the same small widget layout as 0x002BD834: installs the vtable, destroys the 0x50-byte container at self+0x4C, destroys the intrusive list at self+0 and frees the object.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical body to 0x002BD834 (`*arg1 = arg2; func_003E04BC(arg1+0x13); func_001A6768(that-0x4C); func_0010F6CC();`), i.e. another instance of the same generated widget destructor for a different vtable."
+ },
+ {
+  "address": "0x002E4D08",
+  "name": "maybe_Ui_MessageWindow_Dtor",
+  "signature": "void maybe_Ui_MessageWindow_Dtor(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Large deleting destructor of the message window: destroys the message page at self+0x1E18 (Ui_MessagePage_Dtor), rewinds through the embedded widgets at -0x50/-0x5C, installs the two remaining sub-object vtables (0x0075E540 at -0x1CAC and 0x0077FCFC at -0xF94), destroys the two 0x414-byte containers, the list node at -0x1BAC, the -0x11C sub-object and frees the window.",
+  "confidence": 0.45,
+  "evidence": "`func_001DB5D0` is the already-named Ui_MessagePage_Dtor and sits at arg1+0x786*4 = +0x1E18; the two `func_00100BE0(base, 0x001F0700, 0x414, 2)` calls destroy 2 containers of 0x414 bytes (the message page layout), and the stored literal 0x0077FCFC is the same font/text table address that appears in 0x002EA270."
+ },
+ {
+  "address": "0x002E6E9C",
+  "name": "Font_CacheGlyphsForText",
+  "signature": "u32 Font_CacheGlyphsForText(FontCache* self, char* text, FontResource* font, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "text",
+   "param_3": "font",
+   "param_4": "flags"
+  },
+  "summary": "Ensures every glyph needed by `text` is present in the font cache: it walks the cache's dirty bitmap (one bit per 0x34-byte glyph slot), allocates a slot for each missing code point, hashes the character name to pick the atlas page, and uploads the glyph geometry/UVs (0x0058D2xx / 0x00589Dxx / 0x0058EAxx) into the page. Returns 1 when all glyphs could be installed, 0 when a slot or upload failed.",
+  "confidence": 0.6,
+  "evidence": "The 0x34-byte stride together with the bitmap walk (`~word`, bit per glyph, slot index `i*0x34 + bit*0x34`) is a glyph-cache slot table; the hash loop over the string with the four 32-bit multipliers at 0x002E7260..0x002E726C is a character-name hash; the 0x0058xxxx callees belong to the font/atlas module (0x0058D2B0 build page request, 0x005885A8/0x00588AB0 create glyph, 0x0058EABC/0x0058ED28 upload glyph, 0x0058D00C release request); 0x0011CCA0 is strlen."
+ },
+ {
+  "address": "0x002E86E0",
+  "name": "maybe_Ui_PaneSet_Dtor_2",
+  "signature": "void maybe_Ui_PaneSet_Dtor_2(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel that owns two 0x50-byte containers: installs the vtable, destroys the containers at self+0x9C and self+0x4C, destroys the list at self+0 and frees the object.",
+  "confidence": 0.4,
+  "evidence": "Same generated shape as 0x002D04C4 / 0x002C1B9C: two `func_003E04BC` members 0x50 apart, one `func_001A6768` list, then func_0010F6CC."
+ },
+ {
+  "address": "0x002E8C68",
+  "name": "maybe_Ui_ListWidget_Ctor",
+  "signature": "UiListWidget* maybe_Ui_ListWidget_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of a list widget: installs the vtable 0x007612F0, sets up two intrusive list heads at self+0x13C/+0x148 and self+0x14C..0x158 (each pointing at itself), installs the embedded node vtable 0x00759388 and clears the 8 member words.",
+  "confidence": 0.4,
+  "evidence": "`func_001D8B6C()` allocator, `puVar2[0x51] = puVar2[0x52] = puVar2+0x50` and `puVar2[0x53] = puVar2[0x54] = puVar2[0x55]` are the empty-list-head idiom (`next = prev = &head`), and `puVar2[0x4f] = 0x00759388` installs the same embedded node vtable as 0x001A6768's class. Called from 0x00213578."
+ },
+ {
+  "address": "0x002E90FC",
+  "name": "maybe_Ui_PaneSet_Dtor_1",
+  "signature": "void maybe_Ui_PaneSet_Dtor_1(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel that owns one 0x60-byte container at self+0x60 and one intrusive list at self+0, then frees the object.",
+  "confidence": 0.4,
+  "evidence": "One `func_003E04BC(arg1+0x18)` (0x60) followed by `func_001A6768(base-0x60)`, i.e. the same generated teardown with a single container, then func_0010F6CC."
+ },
+ {
+  "address": "0x002E911C",
+  "name": "maybe_Ui_Panel_UpdateVisibility",
+  "signature": "void maybe_Ui_Panel_UpdateVisibility(UiPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Drives the show/hide transitions of a panel with four sub-containers (at self+0x4C, +0x9C, +0xEC, +0x13C): it advances each present animation, and on mode 1 plays/hides the 9C+EC+13C group while on mode 2 it plays/stops them in the opposite order, clearing the request byte afterwards.",
+  "confidence": 0.45,
+  "evidence": "Every sub-object has a `has-anim` byte (`f_68`, `f_b8`, `f_108`, `f_158`) checked before `func_003DFEC4` (advance); the transitions use 0x003E021C (play) and 0x003E043C (stop) - the pair seen in the message system - keyed on self->f_49 (request 1/2) with self->f_4a as the \"already applied\" latch; the two `func_00649B80` checks re-sync the animated half. Called from 0x001CFA84."
+ },
+ {
+  "address": "0x002E93D0",
+  "name": "maybe_Ui_PaneSet_Dtor_4",
+  "signature": "void maybe_Ui_PaneSet_Dtor_4(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel that owns four 0x50-byte containers: destroys them at self+0x13C, +0xEC, +0x9C and +0x4C, destroys the list at self+0 and frees the object.",
+  "confidence": 0.4,
+  "evidence": "Four chained `func_003E04BC` calls each 0x50 below the previous one, then `func_001A6768` on the base and func_0010F6CC - the same class family as 0x002E911C (sub-containers at 0x4C/0x9C/0xEC/0x13C)."
+ },
+ {
+  "address": "0x002E9614",
+  "name": "maybe_Svc_TimerSub_RunDue",
+  "signature": "void maybe_Svc_TimerSub_RunDue(EngineTimer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second timer pump (vtable 0x00761484): advances a 5-slot timer array at self+0x120 by 1/30 s per frame, fires the armed one-shot callback and, when the \"timer stopped\" byte in the BSS block at 0x004FD4+self is set, releases the shared UI singleton and clears that byte.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x002C1D60 but with 5 slots instead of 12: literal 0.0333333, `self->f_128 += dt`, `self->f_12C += 1` (frame count), slot table `self+0x120 + self->f_124*0x18` with the code pointer at +0x34 and adjustor at +0x38 (table self+0x140); vtable 0x00761484 slot 1 with slots 2..4 = the 0x001D8x base draw methods."
+ },
+ {
+  "address": "0x002EA270",
+  "name": "maybe_Ui_MessageWindow_Dtor_Large",
+  "signature": "void maybe_Ui_MessageWindow_Dtor_Large(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the largest message-window variant (0x3B00+ bytes): it walks the member chain in reverse order - list at +0x3FB8, containers at -0x50/-0x5C, two 0x414-byte message pages, the 0x180-byte block at -0x28CC, the 0x1B0-byte model, a list node, the Ui_MessagePage at -0x48 and finally the 0x218-byte sub-object - releasing each and then freeing the window.",
+  "confidence": 0.4,
+  "evidence": "Same sequence and identical literal pool layout as 0x002E4D08 (vtable 0x0075E540 at -0x1CAC, font/text table 0x0077FCFC at -0xF94, `func_00100BE0(..., 0x001F0700, 0x414, 2)`), but with extra members (0x18 x 0x10 array at -0x28CC, 0x004478F4 at -0x6D4, Ui_MessagePage_Dtor at -0x48); the `*(next+4)=prev; *(prev+8)=next` pairs are the intrusive-list re-splices."
+ },
+ {
+  "address": "0x002EA9F2",
+  "name": "Ui_Dive_ReloadTextResources",
+  "signature": "void Ui_Dive_ReloadTextResources(UiDiveText* self, u32 size)",
+  "params": {
+   "param_1": "self",
+   "param_2": "size"
+  },
+  "summary": "Reloads the diving-minigame text bundle into an existing holder: it fetches `dive_text.bxon` (entry 0x35), `dive_sortie_msg.bxon` (0x0B), `dive_blend_color_text.bxon` (0x25), `spirit_skill_text.bxon` (0x1D) and `dive_msg.bxon` (0x0F) and stores each handle plus a reference-counted copy in the 10-word slot array.",
+  "confidence": 0.5,
+  "evidence": "The five resource names are string literals (0x002EB040/0x002EB058/0x002EB074/0x002EB278 plus dive_text at 0x002EB024) and each block is the standard open-by-name / type-check (0x007E7250) / id-check / refcount-copy sequence. Ghidra loses the frame here (`arg1 >> 1`, unaff_r*), which is why the self pointer is reconstructed rather than read - treat the offsets +2/+4/+6/+8/+10 relative to the 8-byte record as the slot array."
+ },
+ {
+  "address": "0x002EAC10",
+  "name": "maybe_Ui_DetachMembers",
+  "signature": "int maybe_Ui_DetachMembers(UiObject* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Detach helper: stores `value` at self+0x18, destroys the 0x4C-byte container at self+0x64 and the intrusive list at self+0x18, and returns the base pointer of the region it just cleared.",
+  "confidence": 0.3,
+  "evidence": "`self->f_18 = arg2;` then `func_003E04BC(arg1+100)` (0x64) and `func_001A6768(that-0x4C)` returning `-0x18` from that address (i.e. self) - the \"destroy these members and hand back the base\" idiom also seen in 0x002BC73C."
+ },
+ {
+  "address": "0x002EAC64",
+  "name": "Ui_Dive_LoadTextResources",
+  "signature": "void Ui_Dive_LoadTextResources(UiDiveText* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Opens every text table the diving minigame needs - `dive_text.bxon` (0x35), `dive_sortie_msg.bxon` (0x0B), `dive_blend_color_text.bxon` (0x25), `spirit_skill_text.bxon` (0x1D), `dive_msg.bxon` (0x0F) - and fills the ten-word slot array at self+0/+4.. with the handles and their reference-counted copies.",
+  "confidence": 0.65,
+  "evidence": "Five copies of the same block, each with a distinct string literal in the pool (`s_dive_text_bxon`, `s_dive_sortie_msg_bxon`, `s_dive_blend_color_text_bxon`, `s_spirit_skill_text_bxon`, `s_dive_msg_bxon`), opened with func_00124E5C(ctx, 5, name), type-checked against 0x007E7250, entry id compared (0x35/0x0B/0x25/0x1D/0x0F) and stored with the refcount helpers 0x00124F60 / 0x0012416C. Called from 0x00213578 together with 0x002E8C68."
+ },
+ {
+  "address": "0x002EB288",
+  "name": "maybe_Gfx_SpritePairArray_Init",
+  "signature": "void maybe_Gfx_SpritePairArray_Init(GfxSpritePair* pairs)",
+  "params": {
+   "param_1": "pairs"
+  },
+  "summary": "Initialises an array of five (render-object, handle) pairs to zero: each pair's first word is cleared and its 0x5634E0 sub-structure reset.",
+  "confidence": 0.4,
+  "evidence": "Five repetitions of `arg1[n] = 0; func_005634E0(arg1 + n + 1);` stepping 2 words - the 5-element fixed layout matches 0x002EBA64, which scans exactly these five slots (arg1+1, +10, +0x13, +0x1C, +0x25) for a free one."
+ },
+ {
+  "address": "0x002EB340",
+  "name": "maybe_Gfx_SpritePairArray_Dtor",
+  "signature": "int maybe_Gfx_SpritePairArray_Dtor(GfxSpritePair* pairs)",
+  "params": {
+   "param_1": "pairs"
+  },
+  "summary": "Destructor of the same five-pair array: clears each pair and its sub-structure, then releases all five reference-counted handles and returns the array base.",
+  "confidence": 0.45,
+  "evidence": "The body first repeats the 0x002EB288 initialisation, then chains five `func_0012416C` releases each 8 bytes apart - the engine's refcount release that returns its argument (so the chain walks backwards over the 5 handles)."
+ },
+ {
+  "address": "0x002EBA64",
+  "name": "maybe_Container_AddToFirstFreeSlot",
+  "signature": "void* maybe_Container_AddToFirstFreeSlot(Container* c, u8 kind, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "c",
+   "param_2": "kind",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Finds the first free entry among the five fixed slots of a container (each slot pair whose handle equals the global \"null\" value at 0x007A8A40+4), configures it with the given kind/arguments through its virtual +0xC and links it into the container's list at +0xC0.",
+  "confidence": 0.45,
+  "evidence": "The five candidate slots are addressed as arg1[1], arg1[0x10], arg1[0x13], arg1[0x1C], arg1[0x25] (stride 9 words); `*(u8*)(result+6) = kind` sets the type byte, `(**(*result+0xC))(result, a3, a4)` the per-slot setup and `func_001235A4(arg1+0x30, arg1+0x30, result+2)` inserts the node. Called from 0x0017CC38."
+ },
+ {
+  "address": "0x002F5164",
+  "name": "maybe_Ui_TreeWidget_Ctor",
+  "signature": "UiTreeWidget* maybe_Ui_TreeWidget_Ctor(u32 a1, u32 id)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "id"
+  },
+  "summary": "Constructor of a tree/list widget: installs the vtable 0x00761E08, initialises two intrusive list heads at self+0x11C..0x134 (plus the embedded node vtable 0x00759388), constructs the sub-structure at self+0x138 (0x002B761C) and allocates the 0x1EC-byte child object whose vtable is 0x007714C8 and whose id field is set from `id`.",
+  "confidence": 0.4,
+  "evidence": "`func_001D8B6C()` allocator, `puVar2[0x49] = puVar2[0x4a] = puVar2+0x48` and `*puVar3 = puVar3; puVar2[0x4c] = puVar2[0x4d] = puVar3` are empty list heads, `puVar2[0x47] = 0x00759388` the embedded node vtable, `func_002B761C(puVar2+0x4e)` builds the sub-object and `func_001A66A0(iVar4+0x1EC)` allocates the child that gets vtable 0x007714C8 and `puVar2[0x13] = id`; the return value `puVar2 - 0xc9` is the widget base. Called from 0x001C4980 / 0x001C4A30."
+ },
+ {
+  "address": "0x002F5784",
+  "name": "Ui_MessageWindow_OpenFromSlot",
+  "signature": "void Ui_MessageWindow_OpenFromSlot(UiMessageScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Opens the message window for the current script message: marks the screen as \"fade in\" (self+0x143), dims the background, prepares the slot array at self+0x10, and if a message window exists it opens it with a configuration that uses texture 0xA0 and then loads the text from the message work area.",
+  "confidence": 0.6,
+  "evidence": "Only named engine calls are involved: 0x002172C4 Ui_DimBackgroundFadeOut, 0x0021D520 maybe_Ui_ForEachSlotPrepare, 0x001C5328 Ui_MessageWindow_Open(msg, &config, 0) and 0x001C54EC Ui_MessageWindow_SetTextFromWork(msg, 1). The config struct is filled with `local_28 = 1` (visible), `local_25 = 0xFF` (alpha), `local_34 = func_00633560(ctx->f_10, 0xa0)` (the window frame texture) and the rest zeroed."
+ },
+ {
+  "address": "0x002F5DF8",
+  "name": "Ui_MessageWindow_HandleClose",
+  "signature": "u32 Ui_MessageWindow_HandleClose(UiMessageScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Drives the message screen's close step: if the message window reports \"close requested with auto-close\" (byte +0x3F set) it raises self+0x144 and switches the screen animator to state 9; otherwise it clears the fade flag, un-dims the background, disposes the slots, closes the message window and switches the animator to state 6. Always returns 1 so the caller keeps running.",
+  "confidence": 0.55,
+  "evidence": "Named callees 0x00217340 Ui_UndimBackgroundNow, 0x0021C3CC maybe_Ui_ForEachSlotDispose and 0x001C465C Ui_MessageWindow_Close; the state bytes are message-window +0x3D (open) and +0x3F (auto close), and the final calls are the screen animator's vtable+0x18 with ids 6 / 9."
+ },
+ {
+  "address": "0x002F60DC",
+  "name": "maybe_Ui_MessageScreen_CheckConfirm",
+  "signature": "u32 maybe_Ui_MessageScreen_CheckConfirm(UiMessageScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Polls the input/confirm object at ctx->f_14->f_C (virtual +0x14) and, when it reports a confirm, switches the screen animator at self+0x13C to state 10.",
+  "confidence": 0.35,
+  "evidence": "`(**(code **)(*(int*)(*piVar1+0x14)+0xc)+0x14)()` is the per-frame input poll used by the whole message family, and the action is `(*(*self->f_13c+0x18))(self->f_13c, 10)` - the same animator dispatch as 0x002F5DF8 (states 6/9). Always returns 1."
+ },
+ {
+  "address": "0x002F664C",
+  "name": "maybe_Ui_MessageScreen_ResetMenuSubsystem",
+  "signature": "void maybe_Ui_MessageScreen_ResetMenuSubsystem(void)",
+  "params": {},
+  "summary": "Resets the menu sub-system: it fetches the engine context and calls 0x002D2440 on `ctx->f_14`, the same subsystem reset entry used by 0x002B56E8 / 0x002C1E40.",
+  "confidence": 0.3,
+  "evidence": "Single call `func_002D2440(ctx->f_14)`; the argument arrives on the stack (`in_r3`) because the caller passes an extra word. 0x002D2440 is in the same 0x2D2xxx family as the timer/subsystem resets."
+ },
+ {
+  "address": "0x002F6670",
+  "name": "maybe_Ui_MessageScreen_CheckCancel",
+  "signature": "u32 maybe_Ui_MessageScreen_CheckCancel(UiMessageScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Counterpart of 0x002F60DC for the cancel path: polls ctx->f_14->f_C virtual +0x18 and, when it reports a cancel, switches the screen animator at self+0x13C to state 5.",
+  "confidence": 0.35,
+  "evidence": "Same shape as 0x002F60DC with the neighbouring virtual slot (+0x18 instead of +0x14) and animator id 5; the +0x14/+0x18 pair is the standard confirm/cancel pair (compare 0x001A6460's use of +0x4C)."
+ },
+ {
+  "address": "0x002F6870",
+  "name": "maybe_Ui_ItemInfoWindow_Dtor",
+  "signature": "void maybe_Ui_ItemInfoWindow_Dtor(UiItemInfoWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the item info window: installs the vtable 0x00761E58, deletes the owned object at self+0x13C, releases the reference at self+0x138, tears down the 0x128-byte sub-object (0x0021DD60) and frees the window.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002f68d0` (0x00761E58), `arg1[0x4f]` deleted via its virtual +4, `func_0012416C(arg1+0x4e)` then 0x0021DD60 on the enclosing object and func_0010F6CC - the members match the item info window family (0x002F6950/0x002F68D4)."
+ },
+ {
+  "address": "0x002F6950",
+  "name": "Ui_ItemInfoWindow_Update",
+  "signature": "void Ui_ItemInfoWindow_Update(UiItemInfoWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of the item info window (vtable slot 1 of 0x00761E78): it advances the window frame at self+0x138 (0x002B7D4C/0x002B7C6C) while the \"animating\" flag 0x10 is set in self+0x130 and, when the frame animation wraps, releases the shared UI singleton so the new frame is picked up.",
+  "confidence": 0.55,
+  "evidence": "Table 0x00761E78 slot 1, with slot 0 = maybe_Ui_ItemInfoWindow_Open (0x002F68D4) - same class as the named item info window. 0x002B7C6C is the frame-state stepper of the window-frame class and 0x002B7D4C its init; the singleton is the 0x98-byte block (guard 0x007BE33C, table 0x007BE340, vtable 0x00782A08) whose `f_25` is cleared."
+ },
+ {
+  "address": "0x002F6B9C",
+  "name": "maybe_Ui_BigWindow_Ctor",
+  "signature": "UiBigWindow* maybe_Ui_BigWindow_Ctor(UiBigWindow* self, u32 variant, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "variant",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Constructor of a very large window object (0x1FBC bytes of state): installs the vtable 0x00761EB8, clamps `variant` to 0/1, allocates and constructs the 0x1FBC-byte window (0x003660DC), attaches it to the UI manager, configures it (0x00366014) and marks it enabled.",
+  "confidence": 0.4,
+  "evidence": "Mem_AllocAligned(0x1FBC, heap, 4) + ctor 0x003660DC(block, variant) with `if (1 < arg2) arg2 = 0;`, 0x0021F738 attach, 0x00366014(child, a3, a4), `*(u8*)(child+0x94) = 1` - the same factory skeleton as 0x002C1C08. Called from 0x002175BC."
+ },
+ {
+  "address": "0x002F6C50",
+  "name": "maybe_Ui_BigWindow_Dtor",
+  "signature": "void maybe_Ui_BigWindow_Dtor(UiBigWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the window created by 0x002F6B9C (vtable 0x00761EB8): deletes the owned 0x1FBC-byte window at self+8 through the engine context and frees the holder.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_002f6c8c` = the same vtable 0x00761EB8 that 0x002F6B9C installs, followed by `func_0021F8B8(ctx->f_c, arg1[1])` and func_0010F6CC."
+ },
+ {
+  "address": "0x002F7304",
+  "name": "maybe_Ui_PaneSet_Dtor_3",
+  "signature": "void maybe_Ui_PaneSet_Dtor_3(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel that owns three 0x50-byte containers (at self+0xEC, +0x9C, +0x4C) and one intrusive list at self+0, then frees the object.",
+  "confidence": 0.4,
+  "evidence": "Three chained `func_003E04BC` calls each 0x50 below the previous, then `func_001A6768` on the base and func_0010F6CC - same generated shape as the 2- and 4-container variants (0x002E86E0 / 0x002E93D0)."
+ },
+ {
+  "address": "0x002F7378",
+  "name": "maybe_Ui_PaneSet_Dtor_1B",
+  "signature": "void maybe_Ui_PaneSet_Dtor_1B(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel that owns one 0x50-byte container at self+0x4C plus the list at self+0, then frees the object.",
+  "confidence": 0.4,
+  "evidence": "One `func_003E04BC(arg1+0x13)` + `func_001A6768(base-0x4C)` + func_0010F6CC; the same one-container variant as 0x002E90FC but with the container at 0x4C instead of 0x60."
+ },
+ {
+  "address": "0x002F77A0",
+  "name": "maybe_Ui_ListWindow_Dtor",
+  "signature": "void maybe_Ui_ListWindow_Dtor(UiListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a list window (vtable 0x0076216C, draw virtual ToD in slot 1): it destroys the base object at self+0x138, unlinks the list at self+0x188, destroys the 0x50-byte container, the two list heads, the 0x138-byte sub-object and frees the window.",
+  "confidence": 0.4,
+  "evidence": "`*self = 0x0076216C` (one word before the table at 0x00762170 whose slot 1 is ToD), `func_00291220(self+0x4e)` = 0x007593A4-class base dtor, then `func_0036B514(self+0x62)` (list), `func_001A6764` (node), repeated `*(next+4)=prev; *(prev+8)=next` re-splices and finally `func_001D8C2C(base-0x138)` + func_0010F6CC."
+ },
+ {
+  "address": "0x002F8F80",
+  "name": "maybe_Trail_UpdateNodeFromOwner",
+  "signature": "u32 maybe_Trail_UpdateNodeFromOwner(TrailNode* self, u32 a2, TrailNode* which)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "which"
+  },
+  "summary": "Callback used by the trail renderer to refresh one of its two owner links: if `which` is the node at self+0x268 it either asks the owner (vtable+0xC8) to restart or starts a fade (0x005E7848(self,5,1)); if it is the node at self+0x390 it looks the effect up in the shared slot table and re-binds or clears it (0x006282D0 / 0x0017C8C4). Returns 0.",
+  "confidence": 0.45,
+  "evidence": "Vtable table 0x007623D4 slot 4, whose neighbours are already named (slot 1 = maybe_Trail_UpdateFromOwnerNode, slots 0/2/3/5 = the 0x005F7xxx/0x001817xx trail node methods), so this is a Trail-class vtable method. The two compared addresses are `arg1+0x9a` and `arg1+0xe4` (the two embedded nodes), the global 0x98-byte singleton is the standard one (guard 0x007BE33C, table 0x007BE340, vtable 0x00782A08) and its `[4]+0x9C` slot is the effect handle."
+ },
+ {
+  "address": "0x002FBA14",
+  "name": "maybe_Ui_ItemRows_MovePage",
+  "signature": "void maybe_Ui_ItemRows_MovePage(UiItemRows* self, int delta, int a3, int wrap)",
+  "params": {
+   "param_1": "self",
+   "param_2": "delta",
+   "param_3": "a3",
+   "param_4": "wrap"
+  },
+  "summary": "Scroll/page movement for the 8-row list: it converts the requested delta into a page index (the row count from vtable+0x64 divided by 8), wraps into [0, pageCount] when `wrap` is set, stores the new page at self+0x50 and notifies the row renderer (vtable+0x60) or triggers the repaint path (vtable+0x3C).",
+  "confidence": 0.5,
+  "evidence": "`iVar1 = (rows - 1 + ...) >> 3` is the page count (8 rows per page, the same 8 as the render loop in 0x002FBC28); self+0x50 is the current page; the tested parent object `self->f_38->f_c != 0x13` is the \"special container\" case. Vtable 0x00762720 slot 2 with slots 0/1 = the 0x001A619C/0x001A60B8 base draw stubs, and 0x002FCA04 is the \"content changed\" helper."
+ },
+ {
+  "address": "0x002FBC28",
+  "name": "maybe_Ui_ItemRows_UpdateIcons",
+  "signature": "void maybe_Ui_ItemRows_UpdateIcons(UiItemRows* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Rebuilds the icon/text/colour of the 8 visible list rows: for each of the 8 slots it resolves the row's 16-bit id through the item table (0x006479CC), picks the icon sprite from the item's type/colour (0x00647A88 / 0x00646060 / 0x00647724 / 0x00641090), tints it with the global row colour at 0x007A9320 scaled by 0x007A9320+? (per-channel /255), sets the sprite frame and tint via func_001A6680 / func_001A629C, and finally formats the two counter labels (current page / page count) with `__d_ls` / `__ls_ls` format strings.",
+  "confidence": 0.45,
+  "evidence": "The loop bound 8, the `((base << 16) | 3) + i` / `| 0xb` sprite-slot addressing and the two format strings `__d_ls` (0x002FC26C) / `__ls_ls` (0x002FC25C) passed to func_006F0F1C are the strongest evidence; the 0x0064xxxx helpers belong to the item/equipment table module and 0x0063CF74 returns the item icon resource. Colour scaling `channel * global / 0xFF` per byte is a per-channel tint multiply."
+ },
+ {
+  "address": "0x002FC280",
+  "name": "maybe_Ui_StatusIcon_SetFromType",
+  "signature": "void maybe_Ui_StatusIcon_SetFromType(UiStatusIcon* self, CmdRecord* rec)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec"
+  },
+  "summary": "Sets a small status icon from a record's type byte: it runs the two command emitters (0x004533E8 / 0x00453B68) and, when the type (rec[rec+8]) is < 0x19, picks texture 0x83+type for the sprite at self+0x4A4, otherwise uses the default texture 0x002FC318.",
+  "confidence": 0.4,
+  "evidence": "`bVar1 = *(u8*)(arg2 + *(int*)(arg2+8))` is the type byte stored after the record header; `func_00633560(ctx->f_10, bVar1 + 0x83)` indexes a contiguous icon texture range, and func_001A6680(&self->f_4a4, self->f_4cc << 16, tex) sets the frame of the icon sprite."
+ },
+ {
+  "address": "0x002FC2B8",
+  "name": "maybe_Ui_Icon_SetFromType",
+  "signature": "void maybe_Ui_Icon_SetFromType(UiIcon* self, u32 type)",
+  "params": {
+   "param_1": "self",
+   "param_2": "type"
+  },
+  "summary": "Sets a plain icon sprite from a type code: type < 0x19 selects texture 0x83+type, anything else selects the default texture 0x002FC318, and the result is applied to the widget's frame at self+0x28.",
+  "confidence": 0.45,
+  "evidence": "`func_00633560(ctx->f_10, (type + 0x83) & 0xFF)` then `func_001A6680(self, self->f_28 << 16, tex)`; the same 0x83+type texture range and the same default table 0x002FC318 as 0x002FC280 (which does it for a nested sprite at +0x4A4)."
+ },
+ {
+  "address": "0x002FC44C",
+  "name": "Ui_ItemMenuWindow_InitBase",
+  "signature": "void Ui_ItemMenuWindow_InitBase(UiItemMenuWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructor/base-initialiser of the item menu window: a pure tail call into the shared initialiser 0x001A6460 (install vtable, set initial flag, bind the two background textures).",
+  "confidence": 0.5,
+  "evidence": "Table 0x00762708 slot 0 with slot 1 = Ui_ItemMenuWindow_InitPanes (0x002FC474): slot 0 is the constructor half of the same class, and 0x001A6460 is the shared base initialiser used by the other window classes in this batch."
+ },
+ {
+  "address": "0x002FCA04",
+  "name": "maybe_Ui_ItemRows_SelectById",
+  "signature": "void maybe_Ui_ItemRows_SelectById(UiItemRows* self, u32 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Selects a list row by record id: id 0x1B6 is the \"nothing selected\" case (highlight the empty slot with marker 0x13); otherwise it searches the 16-bit id array at self+0x58/+0x5C, and if the entry is inside the visible range it moves the cursor cell (func_001D809C with the row offset) and updates the page at self+0x50 before repainting (vtable+0x60).",
+  "confidence": 0.5,
+  "evidence": "The u16 array scan (`puVar7 = arg1[0x16]`, `puVar2 = arg1[0x17]`, stride 2) is the row id list; `iVar3 = (index) >> 3` is the 8-rows-per-page page index used identically in 0x002FBA14; the special id 0x1B6 is the constant passed by 0x002FBA14 as well."
+ },
+ {
+  "address": "0x002FCBF8",
+  "name": "maybe_Ui_SetFourFields",
+  "signature": "void maybe_Ui_SetFourFields(UiObject* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Stores the same value into four members of a large UI object (self+0x278, +0x2FC, +0x688 and +0x2438) - typically the \"current mode/colour/flag\" broadcast to several sub-window states.",
+  "confidence": 0.4,
+  "evidence": "Four plain `self->f_XXX = arg2` stores with no branches; called from 0x001DE2B8 (a window that needs all four sub-states kept in sync)."
+ },
+ {
+  "address": "0x002FCC78",
+  "name": "maybe_Ui_ResetLargeScreenState",
+  "signature": "void maybe_Ui_ResetLargeScreenState(UiLargeScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the state of a very large screen object (0x4400+ bytes): it rebuilds the 8-entry table at self+0x11C, resolves the view at self+0x148, lazily creates the 0x80-byte helper singleton, and then - when 0x00383A80 reports \"scene active\" - empties the element list at self+0x300, frees the cached nodes (0x0070E0B0), resets the three list heads, rebinds the world pointer at self+0x43E0 and switches the screen animator to state 0.",
+  "confidence": 0.35,
+  "evidence": "Vtable 0x007627E4 slot 1 with slot 0 = 0x001D8A80 (the ortho-matrix setup of the 2D widget base), so this is the per-frame/enter hook of a drawable screen. `func_00648B7C(&self->f_11c, 8)` builds an 8-entry table, 0x00479414 binds it to the view, the singleton is the 0x80-byte block (guard 0x007BE324, table 0x007BE328, vtable 0x007829CC, count 0x00833C98), and the 0x2C-byte element loop at self+0x3774 re-splices the element list."
+ },
+ {
+  "address": "0x002FCF64",
+  "name": "maybe_Container_UnlinkNodeAndEnableView",
+  "signature": "void maybe_Container_UnlinkNodeAndEnableView(ListNode* head)",
+  "params": {
+   "param_1": "head"
+  },
+  "summary": "Unlinks the node at `head` from its intrusive list, resets the list head to point at itself, and enables the view object at ctx->f_14->f_1C.",
+  "confidence": 0.35,
+  "evidence": "`*(next+4) = prev; *(prev+8) = next;` then `*arg1 = arg1 - 1; arg1[1] = arg1 - 1;` (re-point the head to itself, with the 4-byte node bias) followed by the `ctx->f_14->f_1c` virtual +0xC call with 1 that also appears in 0x002C6BFC/0x002C6C48."
+ },
+ {
+  "address": "0x002FD298",
+  "name": "maybe_Ui_ItemScreen_HandleConfirm",
+  "signature": "u32 maybe_Ui_ItemScreen_HandleConfirm(UiItemScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Confirm handler of a list screen: when the input object at ctx->f_14->f_28 reports a confirm it sets the two \"dirty\" flags at self+0x134/+0x135 and switches the screen animator to state 0xE (nothing to act on), 3 (element selected but list empty) or 2 (element selected) depending on the element state. Always returns 1.",
+  "confidence": 0.4,
+  "evidence": "Recovered entry point; `ctx->f_14->f_28` virtual +0x18 is the input poll (same shape as 0x002F60DC/0x002F6670 which use ctx->f_14->f_C +0x14/+0x18), the three state decisions read self+0x3D04 (element pointer) and compare self+0x3774/self+0x3778 (element list begin/end), and the animator is at self+0x3574 with virtual +0x14 (request) and +0x10 (apply) - the same pair used by 0x002FCC78."
+ },
+ {
+  "address": "0x00300314",
+  "name": "maybe_Ui_Window_Ctor_530",
+  "signature": "UiWindowHolder* maybe_Ui_Window_Ctor_530(UiWindowHolder* self, u32 a2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2"
+  },
+  "summary": "Constructor of a window holder (vtable 0x00762830): it takes the heap from the shared UI singleton, allocates a 0x530-byte window (ctor 0x00370964), attaches it to the UI manager, marks it enabled and starts it.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = g_0030040c` (0x00762830), the standard 0x98-byte singleton bootstrap (guard 0x007BE33C, table 0x007BE340, vtable 0x00782A08), Mem_AllocAligned(0x530, singleton[3]->f_10, 4), ctor 0x00370964(block, a2), 0x0021F738 attach, `child->f_94 = 1`, `(*(*child+0x24))(child)`. Called from 0x002175BC."
+ },
+ {
+  "address": "0x003005EC",
+  "name": "maybe_Ui_Window_Dtor_530",
+  "signature": "void maybe_Ui_Window_Dtor_530(UiWindowHolder* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the holder created by 0x00300314 (vtable 0x00762830): deletes the owned 0x530-byte window at self+8 through the shared UI manager and frees the holder.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_00300688` = 0x00762830, the same vtable 0x00300314 installs; the singleton bootstrap (0x007BE340 / 0x00782A08) is used only to reach the manager, then `func_0021F8B8(singleton[3], arg1[1])` and func_0010F6CC. Table 0x00762834 slot 0, slot 1 = 0x002FFAD8 (the window's own update)."
+ },
+ {
+  "address": "0x00304084",
+  "name": "Ui_PokerWindow_PlayFlash4",
+  "signature": "void Ui_PokerWindow_PlayFlash4(UiPokerWindow* self, int active)",
+  "params": {
+   "param_1": "self",
+   "param_2": "active"
+  },
+  "summary": "Stops the currently playing animation of the poker window and starts the `flash4` clip; when `active` is zero it also deactivates the parent layer, otherwise it remembers the follow-up clip `flash3`.",
+  "confidence": 0.55,
+  "evidence": "`func_0053D604(parent, \"flash4\", 0, 1)` is the named-animation lookup (the same call takes \"flash1\", \"open2\", \"poker_up_card_red\" in the neighbouring functions); the old clip at self+0x4C is stopped through vtable+0xC of self+4 and the new clip started with vtable+0x54; the follow-up name is stored at self+0x5C."
+ },
+ {
+  "address": "0x0030412C",
+  "name": "maybe_Ui_PokerWindow_PlayStoredFollowUp",
+  "signature": "void maybe_Ui_PokerWindow_PlayStoredFollowUp(UiPokerWindow* self, int* anim)",
+  "params": {
+   "param_1": "self",
+   "param_2": "anim"
+  },
+  "summary": "Starts the follow-up animation remembered at self+0x5C, but only when it declares the poker-window owner tag (anim->f_24 == 0x003041A8): it stops the current clip, looks the stored name up as an animation and starts it, then clears the stored name.",
+  "confidence": 0.5,
+  "evidence": "`arg2->f_24 == g_003041a8` is an owner/tag check, `func_0053D604(parent, name, 0, 1)` the named-animation lookup, `self->f_5c = 0` clears the pending name; table 0x00762BD4 slot 2 (slot 0 = the 0x001A6460 base init, slot 1 = Ui_PokerWindow_InitPanes)."
+ },
+ {
+  "address": "0x003041B0",
+  "name": "Ui_PokerWindow_SetCardVisibility",
+  "signature": "void Ui_PokerWindow_SetCardVisibility(UiPokerWindow* self, char red)",
+  "params": {
+   "param_1": "self",
+   "param_2": "red"
+  },
+  "summary": "Shows/hides the three poker card sprites: the red card is shown when `red` is non-zero, and the silver and gold cards are always hidden.",
+  "confidence": 0.6,
+  "evidence": "Three consecutive calls to 0x00304240 with the string literals `poker_up_card_red`, `poker_up_card_silver`, `poker_up_card_gold`; the red one is the only conditional (`arg2 == '\\0'`)."
+ },
+ {
+  "address": "0x00304240",
+  "name": "Ui_SetChildVisibleByName",
+  "signature": "void Ui_SetChildVisibleByName(UiWidget* self, u32 name, u8 visible)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name",
+   "param_3": "visible"
+  },
+  "summary": "Looks up a child widget by name under the widget's layer (vtable+0x2C with the create flag) and sets its visible bit (bit 0 of the flags at +0x44) to `visible`.",
+  "confidence": 0.65,
+  "evidence": "`(**(code **)(*(int*)(*(int*)(self+4)+0x10) + 0x2c))(layer, name, 1)` is the same \"find node by name\" virtual used by 0x001A60B8 and the font/name lookups, and `*(u8*)(obj+0x44) = obj->f_44 & 0xFE | visible` is the visibility-bit convention used throughout this batch (0x002B7DAC, 0x003A7F3C)."
+ },
+ {
+  "address": "0x0030427C",
+  "name": "Ui_PokerWindow_PlayOpen",
+  "signature": "void Ui_PokerWindow_PlayOpen(UiPokerWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the `flash1` animation of the poker window and remembers `open2` as the follow-up clip at self+0x5C.",
+  "confidence": 0.6,
+  "evidence": "`func_0053D604(parent, \"flash1\", 0, 1)` then start via vtable+0x54 and `self->f_5c = \"open2\"` - the same store-then-consume protocol as 0x00304084 / 0x0030412C."
+ },
+ {
+  "address": "0x00304534",
+  "name": "maybe_Ui_PokerWindow_PlayClip3",
+  "signature": "void maybe_Ui_PokerWindow_PlayClip3(UiPokerWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Stops the current poker-window animation and starts the clip named by the string constant in the literal pool at 0x00304594 (the third of the window's short animation clips).",
+  "confidence": 0.45,
+  "evidence": "Identical structure to 0x0030427C (`func_0053D604(parent, name, 0, 1)`, stop old via vtable+0xC, start via vtable+0x54) but the name argument is the pool label 0x00304594 instead of an inline string; the decompiler could not recover the pool word, so the clip name is not readable here."
+ },
+ {
+  "address": "0x003045A0",
+  "name": "Ui_PokerWindow_PlayOpenAnim",
+  "signature": "void Ui_PokerWindow_PlayOpenAnim(UiPokerWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the `open` animation of the poker window and sets the clip's playback word at +0x10.",
+  "confidence": 0.55,
+  "evidence": "The name argument is the literal 0x6E65706F = ASCII \"open\" (read from the pool at 0x003045F0), the old clip is stopped via vtable+0xC and the new clip gets `clip->f_10 = <pool 0x003045F8>` (a speed/loop parameter)."
+ },
+ {
+  "address": "0x003045FC",
+  "name": "Ui_PokerWindow_PlayOpen3",
+  "signature": "void Ui_PokerWindow_PlayOpen3(UiPokerWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Stops the current poker-window animation, starts the `open3` clip and then deactivates the parent layer (vtable+0x24).",
+  "confidence": 0.55,
+  "evidence": "Same named-animation pattern as 0x0030427C/0x003045A0 (`func_0053D604(parent, \"open3\", 0, 1)`, stop old via vtable+0xC, start via vtable+0x54) plus the explicit parent deactivate call."
+ },
+ {
+  "address": "0x0030550C",
+  "name": "maybe_Ui_PaneSet_Dtor_2B",
+  "signature": "void maybe_Ui_PaneSet_Dtor_2B(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a UI panel with two 0x50-byte containers at self+0xA0/self+0x50 and one list at self+0, then frees the object.",
+  "confidence": 0.4,
+  "evidence": "Two `func_003E04BC` members 0x50 apart plus `func_001A6768` on the base and func_0010F6CC - identical layout to 0x002D04C4 / 0x002E86E0 (different vtable, same generated teardown)."
+ },
+ {
+  "address": "0x003055F8",
+  "name": "maybe_Ui_DualWindow_Ctor",
+  "signature": "UiDualWindow* maybe_Ui_DualWindow_Ctor(UiDualWindow* self, u32 a2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2"
+  },
+  "summary": "Constructor of a holder with two owned windows: it installs the vtable 0x00762CD8, allocates and attaches the big 0x3DF4-byte window (ctor 0x0037B540 with `a2`) and the small 0x124-byte window (ctor 0x0037A23C), starting and enabling both.",
+  "confidence": 0.4,
+  "evidence": "Two consecutive Mem_AllocAligned + ctor + 0x0021F738 attach + `f_94 = 1` + vtable+0x24 sequences, with sizes 0x3DF4 (the literal g_0030570c) and 0x124; the children are stored at self+8 and self+0xC. Called from 0x00216DD4."
+ },
+ {
+  "address": "0x00305714",
+  "name": "maybe_Ui_DualWindow_Dtor",
+  "signature": "void maybe_Ui_DualWindow_Dtor(UiDualWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the two-window holder: installs the vtable, deletes both children at self+8 and self+0xC through the shared UI manager and frees the holder.",
+  "confidence": 0.45,
+  "evidence": "Two `func_0021F8B8(ctx->f_c, arg1[2/3])` pairs followed by func_0010F6CC - the mirror of 0x003055F8, which stores the same two children at arg1[2] and arg1[3]."
+ },
+ {
+  "address": "0x00306654",
+  "name": "Ui_MessageWindow_ShowNextPage",
+  "signature": "void Ui_MessageWindow_ShowNextPage(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances a paginated message: it computes the page count from the page record vector at self+0xC/self+0x10 (0x10-byte records), and while the next page exists it publishes the three 16-bit argument ids of that record via Message_SetArg(5/6/7), opens the message window with the standard fade configuration and moves the current page index at self+0x9C.",
+  "confidence": 0.6,
+  "evidence": "`self->f_9c = ((end - begin) >> 4) + 1` is the page count over 0x10-byte records; each page record at `begin + page*0x10` supplies the three ids at +8/+10/+0xC which go through 0x0061BD4C (pack) and 0x0066C99C (resolve) into the named Message_SetArg positions 5/6/7; the window is opened with 0x001C5328 Ui_MessageWindow_Open and the config block fed with texture 0x00780374; the two state bytes self+0x110/0x111 select the \"last page\"/\"auto close\" behaviour."
+ },
+ {
+  "address": "0x00306958",
+  "name": "maybe_Ui_RecipeMessage_Ctor",
+  "signature": "UiRecipeMessage* maybe_Ui_RecipeMessage_Ctor(UiRecipeMessage* self, u32 recipeId, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "recipeId",
+   "param_3": "mode"
+  },
+  "summary": "Constructor of the recipe message widget: installs the vtable 0x00762D44, initialises the 0x10-byte command vector at self+8/self+0x1C, creates the embedded node (vtable 0x00762028) and registers it in the priority-2 update list (id 0x1FF), builds the recipe command list for `recipeId`/`mode` (0x00306B5C) and finally binds the widget's text object.",
+  "confidence": 0.5,
+  "evidence": "`*arg1 = g_00306a40` (0x00762D44), `arg1[4] = arg1[3] = arg1+7` and `arg1[5] = arg1+0x27` are the command-vector begin/end/storage pointers, `func_001A66A0(arg1+0x28)` builds the embedded node with vtable 0x00762028, `func_0036B45C(node+0x15, 2, 0x1FF)` registers it with priority 2 and id 0x1FF, then 0x00306B5C fills the command list and 0x001C50BC binds the text. Called from 0x002175BC."
+ },
+ {
+  "address": "0x00306A50",
+  "name": "maybe_Ui_RecipeMessage_Dtor",
+  "signature": "void maybe_Ui_RecipeMessage_Dtor(UiRecipeMessage* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the recipe message widget: installs the vtable, unregisters the update-list node at self+0xF4, destroys the embedded node, releases the message reference at self+0x94 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "`func_0036B514(arg1+0x3d)` = remove the update node registered by 0x00306958, then `func_001A6768(-0x54)`, `func_0012416C(-0x98)` and func_0010F6CC - the exact inverse of the constructor's member setup."
+ },
+ {
+  "address": "0x00306B5C",
+  "name": "Ui_Recipe_BuildGetMessage",
+  "signature": "void Ui_Recipe_BuildGetMessage(UiRecipeMessage* self, u32 recipeId, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "recipeId",
+   "param_3": "mode"
+  },
+  "summary": "Builds the \"recipe acquired\" message command list: it opens `recipe_get_msg.bxon`, resolves the recipe record from the recipe table, then emits 0x10-byte message commands - the recipe name, a separator, the ingredient names (in groups of one, two or three per line, resolved through the item name table) and the closing commands - appending each to the vector at self+8/self+0x1C.",
+  "confidence": 0.55,
+  "evidence": "String literal `s_recipe_get_msg_bxon_...` opened with func_00124E5C(ctx,1,name) and entry id 7; `func_0063E1B4(recipeTable, id)` returns the recipe record whose u16 list (count at [0], data at +4) is walked; each ingredient id is resolved with 0x0063E998 (item name table) and packed into the command word (`CONCAT22(.., id)`); command types 0..6 with the packing of 1/2/3 names per record are the 4-word command format consumed by 0x00306654; the vector growth uses 0x0070F140."
+ },
+ {
+  "address": "0x003071B0",
+  "name": "Ui_ListWindow_SetupTextRows",
+  "signature": "void Ui_ListWindow_SetupTextRows(UiListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates the eight text rows of a two-column list window: five left rows (`txt_l1`..`txt_l5`, lengths 0x28/0x15/0x17/0x19/0x1B) and three centre rows (`txt_c1`..`txt_c3`, 0x16/0x18/0x1A), each with its `null_txt_*` placeholder, then switches the window to the row layout via vtable+0x48.",
+  "confidence": 0.55,
+  "evidence": "Eight `func_004E71C0(self, \"txt_l1\", size, \"null_txt_l1\", column, index)` calls with the string literals visible in the pool (0x003072DC `txt_l1` ... 0x00307368 `txt_c3`); column 0 for the l-rows and column 1 for the c-rows, and the final `(**(*arg1+0x48))(arg1, (self->f_28 << 16) | 0x28)` is the same \"switch to layout\" virtual used by 0x002CE7C8."
+ },
+ {
+  "address": "0x00307524",
+  "name": "maybe_Container_UnlinkAndEnableLayer",
+  "signature": "void maybe_Container_UnlinkAndEnableLayer(ListNode* head)",
+  "params": {
+   "param_1": "head"
+  },
+  "summary": "Unlinks the node, resets the list head to point at itself, and enables the layer at `ctx->f_14->f_1C` through its virtual +0xC.",
+  "confidence": 0.35,
+  "evidence": "Identical to 0x002FCF64 (`*(next+4)=prev; *(prev+8)=next;` then `*arg1 = arg1-1; arg1[1] = arg1-1;` and `ctx->f_14->f_1c` virtual +0xC with 1); the only difference is that the singleton is fetched a second time here."
+ },
+ {
+  "address": "0x00308444",
+  "name": "maybe_Ui_TwoTabCursor_HandleInput",
+  "signature": "u32 maybe_Ui_TwoTabCursor_HandleInput(TwoTabCursor* self, UiScreen* screen)",
+  "params": {
+   "param_1": "self",
+   "param_2": "screen"
+  },
+  "summary": "Input router for the two-tab cursor: flag 0x10 runs the \"switch tab\" action 0x0021E124, flag 0x102 runs the tab-change path (0x0021DF50 + 0x0062F038 then screen animator state 5), flag 4 runs the other tab-change path (0x0021DF40 + 0x0062F028, animator state 3) and flag 1 forwards the dpad delta to the cursor's move virtual +0x3C. Always returns 1.",
+  "confidence": 0.5,
+  "evidence": "`self->f_3534` is the same event-flag word used by 0x00308548, and the pair 0x0021DF40/0x0062F028 versus 0x0021DF50/0x0062F038 are the two tab-switch helpers of the already-named maybe_Ui_TwoTabCursor_OnInput (0x0021DF50 owner) - so this is the same two-tab cursor class; `(*(*piVar4+0x3c))(cursor, dx, dy, dz)` is the cursor move virtual."
+ },
+ {
+  "address": "0x00308548",
+  "name": "maybe_Ui_ItemScreen_HandleInput",
+  "signature": "u32 maybe_Ui_ItemScreen_HandleInput(UiItemScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Main input handler of a list screen: it first checks whether the global input object is busy (singleton sub-object virtual +0x18) and otherwise dispatches on the event flags - 0x142 = confirm (0x003BD908 + 0x003BDD90 and animator state 3), 4 = \"can't use\" (0x0018D1C4(3) then state 0x12 or 0x13), 8 = start the scripted element (0x002D8838), 0x10 = set the \"sub-mode\" flag at self+0x3570+0x560, 1 = cursor move through self+0x288 virtual +0x3C.",
+  "confidence": 0.45,
+  "evidence": "The flag word self->f_3534 (0x1/4/8/0x10/0x142 bits) and the animator at self+0x3574 (virtual +0x14 request, +0x10 apply) match 0x00308444 and 0x002FD298; 0x00640308(&self->f_288) is the grid controller's current-index helper and 0x003BD908/0x003BDD90 are the selection commit pair; 0x002D8838 is the already-named \"activate scripted element\" helper. Recovered entry point."
+ },
+ {
+  "address": "0x00308F1C",
+  "name": "maybe_Ui_AbortOnIndexError",
+  "signature": "void maybe_Ui_AbortOnIndexError(UiListState* self, u32 index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Bounds-check failure path: it fetches the 0x1C-byte global helper, computes this frame's time via 0x0051B1FC, and then calls the engine's non-returning panic routine (0x00100B74) with the value obtained from 0x00648B7C(self+0x11C, index) - i.e. an unrecoverable \"index outside table\" abort.",
+  "confidence": 0.4,
+  "evidence": "The function ends in `/* WARNING: Subroutine does not return */ func_00100B74(...)`, the same panic entry used by 0x001A619C and 0x001D809C's error paths; the 0x1C-byte singleton (vtable 0x0030909C) and the 0x00648B7C(self+0x11C, index) table access identify the failing lookup. Recovered entry point."
+ },
+ {
+  "address": "0x0030AFF4",
+  "name": "maybe_Model_LoadVariant",
+  "signature": "u32 maybe_Model_LoadVariant(UiModelSlot* self, u32 key, u32 variant)",
+  "params": {
+   "param_1": "self",
+   "param_2": "key",
+   "param_3": "variant"
+  },
+  "summary": "Resolves and loads a model/asset variant: it builds the name from the type byte at self+0xB (or self+0xA when it is 0x10) and the slot data at self+8, looks the model up with 0x0063675C, computes the frame/size value at self+0x60 from the range self+0x20..self+0x24 (division by 12 via the 0x2AAAAAAB magic), loads the resource with 0x003882F0 and stores it into the slot at self+0x20 via 0x00124D48.",
+  "confidence": 0.45,
+  "evidence": "The magic constant 0x2AAAAAAB is the standard divide-by-12 (or -6) sequence and is applied to `self->f_24 - self->f_20`; 0x0063675C(key, self+8, variant, &param) is the model/archive lookup, 0x003882F0 is the shared BCH load (also used by 0x002C4EB4), 0x0070E194(&self->f_20) and 0x00124D48(slot, handle) assign the reference. Called from 0x00220F78 / 0x00221AA8 / 0x002239F4."
+ },
+ {
+  "address": "0x0030BF90",
+  "name": "maybe_Container_DtorWithArrays",
+  "signature": "int maybe_Container_DtorWithArrays(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a container that owns two arrays: it installs the vtable, runs the class cleanup 0x0030B5F4, releases every 8-byte entry (handle at +4) and every 0xC-byte entry (0x001E8E0C + release) and finally drops the container's own reference.",
+  "confidence": 0.4,
+  "evidence": "Two loops over `arg1[0x19]..arg1[0x1a]` (stride 8) and `arg1[8]..arg1[9]` (stride 0xC) with the element destructors; `*arg1 = g_0030c00c` restores the vtable (table 0x00762E34, slot 1 = 0x0030BF0C) and the tail `func_0012416C(arg1+1) - 4` returns the base."
+ },
+ {
+  "address": "0x0030D3DC",
+  "name": "maybe_Ui_PaneSet_Dtor_2C",
+  "signature": "void maybe_Ui_PaneSet_Dtor_2C(UiPaneSet* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a panel with two 0x50-byte containers and a 0x148-byte sub-object (0x001D8C2C), then frees the object.",
+  "confidence": 0.4,
+  "evidence": "Two `func_003E04BC` members 0x50 apart, then `func_001D8C2C(-0x148)` (the 2D-drawable sub-object teardown used by 0x002CF644/0x002F77A0) and func_0010F6CC."
+ },
+ {
+  "address": "0x0030E1AC",
+  "name": "Ui_KyoukaiWindow_CreatePartyPanes",
+  "signature": "void Ui_KyoukaiWindow_CreatePartyPanes(UiKyoukaiWindow* self, int baseIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "baseIndex"
+  },
+  "summary": "Creates the five sub-windows of the \"kyoukai\" screen: `win_kyoukai_party` (part baseIndex), `win_kyoukai_2d3d` (+1), `win_bind_select` (+2), `win_gold` (+3, with the gold formatter 0x0061B7A4) and `win_kyoukai_select` (+4), linking each into the row list at self+0xD2C and finally disabling the group at self+0x158.",
+  "confidence": 0.55,
+  "evidence": "Five `func_001D85EC(self, dest, \"win_kyoukai_party\"/\"win_kyoukai_2d3d\"/\"win_bind_select\"/\"win_gold\"/\"win_kyoukai_select\", baseIndex+n)` calls with the names visible in the literal pool, each followed by an intrusive-list insert (0x001235A4) at self+0xD2C; this is the same BFLYT-part loading call used by 0x002CE7C8 (`win_kyoukai_icon` / `win_kyoukai_save`), so the two functions build the same window family. Vtable 0x00762F3C slot 0."
+ },
+ {
+  "address": "0x0030E810",
+  "name": "Ui_KyoukaiWindow_Update",
+  "signature": "void Ui_KyoukaiWindow_Update(UiKyoukaiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of the \"kyoukai\" screen (vtable slot 1 of the same class): it advances the gold formatter (0x0061B7A4) and the party animation (0x001964BC) when their flags are set, and pumps the 8-slot, 0x18-byte timer table at self+0xD8C with the 1/30 s step, firing the armed timer callback.",
+  "confidence": 0.5,
+  "evidence": "Literal 0.0333333 = 1/30 s added to self->f_d94 with the frame counter self->f_d98 and step self->f_d9c - exactly the timer pump of 0x002C1D60 / 0x002E9614 but with 8 slots; the slot table is `piVar4 + slot*6` (0x18 bytes) with the code pointer at word 0xD and the adjustor at 0xE, and the sub-animations are advanced by the same pair of calls as 0x0030E1AC (0x0061B7A4 / 0x001964BC)."
+ },
+ {
+  "address": "0x0030FEFC",
+  "name": "maybe_Ui_BigScreen_DtorDelete",
+  "signature": "void maybe_Ui_BigScreen_DtorDelete(UiBigScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the largest UI screen class in this batch (0x1930+ bytes, vtable 0x00762EF4 with ToD in slot 2): runs 0x0030FF0C and frees the screen.",
+  "confidence": 0.45,
+  "evidence": "Standard dtor/delete pair: table 0x00762EF4 slot 1 (slot 0 = 0x0030FF0C, slot 2 = ToD 0x001D863C)."
+ },
+ {
+  "address": "0x0030FF0C",
+  "name": "maybe_Ui_BigScreen_Dtor",
+  "signature": "void maybe_Ui_BigScreen_Dtor(UiBigScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-deleting destructor of the largest UI screen class: restores the vtable, releases the two references at 0x1934/0x193C, rewinds through the member chain destroying the dozens of sub-objects (7 x 0x50 containers, two list nodes, a 4 x 0x5C block, 4 x 0x50 containers, a 4 x 0x3C block, two flags) and finally destroys the base drawable at -0xE78 (0x002CF644).",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_003101b4` = table 0x00762EF4 and the whole body is the reverse-order member teardown with the sub-object vtables (0x00767374, 0x00766E64, 0x0075D118/0x0075D144, 0x00759388, 0x00759CD0, 0x00773740, 0x00758CFC) restored at their negative offsets; `func_00100BE0(base, 0x0061798C, 0x5C, 4)` and `(..., 0x00197250, 0x3C, 4)` are the two 4-element arrays, and the tail call 0x002CF644(-0xE78) is the already-named drawable base destructor."
+ },
+ {
+  "address": "0x00310C90",
+  "name": "maybe_Ui_DualWindow_Dtor_B",
+  "signature": "void maybe_Ui_DualWindow_Dtor_B(UiDualWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a two-window holder: installs the vtable, deletes both children at self+0xC and self+0x10 and frees the holder.",
+  "confidence": 0.4,
+  "evidence": "Two `func_0021F8B8(ctx->f_c, arg1[3/4])` pairs followed by func_0010F6CC - the same two-child pattern as 0x00305714 but with the children at +0xC/+0x10."
+ },
+ {
+  "address": "0x0031101C",
+  "name": "maybe_Ui_GetSingletonAndClearBusy",
+  "signature": "void maybe_Ui_GetSingletonAndClearBusy(char* initFlag)",
+  "params": {
+   "param_1": "initFlag"
+  },
+  "summary": "Lazily creates the global 0x98-byte UI singleton (guarded by *initFlag) and clears its \"busy\" flag at +0x25.",
+  "confidence": 0.3,
+  "evidence": "The standard singleton bootstrap (guard char, table pointer 0x007BE340, count 0x00833F78, vtable 0x00782A08, size 0x98) ending in `puVar2->f_25 = 0` - the same clear that 0x002CEA08 and 0x002F6950 perform on the same object."
+ },
+ {
+  "address": "0x00311530",
+  "name": "maybe_Ui_ActivateScreenMessageAndModel",
+  "signature": "void maybe_Ui_ActivateScreenMessageAndModel(UiScreen** screen)",
+  "params": {
+   "param_1": "screen"
+  },
+  "summary": "Activates the message window and model owned by a screen: if the screen has a message window (*screen+0x30) it marks it active, binds the screen's 0x88 sub-object into the message page (0x001DAC34) and rebinds the screen's model (0x001EABD8 on *screen+0x28).",
+  "confidence": 0.45,
+  "evidence": "`*(u8*)(msg+0x94) = 1` is the \"active\" byte used by every widget constructor in this batch, `func_001DAC34(msg+0x1E18, screen+0x88)` operates on the Ui_MessagePage that also appears in 0x002E4D08 (offset +0x1E18), and 0x001EABD8 takes the model pointer at screen+0x28. Twelve UI screens call this (0x001BFBD4 ... 0x001E93E0)."
+ },
+ {
+  "address": "0x00311C3C",
+  "name": "maybe_Res_ReleaseTwoHandles",
+  "signature": "void maybe_Res_ReleaseTwoHandles(ResObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears four state words and releases the two resource handles at self+0x8C and self+0x90 through the engine's tagged handle table (10-bit offset, 0x007B4D68 base) and 0x0017C51C.",
+  "confidence": 0.4,
+  "evidence": "The two handle releases use the same tagged-pointer scheme as func_0012416C but with a 10-bit tag (`>> 10`, mask 0x3FF) and the table base 0x007B4D68; `self+4`, `self+8`, self->f_28 and self->f_94 are zeroed first (`f_94` again the \"active\" byte). Callers 0x00625308 / 0x0062564C dispose UI resources."
+ },
+ {
+  "address": "0x0031328C",
+  "name": "maybe_Ui_StartIntroModelSequence",
+  "signature": "void maybe_Ui_StartIntroModelSequence(UiIntroScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts a scripted model sequence on a screen: when both engine view layers report ready, it creates the 0x1EB0-byte effect/model helper (0x1EB8C8 with id 0x15), hands the screen's model at self+0x28 to 0x003F043C, starts the model, sets the engine's UI mode word (ctx+0x24A98 slot +8 with 0x20D) and copies the current view rect from g_007285FC into self+0x20.",
+  "confidence": 0.3,
+  "evidence": "Two `ctx->f_14->f_c` slot +0x3C presence checks gate everything; the lazy singleton uses guard 0x007BE2E4 / table 0x007BE2E8 / size 0x1EB0 / vtable 0x00782914 (count literal 0x7F305C); `func_001EB8C8(helper, 0x15, 0)` creates the model/effect, 0x003F043C binds the screen model, and the final writes come from the static parameter block 0x007285FC (also used as the source of f_20/f_24 in 0x0031481C)."
+ },
+ {
+  "address": "0x0031481C",
+  "name": "maybe_Ui_FieldScreen_Init",
+  "signature": "void maybe_Ui_FieldScreen_Init(UiFieldScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates and initialises a large field/menu screen: it builds the five owned sub-objects (0x12BC-byte window via 0x003F05DC, 0x127C-byte via 0x003ED21C, 0x3984-byte via 0x0041B5D8, 0x120-byte 2D drawable via 0x002D00EC and 0x26C-byte panel via 0x002F6B14), attaches each to the UI manager, then zeroes/initialises the ~0x120 bytes of state at self+0x3C.. including two 0xE-byte 0xFF arrays and a 0x30 x 8 memset block at self+0x11C.",
+  "confidence": 0.4,
+  "evidence": "Five identical Mem_AllocAligned + ctor + 0x0021F738 attach blocks with the distinct sizes 0x12BC/0x127C/0x3984/0x120/0x26C, followed by the uniform `field = field & mask | mask` handle-tag initialisation (0xFFFFF800) and two 14-byte 0xFF loops (two 14-slot \"none\" index tables); the last call `func_00100050(&self->f_11c, g_0070B058, 0x30, 8)` fills the 0x180-byte block used later as the 24 x 0x18 timer/slot table by 0x00316250. Called from 0x001EB390."
+ },
+ {
+  "address": "0x00315F98",
+  "name": "maybe_Ui_SetMessageArgCount",
+  "signature": "void maybe_Ui_SetMessageArgCount(UiMessageWidget* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Formats `value` as a number and pushes it into the active message: it formats with 0x006F0E5C, sets text frame `self->f_10<<16 | 2`, then binds Message_SetArg(8, formatted 0x14) and sets the icon frame `|3` to the wrapped index 0x13 from the table at self->f_18+0x11C.",
+  "confidence": 0.45,
+  "evidence": "Named call 0x001F076C Message_SetArg with index 8, the number formatter 0x006F0E5C with the format table 0x00750024, the sprite-frame convention `self->f_10 << 16 | n` used all over this batch, and the wrap helper 0x00648B7C(&self->f_18->f_11c, 0x13)."
+ },
+ {
+  "address": "0x00316024",
+  "name": "maybe_Ui_SetMessageArgCount2",
+  "signature": "void maybe_Ui_SetMessageArgCount2(UiMessageWidget* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Second variant of 0x00315F98: same Message_SetArg(8, ...) and icon wrap, but the text frames used are `self->f_10<<16` and `|1`, and the format width constant is 0x32 instead of 0x14.",
+  "confidence": 0.4,
+  "evidence": "Identical structure to 0x00315F98 with only the frame numbers (0 / 1 instead of 2 / 3) and the 0x32 constant differing; the format table is the same pool label 0x003160A4."
+ },
+ {
+  "address": "0x00316250",
+  "name": "maybe_Svc_TimerSub_RunDue_24",
+  "signature": "void maybe_Svc_TimerSub_RunDue_24(EngineTimer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Third timer pump (vtable 0x00763034): advances the 24-slot, 0x18-byte timer table at self+0x11C by 1/30 s per frame, fires the armed callback, and when the \"stop\" byte at self+0x540 is set clears the engine-context UI mode word.",
+  "confidence": 0.5,
+  "evidence": "Literal 0.0333333 = 1/30 s, `self->f_124 += dt`, `self->f_128 += 1`, table `self + 0x11c + self->f_120*0x18` with the code pointer at +0x34 / adjustor at +0x38 and the adjustor table at self+0x13C - the same timer machinery as 0x002C1D60 (12 slots) and 0x002E9614 (5 slots). Vtable 0x00763034 slot 1, slot 0 = Pb1 (0x003160AC)."
+ },
+ {
+  "address": "0x00316344",
+  "name": "maybe_Ui_EnableViewIfSet",
+  "signature": "void maybe_Ui_EnableViewIfSet(UiScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Enables the screen's view layer when the \"view index\" at self+0x541 is not -1, by calling ctx->f_14->f_1C virtual +0xC with 1.",
+  "confidence": 0.35,
+  "evidence": "The single guarded call `(*(*piVar1+0xC))(piVar1, 1)` on `ctx->f_14->f_1c` is the same view-enable used by 0x002C6BFC/0x002C6F30/0x00307524; `self->f_541 == -1` is the \"no view attached\" sentinel (the pairing with 0x00316250's stop byte at self+0x540 suggests the two bytes are the view slot and its state)."
+ }
+]

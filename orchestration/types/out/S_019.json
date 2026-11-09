@@ -1,0 +1,357 @@
+[
+ {
+  "class": "Cutscene_Scene",
+  "type": "CutsceneScene",
+  "summary": "One cutscene scene: owns the scene definition record, the scene pack handle and its 8-byte resource-handle vector, the embedded Anim_ModelInstance that drives the cutscene camera/actor animation, the BGM handle and the message flag. Allocated by Field_InitSceneObjects (0x0019CD50) and stored at Field_Scene+0x70; driven by Ui_SceneFlow_Update through Cutscene_UpdateTimer.",
+  "size": 528,
+  "base": null,
+  "confidence": 0.6,
+  "evidence": "Cutscene_Scene_Init (0x003984B8) stamps vtable 0x00766E7C and initialises every field; Field_InitSceneObjects (0x0019CD50) allocates 0x210 bytes with Mem_AllocAligned_2 and passes the block to Cutscene_Scene_Init, so the object is 0x210 bytes (the batch's 416 is only the highest field + width). Cutscene_Teardown (0x00397984) resets the same offsets. The batch omits +0xC (u16 scene id) and +0x14 (u8 flag) that the ctor writes, and the tail +0x1C4..+0x210 (camera step index at +0x1CC, message flag at +0x20C) is outside the batch.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Cutscene_Scene_Init stores 0x00766E7C (literal pool 0x003985F8) and Cutscene_Scene_Dtor re-stores it; the slots are Cutscene_CreateActorModels, Cutscene_ApplyLayoutMode, Cutscene_AttachMantleToActor, Cutscene_FindResourceEntry and Cutscene_OpenMessageForActor"
+   },
+   {
+    "offset": 4,
+    "name": "maybe_secondaryVtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "ctor stores the shared rodata constant 0x00782234 (literal 0x003985FC); Anim_Sequence_CtorBase stores the same constant at +0xC and 292 functions reference it, and the table at 0x00782234 is a function-pointer table with mostly null slots, so it is a shared base/interface vtable, not a per-class one"
+   },
+   {
+    "offset": 8,
+    "name": "allocator",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "ctor copies owner[1] here; Field_InitSceneObjects passes {uVar12, memoryManager+0x344} as that argument, and Cutscene_ResolveActorResource forwards this word to Anim_KeyframeTrack_EvaluateAll, which hands it to Mem_AllocAligned as the pool"
+   },
+   {
+    "offset": 12,
+    "name": "sceneId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.85,
+    "evidence": "ctor writes 0xFFFF; Cutscene_Init stores definition[0] here and looks the scene record up with it (func_0063D85C(dm, sceneId)); Cutscene_UpdateTimer passes it to Event_OnCutSceneEnd. struct_db dropped this offset from the batch"
+   },
+   {
+    "offset": 16,
+    "name": "sceneRecord",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Cutscene_Init stores func_0063D85C(dm, sceneId) here; every cutscene method guards on it and reads its bytes +0xC/+0xF/+0x10/+0x16/+0x19/+0x20 (layout mode, flags, layer type, next scene id)"
+   },
+   {
+    "offset": 20,
+    "name": "maybe_is3DScene",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Cutscene_Init sets it to 1 only when the scene record's +0xC byte is 1; Cutscene_LoadScenarioPacks loads the scenario packs only when it is set and Cutscene_Finish uses it to decide whether to drop the animation. struct_db dropped this offset from the batch"
+   },
+   {
+    "offset": 21,
+    "name": "is2DOverride",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Cutscene_Init copies definition byte 2 here; Cutscene_ApplyLayoutMode forces layout mode 0 and skips the 3D layer setup when it is non-zero"
+   },
+   {
+    "offset": 22,
+    "name": "maybe_enableCameraSteps",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Cutscene_Init copies definition byte 3 here; Cutscene_AdvanceTimeline tests it before every camera-step, sound and model-update branch, so it enables the per-frame camera/actor handling of the scene"
+   },
+   {
+    "offset": 24,
+    "name": "packHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Cutscene_Init stores the scene pack handle here (Fs_NamedObject_LoadSimple + Pack_ReleaseHandle); Cutscene_ResolveActorResource resolves it with Container_HandleResolveAsType(&self->f_18) and Cutscene_Teardown frees it through the 0x007BA2D0 handle table"
+   },
+   {
+    "offset": 28,
+    "name": "resource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Cutscene_ResolveActorResource stores Container_HandleResolveAsType(&self->f_18) here and passes it to Gfx_ResourceList_Attach; Cutscene_Teardown clears it"
+   },
+   {
+    "offset": 32,
+    "name": "maybe_taggedResource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Cutscene_ResolveActorResource walks the resource list for the object whose type tag equals &g_tagTypeLookupTable and stores it here"
+   },
+   {
+    "offset": 36,
+    "name": "isTimerRunning",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Cutscene_ApplyLayoutMode sets it to 1 when it applies the layout; Cutscene_UpdateTimer uses it to choose between advancing the timeline (0) and counting down remainingTime"
+   },
+   {
+    "offset": 40,
+    "name": "remainingTime",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Cutscene_ApplyLayoutMode stores 0.5f (0x3F000000); Cutscene_UpdateTimer subtracts the frame delta and stores -1.0f (0xBF800000) when it expires; Cutscene_Teardown clears it"
+   },
+   {
+    "offset": 44,
+    "name": "animResource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Cutscene_ResolveActorResource stores the tagged animation resource here and passes it as the context of Anim_KeyframeTrack_EvaluateAll; Cutscene_UpdateTimer advances the timeline while it is non-zero"
+   },
+   {
+    "offset": 48,
+    "name": "packHandles",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "ctor sets it to self+0x40 (the inline storage); Cutscene_LoadScenarioPacks and Cutscene_AdvanceTimeline compute the count as (f_34-f_30)>>3 and walk 8-byte {handle, resource} entries"
+   },
+   {
+    "offset": 52,
+    "name": "packHandlesEnd",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "ctor sets it to self+0x40; Cutscene_LoadScenarioPacks appends at f_34 and compares it with the capacity at f_38"
+   },
+   {
+    "offset": 56,
+    "name": "packHandlesCapacity",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "ctor sets it to self+0x140, the end of the 32-entry inline storage; Cutscene_LoadScenarioPacks grows the vector when f_34 == f_38"
+   },
+   {
+    "offset": 60,
+    "name": "unknown_3c",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "single write of 0 in the ctor, between the handle-vector capacity word and the inline storage; no reader recovered, so it is probably the small-vector's heap flag but that is unproven"
+   },
+   {
+    "offset": 64,
+    "name": "handleStorage",
+    "type": "u32[64]",
+    "size": 256,
+    "confidence": 0.6,
+    "evidence": "ctor points the vector begin/end at self+0x40 and the capacity at self+0x140, i.e. 0x100 bytes = 32 8-byte {handle, resource} entries (64 words); Cutscene_Teardown walks them with Pack_ReleaseHandle"
+   },
+   {
+    "offset": 320,
+    "name": "handleCursor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Cutscene_AdvanceTimeline: 'if (self[0x50] != (self[0xd]-self[0xc])>>3)' then processes entry begin+cursor*8 and increments it; Cutscene_FindResourceEntry bounds 'index < self->f_140'"
+   },
+   {
+    "offset": 324,
+    "name": "soundFileId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Cutscene_ResolveActorResource stores the +0x58 word of the object found by its third tag lookup (tag &maybe_g_listPanelClassRecord) here; Cutscene_Close passes it to Sound_AllocFileSlot to (re)start the scene BGM"
+   },
+   {
+    "offset": 328,
+    "name": "soundHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "Cutscene_Close, Cutscene_Teardown and Cutscene_ReleaseMessageAndCamera release it with func_001EDD64(Sound_GetPlayer(), handle) and clear it; Cutscene_AdvanceTimeline plays it with func_001EE698(player, self[0x52])"
+   },
+   {
+    "offset": 332,
+    "name": "modelInstanceAnimData",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "+0x14C starts an embedded Anim_ModelInstance (184 bytes, +0x14C..+0x204): Anim_ModelInstance_Release(&self->f_14c) frees *self and clears it, Anim_UpdateModelInstance(&self->f_53) updates it every frame"
+   },
+   {
+    "offset": 336,
+    "name": "unknown_150",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "word 1 of the embedded model instance (Anim_ModelInstance+0x04); cleared by the ctor and by Anim_ModelInstance_Release, no reader recovered"
+   },
+   {
+    "offset": 340,
+    "name": "unknown_154",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "word 2 of the embedded model instance (Anim_ModelInstance+0x08); cleared by the ctor and by Anim_ModelInstance_Release, no reader recovered"
+   },
+   {
+    "offset": 344,
+    "name": "modelAnimResource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "word 3 (Anim_ModelInstance+0x0C): Cutscene_AdvanceTimeline reads self[0x56] and dereferences ->f_60->f_c (the resource's entry count); Anim_ModelInstance_Release uses self[3] as the resource whose +0x60 header holds the u16 count at +0x12"
+   },
+   {
+    "offset": 348,
+    "name": "unknown_15c",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "word 4 of the embedded model instance (Anim_ModelInstance+0x10); cleared by the ctor and by Anim_ModelInstance_Release, no reader recovered"
+   },
+   {
+    "offset": 352,
+    "name": "modelNodeStates",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "word 5 (Anim_ModelInstance+0x14): Anim_Table_ClearActiveEntries(&self->f_14c) walks f_14 in 0x60-byte steps for resource->f_60->f_12 entries; Anim_ModelInstance_Release does the same with self[5]"
+   },
+   {
+    "offset": 356,
+    "name": "unknown_164",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "word 6 of the embedded model instance (Anim_ModelInstance+0x18); cleared by the ctor and by Anim_ModelInstance_Release, no reader recovered"
+   },
+   {
+    "offset": 360,
+    "name": "unknown_168",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "word 7 of the embedded model instance (Anim_ModelInstance+0x1C); cleared by the ctor and by Anim_ModelInstance_Release, no reader recovered"
+   },
+   {
+    "offset": 364,
+    "name": "transformMatrix00",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 0 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 368,
+    "name": "transformMatrix01",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 1 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 372,
+    "name": "transformMatrix02",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 2 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 376,
+    "name": "transformMatrix03",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 3 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 380,
+    "name": "transformMatrix04",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 4 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 384,
+    "name": "transformMatrix05",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 5 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 388,
+    "name": "transformMatrix06",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 6 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 392,
+    "name": "transformMatrix07",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 7 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 396,
+    "name": "transformMatrix08",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 8 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 400,
+    "name": "transformMatrix09",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 9 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 404,
+    "name": "transformMatrix10",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 10 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 408,
+    "name": "transformMatrix11",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "word 11 of the 12-word default transform: Cutscene_Scene_Init (0x003984B8) copies 12 words from the shared default-transform table 0x007E7110 (bss; also used by Gfx_Node_Ctor and Gfx_ModelInstance_InitDefaults) into the embedded model instance's +0x20; 3x4 affine matrix, row/column order not proven"
+   },
+   {
+    "offset": 412,
+    "name": "overrideTracks",
+    "type": "u32[10]",
+    "size": 40,
+    "confidence": 0.5,
+    "evidence": "ctor runs std_ConstructArray(self+0x19C, 0x005646B8, 0x14, 2) - two 20-byte sub-objects; Anim_UpdateModelInstance calls func_005644E0 on self+j*0x14+0x50 for j=0,1 and 0x005646B8 stamps vtable 0x00782254 into each"
+   }
+  ]
+ }
+]

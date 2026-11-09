@@ -1,0 +1,1734 @@
+[
+ {
+  "address": "0x0038AB68",
+  "name": "maybe_Battle_Action_UpdateTargetMarker",
+  "signature": "void maybe_Battle_Action_UpdateTargetMarker(BattleAction* self)",
+  "params": {
+   "self": "battle action object; owner actor at +0x28"
+  },
+  "summary": "Battle-actor action helper: resolves the actor referenced by the action's owner, copies its screen position and, when more than one combatant is present, asks that actor to show its selection/attack-target marker. Otherwise the owner's action state is reset.",
+  "confidence": 0.42,
+  "evidence": "Reads self->f_28 (owner actor) and owner->f_273 (actor/model id); resolves via func_002AB698(ctx+0x4254,id), falling back to ctx+0x4270; both are the battle actor tables. Calls vtable+0x90/+0x94 (world position) and vtable+0xe4(actor,1); otherwise func_005E7848(owner,0). N_054's 0x0038AA18 (maybe_Battle_Actor_FinishMove) calls 0x0038AC74 directly, proving this is the battle-actor action family."
+ },
+ {
+  "address": "0x0038AC74",
+  "name": "Battle_Action_ResolveActor",
+  "signature": "BattleActor* Battle_Action_ResolveActor(BattleAction* self)",
+  "params": {
+   "self": "battle action object; owner actor at +0x28"
+  },
+  "summary": "Resolves and returns the battle actor owned by an action object, first from the active actor table and then from the reserve table; NULL when the owner is not currently a combatant.",
+  "confidence": 0.7,
+  "evidence": "Identical two-table lookup as 0x0038AB68: func_002AB698(ctx+0x4254, owner->f_273), then func_002AB698(ctx+0x4270, owner->f_273); no side effects. Called by 0x0038AA18 (N_054: maybe_Battle_Actor_FinishMove) and 0x00484C10."
+ },
+ {
+  "address": "0x0038AD38",
+  "name": "Ui_BattleEnemyListWindow_BuildRows",
+  "signature": "void Ui_BattleEnemyListWindow_BuildRows(BattleEnemyListWindow* self, int selected_party_slot)",
+  "params": {
+   "self": "7-row battle enemy list window (row data at +0x2A0, 7*4 bytes)",
+   "selected_party_slot": "party slot to apply the selection colour to, or 0"
+  },
+  "summary": "Fills the seven left/right text rows of the battle enemy list from the live battle actor tables: four party slots first, then every extra actor in the battle actor list, clamping each row to the actor's displayed name, level and colour. Rows beyond the number of live actors are hidden, and the selected party slot is marked.",
+  "confidence": 0.7,
+  "evidence": "Loops i<4 over ctx+0x428c + i*0x1c (the four party actor records used by 0x0038D098/0x00391xxx), then walks the intrusive list at ctx+0x4260..0x4264 (all battle actors). Skips actors with func_002AB62C(...,0)->vtable+0x10 == 0 (dead/hidden) and func_005797D8(...,1) false; writes name/module id to self+0x2a0+i, colour through func_003A7A2C/0x003A79C4 on self->f_34, and hides rows via func_003E043C(...,0)/func_003DFF34."
+ },
+ {
+  "address": "0x0038B3AC",
+  "name": "Ui_BattleEnemyListWindow_IsRowSelectable",
+  "signature": "int Ui_BattleEnemyListWindow_IsRowSelectable(BattleEnemyListWindow* self)",
+  "params": {
+   "self": "battle enemy list window"
+  },
+  "summary": "Returns 1 when the row currently under the cursor can be selected: the row must exist, its actor must still be alive/visible, and (for a dead actor) the actor's death animation must have finished. Used by the cancel/confirm logic to keep the cursor off unusable rows.",
+  "confidence": 0.68,
+  "evidence": "Gets the cursor index with FUN_001D806C(self->f_38,...); rejects rows with self+index*4+0x2a4 set (row not valid), checks monster id 399 (0x18F, the 'empty/dead' sentinel used throughout this module) and calls the actor vtable+0x14 (is-alive) through func_002AB62C(ctx+0x4254,...); called by maybe_Ui_BattleCmd_HandleCancel (0x0027E794) and 0x0038D6E0."
+ },
+ {
+  "address": "0x0038B4D0",
+  "name": "Ui_BattleEnemyListWindow_SkipInvalidCursor",
+  "signature": "void Ui_BattleEnemyListWindow_SkipInvalidCursor(BattleEnemyListWindow* self)",
+  "params": {
+   "self": "battle enemy list window"
+  },
+  "summary": "Moves the list cursor forward until it lands on a selectable row, stepping over dead or hidden actors; if every remaining row is invalid it leaves the cursor where it is.",
+  "confidence": 0.62,
+  "evidence": "Calls func_0032570C (generic UI cursor bookkeeping), FUN_001D806C/FUN_001D8004 (cursor range), then loops FUN_001D7D50(self->f_38, row, row+1, 1) while the row is invalid; validity test is the same 399/sentinel + actor-alive test as 0x0038B3AC."
+ },
+ {
+  "address": "0x0038B668",
+  "name": "Ui_BattleEnemyListWindow_OnRowSelected",
+  "signature": "void Ui_BattleEnemyListWindow_OnRowSelected(BattleEnemyListWindow* self, int row_offset)",
+  "params": {
+   "self": "battle enemy list window",
+   "row_offset": "byte offset of the selected row inside the window (index*4)"
+  },
+  "summary": "Commits the row under the cursor: rebuilds the row display, writes the selected row index into the battle context highlight (+0x4210), resolves the actor, tells the actor which column/entry was chosen (vtable +0x64) and updates the command popup. Called when the player confirms a target.",
+  "confidence": 0.7,
+  "evidence": "Calls 0x0038AD38(self, *(char*)(self+row_offset)) to rebuild rows, then FUN_001D806C to read cursor, writes ctx+0x4210 (same highlight byte read by 0x0038C604), resolves actor with func_002AB62C(ctx+0x4254, self->f_4c), calls vtable+0x64 with self+idx*4+0x2a5, stores self->f_58, and invokes self->f_2c0 (popup) vtable +0x2c/+0x18 and func_005797D8 (visibility)."
+ },
+ {
+  "address": "0x0038B8E4",
+  "name": "Ui_BattleEnemyListWindow_ClearSelection",
+  "signature": "void Ui_BattleEnemyListWindow_ClearSelection(BattleEnemyListWindow* self)",
+  "params": {
+   "self": "battle enemy list window"
+  },
+  "summary": "Clears the battle context's target highlight (+0x4210 = 0xFF) and tells the currently bound actor that no row is selected, used when the window is closed or the target set is rebuilt.",
+  "confidence": 0.7,
+  "evidence": "Calls func_003255A4 (UI list reset), resolves actor func_002AB62C(ctx+0x4254,self->f_4c), sets ctx+0x4210 = 0xff, calls actor vtable+100 (0x64) with self+idx*4+0x2a5 and writes the row flag through g_0038b9c0; companion of 0x0038B668."
+ },
+ {
+  "address": "0x0038B9C4",
+  "name": "Ui_BattleEnemyListWindow_InitPanes",
+  "signature": "void Ui_BattleEnemyListWindow_InitPanes(BattleEnemyListWindow* self)",
+  "params": {
+   "self": "battle enemy list window"
+  },
+  "summary": "Builds the battle enemy-list window layout: seven left labels (txt_l1..txt_l7), seven right labels (txt_r1..txt_r7), seven null-text overlays sets the window columns, then creates the seven 'win_enemy_select%d' row frames and refreshes the row data.",
+  "confidence": 0.82,
+  "evidence": "String literals at 0x0038BD68..: txt_l1..txt_l7, txt_r1..txt_r7, null_txt_1..7, 'win_enemy_select%d'; seven calls to vtable+0x34 (add text pane) and vtable+0x38 (add null overlay); func_003E00CC creates the seven row windows in a 7*0x14 array; final func_0038AD38 fills the rows."
+ },
+ {
+  "address": "0x0038BF2C",
+  "name": "maybe_Ui_SubWidgetConfig_Dtor",
+  "signature": "void maybe_Ui_SubWidgetConfig_Dtor(UiSubWidgetConfig* self)",
+  "params": {
+   "self": "sub-widget configuration object with seven 0x50-byte child widgets at +0x1C"
+  },
+  "summary": "Destructor body for the seven-slot sub-widget configuration object: restores the vtable, destroys the seven 0x50-byte child widgets at +0x1C, runs the UI object base destructor and frees the object.",
+  "confidence": 0.45,
+  "evidence": "Sets *self = g_0038bf60 (vtable), calls func_00100BE0(self+0x1c, g_0038bf64, 0x50, 7) = destroy 7 elements of 0x50 bytes, then Ui_Object_DtorBase (func_001A6768) and FUN_0010F6CC (free). Same layout as 0x0038BF68 (N_004: maybe_Ui_SubWidgetConfig_Init) which creates seven 0x50-byte widgets."
+ },
+ {
+  "address": "0x0038C604",
+  "name": "Battle_CommandWindow_Update",
+  "signature": "void Battle_CommandWindow_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command window container (29 sub-window pointers at +0xC)"
+  },
+  "summary": "Per-frame update of the battle command window container: releases the active sub-window when it has finished, keeps the target-highlight byte in sync with the current actor, forwards the current pad/actor state to the selected sub-window (vtable +0x3C), then ticks all 29 registered sub-windows.",
+  "confidence": 0.66,
+  "evidence": "Reads self->f_c (29-entry sub-window array), self->f_10 (active window) and self->f_14; clears ctx+0x4210 when the actor changes; calls sub-window vtable+0x3c with actor x/y/z (f_132/f_133/f_134); final loop i<0x1d calls each window vtable+0x24 (update). Called from maybe_Ui_BattleCmd_HandleMemberSlot (0x0027E294)."
+ },
+ {
+  "address": "0x0038C840",
+  "name": "Battle_CommandWindow_HandleResult",
+  "signature": "void Battle_CommandWindow_HandleResult(BattleCommandWindow* self, BattleCommandResult* result, BattleActor* actor)",
+  "params": {
+   "self": "battle command window container",
+   "result": "result packet; [0]=result code, [1]=row index",
+   "actor": "actor whose command produced the result"
+  },
+  "summary": "Translates a sub-window result packet into the next battle-command state: codes 1/5 (confirm/cancel of the command page) and 2 (target page) drive the sub-window state machine, code 4 applies an equipment/skill action to the actor's slots, and everything else falls back to the idle state 0xD.",
+  "confidence": 0.6,
+  "evidence": "Switch on result[0]: 1/5 with result[1]==1 -> vtable+0x14(state 2); 2 with result[1] in {1,2} -> state 1; 4 reads actor+0xb0f6/0xb0f8/0xb108/0xb10c and calls self->f_10 vtable+0x60; default -> state 0xd. Called by all battle command update routines (0x0038D46C, 0x0038DE50, 0x0038E304, 0x0038E5BC)."
+ },
+ {
+  "address": "0x0038C9D8",
+  "name": "maybe_Battle_CandidateListsDiffer",
+  "signature": "int maybe_Battle_CandidateListsDiffer(BattleActor* actor, int unused, int mode, u32 target_list)",
+  "params": {
+   "actor": "battle actor",
+   "unused": "unused",
+   "mode": "0 = compare with the actor's second table, 1 = compare with the supplied list",
+   "target_list": "candidate/target list handle"
+  },
+  "summary": "Returns non-zero when the actor's current target/candidate list differs from the one supplied by the caller, used to decide whether the target cursor has to be rebuilt after the command or target page changes.",
+  "confidence": 0.45,
+  "evidence": "Builds two actor lists via func_0035EB98 + func_006292F0(...,0/1) + func_0061BD4C, compares their func_0031D178 keys, and compares against arg4 in mode 0/1; reads actor->f_768 (monster id) and g_0038cafc as the 'same list' sentinel. Called only indirectly from the command window code."
+ },
+ {
+  "address": "0x0038CBB4",
+  "name": "maybe_Battle_Command_OpenEquipWindow",
+  "signature": "void maybe_Battle_Command_OpenEquipWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the battle equipment/command page (sub-window id 3) for the active party member, binds the actor's equipment record to it and starts the page animation. The page is closed again when the actor's equipment slot changes.",
+  "confidence": 0.4,
+  "evidence": "Calls self->f_14 vtable+0x4c with id 3; copies the equipment/actor record at actor+0xb0f6/0xb0f8/0xb108 into the window; sets the shared flag at actor-side +0x2c5 and drives vtable+0x60/+0x70/+0x78. Window ids 1..0x14 are the battle sub-window slots (see 0x0027B86C)."
+ },
+ {
+  "address": "0x0038CDC4",
+  "name": "maybe_Battle_Command_OpenTacticsWindow",
+  "signature": "void maybe_Battle_Command_OpenTacticsWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the battle tactics/auto-battle page (sub-window id 0x14), runs its enter hook and leaves it hidden until the command state machine selects it.",
+  "confidence": 0.38,
+  "evidence": "Calls self->f_14 vtable+0x4c(id 0x14,0,1,1); calls func_00403208 (page-specific setup); if self->f_2c==0 calls vtable+0x78; clears the UI result byte at self+0x41."
+ },
+ {
+  "address": "0x0038CE60",
+  "name": "Battle_Command_OpenItemWindow",
+  "signature": "void Battle_Command_OpenItemWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the battle item page (sub-window id 8) for the active actor: selects the item category from the actor's inventory record, sets the inventory colour/usable flags on the page and opens it with the item's id.",
+  "confidence": 0.72,
+  "evidence": "Window id 8; func_002AB62C(ctx+0x4254, actor) gives the actor; uses actor+0xb10c/0xb12c/0xb14c (item/equipment ids); reads item record via func_0018C1B8/func_0018C184 and item category with func_0066C668 (returns 1/3 for usable item types); sets page fields +0x1b0/+0x1b1/+0x1b8 and calls page vtable+0x60 with id 4/5/6 depending on the command state."
+ },
+ {
+  "address": "0x0038D098",
+  "name": "Battle_Command_OpenSpellWindow",
+  "signature": "void Battle_Command_OpenSpellWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the battle spell page (sub-window ids 7/6) for the active actor and pre-selects the actor's last-used spell from the actor's saved spell slot (+0x12E0/+0x12E2); the spell-list window then selects that entry.",
+  "confidence": 0.8,
+  "evidence": "Opens vtable+0x4c(7,1) then (6,0); calls page vtable+0x60(5); reads actor->f_12e0 (default spell) / f_12e2 (alternate) and calls 0x00391B24 (spell-list select entry) when the saved slot is not 0xFF. 0x00391B24 is the list whose entries are read via func_006292F0/006298xx in 0x00391xxx."
+ },
+ {
+  "address": "0x0038D1E8",
+  "name": "Battle_Command_OpenSkillWindow",
+  "signature": "void Battle_Command_OpenSkillWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the battle skill (tokugi) page (sub-window ids 7/5) for the active actor and pre-selects the actor's last-used skill from actor+0x12DF/+0x12E1; the skill-list window then selects that entry.",
+  "confidence": 0.8,
+  "evidence": "Same shape as 0x0038D098 but opens ids 7/5, selects page entry 4 and reads actor->f_12df / f_12e1; calls 0x003929D8 (skill-list select entry). The two functions are a matched spell/skill pair used by the battle command window factory at 0x0027B86C slot 6/5."
+ },
+ {
+  "address": "0x0038D338",
+  "name": "maybe_Battle_Command_OpenSpecialWindow",
+  "signature": "void maybe_Battle_Command_OpenSpecialWindow(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Opens the actor's special/transformation page (sub-window id 1), showing the page only when the actor has a valid special state; otherwise it opens the page in its disabled form.",
+  "confidence": 0.4,
+  "evidence": "Opens vtable+0x4c(1,1); reads actor->f_b0f6 and actor+0x2c3e (special-state bytes); calls actor vtable+0xbc (can-transform) and func_004AAC4C(actor, state, sub-state); stores actor at page+0x70. The same actor bytes are used by 0x0038EB70 (transition/status handling)."
+ },
+ {
+  "address": "0x0038D46C",
+  "name": "Battle_Command_Update",
+  "signature": "u32 Battle_Command_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Main per-frame state machine of the battle command page: publishes the current pad state to the active sub-window, waits for the actor to be ready, opens the attack page (id 1) on confirm, and dispatches the page result through the shared result handler.",
+  "confidence": 0.7,
+  "evidence": "Calls active window vtable+0x70, reads pad via func_0028193C(self->f_14) and its flags (+0x130 & 0x102 = confirm/cancel, &4 = input); on confirm opens vtable+0x4c(1,1) into self->f_4; on cancel calls func_001EBC68 (cancel SE) then 0x0038C840 with a result packet built by func_0063DF9C."
+ },
+ {
+  "address": "0x0038D678",
+  "name": "Battle_Command_SetActorWindowEnabled",
+  "signature": "void Battle_Command_SetActorWindowEnabled(BattleCommandWindow* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle command container",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "scratch"
+  },
+  "summary": "Shows or hides the actor's command sub-window depending on whether the actor currently has a valid command state (alive, not transformed, not in a special state). Called by every command-page update before it processes input.",
+  "confidence": 0.7,
+  "evidence": "Resolves actor with func_002AB62C(ctx+0x4254, self+4); chooses the visibility flag from actor->f_b0f6/f_b0f8 and calls the window at self->f_c+8 vtable+0x18 with the resulting boolean. Same conditional shape as 0x0038B3AC and 0x0038D46C."
+ },
+ {
+  "address": "0x0038D6E0",
+  "name": "Battle_Command_OnInput",
+  "signature": "u32 Battle_Command_OnInput(BattleCommandWindow* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle command container",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "scratch"
+  },
+  "summary": "Confirm/cancel input handler for a command page: cancel closes the page and raises the cancel SE when the current row is selectable, confirm returns the page's current selection to the command state machine.",
+  "confidence": 0.62,
+  "evidence": "Checks pad flags self->f_14->f_130 & 0x102 (cancel) and &4 (confirm); calls 0x0038B3AC (row selectable), func_001EBC68 (cancel SE) and sets sub-window vtable+0x14(0xD) or (self->f_28). Called from the command pages in 0x0027xxxx."
+ },
+ {
+  "address": "0x0038D7B4",
+  "name": "Battle_ItemCommand_Update",
+  "signature": "u32 Battle_ItemCommand_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle item page"
+  },
+  "summary": "Item-page update: builds the item-use request for the selected inventory row, checks field/battle usability, and shows the 'cannot use here' or 'no target' battle popup before switching to the target page.",
+  "confidence": 0.68,
+  "evidence": "Uses func_004034EC/func_0040356C (item inventory page/index), func_006292F0 + func_0061BD4C to read the item record, func_0066C5CC for usability; emits battle popups 0x89/0x8b through func_0027C2F0 and sets page state 0xb/8 via vtable+0x14. Called by the item command page (companion of 0x0038CE60)."
+ },
+ {
+  "address": "0x0038DA58",
+  "name": "Battle_ItemCommand_OnConfirm",
+  "signature": "u32 Battle_ItemCommand_OnConfirm(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle item page"
+  },
+  "summary": "Item-page confirm handler: validates that the chosen item can be used on the current actor/target, then either applies it directly or switches the page to the target-selection state.",
+  "confidence": 0.62,
+  "evidence": "Calls 0x003906D8 (item-target validity), reads page vtable+0x44 current index, compares against 0xE (item 'none'); reads actor->b0f6/b0f8/b10c/b14c (selected item) and item record through func_002AB62C + func_0035EB98; builds popups 0xffff/0x2f/0xc00 via func_0027C2F0 and sets state 0xb/0xd."
+ },
+ {
+  "address": "0x0038DE50",
+  "name": "Battle_AttackTarget_Update",
+  "signature": "u32 Battle_AttackTarget_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle attack-target page"
+  },
+  "summary": "Attack-target page update: reads the selected enemy, refuses targets that are out of range or invalid, then either shows the 'out of range' popup or commits the attack action through the shared result handler.",
+  "confidence": 0.62,
+  "evidence": "Calls vtable+0x70, func_0028193C and the same input flags; actor->f_7c is the selected target slot; reads target record via func_0018C184 and func_00391CAC (spell/attack range check), compares distance with record->f_2ec and func_00488FCC, emits popup 0x2b/0x2c/0x2e via func_0027C2F0, then calls 0x0038C840."
+ },
+ {
+  "address": "0x0038E304",
+  "name": "Battle_SpellTarget_Update",
+  "signature": "u32 Battle_SpellTarget_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle spell-target page"
+  },
+  "summary": "Spell-target page update: validates the chosen spell/target pair (range, target type, MP) and either opens the confirmation state or returns to the spell list with an error popup.",
+  "confidence": 0.62,
+  "evidence": "Same structure as 0x0038DE50 but reads self->f_4->f_6e (spell slot) and func_0018C1B8 (spell record), compares spell range field f_ee with the actor's vtable+0x98, calls func_00488FCC for target filtering and emits popup 0x2b."
+ },
+ {
+  "address": "0x0038E5BC",
+  "name": "Battle_SkillTarget_Update",
+  "signature": "u32 Battle_SkillTarget_Update(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle skill/ability target page"
+  },
+  "summary": "Ability-page update: dispatches on the chosen ability category (single ally, all allies, single enemy, all enemies, self, field) and validates range/MP before building the target commit packet.",
+  "confidence": 0.62,
+  "evidence": "switch(page vtable+0x44) with cases 1,4,5,6,7; calls func_0020D08C (self-target record), func_006294C4/func_00629460/func_00629150 (MP/skill availability checks), actor vtable+0xe8(0x10/0x11) (can-use checks); popups 0xffff, 0x2a, 0x2d, 0x48, 0x62, 0x99, 0xc00 via func_0027C2F0; uses ctx+0x428c actor table."
+ },
+ {
+  "address": "0x0038EB70",
+  "name": "Battle_Command_CommitActorAction",
+  "signature": "void Battle_Command_CommitActorAction(BattleCommandContainer* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle command container",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "scratch"
+  },
+  "summary": "Once the command state machine is finished, copies the chosen action/equipment selections into the actor's saved action slots, clears the pending-state flags and re-enables the actor's battle model update.",
+  "confidence": 0.58,
+  "evidence": "Guards on self->f_44 (already committed); resolves actor via func_002AB62C(ctx+0x4254,self+4); calls actor vtable+0x180 (commit), maps actor->f_b0e8 4/5 to the action/equipment tables at g_0038ef34/g_0038ef38, writes actor->f_12e1/f_12e2, calls actor vtable+0x174(1) and clears actor->f_b0f6/f_b0f8."
+ },
+ {
+  "address": "0x0038EF40",
+  "name": "Battle_Command_AdvanceState",
+  "signature": "u32 Battle_Command_AdvanceState(BattleCommandWindow* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Advances the battle command state machine from the current page to the next one (confirm -> target page, cancel -> equipment/previous page), based on the page result byte and the actor's pending flags.",
+  "confidence": 0.6,
+  "evidence": "Reads self+0x41/0x42 (page-result flags) and self[10] (state), calls vtable+0x4c(7,1)/(6,0) to open equipment pages, 0x0038D678 to toggle the actor window, and sets page vtable+0x14(new state). Companion of 0x0038D46C/0x0038FF08."
+ },
+ {
+  "address": "0x0038F0EC",
+  "name": "maybe_Battle_Command_OpenShortcutWindow",
+  "signature": "void maybe_Battle_Command_OpenShortcutWindow(BattleCommandContainer* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle command container",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Opens the shortcut/quick-command page (sub-window id 0x15) when the actor has a saved shortcut slot, fills it from the actor's action table and jumps straight to the stored entry; otherwise it returns to the current page.",
+  "confidence": 0.42,
+  "evidence": "If *(char*)(self+0x18) != -1 opens vtable+0x4c(0x15,1,0), copies self[3]+0x58, calls func_004ABA70, page vtable+0x78, func_004AB170(page, slot), page vtable+0x90 and func_004AB66C. Otherwise falls through to page vtable+0x14(self[10])."
+ },
+ {
+  "address": "0x0038F1A8",
+  "name": "Battle_Equip_UpdateWeaponSlot",
+  "signature": "u32 Battle_Equip_UpdateWeaponSlot(BattleCommandContainer* self)",
+  "params": {
+   "self": "battle equipment page"
+  },
+  "summary": "Equipment page update for the weapon slot: validates the selected weapon against the actor's equipment record, applies the weapon's stat/attack modifiers and switches the page to its confirmation state.",
+  "confidence": 0.55,
+  "evidence": "Uses func_004AB530/func_004AB59C/func_004AB604 (equipment page helpers), reads weapon record via func_0018C1B8/func_0066CCEC and actor range with func_006292F0/func_00629890; calls func_001901F4/func_00191DA4 (equip apply) and func_0020E448/func_0020F87C (equipment change dispatch); popup 0x8c."
+ },
+ {
+  "address": "0x0038F6C4",
+  "name": "Battle_Equip_UpdateArmourSlot",
+  "signature": "u32 Battle_Equip_UpdateArmourSlot(BattleCommandContainer* self)",
+  "params": {
+   "self": "battle equipment page"
+  },
+  "summary": "Equipment page update for the armour/accessory slot: validates the selected armour, updates the actor's defence/resistance block and either applies it or shows the 'cannot equip' popup.",
+  "confidence": 0.55,
+  "evidence": "Same helper family as 0x0038F1A8 (func_004AB530/func_004AB59C/func_004AB604, func_006292F0/func_00629890, func_001901F4/func_00191DA4) but reads the second equipment slot (self->f_e/self[0xf]) and calls func_0066C434 and popup 0x86/0x88."
+ },
+ {
+  "address": "0x0038FD80",
+  "name": "Battle_Command_Cancel",
+  "signature": "u32 Battle_Command_Cancel(BattleCommandContainer* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Cancel handler for the battle command page: restores the previous command state, hides the command popup and returns the cursor to the previous page; when no page is open it falls back to the idle state.",
+  "confidence": 0.62,
+  "evidence": "Reads pad flags (+0x130 & 0x102 cancel / &4 confirm); calls func_002E0D24 (clear popup), func_002E037C (page has previous), func_0038D678 and page vtable+0x14(7/previous state); emits popup 0xffff via func_0027C2F0."
+ },
+ {
+  "address": "0x0038FF08",
+  "name": "Battle_Command_CancelB",
+  "signature": "u32 Battle_Command_CancelB(BattleCommandContainer* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Second cancel path used when the command page is dismissed from the field/battle transition: closes the open page, restores the saved page and keeps the actor's pending command flags intact.",
+  "confidence": 0.55,
+  "evidence": "Same state logic as 0x0038EF40/0x0038FD80; additionally calls func_002E074C (input page reset), func_003FC60C (page state restore) and checks the global UI flag ctx+0x424c."
+ },
+ {
+  "address": "0x003900F0",
+  "name": "Battle_CommandWindow_HideAll",
+  "signature": "void Battle_CommandWindow_HideAll(BattleCommandContainer* self)",
+  "params": {
+   "self": "battle command container"
+  },
+  "summary": "Hides every battle command sub-window and clears the shared selection byte, used when the battle UI is torn down or the party member changes.",
+  "confidence": 0.7,
+  "evidence": "Loops i<0x1d over the window array at self->f_c; calls each window's vtable+0x18(0) (set visible false), and for slots below 0x16 calls vtable+0x7c and sets window+0x4c = self+4. Also clears the first window at self+8."
+ },
+ {
+  "address": "0x00390268",
+  "name": "Ui_BattlePartyWindow_RenderRow",
+  "signature": "void Ui_BattlePartyWindow_RenderRow(BattlePartyWindow* self, u32 pane_base, u32 actor_id, int style)",
+  "params": {
+   "self": "battle command list window",
+   "pane_base": "first text-pane id of the row",
+   "actor_id": "actor/model id to draw",
+   "style": "0/3 = text style (3 = icon + two numbers)"
+  },
+  "summary": "Renders one party-status row: resolves the party member, picks its name/level/HP values, formats the HP and counter fields and writes the resulting strings into the five text panes of the row (pane_base..pane_base+4). Style 3 draws the two numeric columns (HP and MP) with separate formats.",
+  "confidence": 0.66,
+  "evidence": "Called from 0x00390E20 (party window refresh) with pane_base=row*5, actor id and style self->f_1b8; resolves the actor through func_0035EB98(ctx+0x24a98) and func_002AB698(ctx+0x4254), uses vtable+0x90/+0x94 and func_003CEA1C (row style), builds strings with func_006F0F1C / func_0011CB38 + func_0063D300 and writes panes with func_001A629C + func_003A7A2C. The five panes match the name/num_l/hp/num_c/num_r layout created by 0x00390894."
+ },
+ {
+  "address": "0x003906D8",
+  "name": "Battle_Item_CanTargetActor",
+  "signature": "int Battle_Item_CanTargetActor(BattleCommandWindow* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle item page",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "scratch"
+  },
+  "summary": "Returns 0 when the actor bound to the item page is in a state that items cannot affect (dead, undead, or already at full effect), 1 otherwise. Used to grey out item targets.",
+  "confidence": 0.66,
+  "evidence": "Resolves actor func_002AB62C(ctx+0x4254,self->f_1b4), then rejects the actor when func_00639954(actor, g_00390754) or func_00639954(actor,0x9c/0x9a) is true; these are the same state ids used by 0x00390268 and 0x0038E5BC."
+ },
+ {
+  "address": "0x00390758",
+  "name": "Ui_BattlePartyWindow_SyncCursor",
+  "signature": "void Ui_BattlePartyWindow_SyncCursor(BattlePartyWindow* self)",
+  "params": {
+   "self": "battle party status window"
+  },
+  "summary": "Rebuilds the party window cursor: walks the four party slots, skips dead/absent members and members excluded by the current target filter, and moves the cursor to the matching row.",
+  "confidence": 0.72,
+  "evidence": "Calls func_003255A4 (list reset), func_002AB62C(ctx+0x4254,i) for i<4, filters on self->f_1b0/f_1b1 and actor->f_768 bitmask, then FUN_001D806C/FUN_001D7D50 to move the cursor and sets self->f_1b4 to the selected actor slot."
+ },
+ {
+  "address": "0x00390894",
+  "name": "Ui_BattlePartyWindow_InitPanes",
+  "signature": "void Ui_BattlePartyWindow_InitPanes(BattlePartyWindow* self)",
+  "params": {
+   "self": "battle party status window"
+  },
+  "summary": "Builds the four-row battle party status window: per member it creates the name label (txt_name1..4), the numeric level label (txt_num_l1..4), the HP label (txt_hp1..4), the two counter labels (txt_num_c/r) and a null-text overlay, plus the four 'win_enemy_select1..4' frames.",
+  "confidence": 0.82,
+  "evidence": "Strings at 0x00390C60..: txt_name1..4, txt_num_l1..4, txt_hp1..4, txt_num_c1..4, txt_num_r1..4, null_txt_1..4, win_enemy_select1..4. Uses the same vtable+0x34/+0x38/+0x48 layout calls as 0x0038B9C4; four row frames created with func_003E00CC; ends with 0x00390E20 (refresh)."
+ },
+ {
+  "address": "0x00390E20",
+  "name": "Ui_BattlePartyWindow_RefreshRows",
+  "signature": "void Ui_BattlePartyWindow_RefreshRows(BattlePartyWindow* self)",
+  "params": {
+   "self": "battle party status window"
+  },
+  "summary": "Refreshes the four party rows: shows/hides the row frames according to which party slots are present, re-renders each visible member's name/HP/counters, and restores the cursor to the previously selected member.",
+  "confidence": 0.72,
+  "evidence": "Loops i<4 calling func_002AB62C(ctx+0x4254,i), func_00390268(self,pane_id,actor_id,style) to render each row, func_003E043C/func_003DFF34 to show/hide the row frames, and FUN_001D806C/FUN_001D7EE0 for the cursor; stores self->f_58 = actor index."
+ },
+ {
+  "address": "0x003910D8",
+  "name": "Ui_BattleSpellWindow_DtorBase",
+  "signature": "void Ui_BattleSpellWindow_DtorBase(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Destructor body of the battle spell-list window: restores the spell-window vtable, destroys the four 0x50-byte sub-objects at +0x70 (list/scroll views), then runs the UI object base destructor and frees.",
+  "confidence": 0.66,
+  "evidence": "Sets vtable from g_0039110c, calls func_00100BE0(self+0x1c, g_00391110, 0x50, 4), Ui_Object_DtorBase, free. The 4*0x50 tail is the list/scroll area also cleared by 0x00391AAC."
+ },
+ {
+  "address": "0x00391118",
+  "name": "Ui_BattleSpellWindow_Refresh",
+  "signature": "void Ui_BattleSpellWindow_Refresh(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Rebuilds the battle spell list for the active actor: iterates the actor's learned spells (up to 0x28), writes each spell's name/cost/description into the list rows, applies the MP/availability colours and updates the scrollbar.",
+  "confidence": 0.66,
+  "evidence": "Loops the actor's spell table with func_006292F0/func_006296BC/func_00628F84, uses 0x28-entry bounds, func_0018C184 (spell record), func_003A79C4/func_003A7A2C to write text panes, func_0063D300 for the status icon and the 0..7 style switch at the end; called as a vtable method of the class created at 0x00391070 (0x1BC bytes)."
+ },
+ {
+  "address": "0x00391A20",
+  "name": "Ui_BattleSpellWindow_HasSelectableSpell",
+  "signature": "int Ui_BattleSpellWindow_HasSelectableSpell(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Returns 1 when at least one actor in the battle still has a valid selectable spell slot for this window, 0 when every candidate is dead/disabled. Used to decide whether the spell tab can be opened.",
+  "confidence": 0.6,
+  "evidence": "Walks the battle actor list at ctx+0x4260..0x4264, tests func_002AB62C(...)->vtable+0x24 (is alive) and the actor id bitmask at actor+0x768; returns 1 if none matched. Same list walk as 0x0038AD38/0x00391D24."
+ },
+ {
+  "address": "0x00391AAC",
+  "name": "Ui_BattleSpellWindow_ClearSpellList",
+  "signature": "void Ui_BattleSpellWindow_ClearSpellList(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Empties the intrusive spell-entry list at +0x70, destroying every entry node through its virtual destructor and resetting the list head.",
+  "confidence": 0.68,
+  "evidence": "Walks the self->f_70..f_74 doubly-linked list, calls func_0010EBE4 (node destructor) on each entry and func_0010F6CC (free), then re-links the sentinel. Companion of 0x00391D24 (build list) and 0x00392960 (skill-list twin)."
+ },
+ {
+  "address": "0x00391B24",
+  "name": "Ui_BattleSpellWindow_SelectSpellEntry",
+  "signature": "void Ui_BattleSpellWindow_SelectSpellEntry(UiBattleSpellWindow* self, u32 spell_id, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle spell-list window",
+   "spell_id": "spell/action id to select",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Finds the list row whose spell id matches and moves the window cursor to it, then tells the bound actor which spell is now highlighted. If the spell is absent the cursor is left unchanged.",
+  "confidence": 0.7,
+  "evidence": "Iterates the 0x28-entry rows at self->f_70..f_74, compares entry+0xc with spell_id, calls FUN_001D809C(self->f_38, row) and func_00325738 (list refresh); resolves the actor func_002AB62C(ctx+0x4254,self->f_4c) and reads row fields for the comparison. Called by 0x0038D098."
+ },
+ {
+  "address": "0x00391C54",
+  "name": "Ui_BattleSpellWindow_OnCursorMoved",
+  "signature": "void Ui_BattleSpellWindow_OnCursorMoved(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Cursor-moved callback: tells the active battle actor which spell slot is now under the cursor so the 3D target preview updates.",
+  "confidence": 0.62,
+  "evidence": "Calls func_003255A4 (list reset), resolves actor func_002AB62C(ctx+0x4254,self->f_4c) and calls actor vtable+0x6c(self->f_7c) (set spell preview). Mirrors 0x00392B28 for the skill list."
+ },
+ {
+  "address": "0x00391CAC",
+  "name": "Ui_BattleSpellWindow_IsSpellUsable",
+  "signature": "int Ui_BattleSpellWindow_IsSpellUsable(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Returns 1 when the currently highlighted spell can be cast by the actor (enough MP, not silenced, target exists); used to block confirm on greyed-out rows.",
+  "confidence": 0.6,
+  "evidence": "Reads spell record with func_0018C184, gets the actor with func_002AB62C(ctx+0x4254,self->f_4c), rejects record->f_2b4 == -1 and calls func_00639954(actor,...) for the status check. Called by 0x0038DE50."
+ },
+ {
+  "address": "0x00391D24",
+  "name": "Ui_BattleSpellWindow_BuildSpellList",
+  "signature": "void Ui_BattleSpellWindow_BuildSpellList(UiBattleSpellWindow* self)",
+  "params": {
+   "self": "battle spell-list window"
+  },
+  "summary": "Builds the sorted spell-entry list for the active actor: allocates one 0x10-byte node per learned spell, stores its id and sort key (spell level), inserts the nodes ordered by key and refreshes the list view.",
+  "confidence": 0.66,
+  "evidence": "Clears the list with 0x00391AAC; loops func_006291EC (count) over func_006298E0(i) spell ids, filters with func_0018C184->f_2e9 bit 30, allocates func_00109DC8(0x10,self->f_24,4), writes id at +0xc and key at +0xe, inserts before the first larger key, then func_00325738/func_00325930."
+ },
+ {
+  "address": "0x00392400",
+  "name": "Battle_TextLayout_Ctor",
+  "signature": "BattleTextLayout* Battle_TextLayout_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of the battle text-layout object: allocates the UI object, creates its intrusive list heads, loads 'battle_Text.bxon' through the pack manager and keeps a handle to the first parsed text resource.",
+  "confidence": 0.78,
+  "evidence": "Allocates with func_003259B8, initialises list heads at +0x74/+0x78, opens the pack with func_00122120 + func_00124B24(...,5,'battle_Text.bxon') (string 0x003925D8), walks the returned resource list and stores the 0x21c-byte handle; used by the battle window factory at 0x0027B86C (slot 6, object size 0x8c)."
+ },
+ {
+  "address": "0x0039263C",
+  "name": "Battle_TextLayout_RefreshPartyList",
+  "signature": "void Battle_TextLayout_RefreshPartyList(BattleTextLayout* self)",
+  "params": {
+   "self": "battle text layout"
+  },
+  "summary": "Rebuilds the per-party-member text rows used by the battle command UI: for each of the four party slots it reads the member's name, level and status and writes them into the layout's text panes, hiding empty slots.",
+  "confidence": 0.62,
+  "evidence": "Loops self->f_70..f_74 text entries, resolves actor func_002AB62C(ctx+0x4254,self->f_4c) and func_0035EB98, uses func_0018C1B8/func_00629034/func_00628FFC for name/status, writes panes with func_001A6680/func_003A7974/func_003A7A2C and calls func_00392DAC (row id allocator). Same entry format as 0x00390268."
+ },
+ {
+  "address": "0x00392960",
+  "name": "Ui_BattleSkillWindow_ClearSkillList",
+  "signature": "void Ui_BattleSkillWindow_ClearSkillList(UiBattleSkillWindow* self)",
+  "params": {
+   "self": "battle skill-list window"
+  },
+  "summary": "Empties the intrusive skill-entry list at +0x70, destroying every node through its virtual destructor and resetting the list head.",
+  "confidence": 0.68,
+  "evidence": "Identical body to 0x00391AAC: walks self->f_70..f_74, func_0010EBE4 + func_0010F6CC per node, re-links sentinel. Companion of 0x00392B84."
+ },
+ {
+  "address": "0x003929D8",
+  "name": "Ui_BattleSkillWindow_SelectSkillEntry",
+  "signature": "void Ui_BattleSkillWindow_SelectSkillEntry(UiBattleSkillWindow* self, u32 skill_id)",
+  "params": {
+   "self": "battle skill-list window",
+   "skill_id": "skill id to move the cursor to"
+  },
+  "summary": "Moves the skill-list cursor to the row with the given skill id, accounting for the window's multi-column layout (group index at +0x64), and updates the list selection.",
+  "confidence": 0.68,
+  "evidence": "Reads g_00392b24 (column count), computes row = group*columns + i with bound 0x3c, compares entry+0xc with skill_id, calls FUN_001D809C for the cursor and func_00325738. Called by 0x0038D1E8 (skill command)."
+ },
+ {
+  "address": "0x00392B28",
+  "name": "Ui_BattleSkillWindow_OnCursorMoved",
+  "signature": "void Ui_BattleSkillWindow_OnCursorMoved(UiBattleSkillWindow* self)",
+  "params": {
+   "self": "battle skill-list window"
+  },
+  "summary": "Cursor-moved callback for the skill list: forwards the highlighted skill slot to the active actor so the battle preview follows the cursor.",
+  "confidence": 0.62,
+  "evidence": "func_003255A4 + func_002AB62C(ctx+0x4254,self->f_4c) + actor vtable+0x68(self->f_6e,0); twin of 0x00391C54 (spell list)."
+ },
+ {
+  "address": "0x00392B84",
+  "name": "Ui_BattleSkillWindow_BuildSkillList",
+  "signature": "void Ui_BattleSkillWindow_BuildSkillList(UiBattleSkillWindow* self)",
+  "params": {
+   "self": "battle skill-list window"
+  },
+  "summary": "Builds the sorted skill-entry list for the active actor: allocates one 0x10-byte node per learned skill, stores id + sort key, inserts it in order and refreshes the grid view.",
+  "confidence": 0.66,
+  "evidence": "Clears with 0x00392960; loops func_00629214 (count) over func_006298F0(i) ids, filters func_0018C1B8->f_80 bit 30, allocates 0x10 bytes with func_00109DC8, writes +0xc id / +0xe key, inserts sorted, then func_00325738/func_00325930. Twin of 0x00391D24."
+ },
+ {
+  "address": "0x00392E00",
+  "name": "Ui_BattleSkillWindow_DeleteList",
+  "signature": "void Ui_BattleSkillWindow_DeleteList(UiBattleSkillWindow* self)",
+  "params": {
+   "self": "battle skill-list window"
+  },
+  "summary": "Deleting helper for the battle skill window: releases the skill list, resets the column index and runs the base list cleanup.",
+  "confidence": 0.55,
+  "evidence": "Calls func_00291220 (base delete), 0x00392960 (clear list), sets *(u8*)(self+100)=0 (column index); 0x20-byte tail of the skill window class."
+ },
+ {
+  "address": "0x0039314C",
+  "name": "Ui_NextBattleIcon_Update",
+  "signature": "void Ui_NextBattleIcon_Update(UiNextBattleIcon* self, u32 arg2, BattleSprite* sprite, u32 arg4)",
+  "params": {
+   "self": "next-battle icon widget",
+   "arg2": "unused",
+   "sprite": "sprite actor to attach the icon to",
+   "arg4": "icon variant/priority"
+  },
+  "summary": "Resolves the 'icon_next_battle_3d' or 'icon_next_battle_2d' pane depending on the current render mode and attaches its texture to the supplied battle sprite actor.",
+  "confidence": 0.75,
+  "evidence": "Calls func_002912E8 (base update), func_0062AB3C(ctx) -> render mode, then vtable+0x2c with strings 0x00393204 'icon_next_battle_3d' or 0x00393218 'icon_next_battle_2d'; stores the resolved resource at sprite+0x60c and finalises with func_0053CD1C."
+ },
+ {
+  "address": "0x0039322C",
+  "name": "maybe_Ui_TwoListWindow_Ctor",
+  "signature": "UiTwoListWindow* maybe_Ui_TwoListWindow_Ctor(void)",
+  "params": {},
+  "summary": "Small constructor for an embedded UI object that owns two intrusive list heads at +0x74/+0x78 and an entry count; used as the base of a battle message/list window.",
+  "confidence": 0.48,
+  "evidence": "func_003259B8 allocates; sets result[0x1d]=result+0x1c, result[0x1e]=result+0x1c, result[0x1f]=0 (two sentinel list heads). Object size 0x80 in the battle window factory at 0x0027B86C; its destructor at 0x00393270 walks the same heads."
+ },
+ {
+  "address": "0x00393270",
+  "name": "maybe_Ui_TwoListWindow_Dtor",
+  "signature": "void maybe_Ui_TwoListWindow_Dtor(UiTwoListWindow* self, u32 arg2)",
+  "params": {
+   "self": "child window object",
+   "arg2": "unused delete flag"
+  },
+  "summary": "Destructor body of the two-list UI object: destroys both intrusive lists at +0x74/+0x78, runs the UI object base destructor and frees the object.",
+  "confidence": 0.48,
+  "evidence": "Restores list heads self[0x1d]/self[0x1e], calls Ui_Object_DtorBase (func_001A6768) and FUN_0010F6CC; twin of 0x0039322C."
+ },
+ {
+  "address": "0x00393344",
+  "name": "maybe_Ui_TwoListWindow_Delete",
+  "signature": "void maybe_Ui_TwoListWindow_Delete(UiTwoListWindow* self)",
+  "params": {
+   "self": "child window object"
+  },
+  "summary": "Deleting destructor for the overloaded two-list window class whose vtable base sits at -0x70: runs the base destructor and frees the allocation.",
+  "confidence": 0.42,
+  "evidence": "Calls func_001A6764 (vtable base), func_001A6768 on self-0x70 and free; the -0x70 offset matches the class layout used by 0x00393270."
+ },
+ {
+  "address": "0x003934D8",
+  "name": "maybe_Ui_TwoListWindow_DeleteThunk",
+  "signature": "void maybe_Ui_TwoListWindow_DeleteThunk(UiTwoListWindow* self)",
+  "params": {
+   "self": "child window object"
+  },
+  "summary": "Four-instruction deleting-destructor thunk: runs the UI object base destructor and frees the object.",
+  "confidence": 0.45,
+  "evidence": "Tail call func_001A6768 + FUN_0010F6CC only; standard 0x10-byte delete thunk emitted for the same class as 0x00393270."
+ },
+ {
+  "address": "0x00393C04",
+  "name": "Casino_Slot_InitPanes",
+  "signature": "void Casino_Slot_InitPanes(CasinoSlotWindow* self)",
+  "params": {
+   "self": "casino slot-machine window"
+  },
+  "summary": "Builds the slot-machine window layout: five belt rows, fifty reel-symbol frames, the two side lamps, the queen-select row, the three animation layers (freespin, metalchange, queen) and the 'menu_casino_jackpot' effect object.",
+  "confidence": 0.85,
+  "evidence": "Strings 0x00393F60..: 'belt0', 'side_lamp_top', 'side_lamp_bottom', 'queen_select0', 'anim_freespin', 'anim_metalchange', 'anim_queen', 'menu_casino_jackpot'. Loops i<5 over 0x238-byte belt rows at +0x5c0, i<5 queen slots at +0x12c4, 3 jackpot effect slots via func_0053D4C4, and creates the effect object with func_004A031C."
+ },
+ {
+  "address": "0x003940C4",
+  "name": "Casino_Slot_ReleaseEffects",
+  "signature": "void Casino_Slot_ReleaseEffects(CasinoSlotWindow* self)",
+  "params": {
+   "self": "casino slot-machine window"
+  },
+  "summary": "Releases the slot machine's animated jackpot object at +0x1544 and the embedded effect handle at +0x98.",
+  "confidence": 0.7,
+  "evidence": "Calls self->f_98->vtable+0x2c (release) and func_0046BFC4(&self->f_1544) (effect object destructor); companion of the effect creation at the end of 0x00393C04."
+ },
+ {
+  "address": "0x0039476C",
+  "name": "Casino_Slot_Dtor",
+  "signature": "void Casino_Slot_Dtor(CasinoSlotWindow* self, u32 arg2)",
+  "params": {
+   "self": "casino slot-machine window",
+   "arg2": "unused delete flag"
+  },
+  "summary": "Complete destructor of the casino slot-machine window: destroys the five payout rows (0x238 stride), the three 0x54-byte side widgets, the five 0x50-byte belt widgets, the 0x18*0x10 symbol grid and the two child objects before freeing.",
+  "confidence": 0.72,
+  "evidence": "func_00100BE0 with strides/counts 0x50*5, 0x54*3, 0x238*5 and 0x18*0x10, plus func_0040673C and func_001D8C2C on the -0x128 child; the same counts used by 0x00393C04 (5 belts, 3 anims, 5 queen rows)."
+ },
+ {
+  "address": "0x00394848",
+  "name": "Ui_SaveIconWindow_Init",
+  "signature": "void Ui_SaveIconWindow_Init(UiSaveIconWindow* self, int owner)",
+  "params": {
+   "self": "save-icon window",
+   "owner": "owning UI screen object"
+  },
+  "summary": "Creates and attaches the 'win_save_icon' pane for the save/suspend icon and starts it hidden, ready for the save routine to show.",
+  "confidence": 0.75,
+  "evidence": "Calls FUN_001D85EC(self, owner+0x30c, 'win_save_icon' @0x003948D4, 1) and func_0029126C(owner+0x30c,0) to hide it."
+ },
+ {
+  "address": "0x00394B10",
+  "name": "maybe_Ui_SaveIcon_Update",
+  "signature": "u32 maybe_Ui_SaveIcon_Update(void)",
+  "params": {},
+  "summary": "Ticks the save/suspend icon's UI animation player and reports that the icon's update has completed; the decompiled body has no explicit state read, so it is the 'is-finished' slot of the small icon class.",
+  "confidence": 0.4,
+  "evidence": "Only calls func_001DAD58 (UI object/animation tick) and returns 1. Neighbouring 0x00394848 creates the 'win_save_icon' pane, so this is the icon's tiny update/finished vtable slot."
+ },
+ {
+  "address": "0x00394C1C",
+  "name": "Ui_Window_WaitForAnimA",
+  "signature": "u32 Ui_Window_WaitForAnimA(UiWindow* self, int owner)",
+  "params": {
+   "self": "window object",
+   "owner": "owning screen"
+  },
+  "summary": "Waits for the window's layout animation to finish: ticks the animation player at self+0x1c8 and, once it is done, fires the window's finish callback at +0x11C.",
+  "confidence": 0.6,
+  "evidence": "func_001DAD58(self+0x1c8, owner+0x58) ticks the player, func_0062F680(self+0x1c8) reports completion; then vtable+0x14(0) and vtable+0x10 on the object at self+0x11c. Same shape as 0x00394C78/0x00394D78."
+ },
+ {
+  "address": "0x00394C78",
+  "name": "Ui_Window_WaitForAnimB",
+  "signature": "u32 Ui_Window_WaitForAnimB(UiWindow* self, int owner)",
+  "params": {
+   "self": "window object",
+   "owner": "owning screen"
+  },
+  "summary": "Second animation-wait variant: ticks the same layout player and invokes the finish callback when the animation has completed; used by windows whose player is started by their enter hook.",
+  "confidence": 0.58,
+  "evidence": "Byte-for-byte the same control flow as 0x00394C1C (func_001DAD58(self+0x1c8,...), func_0062F680, vtable+0x14(0), vtable+0x10)."
+ },
+ {
+  "address": "0x00394D78",
+  "name": "Ui_Window_WaitForAnimC",
+  "signature": "u32 Ui_Window_WaitForAnimC(UiWindow* self, int owner)",
+  "params": {
+   "self": "window object",
+   "owner": "owning screen"
+  },
+  "summary": "Third animation-wait variant: waits for both the layout player and the screen-flow timer (f_124 > 0x3FFFFFFF), then fires the finish callback at +0x11C.",
+  "confidence": 0.58,
+  "evidence": "Adds func_003F333C(self+0x1c0) and self->f_124 > 0x3fffffff to the checks of 0x00394C1C/0x00394C78, plus func_0021FC60(self+0x1f0c); still calls vtable+0x14(3) then vtable+0x10."
+ },
+ {
+  "address": "0x0039620C",
+  "name": "Cutscene_LoadScenarioPacks",
+  "signature": "void Cutscene_LoadScenarioPacks(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene object; pack-name array at +0x30..+0x38"
+  },
+  "summary": "Loads every scenario pack referenced by the current cutscene: builds the '3d/cs/scenario/%s/%s.pack' name for each entry, opens it through the pack manager and grows the scene's pack-handle array as needed.",
+  "confidence": 0.8,
+  "evidence": "String 0x00396674 '3d/cs/scenario/%s/%s.pack'; func_006F0C10 builds the name; func_00122120 + func_003882F0 (pack open) and func_0012416C/func_00124DD0 (handle release); manages the 8-byte handle vector at self+0x30..+0x38 and the count at +0x60."
+ },
+ {
+  "address": "0x003966A4",
+  "name": "Cutscene_ApplyLayoutMode",
+  "signature": "void Cutscene_ApplyLayoutMode(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene object"
+  },
+  "summary": "Applies the cutscene's 2D/3D layout mode: switches the render layer used for the scene (0/1/2), configures the camera and the message layer, and restores the scene's UI state when the cutscene ends.",
+  "confidence": 0.68,
+  "evidence": "Reads self->f_10->f_10/f_f (layout mode) and self->f_15 (2D override); calls func_001EE7EC/func_001ED7CC (layer), func_001DB6E8, func_001F3DE8, func_001C465C/func_001C4F3C, func_00293D90; sets layer visibility via vtable+0x28(0/1, mode)."
+ },
+ {
+  "address": "0x003969B4",
+  "name": "Cutscene_AttachMantleToActor",
+  "signature": "void Cutscene_AttachMantleToActor(void)",
+  "params": {},
+  "summary": "Attaches the 'cbhm_tcs_mant' (cutscene mantle/cloak) model attachment to the actor currently being animated by the cutscene.",
+  "confidence": 0.7,
+  "evidence": "func_005F5818 returns the current cutscene actor; if it and its model part at +0x160 exist, calls func_002248FC(part, 'cbhm_tcs_mant' @0x003969E0, 1) (attach named model part)."
+ },
+ {
+  "address": "0x003969F0",
+  "name": "Cutscene_OpenMessageForActor",
+  "signature": "void Cutscene_OpenMessageForActor(CutsceneScene* self, u32 actor_handle, u32 text_id, u32 speaker_id, int mode, ...)",
+  "params": {
+   "self": "cutscene scene",
+   "actor_handle": "actor model handle",
+   "text_id": "message text id",
+   "speaker_id": "speaker/character id",
+   "mode": "display mode"
+  },
+  "summary": "Prepares and opens the cutscene message window for an actor: resolves the actor's model, applies the face/expression state, chooses the display token and calls the message window with the formatted string.",
+  "confidence": 0.62,
+  "evidence": "Uses func_005F5818 (actor from handle), func_005F7F78/func_005F7EF8 (model part), func_001C4468/func_001C4FE4 (message text), func_0024B998 (token id), Text_DrawToken and Ui_MessageWindow_Open; the formatting string at 0x00396B9C is 'g0p0c0P0'."
+ },
+ {
+  "address": "0x00396BEC",
+  "name": "Cutscene_ApplyLayerFlags",
+  "signature": "void Cutscene_ApplyLayerFlags(CutsceneScene* self, CutsceneLayer* layer)",
+  "params": {
+   "self": "cutscene scene",
+   "layer": "layer record; byte +4 selects the layer group"
+  },
+  "summary": "Applies the cutscene's per-layer visibility flags to the render layer object: converts the scene's flag byte at +0x16 into the renderer's 0/1/2/4/8 mask so the correct 3D or 2D layer is drawn during the cutscene.",
+  "confidence": 0.62,
+  "evidence": "Reads self->f_10->f_19 (layer type 8/9) and self->f_10->f_16 (flags); ORs 1/2/4/8 into renderer->f_2c (the layer mask also touched by func_001EE7EC and 0x003966A4); called from Ui_SceneFlow_OpenScene2 (0x001A0AE4)."
+ },
+ {
+  "address": "0x00396DAC",
+  "name": "Cutscene_Finish",
+  "signature": "u32 Cutscene_Finish(CutsceneScene* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "cutscene scene",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Finishes the current cutscene: restores the normal render output, marks the renderer as dirty (+0x35) and releases the scene camera/effect object at +0x14C.",
+  "confidence": 0.6,
+  "evidence": "Checks self->f_10 and self->f_14/self->f_2c, calls func_005ACAAC(&self->f_14c,0) (release camera/effect) and sets renderer->f_35 = 1; returns 1 when the scene existed, 0 otherwise."
+ },
+ {
+  "address": "0x00396E20",
+  "name": "Cutscene_ResolveActorResource",
+  "signature": "CutsceneResource* Cutscene_ResolveActorResource(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene object"
+  },
+  "summary": "Resolves the resource object for the cutscene's current actor: looks the handle up in the scene resource list, falls back to the shared render resource and caches the result at +0x20/+0x2C.",
+  "confidence": 0.55,
+  "evidence": "Walks the intrusive lists at self+0x18 and self+0x2C, uses func_0071342C/func_00193FA0 (handle resolve), func_005ABEB4 (create fallback resource) and stores self->f_1c/f_20/f_2c; same resource-list idiom as 0x003980B8 and 0x00396E20's callers in the scene flow."
+ },
+ {
+  "address": "0x003970F4",
+  "name": "Cutscene_FindResourceEntry",
+  "signature": "int Cutscene_FindResourceEntry(CutsceneScene* self, int index, u32 handle, int* out_a, int* out_b)",
+  "params": {
+   "self": "cutscene scene",
+   "index": "resource slot",
+   "handle": "resource handle",
+   "out_a": "resolved object A",
+   "out_b": "resolved object B"
+  },
+  "summary": "Looks up one cutscene resource slot and returns 1 when both the primary and secondary resource objects for the handle exist.",
+  "confidence": 0.55,
+  "evidence": "Bounds index < self->f_140, reads the 8-byte entry at self->f_30 + index*8 + 4, then func_0019466C / func_001941D4 (resource resolve); returns 1 only when both non-null. Called by the scene resource setup path."
+ },
+ {
+  "address": "0x00397448",
+  "name": "Cutscene_ReleaseMessageAndCamera",
+  "signature": "void Cutscene_ReleaseMessageAndCamera(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Releases the cutscene's message-window and camera objects and drops the cached camera animation handle at +0x148 when the scene closes.",
+  "confidence": 0.6,
+  "evidence": "Checks the UI message object at ctx+0x74->f_90 and camera object ctx+0x78->f_7c; calls func_002AE144 (message reset), func_002ACA98 (camera reset) and func_001EDD64 to release self->f_148."
+ },
+ {
+  "address": "0x00397514",
+  "name": "Cutscene_Init",
+  "signature": "u32 Cutscene_Init(CutsceneScene* self, u16* definition)",
+  "params": {
+   "self": "cutscene scene",
+   "definition": "scene descriptor: [0]=scene id, [1]=layout mode, [3]=flags"
+  },
+  "summary": "Initialises a cutscene scene from its descriptor: stores the scene id/layout/flags, resolves the scene resource handle, sets up the default camera and prepares the pack that will hold the scene's assets.",
+  "confidence": 0.65,
+  "evidence": "Reads *(u16*)arg2 (scene id -> self->f_c), arg2[1] (self->f_15) and byte 3 (self->f_16); resolves with func_0063D85C (scene table) and func_00707BD4; builds the scene pack name via func_003882F0 + func_0012416C; stores handle at self->f_18."
+ },
+ {
+  "address": "0x0039772C",
+  "name": "Cutscene_Close",
+  "signature": "void Cutscene_Close(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Closes the cutscene: stops the camera and message animations, releases the cached camera-animation handle and clears the scene's pending display object.",
+  "confidence": 0.62,
+  "evidence": "func_002AEA24(ctx+0x74,0) (stop message), func_002ACE14(ctx+0x78) (stop camera), func_001EDD64(self->f_148) (release), func_001EE294(self->f_144) to rebuild the animation; clears self->f_20c. Open/close pair with 0x00397514."
+ },
+ {
+  "address": "0x003977D0",
+  "name": "Cutscene_UpdateTimer",
+  "signature": "void Cutscene_UpdateTimer(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Advances the cutscene's frame timer and, when the current scene step ends, loads the next scene resource or shuts the scene down. Also feeds the current scene id into the message/sound systems.",
+  "confidence": 0.6,
+  "evidence": "Decrements self->f_28 by the frame delta and compares with g_003978ec/g_003978f0; calls 0x003980B8 (advance timeline), func_0024CB9C/func_0024CB38 (sound scene), func_0063D85C/func_002D2720 (message scene) and func_001A0098; called by Ui_SceneFlow_Update/SyncState."
+ },
+ {
+  "address": "0x00397984",
+  "name": "Cutscene_Teardown",
+  "signature": "void Cutscene_Teardown(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Tears down a cutscene scene: releases the camera/effect object, destroys every pack handle in the 8-byte vector, releases the text resource and resets all scene fields to their empty values.",
+  "confidence": 0.72,
+  "evidence": "func_005AD1CC(&self->f_14c) releases camera/effect; func_001C863C(ctx+0x54,6) releases text; loops self->f_30..f_34 calling func_0012416C per handle; then func_001241D0 and clears f_c..f_28/f_140/f_144. Called by Ui_SceneFlow_TeardownAll and 0x0039860C."
+ },
+ {
+  "address": "0x00397AA4",
+  "name": "Cutscene_CreateActorModels",
+  "signature": "void Cutscene_CreateActorModels(CutsceneScene* self, u32 arg2, u32 actor_id, int face_id, int expression, ...)",
+  "params": {
+   "self": "cutscene scene",
+   "arg2": "scene slot",
+   "actor_id": "actor/model id",
+   "face_id": "face expression id",
+   "expression": "expression/pose id"
+  },
+  "summary": "Creates the visible models for a cutscene actor: resolves the actor's model definition, applies face/expression overrides and attaches the model to the scene's actor slot.",
+  "confidence": 0.62,
+  "evidence": "Uses func_001C9438/func_001C94B4 (actor table), func_0063FFE8 (model record), maybe_Model_CreateAttachmentA/B, func_003D4920 (attach), func_0023D078/00224110 (face/expression) and func_0062B540; writes self->f_120/model slots. Called only from the scene flow object at 0x003980B8."
+ },
+ {
+  "address": "0x003980B8",
+  "name": "Cutscene_AdvanceTimeline",
+  "signature": "void Cutscene_AdvanceTimeline(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Advances the cutscene timeline by one slot: consumes the next scene event/handle, updates the actor/camera attachments and triggers the scene's follow-up step when the slot count is exhausted.",
+  "confidence": 0.62,
+  "evidence": "Reads the handle vector at self->f_30..f_34 (index f_50), resolves with func_0071342C/func_00193FA0, updates self->f_50, calls 0x0039620C to load more packs, func_001051F0 to allocate, and func_005AD368/func_005ACE3C/func_005ACEC8 for camera; driven by 0x003977D0."
+ },
+ {
+  "address": "0x0039860C",
+  "name": "Cutscene_Scene_Dtor",
+  "signature": "void Cutscene_Scene_Dtor(CutsceneScene* self)",
+  "params": {
+   "self": "cutscene scene"
+  },
+  "summary": "Destructor of the cutscene scene: runs the full teardown, releases the camera handle at +0x14C, destroys the two 0x14-byte vectors and frees the object.",
+  "confidence": 0.68,
+  "evidence": "Calls 0x00397984 (teardown), func_005AD1CC(self+0x14c), func_00100BE0(self+0x67, g_00398680, 0x14, 2), loops the 8-byte handle vector calling func_0012416C, then func_0010F6CC on self-0x18."
+ },
+ {
+  "address": "0x00398ADC",
+  "name": "maybe_Ui_TextLineCache_Init",
+  "signature": "void maybe_Ui_TextLineCache_Init(UiTextLineCache* self)",
+  "params": {
+   "self": "three-line text cache (3 * 0x180 bytes)"
+  },
+  "summary": "Clears the three 0x180-byte text-line buffers and their counters; used by screens that build multi-line message text before drawing it.",
+  "confidence": 0.45,
+  "evidence": "Memsets self+0, self+0x180 and self+0x300 with size 0x180 through func_00116AE0, then zeroes f_480..f_495. No return value. Twin of 0x00398B28 (identical plus 'return self')."
+ },
+ {
+  "address": "0x00398B28",
+  "name": "maybe_Ui_TextLineCache_InitAndReturn",
+  "signature": "UiTextLineCache* maybe_Ui_TextLineCache_InitAndReturn(UiTextLineCache* self)",
+  "params": {
+   "self": "three-line text cache (3 * 0x180 bytes)"
+  },
+  "summary": "Same initialisation as 0x00398ADC but returns the cache pointer, for use as an expression initialiser.",
+  "confidence": 0.45,
+  "evidence": "Identical three func_00116AE0(self+{0,0x180,0x300},0x180) calls and f_480..f_495 zeroing, then 'return self'."
+ },
+ {
+  "address": "0x00398B9C",
+  "name": "Ui_DungeonListWindow_Init",
+  "signature": "void Ui_DungeonListWindow_Init(UiDungeonListWindow* self)",
+  "params": {
+   "self": "dungeon list window"
+  },
+  "summary": "Initialises the dungeon-list window: attaches the 'win_dungeon_list2' pane, links the embedded list headers at +0x18C/+0x17C and refreshes the list.",
+  "confidence": 0.72,
+  "evidence": "Calls FUN_001D85EC(self, self+0x198, 'win_dungeon_list2' @0x00398BE0, 0), func_001235A4(self+0x18c,...) to splice the list, func_00123594(self, self+0x17c). Companion of 0x00398B7C (N_016: maybe_Ui_DungeonListWindow_Delete)."
+ },
+ {
+  "address": "0x00399100",
+  "name": "maybe_Ui_ScreenObject_Dtor",
+  "signature": "void maybe_Ui_ScreenObject_Dtor(UiDungeonListWindow* self)",
+  "params": {
+   "self": "dungeon list window (object base at -0x293C from the list pointer)"
+  },
+  "summary": "Generic destructor of the large dungeon/status screen object: destroys the 0x18*0x10 entry grid, the embedded child list and the widget at -0x198, then frees the screen.",
+  "confidence": 0.45,
+  "evidence": "func_0036B514(self+0xab5) resolves the owning screen; func_00100BE0(base-0x28cc, g, 0x18, 0x10) destroys the entry grid; func_001D8C2C(base-0x198); func_0010F6CC frees. The exact screen class is not proven, so the name stays generic."
+ },
+ {
+  "address": "0x0039921C",
+  "name": "Ui_CreditWindow_SelectPaneGroup",
+  "signature": "void Ui_CreditWindow_SelectPaneGroup(UiCreditWindow* self, u32 group, int visible)",
+  "params": {
+   "self": "credits/ending window",
+   "group": "1..3 selects one of the animation groups",
+   "visible": "show/hide the selected group"
+  },
+  "summary": "Shows or hides one of the credits window's three animation groups (panes at +0x4C/0x9C/0xEC and +0x13C/0x18C/0x1DC), resetting the other groups so only the requested one plays.",
+  "confidence": 0.68,
+  "evidence": "When group!=0 and group count>3 it calls func_003E043C/func_003DFF34 on the six 0x50-byte pane objects at self+0x4c,0x9c,0xec,0x13c,0x18c,0x1dc and sets self->f_22c to the chosen pane; called by maybe_Ui_CreditWindow_SetAnimParams / maybe_Ui_PlaySeForAnimState."
+ },
+ {
+  "address": "0x00399418",
+  "name": "Ui_CreditWindow_PlayPaneAnim",
+  "signature": "void Ui_CreditWindow_PlayPaneAnim(UiCreditWindow* self, int pane, int reverse)",
+  "params": {
+   "self": "credits/ending window",
+   "pane": "0..2 pane index",
+   "reverse": "play the out/reverse animation"
+  },
+  "summary": "Plays the in or out animation of one of the three credits panes at +0x230/+0x280/+0x2D0, resetting the other two.",
+  "confidence": 0.68,
+  "evidence": "Calls func_003E043C on self+0x230/0x280/0x2d0, selects the pane by arg2, then func_003E021C(...,0) or func_00649BD4/func_003E0088 for reverse playback; called by maybe_Ui_CreditWindow_PlayShakeAndSe."
+ },
+ {
+  "address": "0x003996F8",
+  "name": "Field_ActorAction_Dead",
+  "signature": "void Field_ActorAction_Dead(FieldActorAction* self)",
+  "params": {
+   "self": "field actor action state"
+  },
+  "summary": "Death action: plays the 'Bt_Dead' animation on the actor, stops its motion, and marks the actor as dead/immobile once the animation passes its end.",
+  "confidence": 0.78,
+  "evidence": "Calls func_002B13E0 (base action tick), actor vtable+0x84 with string 'Bt_Dead' @0x00399758, func_0066A244 (stop motion); when g_00399760 < timer, func_005F7564 and sets actor->f_28a/f_289 = 1 (dead flags)."
+ },
+ {
+  "address": "0x00399768",
+  "name": "maybe_Field_ActorAction_Dead_Ctor",
+  "signature": "void maybe_Field_ActorAction_Dead_Ctor(void)",
+  "params": {},
+  "summary": "Constructor stub for the death action: allocates its base action object through func_002B1808.",
+  "confidence": 0.45,
+  "evidence": "Single call func_002B1808 (base action constructor) with no other setup; used as index 9 in the action table built by 0x00399834."
+ },
+ {
+  "address": "0x0039979C",
+  "name": "Field_ActorAction_PlayDefaultAnim",
+  "signature": "void Field_ActorAction_PlayDefaultAnim(FieldActorAction* self)",
+  "params": {
+   "self": "field actor action state"
+  },
+  "summary": "Plays the actor's default 'Act_Def' animation and forwards the action-start notification to the actor's motion controller.",
+  "confidence": 0.7,
+  "evidence": "Calls func_005E7598 (action start), then if actor->f_58 and func_00633D6C(actor->f_58,'Act_Def' @0x003997E0) call actor vtable+0x84 with 'Act_Def'."
+ },
+ {
+  "address": "0x00399834",
+  "name": "Field_ActorActionSet_Init",
+  "signature": "void Field_ActorActionSet_Init(FieldActorActionSet* self)",
+  "params": {
+   "self": "field actor action set (10 action slots)"
+  },
+  "summary": "Builds the field actor's ten-slot action table: creates the base action plus the named sub-actions nut, run, jump, exit, skill, sklEd, dmg and dead and stores each into the actor's action array. This is the behaviour/animation set used by field monsters and NPCs.",
+  "confidence": 0.6,
+  "evidence": "Allocates/creates func_002A8BFC, func_0028A5B4, func_002B19E4, func_002B1808, func_002B11B4, func_003D5D0C, func_004A1DCC, func_0032CC94, func_00399768 as action slots 0,1,2,3,4,6,7,8,9; the name strings read at 0x00399C10.. are 'action', then 'nut' @0x00399C20, 'run' @0x00399C24, 'jump' @0x00399C28, 'exit' @0x00399C30, 'skill' @0x00399C38, 'sklEd' @0x00399DFC, 'dmg' @0x00399E04, 'dead' @0x00399E08; sets actor->f_160->f_599/f_59a = 1."
+ },
+ {
+  "address": "0x00399EA8",
+  "name": "Field_ActorAction_GripOn",
+  "signature": "void Field_ActorAction_GripOn(FieldActorAction* self)",
+  "params": {
+   "self": "field actor action state"
+  },
+  "summary": "Plays the 'wbhm_grip_on' animation (weapon/held-item grip) on the actor's attached model and marks the action as running.",
+  "confidence": 0.72,
+  "evidence": "Calls func_005E7598 (action start), func_00223CF4(self->f_23c,'wbhm_grip_on' @0x003999EE0) on the attached model, func_005E74A0(self,0,1) and sets self->f_28b = 1."
+ },
+ {
+  "address": "0x00399F2C",
+  "name": "Field_Actor_UpdateAttachment",
+  "signature": "void Field_Actor_UpdateAttachment(FieldActor* self, int apply)",
+  "params": {
+   "self": "field actor",
+   "apply": "copy the computed position back into the actor"
+  },
+  "summary": "Positions the actor's attached model (weapon/accessory) from the actor's body slot +0x220, adding the slot's local offset and the actor's current motion; optionally writes the result into the actor's render position.",
+  "confidence": 0.62,
+  "evidence": "Reads self->f_220->f_9c/f_a0/f_a4, func_0051B1FC(ctx+0x98) for the frame time, stores self->f_228/f_22c/f_230 and copies to f_9c/f_a0/f_a4 + f_118=1 when apply!=0. Same fields used by 0x0039B6D0."
+ },
+ {
+  "address": "0x0039A504",
+  "name": "Field_Actor_ReleaseAttachment",
+  "signature": "void Field_Actor_ReleaseAttachment(FieldActor* self)",
+  "params": {
+   "self": "field actor"
+  },
+  "summary": "Releases the actor's attached model and clears its body-slot pointer when the attachment flag is set.",
+  "confidence": 0.55,
+  "evidence": "If self->f_41 != 0 calls func_005F7F98 (release model) and sets self->f_220 = 0; pair of 0x00399F2C."
+ },
+ {
+  "address": "0x0039A52C",
+  "name": "Field_Actor_Create",
+  "signature": "FieldActor* Field_Actor_Create(u32 model_id, int heap)",
+  "params": {
+   "model_id": "actor model id",
+   "heap": "allocation heap/owner"
+  },
+  "summary": "Allocates and initialises a field actor object: creates the base 3D actor, fills its position/rotation defaults, model id, animation slots and interaction state.",
+  "confidence": 0.62,
+  "evidence": "Calls func_005F8174 (base 3D actor create) with the model id, then writes +0x88..+0x9A defaults (0xFFFF sentinels, model id copies) and copies the 3-word transform from the model record; fields match the NPC controller used by 0x0039B638/0x0039B6D0."
+ },
+ {
+  "address": "0x0039A6B8",
+  "name": "Field_CommandMenu_Build",
+  "signature": "void Field_CommandMenu_Build(FieldCommandMenu* self)",
+  "params": {
+   "self": "field command menu"
+  },
+  "summary": "Builds the field command menu (talk, search, item, equip, ...) from the current interaction target: enables each command according to the target/event flags and inserts the available event commands.",
+  "confidence": 0.7,
+  "evidence": "Emits command ids 0x25..0x2d with func_00617D7C (add command), checks event/flag lookups func_0066B17C(ctx+0x24a98,...), reads the current interaction record at ctx+0x111c and calls func_0019AD70/func_00198ED8 (menu commit). Command ids 0x25..0x2d are the field command page."
+ },
+ {
+  "address": "0x0039AA28",
+  "name": "maybe_Text_CommandExecutor_Init",
+  "signature": "void maybe_Text_CommandExecutor_Init(TextCommandExecutor* self)",
+  "params": {
+   "self": "text command executor; command table at +8, text id at +0xC"
+  },
+  "summary": "Initialises a text command executor: resets the command list and registers the command table and default text id.",
+  "confidence": 0.45,
+  "evidence": "func_00257D04(self+8) resets the executor, func_00257B30(self+8, self->f_c, 0) registers the table/id. No other state."
+ },
+ {
+  "address": "0x0039B2F0",
+  "name": "Ui_EmotionBalloon_Init",
+  "signature": "void Ui_EmotionBalloon_Init(UiEmotionBalloon* self, FieldActor* actor)",
+  "params": {
+   "self": "emotion balloon widget",
+   "actor": "field actor that shows the balloon"
+  },
+  "summary": "Creates the emotion/expression balloon for a field actor: resolves the 'null_ex' and 'emotion_chara_ex' panes, attaches them to the actor's UI layer and hides the balloon until an emotion is requested.",
+  "confidence": 0.7,
+  "evidence": "Uses actor->f_ac->f_10 (UI layout) vtable+0x2c('null_ex' @0x0039B348) and func_003E00CC(self+2, actor->f_ac, 'emotion_chara_ex' @0x0039B350, 0); calls vtable+0x0c(self,0) to hide."
+ },
+ {
+  "address": "0x0039B40C",
+  "name": "maybe_Ui_EmotionBalloon_Reset",
+  "signature": "int maybe_Ui_EmotionBalloon_Reset(UiEmotionBalloon* self, u32 arg2, u32 arg3)",
+  "params": {
+   "self": "emotion balloon widget",
+   "arg2": "unused",
+   "arg3": "unused"
+  },
+  "summary": "Resets the emotion balloon to its hidden state and returns the adjusted pane base offset.",
+  "confidence": 0.42,
+  "evidence": "Sets self[1]=0, calls func_003E0454(self+2) (pane release) and returns its result - 8; tiny layout helper paired with 0x0039B2F0."
+ },
+ {
+  "address": "0x0039B42C",
+  "name": "Field_Npc_UpdateAnchor",
+  "signature": "void Field_Npc_UpdateAnchor(FieldNpc* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field NPC controller",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Places an NPC at its map anchor: looks up the actor's spawn/anchor record, copies the anchor position into the NPC's target position and starts the placement animation.",
+  "confidence": 0.58,
+  "evidence": "Reads actor->f_26c (anchor index) and f_2b4 (anchor sub-index), indexes ctx+0x154 + f_26c*g_0039b51c*4 + f_2b4*0x1c; stores f_1ac/f_1b0/f_1b4/f_1b8 and calls func_005E7F84 + func_0028B02C (move start)."
+ },
+ {
+  "address": "0x0039B638",
+  "name": "Field_Npc_FaceTarget",
+  "signature": "void Field_Npc_FaceTarget(FieldNpc* self)",
+  "params": {
+   "self": "field NPC controller"
+  },
+  "summary": "Turns the NPC toward its current look-at target by adding the target offset to the NPC's base rotation, and triggers the turn animation.",
+  "confidence": 0.7,
+  "evidence": "Calls func_0017A360(actor, out) to fetch the look-at point; if valid calls func_005E7848(actor,2,0) (turn action) and adds the result offsets to self->f_44/f_48/f_4c from f_1c4/f_1c8/f_1cc."
+ },
+ {
+  "address": "0x0039B6D0",
+  "name": "Field_Npc_UpdateMoveTarget",
+  "signature": "void Field_Npc_UpdateMoveTarget(FieldNpc* self)",
+  "params": {
+   "self": "field NPC controller"
+  },
+  "summary": "Converts the NPC's local target point and rotation into world space and stores the resulting movement target; also refreshes the vertical offset used by the walk animation.",
+  "confidence": 0.7,
+  "evidence": "func_001D233C(ctx+0x4c, &self->f_1ac, self->f_28, 0) computes world position; stores f_44/f_48/f_4c/f_1bc; func_0051B1FC(ctx+0x98) + g_0039b7a0/g_0039b7a4 compute f_1c0. Called by 0x0039B8A8/0x0039BADC/0x0039BBA8/0x0039BD00."
+ },
+ {
+  "address": "0x0039B8A8",
+  "name": "Field_NpcAction_Approach",
+  "signature": "u32 Field_NpcAction_Approach(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC walk action"
+  },
+  "summary": "Approach action: steers the NPC toward its target point while playing the neutral 'Nut' action, advances its position at the configured speed and hands over to the next action when the target is reached.",
+  "confidence": 0.68,
+  "evidence": "Calls func_0028AFF4 (target check), func_00669DD4 (arrived), actor vtable+0x84 with the neutral action name 'Nut' @0x0039BA04 (string confirmed), func_005E8BEC (steering) and func_00669338 (move); if the vertical delta crosses g_0039ba0c it calls func_0028c42c and sets f_35. Ends with func_0017A2D8(actor,4). The separate 0x0039BADC starts the real 'Walk' action (0x0039BB14)."
+ },
+ {
+  "address": "0x0039BADC",
+  "name": "Field_NpcAction_Walk_Init",
+  "signature": "void Field_NpcAction_Walk_Init(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC walk action"
+  },
+  "summary": "Initialises the walk action: computes the movement target, starts the walk animation and sets the action speed.",
+  "confidence": 0.68,
+  "evidence": "Calls 0x0039B6D0 (compute target), func_005E7F84(actor+600) and actor vtable+0x84 with the walk animation name at 0x0039BB14. Same start sequence as 0x0039BBA8."
+ },
+ {
+  "address": "0x0039BBA8",
+  "name": "Field_NpcAction_Walk_InitB",
+  "signature": "void Field_NpcAction_Walk_InitB(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC run action"
+  },
+  "summary": "Second walk-action initialiser: computes the movement target, starts the walk animation and sets the action speed; differs from 0x0039BADC only in the animation-name pointer used.",
+  "confidence": 0.55,
+  "evidence": "Identical to 0x0039BADC; the animation pointer at 0x0039BBE0 resolves to 0x0039BB14, the same 'Walk' string used by 0x0039BADC (verified in the binary), so this is a second walk variant rather than a run variant."
+ },
+ {
+  "address": "0x0039BC18",
+  "name": "Field_NpcAction_Turn",
+  "signature": "u32 Field_NpcAction_Turn(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC turn action"
+  },
+  "summary": "Turn-in-place action: rotates the actor toward its target angle in fixed steps and finishes when the remaining angle is inside the tolerance or the actor is blocked.",
+  "confidence": 0.62,
+  "evidence": "func_0017843C(actor) (blocked), computes dx/dz to target, compares with g_0039bcf8, calls 0x0039B638 (face target) and func_005E8BEC then applies movement; on failure func_005E7848(actor,4,0) ends the action."
+ },
+ {
+  "address": "0x0039BD00",
+  "name": "Field_NpcAction_Patrol",
+  "signature": "u32 Field_NpcAction_Patrol(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC patrol action"
+  },
+  "summary": "Patrol action: moves the NPC forward along its current heading for a timed interval, then switches to the next action; used for wandering town NPCs and monsters.",
+  "confidence": 0.55,
+  "evidence": "Decrements self->f_54 by the frame delta, compares with f_1bc/f_1c0, calls func_0028AFF4 and 0x0039B6D0 (recompute target) then applies movement; on expiration func_0017A2D8(actor,5). Twin structure of 0x0039BC18."
+ },
+ {
+  "address": "0x0039BE4C",
+  "name": "Field_NpcAction_Turn_Update",
+  "signature": "u32 Field_NpcAction_Turn_Update(void)",
+  "params": {},
+  "summary": "Vtable wrapper for the NPC turn action; always reports success to the action scheduler.",
+  "confidence": 0.55,
+  "evidence": "Tail call 0x0039BC18 and 'return 1'; the thunk is the action's vtable update slot."
+ },
+ {
+  "address": "0x0039BE5C",
+  "name": "Field_NpcAction_Patrol_Update",
+  "signature": "u32 Field_NpcAction_Patrol_Update(void)",
+  "params": {},
+  "summary": "Vtable wrapper for the NPC patrol action; always reports success to the action scheduler.",
+  "confidence": 0.55,
+  "evidence": "Tail call 0x0039BD00 and 'return 1'."
+ },
+ {
+  "address": "0x0039BE90",
+  "name": "Field_NpcAction_Idle",
+  "signature": "u32 Field_NpcAction_Idle(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC idle action"
+  },
+  "summary": "Idle action: plays a random idle animation for a duration, then falls through to the action's link/end handler so the NPC's behaviour chain continues.",
+  "confidence": 0.6,
+  "evidence": "Decrements self->f_54, calls func_00627EE4(actor, anim), actor vtable+0x84(anim), func_00669DD4 (arrived) and func_0028C414(self->f_5c, actor+0x2c8) when the timer expires; animation name comes from the record at 0x0039BF54/58/5C."
+ },
+ {
+  "address": "0x0039BF60",
+  "name": "Field_NpcAction_LinkEnd",
+  "signature": "u32 Field_NpcAction_LinkEnd(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC link action"
+  },
+  "summary": "Link action: plays the 'LinkEnd' animation and, when it finishes, hands control to the next action in the behaviour chain (used to join two scripted NPC actions).",
+  "confidence": 0.7,
+  "evidence": "Same body as 0x0039BE90 but with string 'LinkEnd' @0x0039C028 and the end animation pointer 0x0039C030; calls func_00627EE4/func_00669DD4/func_0028C414."
+ },
+ {
+  "address": "0x0039C5F4",
+  "name": "Field_NpcAction_Jump",
+  "signature": "void Field_NpcAction_Jump(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC jump/land action"
+  },
+  "summary": "Jump/land action: computes the landing point from the actor's current velocity, interpolates its height along the jump arc and plays the landing animation when it touches the ground.",
+  "confidence": 0.55,
+  "evidence": "Calls func_0028B3AC (motion state), func_005E84C8 (ground height), func_0063451C (frame delta), compares f_44/f_48/f_4c with actor f_8c..f_98, calls func_005F5F54 (set position), func_005E88B8/func_005E8218 (anim) and actor vtable+0x84(g_0039c760)."
+ },
+ {
+  "address": "0x0039C774",
+  "name": "Field_NpcAction_Move",
+  "signature": "void Field_NpcAction_Move(FieldNpcAction* self)",
+  "params": {
+   "self": "NPC move action"
+  },
+  "summary": "Generic move action: moves the NPC along its heading at the configured speed while keeping it on the ground; switches to the arrive action when it reaches the destination.",
+  "confidence": 0.55,
+  "evidence": "Reads actor->f_26a (ground/height id), calls func_0062DDF0(ctx+0x4c, position, id, 0) for ground height, func_005E7848(actor,2,0) on collision, and integrates actor->f_100/f_104/f_108 by self->f_10..f_13 speeds; calls func_0028B3D8."
+ },
+ {
+  "address": "0x0039CBBC",
+  "name": "Text_LayoutSingleLine",
+  "signature": "void Text_LayoutSingleLine(TextLayout* self, TextLine* line, u32 text_id)",
+  "params": {
+   "self": "text layout context",
+   "line": "destination line record",
+   "text_id": "string/table id to lay out"
+  },
+  "summary": "Lays out one text line: measures the string, applies the current font scale and stores the start/end glyph indices and width into the line record.",
+  "confidence": 0.55,
+  "evidence": "Calls func_0039CA80 (string metrics, outside this batch), func_0051B1FC(ctx+0x98) for frame/UI scale, func_0011CD80 for glyph count, then func_002EC0BC/func_002EC344/func_002EBF4C (glyph lookup) and func_002EC260 (commit line). Writes line->f_3c/f_3f."
+ },
+ {
+  "address": "0x0039CD34",
+  "name": "Text_LayoutColumns",
+  "signature": "void Text_LayoutColumns(TextLayout* self, TextLine* line, u32 text_id)",
+  "params": {
+   "self": "text layout context",
+   "line": "destination line record",
+   "text_id": "string/table id"
+  },
+  "summary": "Lays out a multi-column text block: gathers candidate lines from the actor/table lists, sorts them by width and fills up to three columns, merging short lines into the current column.",
+  "confidence": 0.5,
+  "evidence": "Calls func_001C7AD0/func_001C7560 (actor list), func_00669250 (actor id), func_0070F66C/func_007208B4/func_0071809C (sort/merge candidates), func_0051B1FC/func_0011CD80 (metrics), writes line->f_3c/f_3f/f_4c/f_58."
+ },
+ {
+  "address": "0x0039D1BC",
+  "name": "Text_LayoutRecord",
+  "signature": "void Text_LayoutRecord(TextLayout* self, TextLine* line)",
+  "params": {
+   "self": "text layout context",
+   "line": "destination line record"
+  },
+  "summary": "Lays out text for the current actor/record: reads the record's name/text, selects the appropriate font style and writes the measured line into the destination.",
+  "confidence": 0.5,
+  "evidence": "Reads *(short**)(self+4)->f_2ac (text resource), func_002EC0BC/func_002EC344/func_002EBF4C (glyph lookup), func_0062FAE8/func_0062FAFC (actor text), func_005F9650 and func_002EC260; same destination fields as 0x0039CBBC."
+ },
+ {
+  "address": "0x0039EF94",
+  "name": "maybe_Field_ObjectSprite_InitFromDesc",
+  "signature": "void maybe_Field_ObjectSprite_InitFromDesc(FieldObjectSprite* self, int* desc, u32 owner)",
+  "params": {
+   "self": "field field-object sprite",
+   "desc": "sprite descriptor: count, entry table, flags, id",
+   "owner": "owning field actor"
+  },
+  "summary": "Builds the scene-sprite (draw entry) representation of a field object from its descriptor: for each of up to 13 shape groups it allocates the sprite slots, stores the group masks/ids and links the object to its scene render entries.",
+  "confidence": 0.45,
+  "evidence": "Calls func_0066A7B8/func_0062C388/func_0062C3B0 (field object lookup), func_002E5E18 (Gfx_Scene_AllocSpriteSlot), func_002E6398 (Gfx_Scene_AddNodeType4), func_0033D99C (shape/param table) and func_003DF8BC (bit mask per group); loops groups < 0xd and stores id/params in self->f_220/f_224. Called from the field object table builder 0x0033A140 with a 0x224-byte stride."
+ },
+ {
+  "address": "0x0039F2DC",
+  "name": "Field_ObjectSprite_InitBox",
+  "signature": "void Field_ObjectSprite_InitBox(FieldObjectSprite* self, int* box)",
+  "params": {
+   "self": "field-object sprite",
+   "box": "four-value box (x,y,width,height)"
+  },
+  "summary": "Sets up the simple rectangular scene-sprite entry for a field object: allocates/replaces the object's draw slot from a four-value rectangle and refreshes the object's render state.",
+  "confidence": 0.7,
+  "evidence": "Calls func_002E5E18 (Gfx_Scene_AllocSpriteSlot) with the rectangle and &self->f_1c, or func_002E6398 to replace it; then self->f_28=1 and func_002F2144 (field-object sprite refresh). Called by 0x00448970, which passes a 4-short rectangle and then computes the object's draw bounds."
+ },
+ {
+  "address": "0x0039F3DC",
+  "name": "Field_ObjectSprite_InitComplex",
+  "signature": "void Field_ObjectSprite_InitComplex(FieldObjectSprite* self, int* desc)",
+  "params": {
+   "self": "field-object sprite",
+   "desc": "complex descriptor: shape list, transform list, orientation list"
+  },
+  "summary": "Builds a complex scene-sprite object from three descriptor arrays (large entry records, node records and transform records), creates the corresponding draw entries and computes the object's aggregate transform and bounds.",
+  "confidence": 0.62,
+  "evidence": "Three loops over *arg2, arg2[2], arg2[4]; calls func_002E5934 (Gfx_Scene_AddSpriteEntryLarge) / func_002E5C60 (Gfx_Scene_AddNodeType2) and func_002E59B8 (Gfx_Scene_AddSpriteEntrySmall) / func_002E5D0C (Gfx_Scene_AddNodeType1); stores f_244..f_250/f_2c/f_20c/f_28 and uses func_002F2144; func_00572D94 builds a quaternion for the orientation."
+ },
+ {
+  "address": "0x0039FA90",
+  "name": "Field_ObjectSprite_SetTransform",
+  "signature": "void Field_ObjectSprite_SetTransform(FieldObjectSprite* self, float* transform, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field-object sprite (sub-shape at +0x4C)",
+   "transform": "position + rotation + scale",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Applies a position/rotation/scale transform to a field object's sprite sub-entry (at +0x4C), creating or replacing its draw entries and storing the resulting orientation and extents.",
+  "confidence": 0.62,
+  "evidence": "func_002E5934 (large sprite entry) / func_002E5C60 (type-2 node) with &self->f_4c; stores f_244/f_248/f_24c and the sin/cos products in f_250/f_254; calls func_002F2144. Companion of 0x0039FB6C."
+ },
+ {
+  "address": "0x0039FB6C",
+  "name": "Field_ObjectSprite_SetPosition",
+  "signature": "void Field_ObjectSprite_SetPosition(FieldObjectSprite* self, u32* position, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field-object sprite sub-shape",
+   "position": "three floats",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Moves a field object's sprite sub-entry to the given position, recreating its small draw entry and refreshing the object's render state.",
+  "confidence": 0.62,
+  "evidence": "func_002E59B8 (Gfx_Scene_AddSpriteEntrySmall) / func_002E5D0C (Gfx_Scene_AddNodeType1) with position; stores f_244/f_248/f_24c; func_002F2144. Called from 0x00448970's object setup."
+ },
+ {
+  "address": "0x0039FD20",
+  "name": "Field_ObjectSprite_EnableDraw",
+  "signature": "int Field_ObjectSprite_EnableDraw(FieldObjectSprite* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field-object sprite",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Registers the field object's sprite/draw entry with the scene once, using the object's sprite id and shape id; the one-shot flag at +0x2A8 prevents duplicate registration.",
+  "confidence": 0.6,
+  "evidence": "Checks ctx (func_006F1EEC) and func_00636AFC(ctx+0x6c); when self->f_2a8 != 0 clears it and calls func_00251230(ctx+0x6c, self->f_46, self->f_48, 8) (field scene/sprite registration). The same call is used by 0x003A04DC."
+ },
+ {
+  "address": "0x0039FDA0",
+  "name": "Field_ObjectSprite_InitFromRecord",
+  "signature": "void Field_ObjectSprite_InitFromRecord(FieldObjectSprite* self, u32* record)",
+  "params": {
+   "self": "field-object sprite object",
+   "record": "sprite record with flags, ids and transform"
+  },
+  "summary": "Initialises a field object's sprite state directly from a map record: sets its transform/orientation, marks it active and copies the shape/texture ids used for drawing.",
+  "confidence": 0.58,
+  "evidence": "func_00572D94 (quaternion from record+6), 0x0039FA90(&self->f_4c,...), func_002F22C8(&self->f_4c, self+4, 8) (register up to 8 sprite handles); writes f_25c..f_28c and f_46/f_48 from record offsets. The 0x2F22C8 callee stores handles in a per-group 0x20-byte sprite list, confirming the sprite interpretation."
+ },
+ {
+  "address": "0x0039FF90",
+  "name": "maybe_Field_ObjectSprite_ResolveName",
+  "signature": "u32 maybe_Field_ObjectSprite_ResolveName(FieldObjectSprite* self)",
+  "params": {
+   "self": "field-object sprite"
+  },
+  "summary": "Resolves the display name of a field object/sprite from its event and actor ids, formats them as '%ls/%ls' and stores the label; raises the object's script event when the id is valid.",
+  "confidence": 0.45,
+  "evidence": "Calls func_0063D300/func_0063CC1C/func_0063CD18 (event/actor name tables), func_0066B0B4/func_0066B45C (world objects), func_006F0E9C with format '%ls/%ls' @0x003A016C, func_00707C1C to store the label into the object record; ends with func_00253290(ctx,0x13) (Event_OnTriggerCommand family)."
+ },
+ {
+  "address": "0x003A0184",
+  "name": "Field_ObjectSprite_Ctor",
+  "signature": "FieldObjectSprite* Field_ObjectSprite_Ctor(void)",
+  "params": {},
+  "summary": "Constructor for a field-object sprite object: allocates it from the field object pool, sets the debug/display id to 0xFF and initialises the embedded sprite list.",
+  "confidence": 0.5,
+  "evidence": "func_0017C1C8 allocates the field object, sets f_12=0xff, calls func_0039FC00(&f_13) and sets f_25c=0, returns object-0x4c. Base-offset convention shared with 0x003A01C0/0x003A06A4."
+ },
+ {
+  "address": "0x003A01C0",
+  "name": "Field_ObjectSprite_Delete",
+  "signature": "void Field_ObjectSprite_Delete(FieldObjectSprite* self, u32 arg2)",
+  "params": {
+   "self": "field-object sprite",
+   "arg2": "delete flag"
+  },
+  "summary": "Deleting destructor for a field-object sprite: destroys its embedded sprite/shape list, releases the field object and frees it.",
+  "confidence": 0.5,
+  "evidence": "func_0039FCCC(self+0x13) destroys the sprite list, func_0017C334(base-0x4c) releases the field object, func_0010F6CC frees."
+ },
+ {
+  "address": "0x003A01E0",
+  "name": "maybe_Field_ObjectSprite_CreateActor",
+  "signature": "u32 maybe_Field_ObjectSprite_CreateActor(FieldObjectSprite* self)",
+  "params": {
+   "self": "field-object sprite"
+  },
+  "summary": "Creates the visible sprite actor for a field object: resolves the object's sprite resource, builds its transform and submits it to the field scene actor manager.",
+  "confidence": 0.45,
+  "evidence": "Checks ctx+0x6c valid, self->f_50 and the ctx+0x24a98 world object; func_00642CB4(ctx+0x58,&self->f_4c) loads the sprite resource, func_00572D94/func_00574548 build the transform and func_00612CA0(ctx+0x24a98,1,0,world->f_14,resource,matrix) creates the sprite actor; 0x003A0328 is called when the scene mode is 2."
+ },
+ {
+  "address": "0x003A0328",
+  "name": "maybe_Field_ObjectSprite_CreateChildActors",
+  "signature": "void maybe_Field_ObjectSprite_CreateChildActors(FieldObjectSprite* self)",
+  "params": {
+   "self": "field-object sprite"
+  },
+  "summary": "Creates one visible sprite actor per shape/child of a field object: walks the object's child list, matches the shape ids and spawns the corresponding field sprites.",
+  "confidence": 0.45,
+  "evidence": "Walks world object ctx+0x88->f_8, func_0066AA7C (field object), iterates f_16d8/f_16dc child list, matches self->f_45/f_46, resolves func_00642DFC(ctx+0x58) and func_00319848 (shape), then func_006133B4(ctx+0x24a98,...,shape id) to create each sprite."
+ },
+ {
+  "address": "0x003A04DC",
+  "name": "maybe_Field_ObjectSprite_UpdateOwner",
+  "signature": "int maybe_Field_ObjectSprite_UpdateOwner(FieldObjectSprite* self)",
+  "params": {
+   "self": "field-object sprite"
+  },
+  "summary": "Refreshes a field object's sprite after its owner moves: updates the visibility flag from the scene mode, re-resolves the owning object and updates the spawned sprites.",
+  "confidence": 0.45,
+  "evidence": "Reads ctx+0x48->f_281 for self->f_50; if self->f_49 calls func_004417EC, then func_00251230(ctx+0x6c,self->f_46,self->f_45,self->f_48) registers the draw entry; iterates func_00669250(puVar3) ids 4/5 and calls func_005E74A0(actor,1)."
+ },
+ {
+  "address": "0x003A06A4",
+  "name": "maybe_Field_ObjectSprite_InitShared",
+  "signature": "void maybe_Field_ObjectSprite_InitShared(void)",
+  "params": {},
+  "summary": "Initialises the shared field-object sprite/debug state: resets the id fields and sets the draw colour to opaque.",
+  "confidence": 0.4,
+  "evidence": "func_0017C1C8 allocates the shared field object; sets f_12=0, f_14=0 and the word at +0x4C to 0x0FFFFFFF. No arguments. Sits next to the sprite object ctor/dtor pair."
+ },
+ {
+  "address": "0x003A06E8",
+  "name": "maybe_Field_ObjectSprite_DeleteShared",
+  "signature": "void maybe_Field_ObjectSprite_DeleteShared(void)",
+  "params": {},
+  "summary": "Releases and frees the shared field-object sprite/debug object.",
+  "confidence": 0.4,
+  "evidence": "func_0017C334 (field object release) + func_0010F6CC (free); pair of 0x003A06A4."
+ },
+ {
+  "address": "0x003A11BC",
+  "name": "maybe_Field_Gadget_IsReady",
+  "signature": "int maybe_Field_Gadget_IsReady(void)",
+  "params": {},
+  "summary": "Generic readiness predicate: returns 1 when the field context exists and the gadget's owning field object at ctx+0x6C is still alive.",
+  "confidence": 0.35,
+  "evidence": "Reads ctx with func_006F1EEC and calls func_00636AFC(ctx+0x6c); no other state is touched. The predicate's exact use is not proven, hence the vague name."
+ },
+ {
+  "address": "0x003A131C",
+  "name": "Field_Gadget_TriggerTouchCommand",
+  "signature": "u32 Field_Gadget_TriggerTouchCommand(FieldGadget* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field gadget",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Raises the gadget's touch/interaction event (command 0xF) in the field event system when the player touches it.",
+  "confidence": 0.6,
+  "evidence": "Calls func_00256678(ctx+0x6c, 0xf, ...) only when ctx+8 exists; func_00256678 is named Field_Gadget_AddAndTriggerCommand in other batches, and 0xF is the interaction command id."
+ },
+ {
+  "address": "0x003A13D0",
+  "name": "maybe_Field_Gadget_ApplyModelRecord",
+  "signature": "void maybe_Field_Gadget_ApplyModelRecord(FieldGadget* self)",
+  "params": {
+   "self": "field gadget"
+  },
+  "summary": "Applies the gadget's model record to its attached model and notifies the gadget's embedded motion/transform sub-object.",
+  "confidence": 0.42,
+  "evidence": "Calls func_0028E37C (named maybe_Actor_ApplyModelRecordFast for 0x0028E37C) and then self->f_298->vtable+0x10(self->f_298,self). f_298 is the same sub-object started by 0x003A24D4/0x003A25D0."
+ },
+ {
+  "address": "0x003A156C",
+  "name": "maybe_Field_Gadget_DtorA",
+  "signature": "void maybe_Field_Gadget_DtorA(FieldGadget* self, u32 arg2)",
+  "params": {
+   "self": "field gadget",
+   "arg2": "base offset of the embedded gadget state"
+  },
+  "summary": "Destructor of the gadget's embedded state at +0x24C: releases the field object and frees the allocation.",
+  "confidence": 0.45,
+  "evidence": "Sets arg1[0x8b] = arg2+0x98; func_0017C330(&arg1[0x93]) returns the object base, func_00335DAC(base-0x24c) destroys the embedded gadget, func_0010F6CC frees. Same code as 0x003A1BF0."
+ },
+ {
+  "address": "0x003A15A8",
+  "name": "maybe_Field_Gadget_IsReadyB",
+  "signature": "int maybe_Field_Gadget_IsReadyB(void)",
+  "params": {},
+  "summary": "Second readiness predicate: returns 1 when the field context exists and the object at ctx+0x6C is alive.",
+  "confidence": 0.35,
+  "evidence": "Identical check to 0x003A11BC (func_006F1EEC + func_00636AFC(ctx+0x6c)); emitted for a second gadget vtable."
+ },
+ {
+  "address": "0x003A171C",
+  "name": "Field_Gadget_TriggerActionCommand",
+  "signature": "u32 Field_Gadget_TriggerActionCommand(FieldGadget* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field gadget",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Raises the gadget's action-button event (command 0xF) and always reports success, used when the player presses the interact button in front of the object.",
+  "confidence": 0.55,
+  "evidence": "Calls func_00256678(ctx+0x6c,0xf,*(u32*)(self+4)) and returns 1; twin of 0x003A131C but unconditional and passes the gadget id."
+ },
+ {
+  "address": "0x003A17E4",
+  "name": "maybe_Field_Gadget_ApplyModelOffset",
+  "signature": "void maybe_Field_Gadget_ApplyModelOffset(FieldGadget* self)",
+  "params": {
+   "self": "field gadget"
+  },
+  "summary": "Applies the gadget's model record and adds the sub-object's vertical offset to the gadget's Y position, used for floating/bobbing props.",
+  "confidence": 0.42,
+  "evidence": "Calls func_0028E37C (maybe_Actor_ApplyModelRecordFast), reads self->f_298->f_10 as a signed fixed-point offset and adds it to self->f_9c (Y). Twin of 0x003A13D0."
+ },
+ {
+  "address": "0x003A181C",
+  "name": "Field_Gadget_SetModelFrame",
+  "signature": "void Field_Gadget_SetModelFrame(FieldGadget* self, int frame, int loop)",
+  "params": {
+   "self": "field gadget",
+   "frame": "animation frame (0 = keep current)",
+   "loop": "wrap to last frame when set"
+  },
+  "summary": "Sets the gadget model's animation frame: clamps/wraps the requested frame against the model's animation length and applies it to the attached model at +0xB8.",
+  "confidence": 0.55,
+  "evidence": "Calls func_002D1258(self->f_b8, anim, 0) when frame!=0, then func_0063C78C (frame count) and func_002D19C8(self->f_b8, count-1) when loop!=0 and the model has frames (f_164 != 0)."
+ },
+ {
+  "address": "0x003A1BF0",
+  "name": "maybe_Field_Gadget_DtorB",
+  "signature": "void maybe_Field_Gadget_DtorB(FieldGadget* self, u32 arg2)",
+  "params": {
+   "self": "field gadget",
+   "arg2": "base offset of the embedded gadget state"
+  },
+  "summary": "Second destructor for the gadget's embedded state at +0x24C; releases the field object and frees it.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x003A156C (arg1[0x8b]=arg2+0x98, func_0017C330, func_00335DAC(base-0x24c), free). Duplicate emitted for a second gadget vtable."
+ },
+ {
+  "address": "0x003A1C28",
+  "name": "Field_Gadget_CreateSprite",
+  "signature": "void Field_Gadget_CreateSprite(FieldGadget* self, FieldObject* owner)",
+  "params": {
+   "self": "field gadget",
+   "owner": "owning field object"
+  },
+  "summary": "Creates the gadget's sprite/quad mesh, sizes it from the gadget record and attaches it to the field object so the gadget can be drawn and touch-tested.",
+  "confidence": 0.55,
+  "evidence": "func_005F2B54 (base model init), func_0031A48C(&local,0,0x25,owner->f_48,...) builds the sprite record, func_0031A394(...,'sprite' @0x003A1CC0) creates the mesh, stores at self->f_b8 and func_005E7650 attaches it; sets frame 10."
+ },
+ {
+  "address": "0x003A1CD0",
+  "name": "maybe_Field_Gadget_IsTouchOutside",
+  "signature": "u32 maybe_Field_Gadget_IsTouchOutside(u32 touch_state)",
+  "params": {
+   "touch_state": "current touch/pad state"
+  },
+  "summary": "Returns 1 when the current touch point is outside the gadget's hit area; the actual hit test is delegated to func_0064C740 and the result is inverted.",
+  "confidence": 0.35,
+  "evidence": "Calls func_0040D9FC (touch query), then func_0064C740(touch_state) and returns result XOR 1. The hit-test internals live in func_0064C740, so the polarity is inferred from the XOR."
+ },
+ {
+  "address": "0x003A1EB0",
+  "name": "maybe_Field_Gadget_GetTouchPoint",
+  "signature": "u32 maybe_Field_Gadget_GetTouchPoint(FieldGadget* self)",
+  "params": {
+   "self": "field gadget"
+  },
+  "summary": "Resolves the current touch point to gadget-local coordinates and stores the resulting 6-byte touch record (id, state, x/y) at +0x4D8.",
+  "confidence": 0.42,
+  "evidence": "func_0063C7B0 (pad/touch) + func_0040DBB4(&record,6,touch_id,&point); copies record[0..2] to self+0x4d8..0x4da and two u32s to +0x4dc/+0x4e0; returns 1 when a model (f_b8) exists."
+ },
+ {
+  "address": "0x003A1F6C",
+  "name": "maybe_Field_Gadget_DtorC",
+  "signature": "void maybe_Field_Gadget_DtorC(FieldGadget* self)",
+  "params": {
+   "self": "field gadget with a 0x48-byte child array at +0x298"
+  },
+  "summary": "Destructor of the gadget's larger variant: destroys the 0x48-byte child array, releases the embedded gadget state at +0x24C and frees the object.",
+  "confidence": 0.45,
+  "evidence": "Sets arg1[0x8b] from g_003a1fd0+0x9c, func_00100BE0(arg1+0xa6, g_003a1fd4, 0x48) (destroy array), then same func_0017C330/func_00335DAC(base-0x24c)/free as 0x003A156C; ends in halt_baddata (Ghidra lost the epilogue)."
+ },
+ {
+  "address": "0x003A1FDC",
+  "name": "maybe_Field_Gadget_OnNotify",
+  "signature": "void maybe_Field_Gadget_OnNotify(FieldGadget* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field gadget",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Notification handler for the gadget: when the gadget is in state 2 (dragging/released) it forwards the event to the shared field UI object.",
+  "confidence": 0.4,
+  "evidence": "If self->f_297 == 2, calls func_005F36E0(*(u32*)(ctx+0x54)+0x20, self->f_2ec, 1); f_297 is the 0/1/2 drag state used by 0x003A2018/0x003A24D4."
+ },
+ {
+  "address": "0x003A2018",
+  "name": "maybe_Field_Gadget_UpdateDrag",
+  "signature": "u32 maybe_Field_Gadget_UpdateDrag(FieldGadget* self)",
+  "params": {
+   "self": "field gadget in drag state"
+  },
+  "summary": "Updates a gadget the player is dragging: integrates the drag delta into the gadget's rotation/position, clamps it to its limits and ends the drag when the pointer is released.",
+  "confidence": 0.42,
+  "evidence": "State machine on self->f_297 (0/1/2); reads pad/touch from ctx+0x54+0x20 (f_1c5), accumulates self->f_2f4 into pad->f_c4, clamps by multiplying f_2f4; when released sets f_297=2 and func_00253290(ctx+0x6c,0x15). Called by 0x003A24D4 (drag begin)."
+ },
+ {
+  "address": "0x003A24D4",
+  "name": "maybe_Field_Gadget_BeginDrag",
+  "signature": "u32 maybe_Field_Gadget_BeginDrag(FieldGadget* self, u32 event, int area)",
+  "params": {
+   "self": "field gadget",
+   "event": "pointer event id",
+   "area": "address of the hit area that produced the event"
+  },
+  "summary": "Starts a gadget drag when the player presses inside the gadget's touch area: records the press position, switches the gadget to drag state 1 and sends the initial view/rotation record to the field camera.",
+  "confidence": 0.42,
+  "evidence": "Compares area with self+0x24c and self+0x298 (two embedded touch areas); branch 1 builds a 6-field record from self->f_78/f_7c/f_2e0 and calls func_0022D4E0(ctx+0x54+0x20,&record); branch 2 stores the delta into f_2f0/f_2f4 and sets f_297=1."
+ },
+ {
+  "address": "0x003A25D0",
+  "name": "maybe_Field_Gadget_Ctor",
+  "signature": "FieldGadget* maybe_Field_Gadget_Ctor(u32 owner, int model_id, u32 record, u32 arg4)",
+  "params": {
+   "owner": "owning field object/actor",
+   "model_id": "gadget model id",
+   "record": "gadget placement record",
+   "arg4": "flags"
+  },
+  "summary": "Creates a field gadget object: allocates the base 3D object with the gadget flags, creates its embedded touch/drag state at +0x298 and initialises the model and draw references.",
+  "confidence": 0.45,
+  "evidence": "func_0028E630(arg1,&local,0x4000000c) allocates a 3D field object; stores owner+0x98 at +0x8b; func_004AF3F4(piVar2+0xa6) creates the embedded state; writes f_48/f_4c/f_50/f_54/f_58/f_5c from the record and returns base-0x298."
+ }
+]

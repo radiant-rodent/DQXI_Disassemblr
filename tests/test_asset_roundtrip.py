@@ -524,13 +524,14 @@ class AssetRoundTripTests(unittest.TestCase):
             "  iVar1 = GetActorID(0);",
             "  uVar2 = *(uint *)(param_1 + 0x24);",
             "  *(undefined4 *)(*(int *)(param_1 + 0x160) + 0x1c) = param_2;",
-            "  FUN_00300000(param_1 + 0x254,DAT_00401000,iVar1,uVar2);",
+            # a BSS global (a DAT_ inside code.bin is a literal-pool constant and is inlined)
+            "  FUN_00300000(param_1 + 0x254,DAT_00801000,iVar1,uVar2);",
             "  return;",
             "}",
         ])
         out = rewrite(src, {0x00300000: "UpdateTimer"})
         self.assertIn("self->f_160->f_1c = arg2;", out)
-        self.assertIn("UpdateTimer(&self->f_254,g_00401000,actorId,f24);", out)
+        self.assertIn("UpdateTimer(&self->f_254,g_00801000,actorId,f24);", out)
         self.assertIn("u32 f24;", out)
         self.assertNotRegex(out, r"param_|undefined|DAT_|iVar|uVar")
         self.assertIn("func_00200000(int self,u32 arg2)", out)

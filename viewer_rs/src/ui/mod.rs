@@ -1,6 +1,9 @@
 //! Shared UI helpers: text views with syntax colouring, JSON tree, images.
 
+pub mod asset_jobs;
 pub mod panels;
+pub mod shell;
+pub mod tour;
 
 use std::collections::HashMap;
 
@@ -428,8 +431,8 @@ pub fn image_pane(
     }
     let scroll = ui.input(|i| i.smooth_scroll_delta.y);
     if response.hovered() && scroll != 0.0 {
-        let factor = if scroll > 0.0 { 1.15 } else { 1.0 / 1.15 };
-        state.zoom = (state.zoom * factor).clamp(0.02, 16.0);
+        let pointer = ui.input(|i| i.pointer.hover_pos());
+        wheel_zoom(&mut state.zoom, &mut state.offset, scroll, rect.center(), pointer);
         state.fit = false;
     }
     if response.double_clicked() {
@@ -442,6 +445,26 @@ pub fn image_pane(
     let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     painter.image(handle.id(), draw_rect, uv, egui::Color32::WHITE);
     response
+}
+
+/// Mouse-wheel zoom for 2D views drawn at `origin + offset` with scale `zoom`.
+///
+/// egui spreads one wheel notch over several frames of `smooth_scroll_delta`, so the factor
+/// follows the distance scrolled (about 10% per notch) instead of a fixed step per frame, which
+/// used to jump from very close to very far in one notch. The point under the pointer stays put.
+pub fn wheel_zoom(zoom: &mut f32, offset: &mut egui::Vec2, scroll: f32, origin: egui::Pos2,
+                  pointer: Option<egui::Pos2>) {
+    let old = *zoom;
+    let new = (old * wheel_zoom_factor(scroll)).clamp(0.02, 16.0);
+    if let Some(p) = pointer {
+        let centre = origin + *offset;
+        *offset = (p - origin) - (p - centre) * (new / old);
+    }
+    *zoom = new;
+}
+
+pub fn wheel_zoom_factor(scroll: f32) -> f32 {
+    (scroll * 0.002).exp()
 }
 
 /// Waveform drawn straight onto the painter.
@@ -474,17 +497,28 @@ pub fn waveform(
         );
         return response;
     }
-    let step = (rect.width() - 8.0) / mins.len() as f32;
+    // One filled rect per whole pixel column, each spanning the min/max of the
+    // bins it covers: no sub-pixel line positions, so no anti-aliasing seams.
+    let left = rect.left() + 4.0;
+    let columns = ((rect.width() - 8.0).floor() as usize).max(1);
     let scale = rect.height() * 0.42;
-    let stroke = egui::Stroke::new(1.0, theme::INFO);
-    for (i, (lo, hi)) in mins.iter().zip(maxs.iter()).enumerate() {
-        let x = rect.left() + 4.0 + i as f32 * step;
-        painter.line_segment(
-            [
-                egui::pos2(x, mid - hi * scale),
-                egui::pos2(x, (mid - lo * scale).max(mid - hi * scale + 1.0)),
-            ],
-            stroke,
+    let bins = mins.len().min(maxs.len());
+    for c in 0..columns {
+        let from = c * bins / columns;
+        let to = (((c + 1) * bins).div_ceil(columns)).clamp(from + 1, bins);
+        let mut lo = f32::MAX;
+        let mut hi = f32::MIN;
+        for i in from..to {
+            lo = lo.min(mins[i]);
+            hi = hi.max(maxs[i]);
+        }
+        let x = (left + c as f32).round();
+        let top = mid - hi * scale;
+        let bottom = (mid - lo * scale).max(top + 1.0);
+        painter.rect_filled(
+            egui::Rect::from_min_max(egui::pos2(x, top), egui::pos2(x + 1.0, bottom)),
+            0.0,
+            theme::INFO,
         );
     }
     if let Some(fraction) = playhead {
@@ -529,3 +563,92 @@ pub fn waveform_seek_fraction(response: &egui::Response) -> Option<f32> {
 
 pub type LayoutCache = HashMap<usize, egui::text::LayoutJob>;
 
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::*;
+
+    #[test]
+    fn a_wheel_notch_zooms_the_same_however_it_is_split_into_frames() {
+        let whole = wheel_zoom_factor(50.0);
+        let split = wheel_zoom_factor(20.0) * wheel_zoom_factor(20.0) * wheel_zoom_factor(10.0);
+        assert!((whole - split).abs() < 1e-5);
+        assert!(whole > 1.05 && whole < 1.2, "one notch should be a small step, got {whole}");
+    }
+
+    #[test]
+    fn the_point_under_the_pointer_stays_put() {
+        let (origin, pointer) = (egui::pos2(100.0, 100.0), egui::pos2(160.0, 70.0));
+        let (mut zoom, mut offset) = (2.0, egui::vec2(10.0, -5.0));
+        let before = (pointer - (origin + offset)) / zoom; // layout point under the pointer
+        wheel_zoom(&mut zoom, &mut offset, -120.0, origin, Some(pointer));
+        let after = (pointer - (origin + offset)) / zoom;
+        assert!((before - after).length() < 1e-3);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// keyboard navigation for lists
+// ---------------------------------------------------------------------------
+
+/// Up/Down/PageUp/PageDown/Home/End over a list: the newly selected item and its
+/// row, or `None` when no navigation key was pressed (or a text field has focus).
+pub fn list_nav<T: PartialEq + Clone>(ctx: &egui::Context, list: &[T], selected: Option<&T>) -> Option<(T, usize)> {
+    if list.is_empty() || ctx.egui_wants_keyboard_input() {
+        return None;
+    }
+    let (up, down, page_up, page_down, home, end) = ctx.input(|i| {
+        (
+            i.key_pressed(egui::Key::ArrowUp),
+            i.key_pressed(egui::Key::ArrowDown),
+            i.key_pressed(egui::Key::PageUp),
+            i.key_pressed(egui::Key::PageDown),
+            i.key_pressed(egui::Key::Home),
+            i.key_pressed(egui::Key::End),
+        )
+    });
+    if !(up || down || page_up || page_down || home || end) {
+        return None;
+    }
+    let last = list.len() - 1;
+    let current = selected.and_then(|s| list.iter().position(|x| x == s));
+    let row = match current {
+        None => {
+            if end || up || page_up {
+                last
+            } else {
+                0
+            }
+        }
+        Some(c) => {
+            if home {
+                0
+            } else if end {
+                last
+            } else if down {
+                (c + 1).min(last)
+            } else if up {
+                c.saturating_sub(1)
+            } else if page_down {
+                (c + 15).min(last)
+            } else {
+                c.saturating_sub(15)
+            }
+        }
+    };
+    Some((list[row].clone(), row))
+}
+
+/// Lets a keyboard move scroll a table to the selected row.
+pub trait TableNav {
+    fn nav_scroll(self, row: Option<usize>) -> Self;
+}
+
+impl TableNav for egui_extras::TableBuilder<'_> {
+    fn nav_scroll(self, row: Option<usize>) -> Self {
+        match row {
+            Some(r) => self.scroll_to_row(r, None),
+            None => self,
+        }
+    }
+}

@@ -19,8 +19,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-if "../reference project" not in sys.path:
-    sys.path.insert(0, "../reference project")
+if "../3DS_Translate" not in sys.path:
+    sys.path.insert(0, "../3DS_Translate")
 
 AUDIO_OUT = PROJECT_ROOT / "game_audio"
 
@@ -290,9 +290,9 @@ def unpack_bcgrp(bcgrp_data: bytes, out_dir: Path) -> int:
 
 
 def read_romfs():
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     return f, ncch.romfs()
 
 

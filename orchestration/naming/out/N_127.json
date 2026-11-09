@@ -1,0 +1,1646 @@
+[
+ {
+  "address": "0x00361528",
+  "name": "maybe_Container_Map_DestroyLoopTail",
+  "signature": "void maybe_Container_Map_DestroyLoopTail(void)",
+  "params": {},
+  "summary": "Internal loop tail of a std::map/std::set teardown: erases the current red-black-tree node, releases the stored object through its virtual slot and then restores a 0x12C-byte frame. Ghidra labelled it Thumb but the bytes are ARM.",
+  "confidence": 0.3,
+  "evidence": "starts with bl 0x10EC14 (std_RbTree_EraseNode), loops back to 0x3614B0, ends add sp,sp,#0x12C / vpop {d8} / pop {r4-r8,sb,sl,fp,pc}; no caller in decomp/readable; declared mode thumb but ARM decode is clean (0 bad insns vs 10/56)."
+ },
+ {
+  "address": "0x00361640",
+  "name": "maybe_Container_Map_DestroyLoopTailB",
+  "signature": "void maybe_Container_Map_DestroyLoopTailB(void)",
+  "params": {},
+  "summary": "Second teardown tail of the same map/dictionary class: walks the remaining tree nodes with the rb-tree increment/decrement helpers, destroys the attached object at [node+0xC] and returns to the common epilogue at 0x3615BC.",
+  "confidence": 0.3,
+  "evidence": "bl 0x10EBE4, 0x115390 and 0x115358 (red-black-tree increment/decrement: they read the colour byte at node+0x10), object destroyed through [obj]->[+4]; ends b 0x3615F4; declared thumb, actual ARM."
+ },
+ {
+  "address": "0x00361724",
+  "name": "maybe_Container_Map_DestroyLoopTailC",
+  "signature": "void maybe_Container_Map_DestroyLoopTailC(void)",
+  "params": {},
+  "summary": "Third teardown tail for the map/dictionary class: erases the node, calls the stored object virtual destructor (+4) and jumps back to the shared epilogue.",
+  "confidence": 0.3,
+  "evidence": "bl 0x10EC14 (std_RbTree_EraseNode) then ldr r1,[r0,#4] / blx r1; b 0x3615BC; same code shape as 0x00361640; declared thumb, ARM is the sane decode."
+ },
+ {
+  "address": "0x00361C88",
+  "name": "Gfx_SpriteSceneNode_DeletingDtor",
+  "signature": "void Gfx_SpriteSceneNode_DeletingDtor(void* self)",
+  "params": {
+   "self": "sprite object"
+  },
+  "summary": "Deleting destructor (vtable slot 0) of the sprite/scene-node class: runs its destructor body and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x00764BB0 slot 0; body func_0028E6C4(); operator delete 0x0010F6CC; same table holds Gfx_Sprite_CreateInstance (0x005F2B54), Gfx_SpriteActor_PlayAnim and Field_SceneObject_* methods."
+ },
+ {
+  "address": "0x00361FC4",
+  "name": "maybe_Gfx_Sprite_InvokeEventHandler",
+  "signature": "u32 maybe_Gfx_Sprite_InvokeEventHandler(void* self)",
+  "params": {
+   "self": "sprite object"
+  },
+  "summary": "Calls the sprite scene-event handler: picks one of two callback pairs in the table at 0x0072840C depending on self->f_2A0 and invokes it with (self->f_2A0, self->f_2A4, self). Always returns 0.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00764BB0 slot 29; ldr r2,=0x0072840C then addne #4 / addeq #0xC; indirect blx with r0..r2 from the object; readable C func_00361FC4 returns 0 unconditionally."
+ },
+ {
+  "address": "0x003620B4",
+  "name": "maybe_Gfx_Sprite_DeleteThunk",
+  "signature": "void maybe_Gfx_Sprite_DeleteThunk(void)",
+  "params": {},
+  "summary": "Eight-byte tail thunk that jumps to the object-delete helper (0x0010F6CC); the preceding function has already released the sprite body.",
+  "confidence": 0.3,
+  "evidence": "only instruction is b 0x0010F6CC (operator delete dispatcher: checks r0, reloads the vtable from [r0-8], calls [vtable+4]); immediately precedes maybe_Field_SpriteObject_* helpers."
+ },
+ {
+  "address": "0x003627B8",
+  "name": "maybe_Actor2D_Ctor",
+  "signature": "void* maybe_Actor2D_Ctor(u32 owner, int* params, u32 arg3, u32 arg4)",
+  "params": {
+   "owner": "owner/outer object",
+   "params": "creation parameter block",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Constructs a small 2D actor/scene-node: allocates 0x4000000C bytes-worth of object through 0x0028E630, installs the class descriptor 0x00764D20, sets sub-descriptor at +0x22C and resets ids/flags/scales (0xFFFF, 0xFF, 0.0f).",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028E630 with size tag 0x4000000C; str r4,[r0] with r4=0x00764D20; str ip,[r0,#0x22C] with ip=r4+0x98; strh -1 at +0x298; vstr 0.0f at +0x2A8/+0x2AC; sibling ctor 0x00362B2C has the same shape."
+ },
+ {
+  "address": "0x00362B2C",
+  "name": "maybe_Actor2D_CtorWithSprite",
+  "signature": "void* maybe_Actor2D_CtorWithSprite(u32 owner, int* params, u32 arg3, u32 arg4)",
+  "params": {
+   "owner": "owner/outer object",
+   "params": "creation parameter block",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Constructs the larger 2D actor variant: allocates through 0x0028EE8C, installs class descriptor 0x00764DDC (+0xD4 sub-descriptor at +0x258) and initialises 0x2C8..0x2F4 from the default blocks at 0x007E7000/0x007E7024.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028EE8C, str r4,[r0] with r4=0x00764DDC, add ip,r4,#0xD4 stored at +0x258, then three 3-word copies from 0x7E7000 and 0x7E7024; matches the 2D actor field layout used by 0x00363384."
+ },
+ {
+  "address": "0x00362BEC",
+  "name": "maybe_Actor2DNode_DeletingDtor",
+  "signature": "void maybe_Actor2DNode_DeletingDtor(void* self)",
+  "params": {
+   "self": "2D actor object"
+  },
+  "summary": "Deleting destructor (slot 0) of the 2D actor class; runs 0x0028EFB4 (its destructor body) and frees the object.",
+  "confidence": 0.55,
+  "evidence": "vtable 0x00764DE4 slot 0; same table holds maybe_Actor2D_NotifyObjectHandle and Gfx_Node_* methods; body func_0028EFB4(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x00363384",
+  "name": "maybe_Field_Actor_UpdateBreakState",
+  "signature": "u32 maybe_Field_Actor_UpdateBreakState(void* self)",
+  "params": {
+   "self": "field actor"
+  },
+  "summary": "Per-frame update of the actor break/visibility interface: returns 0 while a timer byte (+0x51) is set; otherwise if the actor has a pending break (+0x2C8) and 0x00669DD4 reports a live model, calls vtable+0x40 and vtable+0x58 with parameter 4 and returns 1.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00765044 slot 2, whose other slots are maybe_Field_Actor_SwitchVisibilityState and Field_Actor_PlayBreakEffect; readable C compares f_51, f_2C8, calls func_00669DD4 then (**(*self+0x40))(self,4) and (**(*self+0x58))(self,4)."
+ },
+ {
+  "address": "0x00363E3C",
+  "name": "maybe_Model_AnimInstance_CreateTail",
+  "signature": "void maybe_Model_AnimInstance_CreateTail(void)",
+  "params": {},
+  "summary": "Tail fragment of an actor model setup: creates a sprite animation instance and stores it in self->f_B8.",
+  "confidence": 0.3,
+  "evidence": "bl 0x002D1F28 (Anim_Instance_CtorSprite) then str r0,[r6,#0xB8]; no prologue, continues the function that owns 0x00363Dxx."
+ },
+ {
+  "address": "0x00363E68",
+  "name": "maybe_Field_Actor_SetupModelParts",
+  "signature": "void maybe_Field_Actor_SetupModelParts(void)",
+  "params": {},
+  "summary": "Continuation of the same model setup: applies the animation template, binds the model to the actor, applies the placement size and creates the colour animator and render-part descriptors.",
+  "confidence": 0.4,
+  "evidence": "bl 0x002D1304 (Anim_Instance_ApplyTemplate), 0x005E7650, 0x005F3500 (Field_SceneObject_SetModelSize), 0x0029E41C, 0x0028E2A0 (Gfx_CreateFColAnimator); no prologue, ends in the caller frame."
+ },
+ {
+  "address": "0x00364640",
+  "name": "maybe_Field_ActorPart_DtorBody",
+  "signature": "void maybe_Field_ActorPart_DtorBody(void* self)",
+  "params": {
+   "self": "actor part"
+  },
+  "summary": "Destructor body of a small actor sub-part/attachment: tells the owner actor (+0x28) to detach it through the owner vtable+0x84 with the part descriptor g_0036466C and caches the owner model state at +0x2C.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765244 slot 1 (slot 0 is its deleting destructor 0x003646EC); (**(code**)(*self->f_28+0x84))(self->f_28,&g_0036466C); self->f_2C = self->f_28->f_37C."
+ },
+ {
+  "address": "0x003646EC",
+  "name": "maybe_Field_ActorPart_DeletingDtor",
+  "signature": "void maybe_Field_ActorPart_DeletingDtor(void* self)",
+  "params": {
+   "self": "actor part"
+  },
+  "summary": "Deleting destructor (slot 0) of that actor sub-part: runs 0x00193E44 (base destructor) and frees the object.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00765244 slot 0; body func_00193E44(); delete 0x0010F6CC; same two-slot layout as the other action/part classes."
+ },
+ {
+  "address": "0x00364A14",
+  "name": "maybe_Field_SceneNode_BroadcastChildTransform",
+  "signature": "void maybe_Field_SceneNode_BroadcastChildTransform(void* self, u32* outTransform, u32 transform, u32 arg4)",
+  "params": {
+   "self": "scene node",
+   "outTransform": "accumulated transform (in/out)",
+   "transform": "source transform",
+   "arg4": "extra argument"
+  },
+  "summary": "Walks the two intrusive child lists (self+0x4 and self+0x5C), and for every child whose flag bit 0 is set merges its transform into the accumulator using 0x0053CD1C.",
+  "confidence": 0.45,
+  "evidence": "two identical for-loops over list heads at +0x10/+0x5C calling func_0053CD1C(arg3, value, child->f_8, arg4); flag test is (child->f_11 & 1)."
+ },
+ {
+  "address": "0x00364B94",
+  "name": "maybe_Container_IntrusiveList_InsertNode",
+  "signature": "void maybe_Container_IntrusiveList_InsertNode(void* self, void* owner, u32* value)",
+  "params": {
+   "self": "node to insert",
+   "owner": "list owner",
+   "value": "two-word value to copy"
+  },
+  "summary": "Splices the node embedded in self into the intrusive list anchored at owner+0xC4 and stores the two-word value (ptr + flags) into the node.",
+  "confidence": 0.5,
+  "evidence": "bl 0x001235A4 (doubly-linked list splice: writes node->next/prev around the neighbours) with owner+0xC4 on both sides and &self->f_B8 as node; then self->f_CC / self->f_C4 / *(self+0xC8) are set from the value."
+ },
+ {
+  "address": "0x00365C18",
+  "name": "maybe_Container_Queue_PopFront",
+  "signature": "u32 maybe_Container_Queue_PopFront(void* self)",
+  "params": {
+   "self": "queue"
+  },
+  "summary": "Pops the first element of a fixed-stride queue: returns the first word, shifts the remaining 0x1C bytes down by one slot and clears the count at +0x20.",
+  "confidence": 0.55,
+  "evidence": "result = *(self+4); memmove(self+4, self+8, 0x1C) (func_0011CD00); self->f_20 = 0; vtable 0x00780648 slot 1."
+ },
+ {
+  "address": "0x00366284",
+  "name": "Ui_JewelShopWindow_DeletingDtor",
+  "signature": "void Ui_JewelShopWindow_DeletingDtor(void* self)",
+  "params": {
+   "self": "jewel shop window"
+  },
+  "summary": "Deleting destructor (slot 1) of the jewel-shop window; runs the window destructor body 0x00366294/0x00366298 and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x007652F0 slot 1, whose other slots are Ui_JewelShopWindow_InitPanes / Ui_Window_LayoutRows; body func_00366294() (the local dtor entry that installs vptr 0x007652F0 and falls into 0x00366298, already named Ui_JewelShopWindow_Dtor by N_015); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x00366910",
+  "name": "maybe_Gfx_EffectSlot_ResetPlayback",
+  "signature": "void maybe_Gfx_EffectSlot_ResetPlayback(void* self)",
+  "params": {
+   "self": "effect slot"
+  },
+  "summary": "Resets the nested scene/effect parameter block at self+0x26C to its defaults (0x0017D0DC writes the default ids, floats and flags) and raises the two \"restart\" flags at +0x2C8 and +0x2F4.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00765400 slot 20, whose table also holds Gfx_EffectPart_* and Field_SceneNode_CreateMapInstance; body func_0017D0DC(&self->f_26C) (default-value writer for a 0x6C-byte block); self->f_2C8 = 1; self->f_2F4 = 1."
+ },
+ {
+  "address": "0x00367F94",
+  "name": "maybe_Field_SceneObject_CtorWithDefaults",
+  "signature": "void* maybe_Field_SceneObject_CtorWithDefaults(u32 owner, int* params, u32 flags)",
+  "params": {
+   "owner": "owner object",
+   "params": "creation parameters",
+   "flags": "creation flags (OR 0x20000000)"
+  },
+  "summary": "Constructs a scene object with default part/colour data: allocates through 0x005F8174 with flag 0x20000000, installs the class descriptor embedded at 0x00368094, copies the 8-word default tables at 0x0036809C twice and fills the id/flag/scale fields.",
+  "confidence": 0.5,
+  "evidence": "bl 0x005F8174(arg1,local,arg3|0x20000000); *result = g_00368094 (descriptor); two 8-word copies from puVar1 = g_0036809C; result[0xB4] = 0xFFFFF800; result[0xB6] = -1; *(u8*)(result+0x2F5)=1."
+ },
+ {
+  "address": "0x003680B4",
+  "name": "maybe_Field_SceneObject_DeletingDtor",
+  "signature": "void maybe_Field_SceneObject_DeletingDtor(void** self, u32 vtable)",
+  "params": {
+   "self": "scene object",
+   "vtable": "descriptor to install before destruction"
+  },
+  "summary": "Deleting destructor: stores the base descriptor into the object, calls the scene-object destructor 0x005F8528 and frees the memory.",
+  "confidence": 0.5,
+  "evidence": "*arg1 = arg2; func_005F8528(); func_0010F6CC(); the sibling 0x005F8528 is the scene-object cleanup used together with 0x005F8174 above."
+ },
+ {
+  "address": "0x00368934",
+  "name": "maybe_Ui_Window_UpdateActorChild",
+  "signature": "void maybe_Ui_Window_UpdateActorChild(void* self)",
+  "params": {
+   "self": "UI window with a 3D actor child"
+  },
+  "summary": "Window virtual (slot 4) that ticks the attached 3D actor (+0x98) through its own virtual and then updates the embedded actor-node block at +0x184.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00765508 slot 4 (neighbours Ui_LoadingWindow_Init, Ui_Window_LayoutRows, Ui_Widget_UpdateAnimatedChildren); body (*self->f_98->f_2C)(); func_003DFEC4(&self->f_184)."
+ },
+ {
+  "address": "0x0036898C",
+  "name": "maybe_Ui_Window_ApplyActorProjection",
+  "signature": "void maybe_Ui_Window_ApplyActorProjection(void* self, u32 unused, u32 unused2, void* outMatrix, u32 mode)",
+  "params": {
+   "self": "UI window with a 3D actor child",
+   "unused": "",
+   "unused2": "",
+   "outMatrix": "matrix to fill",
+   "mode": "projection variant (2/3)"
+  },
+  "summary": "Window virtual (slot 7) that builds a projection matrix for the attached 3D actor: reads the node transform, selects one of two stored frustum constants for mode 2/3, fills the matrix and applies it to the node.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765508 slot 7 (neighbours Ui_Widget_UpdateAnimatedChildren and maybe_Ui_Widget_ApplyScreenTransform); func_0065DB8C(&local,self+0x98); float constants 0x00368AB8..0x00368ADC; func_00125558(arg4,&matrix); (*piVar1)[0x30](piVar1,arg4,1)."
+ },
+ {
+  "address": "0x00368F58",
+  "name": "maybe_Ui_Window_LayoutRowSlot",
+  "signature": "void maybe_Ui_Window_LayoutRowSlot(void* self, void* rowParams, void* row)",
+  "params": {
+   "self": "UI window",
+   "rowParams": "row parameter block",
+   "row": "row/child object"
+  },
+  "summary": "Lays out one row of a window: publishes the row parameter block into row[0x183], asks the row to place itself through vtable+0x24 using the window actor block at self+0x98, then restores the pointer.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765558 slot 6 (neighbours Ui_GuideWindow_InitPanes / RefreshMemberRows / Ui_Window_LayoutRows); arg3[0x183] = arg2+4; (*(*arg3+0x24))(arg3,*(arg2+4),arg1+0x98); arg3[0x183]=0."
+ },
+ {
+  "address": "0x00369300",
+  "name": "maybe_Anim_Sequence_CreateAndPlaySeTail",
+  "signature": "void maybe_Anim_Sequence_CreateAndPlaySeTail(void)",
+  "params": {},
+  "summary": "Tail of a four-iteration loop that creates animation sequences and plays a sound effect per slot, then restores the frame.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010B2C4 (Anim_Sequence_CtorBase), bl 0x001EBC68 (Sound_PlaySeById), cmp r4,#4 / blt back to 0x369284, epilogue add sp,#4 / vpop {d8} / pop {r4-r8,sb,sl,fp,pc}; starts two bytes off (0x369300 is not an ARM instruction boundary)."
+ },
+ {
+  "address": "0x00369370",
+  "name": "maybe_Field_Timer_ResetToDefaults",
+  "signature": "void maybe_Field_Timer_ResetToDefaults(void* self)",
+  "params": {
+   "self": "timer/gadget object"
+  },
+  "summary": "Releases the running gadget command at +0x54 and copies the two default words from the constant block at 0x00369394 into self+8/+0xC.",
+  "confidence": 0.4,
+  "evidence": "if (self->f_54) func_004A43CC(); then reads g_00369394->f_48/f_4C and stores at self+8 / self+0xC."
+ },
+ {
+  "address": "0x0036AD6E",
+  "name": "maybe_Ui_StampBookWindow_SetupPageRows",
+  "signature": "void maybe_Ui_StampBookWindow_SetupPageRows(void* self)",
+  "params": {
+   "self": "stamp-book window"
+  },
+  "summary": "Builds the stamp-book page: refreshes the two child list windows (Ui_List_SetupRows), sets the message text (Ui_GuideWindow_SetTextFromMessage), starts the pooled page effect and links the child windows back to the window. Real code starts at 0x0036AD70 (ARM); the batch address is 2 bytes early.",
+  "confidence": 0.4,
+  "evidence": "bl 0x003A8D80 (maybe_Ui_List_SetupRows), 0x003A8948 (maybe_Ui_GuideWindow_SetTextFromMessage), 0x003A89D4 (maybe_Ui_Effect_InitPooled), Ui_GetCore 0x006F229C; fields 0x44/0x48/0x4C are the child windows; ARM decodes coherently only from 0x36AD70."
+ },
+ {
+  "address": "0x0036B238",
+  "name": "Ui_StampBookWindow_DeletingDtor",
+  "signature": "void Ui_StampBookWindow_DeletingDtor(void* self)",
+  "params": {
+   "self": "stamp-book window"
+  },
+  "summary": "Deleting destructor (slot 1) of the stamp-book window; runs 0x0036B248 (window destructor) and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x007655A4 slot 1 (slot 0 is maybe_Ui_StampBookWindow_Dtor, slot 2 Ui_GuideWindow_UpdateState); body func_0036B248(); b 0x0010F6CC."
+ },
+ {
+  "address": "0x0036B5D4",
+  "name": "maybe_Ui_NodeList_CreateChildSlots",
+  "signature": "void maybe_Ui_NodeList_CreateChildSlots(void* self, u16* text)",
+  "params": {
+   "self": "UI node list",
+   "text": "UTF-16 text to measure"
+  },
+  "summary": "Creates eighteen child nodes (ids 0..8 and 10..18 combined with the owner id in the high half) and then measures the supplied UTF-16 string.",
+  "confidence": 0.4,
+  "evidence": "two loops calling 0x001A6680(self, index | self->f_28<<16, &g_0036B9C4) for 0..8 and 10..18; tail b 0x00100B74, which is the u16-strlen helper (counts halfwords to the NUL terminator)."
+ },
+ {
+  "address": "0x0036C304",
+  "name": "Field_ActorAction_DeletingDtor",
+  "signature": "void Field_ActorAction_DeletingDtor(void* self)",
+  "params": {
+   "self": "actor action"
+  },
+  "summary": "Deleting destructor (slot 0) of the generic field actor-action class; runs the shared action destructor 0x00193E44 and frees the object.",
+  "confidence": 0.55,
+  "evidence": "vtable 0x0076563C slot 0 (neighbours maybe_Actor_UpdateTurnAnimation, maybe_Field_HorseAction_CommitTransform); body func_00193E44(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x0036C3C0",
+  "name": "maybe_Field_HorseAction_CheckRideState",
+  "signature": "u32 maybe_Field_HorseAction_CheckRideState(void* self, float distance)",
+  "params": {
+   "self": "horse action",
+   "distance": "distance to target (s0)"
+  },
+  "summary": "Decides whether the horse action may continue: inspects the owner actor flags at +0x28C/+0x290/+0x2CC, the \"blocked\" byte +0x276, calls 0x00669338 and compares the computed distance against +0x2C. Returns -1 (cancel), 3 (special) or 1 (continue).",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765678 slot 12 (same table as Field_HorseAction_Start/Stop/Update); readable C mixes the three flag bytes and returns 0xFFFFFFFF / 3 / 1."
+ },
+ {
+  "address": "0x0036C580",
+  "name": "Field_HorseAction_DeletingDtor",
+  "signature": "void Field_HorseAction_DeletingDtor(void* self)",
+  "params": {
+   "self": "horse action"
+  },
+  "summary": "Deleting destructor (slot 0) of the horse action; runs 0x00193E44 and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x00765678 slot 0, whose slots 1-3 are Field_HorseAction_Start/Stop/Update; body func_00193E44(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x0036CC64",
+  "name": "maybe_Field_HorseRideAction_DeletingDtor",
+  "signature": "void maybe_Field_HorseRideAction_DeletingDtor(void* self)",
+  "params": {
+   "self": "horse ride action"
+  },
+  "summary": "Deleting destructor (slot 0) of the horse ride/orientation action variant; runs 0x00193E44 and frees the object.",
+  "confidence": 0.55,
+  "evidence": "vtable 0x007656B8 slot 0, whose slots 1-3 are Field_HorseAction_UpdateRideOrientation / Sound_Emitter_StopHandleSlot / Field_HorseAction_UpdateMotion."
+ },
+ {
+  "address": "0x0036CC74",
+  "name": "maybe_Field_ActorAction_OnStateNotify",
+  "signature": "void maybe_Field_ActorAction_OnStateNotify(void* self, void* notify)",
+  "params": {
+   "self": "actor action",
+   "notify": "notification record"
+  },
+  "summary": "Action virtual (slot 10) invoked when the owner changes state: ticks the base action and, if the notification is active while the actor is not in battle and still has HP, requests motion 2 through the actor motion component (0x005E7848 -> 0x002A891C).",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765678 slot 10 and 0x007656F0 slot 10; body func_0036D150(); if (notify->f_10 && actor->f_276==0 && actor->f_280>0) func_005E7848(actor,2,0); 0x005E7848 forwards to the motion component at actor+0x60 (0x002A891C, which compares the current motion byte at +0x39)."
+ },
+ {
+  "address": "0x0036CCC4",
+  "name": "maybe_Field_ActorAction_SyncToOwner",
+  "signature": "void maybe_Field_ActorAction_SyncToOwner(void* self)",
+  "params": {
+   "self": "actor action"
+  },
+  "summary": "Action virtual that asks the owner actor for its current value (owner vtable+0x30) and forwards it to the owner through vtable+0x84 (same slot used to attach/detach parts).",
+  "confidence": 0.4,
+  "evidence": "vtable 0x007656F0 slot 1; uVar1 = (**(*arg1+0x30))(); (**(code**)(*piVar2+0x84))(piVar2,uVar1) where piVar2 = arg1[10] (the owner actor)."
+ },
+ {
+  "address": "0x0036CE84",
+  "name": "maybe_Field_ActorTurnAction_DeletingDtor",
+  "signature": "void maybe_Field_ActorTurnAction_DeletingDtor(void* self)",
+  "params": {
+   "self": "turn action"
+  },
+  "summary": "Deleting destructor (slot 0) of the turn-in-place action class; runs 0x00193E44 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x007656F0 slot 0, whose slot 3 is maybe_Actor_UpdateTurnState; body func_00193E44(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x0036D174",
+  "name": "maybe_Field_ActorAction_CheckFacingTarget",
+  "signature": "u64 maybe_Field_ActorAction_CheckFacingTarget(void* self, u32 mode, void* target)",
+  "params": {
+   "self": "actor action",
+   "mode": "notification type (4 = position)",
+   "target": "target position record"
+  },
+  "summary": "Shared action virtual (slot 6 in the horse/turn action vtables) that measures the target position against the owner actor orientation and sets the \"in front\"/\"behind\" bits (1 or 4) in the actor motion flags at +0x290.",
+  "confidence": 0.45,
+  "evidence": "appears in five action vtables (0x007625D8, 0x00765678, 0x007656B8, 0x007656F0, 0x00765730); body computes a dot product from actor quaternion fields +0x8C/+0x90/+0x94/+0x98 and target +0x10/+0x18, then ORs 1 or 4 into f_290; calls 0x00672E44 (float helper)."
+ },
+ {
+  "address": "0x0036D39C",
+  "name": "maybe_Field_TurnAction_DeletingDtor",
+  "signature": "void maybe_Field_TurnAction_DeletingDtor(void* self)",
+  "params": {
+   "self": "turn action"
+  },
+  "summary": "Deleting destructor (slot 0) of the turn-action class with vtable 0x00765730; runs 0x00193E44 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00765730 slot 0; body func_00193E44(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x0036DCF6",
+  "name": "maybe_Field_ActorAction_EpilogueTail",
+  "signature": "void maybe_Field_ActorAction_EpilogueTail(void)",
+  "params": {},
+  "summary": "Two-byte-off entry into the epilogue of the action update that ends at 0x0036DD08: loads the result word from [r4+0xC], releases the 0x480-byte frame and returns.",
+  "confidence": 0.3,
+  "evidence": "ARM decoding only becomes coherent from 0x36DCF4 (ldrlt r0,[r4,#8] / blt / ldr r0,[r4,#0xC] / add sp,sp,#0x480 / pop {r4,r5,r6,r7,r8,pc}); the batch address is inside the preceding ldrlt."
+ },
+ {
+  "address": "0x0036E566",
+  "name": "maybe_Field_ActorAction_AttachTail",
+  "signature": "void maybe_Field_ActorAction_AttachTail(void)",
+  "params": {},
+  "summary": "Two-byte-off fragment inside an action attach routine: calls a helper with the owner in r0, tests the result and fills node/flag fields before the shared epilogue.",
+  "confidence": 0.3,
+  "evidence": "coherent ARM only from 0x36E568 (mov r0,r7; bl 0x000B0442; cmp r0,#0; ...); writes [r4+0xD4]/[r8+8]/[r4+8] and the two bytes at +0x30/+0x31 of r6."
+ },
+ {
+  "address": "0x0036FB00",
+  "name": "Ui_SkillPanel_DeletingDtor",
+  "signature": "void Ui_SkillPanel_DeletingDtor(void* self)",
+  "params": {
+   "self": "skill panel"
+  },
+  "summary": "Deleting destructor (slot 1) of the skill panel; runs the panel destructor body 0x0036FB10/0x0036FB14 and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x00765790 slot 1, whose slot 4 is Ui_SkillPanel_InitPanes; body func_0036FB10() (installs vptr 0x00765790 and falls into 0x0036FB14, already named Ui_SkillPanel_Dtor by N_015); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x00370384",
+  "name": "Ui_PastPlaceWindow_Update",
+  "signature": "void Ui_PastPlaceWindow_Update(void* self)",
+  "params": {
+   "self": "past-place window"
+  },
+  "summary": "Per-frame update of the past-place window: advances the child actor, drives the fade/open animation counters and dispatches the pending row callback identified by self+0x124.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x007658A8 slot 5, between Ui_PastPlaceWindow_InitPanes (slot 4) and Ui_Window_LayoutRows (slot 6); body calls (*self->f_98->f_2C)(), advances f_128/f_130 and invokes the callback in the 0x18-stride array at +0x120."
+ },
+ {
+  "address": "0x00371508",
+  "name": "Field_ActorList_DeletingDtor",
+  "signature": "void Field_ActorList_DeletingDtor(void* self)",
+  "params": {
+   "self": "field actor list"
+  },
+  "summary": "Deleting destructor (slot 0) of the field actor list/filter class; runs 0x00193E44 and frees the object.",
+  "confidence": 0.55,
+  "evidence": "vtable 0x007658FC slot 0, whose other slots are Field_ActorList_ClearFlagByType / SendMessageByType / ForEachByType."
+ },
+ {
+  "address": "0x00371A18",
+  "name": "maybe_Field_ActorComponent_DeletingDtor",
+  "signature": "void maybe_Field_ActorComponent_DeletingDtor(void* self)",
+  "params": {
+   "self": "actor component"
+  },
+  "summary": "Deleting destructor (slot 0) of a small actor component table (0x00765930) whose other slots compute overlay positions and reset the Gfx actor component.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00765930 slot 0 (neighbours maybe_Ui_Actor_CalcOverlayPosition, maybe_Gfx_Actor_ResetComponent); body func_001E1B88(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x00371D8C",
+  "name": "maybe_Field_PlayerActor_ChangeMotionState",
+  "signature": "void maybe_Field_PlayerActor_ChangeMotionState(void* self)",
+  "params": {
+   "self": "player actor state object"
+  },
+  "summary": "Player-actor virtual (slot 12) that reacts to a motion state change: state 1 requests motion 0x17, state -1 requests motion 3 (both through 0x005E7848), and in both cases marks the state as applied at +0x78.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00765964 slot 12 (neighbours Field_Actor_ResetStep, Field_Actor_UpdateInputDirection, Model_ApplyFacingTilt); func_005E7848(actor,0x17,0) / (actor,3,0) then self->f_78 = 1; 0x005E7848 forwards to the motion component at actor+0x60."
+ },
+ {
+  "address": "0x00371DDC",
+  "name": "maybe_Field_PlayerActor_SetAttachmentA",
+  "signature": "void maybe_Field_PlayerActor_SetAttachmentA(void* self)",
+  "params": {
+   "self": "player actor state object"
+  },
+  "summary": "Player-actor virtual (slot 11): when the state byte at +0x74 is 0 it passes the attachment node &self->f_30 to the actor attachment slot (owner vtable+0x84, the same slot used to attach/detach parts) and clears the actor flag at +0x311.",
+  "confidence": 0.35,
+  "evidence": "vtable 0x00765964 slot 11; if (self->f_74 == 0) (**(code**)(*self->f_28+0x84))(self->f_28,&self->f_30); self->f_28->f_311 = 0; slot 11/10 hold the two 0x14-byte attachment nodes at self+0x30 and self+0x44."
+ },
+ {
+  "address": "0x00371E14",
+  "name": "maybe_Field_PlayerActor_SetAttachmentB",
+  "signature": "void maybe_Field_PlayerActor_SetAttachmentB(void* self)",
+  "params": {
+   "self": "player actor state object"
+  },
+  "summary": "Companion of slot 11 (slot 10): applies the second attachment node &self->f_44 through the actor attachment slot and sets the actor flag at +0x311.",
+  "confidence": 0.35,
+  "evidence": "vtable 0x00765964 slot 10; same shape as slot 11 but uses &self->f_44 and sets f_311 = 1."
+ },
+ {
+  "address": "0x00371F5C",
+  "name": "maybe_Field_PlayerActor_DeletingDtor",
+  "signature": "void maybe_Field_PlayerActor_DeletingDtor(void* self)",
+  "params": {
+   "self": "player actor"
+  },
+  "summary": "Deleting destructor (slot 0) of the player-controlled field actor class (vtable 0x00765964); runs 0x001E1B88 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00765964 slot 0; body func_001E1B88(); delete 0x0010F6CC; the same table holds Field_Actor_ResetStep and Field_Actor_UpdateInputDirection."
+ },
+ {
+  "address": "0x00372AF0",
+  "name": "Field_ActorBase_DeletingDtor",
+  "signature": "void Field_ActorBase_DeletingDtor(void* self)",
+  "params": {
+   "self": "field actor"
+  },
+  "summary": "Deleting destructor (slot 0) of the base field actor vtable; runs 0x001E1B88 (base destructor body) and frees the object.",
+  "confidence": 0.6,
+  "evidence": "vtable 0x007659E0 slot 0, whose slots 1-3 are maybe_Field_Actor_BeginStep / EndBehaviour / UpdateBehaviour and 10-11 the SetDirectionTarget pair; body func_001E1B88(); delete 0x0010F6CC."
+ },
+ {
+  "address": "0x00689348",
+  "name": "Field_RegisterActorClass_GmSkyBase2D",
+  "signature": "void Field_RegisterActorClass_GmSkyBase2D(void)",
+  "params": {},
+  "summary": "Creates the two named registry entries used by the GmSkyBase2D field actor class: a \"Body\" part entry (descriptor 0x00689504) and the class entry \"GmSkyBase2D\", linking each into the global name list and ensuring the shared default block is initialised.",
+  "confidence": 0.5,
+  "evidence": "inline strings \"Body\" @0x689504 and \"GmSkyBase2D\" @0x689528; list heads 0x007C466C/0x007C4658; bl 0x0011FE8C (popcount used for size rounding), 0x0011CFAC (round-up divide), 0x001235A4 (intrusive list splice); guard pair 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00689544",
+  "name": "Field_RegisterActorClass_GmMiniGameBoot3D",
+  "signature": "void Field_RegisterActorClass_GmMiniGameBoot3D(u32* self, u32 arg2)",
+  "params": {
+   "self": "registration record",
+   "arg2": "id/value stored at +0/+4"
+  },
+  "summary": "Registers two 3D gimmick classes by name: GmMiniGameBoot3DActor and GmBlacksmithStand3DActor, each as a named animation-part record created by 0x002A55EC and linked into the global registry.",
+  "confidence": 0.55,
+  "evidence": "inline strings \"GmMiniGameBoot3DActor\" @0x6895D0 and \"GmBlacksmithStand3DActor\" @0x6895F8; two bl 0x002A55EC(name) with objects 0x007C4B6C and 0x007C4B80; guard 0x007BE2D0."
+ },
+ {
+  "address": "0x00689770",
+  "name": "maybe_Os_EnsureDefaultValueInit_689770",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_689770(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under the guard at 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4.",
+  "confidence": 0.3,
+  "evidence": "only body is func_0010009C(0x007BE2D0) (test-and-set guard), stm 0x007BE2D4,{0,0}, release thunk 0x00101A94; the same block appears in hundreds of functions."
+ },
+ {
+  "address": "0x00689970",
+  "name": "Field_InitActorColorTables_7AC77E",
+  "signature": "void Field_InitActorColorTables_7AC77E(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "4-byte colour written first"
+  },
+  "summary": "Fills several built-in field-actor colour palettes (first table 0x007AC77E, plus 0x007A9B24/0x007A9B28 and 0x007A351C) with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by tint, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "106 strb instructions writing RGBA quadruples; ldr literals 0x007AC77E/0x007AC782/0x007A9B24/0x007A9B28/0x007A351C; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x00689CC4",
+  "name": "Field_InitActorColorTable_7AB190",
+  "signature": "void Field_InitActorColorTable_7AB190(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AB190 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AB190; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00689EBC",
+  "name": "maybe_Os_EnsureDefaultValueInit_689EBC",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_689EBC(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A3BF4 (not part of this routine)."
+ },
+ {
+  "address": "0x00689F20",
+  "name": "maybe_Os_EnsureDefaultValueInit_689F20",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_689F20(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A9154 (not part of this routine)."
+ },
+ {
+  "address": "0x00689F68",
+  "name": "Field_InitActorColorTable_7A9158",
+  "signature": "void Field_InitActorColorTable_7A9158(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A9158 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A9158; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068A11C",
+  "name": "Field_InitActorColorTable_7A931C",
+  "signature": "void Field_InitActorColorTable_7A931C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A931C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A931C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068A2D0",
+  "name": "Field_InitActorColorTable_7A3D74",
+  "signature": "void Field_InitActorColorTable_7A3D74(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A3D74 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A3D74; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068A4B0",
+  "name": "maybe_Os_EnsureDefaultValueInit_68A4B0",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68A4B0(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A3E60 (not part of this routine)."
+ },
+ {
+  "address": "0x0068A520",
+  "name": "maybe_Os_EnsureDefaultValueInit_68A520",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68A520(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body."
+ },
+ {
+  "address": "0x0068A564",
+  "name": "maybe_Field_RegisterActorPart_Plain",
+  "signature": "void maybe_Field_RegisterActorPart_Plain(void)",
+  "params": {},
+  "summary": "Registers the \"Plain\" actor part/animation record: initialises its default parameter block 0x007A6970 (-1,-1,0xFF), prepares the list head at 0x007C52CC and creates the named entry \"Plain\" through 0x002A55EC.",
+  "confidence": 0.45,
+  "evidence": "inline string \"Plain\" @0x68A75C; table 0x007A6970; list 0x007C52CC; bl 0x002A55EC; guard pair 0x007BE374/0x007BE378 (the shared named-part table)."
+ },
+ {
+  "address": "0x0068A798",
+  "name": "Field_InitActorColorTables_7A728C",
+  "signature": "void Field_InitActorColorTables_7A728C(void* self, u32 unused, u32 value)",
+  "params": {
+   "self": "actor variant block",
+   "unused": "r1 is overwritten with 0xFF",
+   "value": "value stored at self+0x44/+0x48"
+  },
+  "summary": "Initialises a whole actor colour-variant block: writes the per-instance palette at self+0x50 and the shared template palettes at 0x007A728C/0x007A9C54/0x007A9C58/0x007A6428 with the shipped RGBA template, plus the two default floats at self+0x10.",
+  "confidence": 0.55,
+  "evidence": "169 strb; ldr literals 0x007A728C, 0x007A9C54/0x007A9C58, 0x007A9D0C/0x007A9D10, 0x007A6428, 0x007A64B0; vldr/vstr at self+0x10; writes bytes at self+0x50..; guard 0x007BE2D0."
+ },
+ {
+  "address": "0x0068ADE8",
+  "name": "maybe_Anim_Clip_Init",
+  "signature": "void maybe_Anim_Clip_Init(void* self, u32 value, u32 unused)",
+  "params": {
+   "self": "clip/parameter object",
+   "value": "start value",
+   "unused": "not used"
+  },
+  "summary": "Initialises a small two-field animation/clip descriptor: stores the value at +0xC/+0x10, sets +0x14 to 0xFF and both limits at +4/+8 to 0x19, then ensures the shared default block.",
+  "confidence": 0.35,
+  "evidence": "str r2,[r0,#0xC]; stm r4,{r1,r3} with r4=r0+0x10; mov r1,#0x19 stored at +4 and +8; strh r2,[r0,#2]; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x0068AE78",
+  "name": "Field_InitActorColorTable_7A9590",
+  "signature": "void Field_InitActorColorTable_7A9590(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A9590 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A9590; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068B02C",
+  "name": "Field_InitActorColorTable_7A95D0",
+  "signature": "void Field_InitActorColorTable_7A95D0(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A95D0 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A95D0; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068B23C",
+  "name": "maybe_Os_Singleton_GetInstance_7C8608",
+  "signature": "void* maybe_Os_Singleton_GetInstance_7C8608(void* owner, u32 arg2)",
+  "params": {
+   "owner": "only used for the list head word",
+   "arg2": "object tag"
+  },
+  "summary": "Lazy singleton getter: initialises the intrusive list at 0x007C8608, allocates and links a node sized from 0x00837128, stores the two constant tables 0x007A86F4/0x007A9D80 and returns the singleton.",
+  "confidence": 0.3,
+  "evidence": "list head 0x007C8608 (self-linked), bl 0x0011CFAC (round-up divide), bl 0x001235A4 (list splice), guard pair 0x007BE37C/0x007BE380, tail b 0x00672404 (return helper); same shape as 0x00691C0C."
+ },
+ {
+  "address": "0x0068B460",
+  "name": "Field_InitActorColorTable_7A86F8",
+  "signature": "void Field_InitActorColorTable_7A86F8(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A86F8 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A86F8; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068B614",
+  "name": "Field_InitActorColorTable_7A879C",
+  "signature": "void Field_InitActorColorTable_7A879C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A879C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A879C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068B7DC",
+  "name": "Field_InitActorColorTable_7AA770",
+  "signature": "void Field_InitActorColorTable_7AA770(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AA770 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AA770; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068B9B4",
+  "name": "maybe_Os_EnsureDefaultValueInit_68B9B4",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68B9B4(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A6B68 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BA50",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BA50",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BA50(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A6AC4 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BABC",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BABC",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BABC(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A6988 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BB20",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BB20",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BB20(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A6BB0 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BB8C",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BB8C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BB8C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A6A0C (not part of this routine)."
+ },
+ {
+  "address": "0x0068BBF0",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BBF0",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BBF0(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A9958 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BC38",
+  "name": "Field_InitActorColorTable_7A995C",
+  "signature": "void Field_InitActorColorTable_7A995C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A995C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A995C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068BE3C",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BE3C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BE3C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007AC834 (not part of this routine)."
+ },
+ {
+  "address": "0x0068BE98",
+  "name": "maybe_Os_EnsureDefaultValueInit_68BE98",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68BE98(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007AAFC0 (not part of this routine)."
+ },
+ {
+  "address": "0x0068C04C",
+  "name": "Field_InitActorColorTable_7AB0AC",
+  "signature": "void Field_InitActorColorTable_7AB0AC(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AB0AC with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AB0AC; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068C214",
+  "name": "maybe_Os_EnsureDefaultValueInit_68C214",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68C214(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A34DC (not part of this routine)."
+ },
+ {
+  "address": "0x0068C274",
+  "name": "maybe_Os_EnsureDefaultValueInit_68C274",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68C274(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A3560 (not part of this routine)."
+ },
+ {
+  "address": "0x0068C2BC",
+  "name": "Field_RegisterCutSceneActorClasses",
+  "signature": "void Field_RegisterCutSceneActorClasses(u32* self, u32 arg2)",
+  "params": {
+   "self": "registration record",
+   "arg2": "value stored at self+0/+4"
+  },
+  "summary": "Registers the three cut-scene actor classes CutSceneActor, CutScenePlayerActor and ScriptGadgetActor as named records in the global actor registry.",
+  "confidence": 0.55,
+  "evidence": "inline strings \"CutSceneActor\" @0x68C364, \"CutScenePlayerActor\" @0x68C384, \"ScriptGadgetActor\" @0x68C398; three bl 0x002A55EC; lists 0x007C33D4/0x007C34C0/0x007C34E8."
+ },
+ {
+  "address": "0x0068C3BC",
+  "name": "Field_RegisterActorClass_PlayerActor2D",
+  "signature": "void Field_RegisterActorClass_PlayerActor2D(void* self)",
+  "params": {
+   "self": "registration record"
+  },
+  "summary": "Registers the PlayerActor2D class record: initialises its default parameters, creates the named entry and links it into the player actor registry.",
+  "confidence": 0.55,
+  "evidence": "inline string \"PlayerActor2D\" @0x68C4F0; bl 0x002A55EC; table 0x007A3F68/0x007A3F6C; list 0x007C4E3C."
+ },
+ {
+  "address": "0x0068C520",
+  "name": "Field_RegisterActorClass_PlayerActor3D",
+  "signature": "void Field_RegisterActorClass_PlayerActor3D(u32* self)",
+  "params": {
+   "self": "registration record"
+  },
+  "summary": "Registers the PlayerActor3D class record together with its default scale/parameter block at 0x007A3F7C and the shared 3D parameter block at 0x007A4058.",
+  "confidence": 0.55,
+  "evidence": "inline string \"PlayerActor3D\" @0x68C674; bl 0x002A55EC; tables 0x007A3F7C and 0x007A4058; list 0x007C4E50."
+ },
+ {
+  "address": "0x0068C6C8",
+  "name": "maybe_Os_EnsureDefaultValueInit_68C6C8",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68C6C8(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A4064 (not part of this routine)."
+ },
+ {
+  "address": "0x0068C7F0",
+  "name": "Field_InitActorColorTable_7A5E10",
+  "signature": "void Field_InitActorColorTable_7A5E10(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A5E10 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A5E10; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068C9D8",
+  "name": "maybe_Os_EnsureDefaultValueInit_68C9D8",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68C9D8(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A4070 (not part of this routine)."
+ },
+ {
+  "address": "0x0068CA24",
+  "name": "Field_InitActorColorTable_7A4080",
+  "signature": "void Field_InitActorColorTable_7A4080(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A4080 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A4080; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068CBD8",
+  "name": "Field_InitActorColorTable_7A412C",
+  "signature": "void Field_InitActorColorTable_7A412C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A412C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "53 strb instructions writing RGBA quadruples; first table literal 0x007A412C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068CDD8",
+  "name": "maybe_Os_EnsureDefaultValueInit_68CDD8",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68CDD8(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A5F68 (not part of this routine)."
+ },
+ {
+  "address": "0x0068CE24",
+  "name": "Field_InitActorColorTable_7A5F78",
+  "signature": "void Field_InitActorColorTable_7A5F78(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A5F78 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A5F78; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068CFDC",
+  "name": "Field_InitActorColorTable_7A7A08",
+  "signature": "void Field_InitActorColorTable_7A7A08(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7A08 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7A08; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068D1A0",
+  "name": "Field_InitActorColorTable_7A7A4C",
+  "signature": "void Field_InitActorColorTable_7A7A4C(void* self, u32 tint, u32 unused)",
+  "params": {
+   "self": "actor variant block that also receives a palette",
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "unused": "not used"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7A4C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7A4C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068D364",
+  "name": "Field_InitActorColorTable_7A7B94",
+  "signature": "void Field_InitActorColorTable_7A7B94(void* self, u32 tint, u32 unused)",
+  "params": {
+   "self": "actor variant block that also receives a palette",
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "unused": "not used"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7B94 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7B94; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068D528",
+  "name": "Field_InitActorColorTable_7A7BD4",
+  "signature": "void Field_InitActorColorTable_7A7BD4(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7BD4 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7BD4; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068D6EC",
+  "name": "Field_InitActorColorTable_7A7C18",
+  "signature": "void Field_InitActorColorTable_7A7C18(void* self, u32 tint, u32 unused)",
+  "params": {
+   "self": "actor variant block that also receives a palette",
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "unused": "not used"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7C18 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7C18; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068D8B0",
+  "name": "Field_InitActorColorTable_7A7C5C",
+  "signature": "void Field_InitActorColorTable_7A7C5C(void* self, u32 tint, u32 unused)",
+  "params": {
+   "self": "actor variant block that also receives a palette",
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "unused": "not used"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7C5C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7C5C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068DA74",
+  "name": "Field_InitActorColorTables_7A8040",
+  "signature": "void Field_InitActorColorTables_7A8040(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007A8040 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "156 strb instructions writing RGBA quadruples; first table literal 0x007A8040; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x0068DF10",
+  "name": "Field_RegisterActorClass_GmDiveMonster2D",
+  "signature": "void Field_RegisterActorClass_GmDiveMonster2D(void* record)",
+  "params": {
+   "record": "registration record (unused fields)"
+  },
+  "summary": "Registers the GmDiveMonster2D class: builds its default parameter block at 0x007AA260, creates the named entry and links it into the registry.",
+  "confidence": 0.55,
+  "evidence": "inline string \"GmDiveMonster2D\" @0x68E110; bl 0x002A55EC; named-part table 0x007BE374/0x007BE378; list 0x007C53BC."
+ },
+ {
+  "address": "0x0068E158",
+  "name": "Field_InitActorColorTable_7AA270",
+  "signature": "void Field_InitActorColorTable_7AA270(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AA270 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AA270; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068E30C",
+  "name": "Field_InitActorColorTable_7A63AC",
+  "signature": "void Field_InitActorColorTable_7A63AC(void)",
+  "params": {},
+  "summary": "Fills the built-in field-actor colour palette at 0x007A63AC with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor. The declared body begins with the outlined guard for 0x007BE2D4; the table write is the inlined fast path that follows it in the same Ghidra body.",
+  "confidence": 0.55,
+  "evidence": "62 strb instructions writing RGBA quadruples; first table literal 0x007A63AC; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068E51C",
+  "name": "maybe_Os_EnsureDefaultValueInit_68E51C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68E51C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A8AC4 (not part of this routine)."
+ },
+ {
+  "address": "0x0068E598",
+  "name": "maybe_Os_EnsureDefaultValueInit_68E598",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68E598(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A36B4 (not part of this routine)."
+ },
+ {
+  "address": "0x0068E5FC",
+  "name": "maybe_Os_EnsureDefaultValueInit_68E5FC",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68E5FC(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A63B8 (not part of this routine)."
+ },
+ {
+  "address": "0x0068E680",
+  "name": "maybe_Os_EnsureDefaultValueInit_68E680",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68E680(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A707C (not part of this routine)."
+ },
+ {
+  "address": "0x0068E6C8",
+  "name": "Field_InitActorColorTable_7A708C",
+  "signature": "void Field_InitActorColorTable_7A708C(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A708C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A708C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068E8B8",
+  "name": "Field_InitActorColorTable_7A7600",
+  "signature": "void Field_InitActorColorTable_7A7600(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7600 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7600; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068EA7C",
+  "name": "Field_RegisterActorClass_GmBeeRider2D",
+  "signature": "void Field_RegisterActorClass_GmBeeRider2D(void)",
+  "params": {},
+  "summary": "Registers the GmBeeRider2D class with its default parameters at 0x007A390C and named record in the global registry.",
+  "confidence": 0.55,
+  "evidence": "inline string \"GmBeeRider2D\" @0x68EC78; bl 0x002A55EC; table 0x007A390C; list 0x007C470C."
+ },
+ {
+  "address": "0x0068ECB4",
+  "name": "Field_RegisterActorClass_GmHellkacha2D",
+  "signature": "void Field_RegisterActorClass_GmHellkacha2D(void)",
+  "params": {},
+  "summary": "Registers the GmHellkacha2D class with its default parameters at 0x007A3954 and named record in the global registry.",
+  "confidence": 0.55,
+  "evidence": "inline string \"GmHellkacha2D\" @0x68EEB0; bl 0x002A55EC; table 0x007A3954; list 0x007C4784."
+ },
+ {
+  "address": "0x0068EEEC",
+  "name": "Field_RegisterActorClass_GmWaterfall2D",
+  "signature": "void Field_RegisterActorClass_GmWaterfall2D(void)",
+  "params": {},
+  "summary": "Registers the GmWaterfall2D class with its default parameters at 0x007A38F4/0x007A39EC and named record in the global registry.",
+  "confidence": 0.55,
+  "evidence": "inline string \"GmWaterfall2D\" @0x68F0E4; bl 0x002A55EC; tables 0x007A38F4, 0x007A39EC; list 0x007C4360."
+ },
+ {
+  "address": "0x0068F128",
+  "name": "Field_RegisterRaceActorClasses",
+  "signature": "void Field_RegisterRaceActorClasses(u32* self, u32 arg2)",
+  "params": {
+   "self": "registration record",
+   "arg2": "value stored at self+0/+4"
+  },
+  "summary": "Registers the seven horse-race gimmick classes (GmRacePillar3DActor, GmRaceMud3DActor, GmRaceWood3DActor, GmRaceSlope3DActor, GmRaceHighRoad3DActor, GmRaceJumpRamp3DActor, GmRaceQuickItem3DActor) as named records.",
+  "confidence": 0.55,
+  "evidence": "seven inline class-name strings @0x68F240..0x68F2E4; seven bl 0x002A55EC calls; list heads 0x007C4AE0/0x007C4AF4/0x007C4B08."
+ },
+ {
+  "address": "0x0068F334",
+  "name": "Field_InitActorColorTables_7AC274",
+  "signature": "void Field_InitActorColorTables_7AC274(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007AC274 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "105 strb instructions writing RGBA quadruples; first table literal 0x007AC274; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x0068F67C",
+  "name": "Field_InitActorColorTable_7AC37C",
+  "signature": "void Field_InitActorColorTable_7AC37C(void* self, u32 tint, u32 unused)",
+  "params": {
+   "self": "actor variant block that also receives a palette",
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "unused": "not used"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AC37C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor. The declared body begins with the outlined guard for 0x007BE2D4; the table write is the inlined fast path that follows it in the same Ghidra body.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AC37C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068F858",
+  "name": "Field_InitActorColorTable_7A9028",
+  "signature": "void Field_InitActorColorTable_7A9028(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A9028 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A9028; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068FA0C",
+  "name": "Field_InitActorColorTable_7AE124",
+  "signature": "void Field_InitActorColorTable_7AE124(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AE124 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AE124; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068FC0C",
+  "name": "maybe_Os_EnsureDefaultValueInit_68FC0C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68FC0C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A3BE8 (not part of this routine)."
+ },
+ {
+  "address": "0x0068FC70",
+  "name": "maybe_Os_EnsureDefaultValueInit_68FC70",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_68FC70(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A911C (not part of this routine)."
+ },
+ {
+  "address": "0x0068FCB8",
+  "name": "Field_InitActorColorTable_7A9120",
+  "signature": "void Field_InitActorColorTable_7A9120(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A9120 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A9120; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x0068FE6C",
+  "name": "Field_InitActorColorTables_7AC3B4",
+  "signature": "void Field_InitActorColorTables_7AC3B4(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007AC3B4 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "156 strb instructions writing RGBA quadruples; first table literal 0x007AC3B4; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x006902F8",
+  "name": "Field_InitActorColorTables_7A8650",
+  "signature": "void Field_InitActorColorTables_7A8650(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007A8650 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "104 strb instructions writing RGBA quadruples; first table literal 0x007A8650; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x006906A0",
+  "name": "Field_InitActorColorTables_7A953C",
+  "signature": "void Field_InitActorColorTables_7A953C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007A953C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "104 strb instructions writing RGBA quadruples; first table literal 0x007A953C; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x006909CC",
+  "name": "Field_InitActorColorTable_7A96EC",
+  "signature": "void Field_InitActorColorTable_7A96EC(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A96EC with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "56 strb instructions writing RGBA quadruples; first table literal 0x007A96EC; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00690C68",
+  "name": "maybe_Os_EnsureDefaultValueInit_690C68",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_690C68(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007AE3B4 (not part of this routine)."
+ },
+ {
+  "address": "0x00690E18",
+  "name": "Field_InitActorColorTable_7AE6E4",
+  "signature": "void Field_InitActorColorTable_7AE6E4(void)",
+  "params": {},
+  "summary": "Fills the built-in field-actor colour palette at 0x007AE6E4 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor. The declared body begins with the outlined guard for 0x007BE2D4; the table write is the inlined fast path that follows it in the same Ghidra body.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AE6E4; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00691038",
+  "name": "Field_InitActorColorTable_7AA72C",
+  "signature": "void Field_InitActorColorTable_7AA72C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AA72C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007AA72C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x006911F8",
+  "name": "Field_InitActorColorTable_7AA7E0",
+  "signature": "void Field_InitActorColorTable_7AA7E0(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007AA7E0 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "53 strb instructions writing RGBA quadruples; first table literal 0x007AA7E0; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x006913F0",
+  "name": "maybe_Os_EnsureDefaultValueInit_6913F0",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_6913F0(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A4048 (not part of this routine)."
+ },
+ {
+  "address": "0x00691458",
+  "name": "maybe_Os_EnsureDefaultValueInit_691458",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_691458(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A982C (not part of this routine)."
+ },
+ {
+  "address": "0x006914A0",
+  "name": "Field_InitActorColorTable_7A9830",
+  "signature": "void Field_InitActorColorTable_7A9830(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A9830 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A9830; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00691654",
+  "name": "Field_InitActorColorTables_7A98A8",
+  "signature": "void Field_InitActorColorTables_7A98A8(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007A98A8 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "104 strb instructions writing RGBA quadruples; first table literal 0x007A98A8; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x00691984",
+  "name": "Field_InitActorColorTable_7A991C",
+  "signature": "void Field_InitActorColorTable_7A991C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A991C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A991C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00691B6C",
+  "name": "maybe_Os_EnsureDefaultValueInit_691B6C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_691B6C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A75F0 (not part of this routine)."
+ },
+ {
+  "address": "0x00691BCC",
+  "name": "maybe_Os_EnsureDefaultValueInit_691BCC",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_691BCC(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body."
+ },
+ {
+  "address": "0x00691C0C",
+  "name": "maybe_Os_Singleton_GetInstance_7E2164",
+  "signature": "void* maybe_Os_Singleton_GetInstance_7E2164(void)",
+  "params": {},
+  "summary": "Lazy singleton getter for the object at 0x007E2164: initialises the list head, allocates and links the node (size from 0x00837128), installs the two code pointers 0x00576CBC/0x00576E90 and returns it.",
+  "confidence": 0.3,
+  "evidence": "list head 0x007E2164, bl 0x0011CFAC, bl 0x001235A4, guard 0x007BE37C/0x007BE380, str r6/r7 (0x00576CBC/0x00576E90) into +0x10/+0x14, tail b 0x00672404."
+ },
+ {
+  "address": "0x00691DE4",
+  "name": "Field_InitActorColorTable_7ABF98",
+  "signature": "void Field_InitActorColorTable_7ABF98(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007ABF98 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007ABF98; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00691F98",
+  "name": "Field_InitActorColorTables_7AAF8C",
+  "signature": "void Field_InitActorColorTables_7AAF8C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007AAF8C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "104 strb instructions writing RGBA quadruples; first table literal 0x007AAF8C; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x006922B8",
+  "name": "Field_InitActorColorTables_7AB074",
+  "signature": "void Field_InitActorColorTables_7AB074(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007AB074 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "106 strb instructions writing RGBA quadruples; first table literal 0x007AB074; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x00692628",
+  "name": "maybe_Os_EnsureDefaultValueInit_692628",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_692628(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A4034 (not part of this routine)."
+ },
+ {
+  "address": "0x0069268C",
+  "name": "maybe_Os_EnsureDefaultValueInit_69268C",
+  "signature": "void maybe_Os_EnsureDefaultValueInit_69268C(void)",
+  "params": {},
+  "summary": "Outlined cold path of a function-local static: under guard 0x007BE2D0 it zero-initialises the shared 8-byte default value at 0x007BE2D4 (the same block is inlined in hundreds of functions); the following bytes in the Ghidra body are the caller's inlined fast path, not part of this routine.",
+  "confidence": 0.3,
+  "evidence": "bl 0x0010009C (test-and-set guard on 0x007BE2D0), stm 0x007BE2D4,{0,0}, tail b 0x00101A94 (release thunk); no other effect in the declared body. The caller-side fast path that follows in the same Ghidra body initialises the data table at 0x007A3558 (not part of this routine)."
+ },
+ {
+  "address": "0x006926E4",
+  "name": "Field_RegisterActorClass_EnemyMenuActor",
+  "signature": "void Field_RegisterActorClass_EnemyMenuActor(void)",
+  "params": {},
+  "summary": "Registers the EnemyMenuActor class (the enemy 3D model shown in the battle menu) with its parameters at 0x007A3774/0x007A37B8.",
+  "confidence": 0.55,
+  "evidence": "inline string \"EnemyMenuActor\" @0x692894; bl 0x002A55EC; tables 0x007A3774, 0x007A37B8; list 0x007C42F0."
+ },
+ {
+  "address": "0x006928D0",
+  "name": "Field_RegisterGimmick2DClasses",
+  "signature": "void Field_RegisterGimmick2DClasses(u32 unused, int arg2, u32 arg3)",
+  "params": {
+   "unused": "not used by the body",
+   "arg2": "not used by the body",
+   "arg3": "not used by the body"
+  },
+  "summary": "Registers the twenty 2D field-gimmick classes (Gimmick2DActor, CSGm2DActor, GmItemGettable2DActor, GmItemBox2DActor, GmDoor2DActor ... GmPastAltar2DActor): writes the shared default palette 0x007A37D0/0x007A37CC and creates each named record with 0x002A55EC.",
+  "confidence": 0.5,
+  "evidence": "twenty bl 0x002A55EC with name pointers taken from the inline table 0x00692CB0 (\"Gimmick2DActor\", \"CSGm2DActor\", ...); palette 0x007A37CC/0x007A37D0; list 0x007C4338/0x007C4360."
+ },
+ {
+  "address": "0x00692C7C",
+  "name": "maybe_Field_RegisterGimmick2DClassesTail",
+  "signature": "void maybe_Field_RegisterGimmick2DClassesTail(void)",
+  "params": {},
+  "summary": "Continuation of the 2D-gimmick registration function: the outlined guard path of 0x006928D0 followed by the shared inline table of 2D gimmick class names.",
+  "confidence": 0.4,
+  "evidence": "blx 0x0010009C then zero 0x007BE2D4 and b 0x00101A94 with no prologue (it reuses the caller frame); bytes from 0x00692CB0 on are ASCII class names, not code; declared Thumb but the guard sequence is ARM."
+ },
+ {
+  "address": "0x00692E88",
+  "name": "Field_RegisterGimmick3DClasses",
+  "signature": "void Field_RegisterGimmick3DClasses(void)",
+  "params": {},
+  "summary": "Registers the thirty-three 3D field-gimmick classes (GmItemGettable3DActor, GmBreakableObj3DActor, GmDoor3DActor ... GmBeeGlitterPoint3DActor) by name in the global actor registry.",
+  "confidence": 0.55,
+  "evidence": "thirty-three bl 0x002A55EC with name pointers from the inline table 0x006933F4..0x006936DC; list head 0x007C484C/0x007C4860."
+ },
+ {
+  "address": "0x00693700",
+  "name": "Field_RegisterActorClass_Barrier",
+  "signature": "void Field_RegisterActorClass_Barrier(void)",
+  "params": {},
+  "summary": "Registers the Barrier field actor class (the invisible field barrier) with its parameters at 0x007A6A50/0x007A7800.",
+  "confidence": 0.55,
+  "evidence": "inline string \"Barrier\" @0x6938F8; bl 0x002A55EC; tables 0x007A6A50, 0x007A7800; list 0x007C52E0."
+ },
+ {
+  "address": "0x00693930",
+  "name": "Field_InitActorColorTables_7A7844",
+  "signature": "void Field_InitActorColorTables_7A7844(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palettes starting at 0x007A7844 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "92 strb instructions writing RGBA quadruples; first table literal 0x007A7844; same code shape as 0x0068AE78; tail guard 0x007BE2D0."
+ },
+ {
+  "address": "0x00693BE0",
+  "name": "Field_InitActorColorTable_7A7884",
+  "signature": "void Field_InitActorColorTable_7A7884(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7884 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7884; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00693DA4",
+  "name": "Field_InitActorColorTable_7A7F8C",
+  "signature": "void Field_InitActorColorTable_7A7F8C(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A7F8C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A7F8C; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00693FB0",
+  "name": "Field_InitActorColorTable_7A8008",
+  "signature": "void Field_InitActorColorTable_7A8008(u32 tint, u8* dstColor)",
+  "params": {
+   "tint": "replaces every 0xFF byte of the shipped RGBA template",
+   "dstColor": "four-byte colour written first"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A8008 with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A8008; tail guard 0x007BE2D0/0x007BE2D4."
+ },
+ {
+  "address": "0x00694168",
+  "name": "Field_InitActorColorTable_7A704C",
+  "signature": "void Field_InitActorColorTable_7A704C(u32 unused, u32* dstColor, u32 color)",
+  "params": {
+   "unused": "r0 is overwritten with 0xFF; no input",
+   "dstColor": "three-word default colour block written first",
+   "color": "colour word copied into dstColor[0..1]"
+  },
+  "summary": "Fills the built-in field-actor colour palette at 0x007A704C with the shipped 12/13-colour RGBA template (every template byte equal to 0xFF is replaced by the tint argument, so 0xFF reproduces the shipped table) and writes the base colour into dstColor.",
+  "confidence": 0.55,
+  "evidence": "52 strb instructions writing RGBA quadruples; first table literal 0x007A704C; tail guard 0x007BE2D0/0x007BE2D4."
+ }
+]

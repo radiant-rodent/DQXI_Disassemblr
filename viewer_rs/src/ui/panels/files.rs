@@ -157,9 +157,16 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let list = app.panels.files.list.clone();
             let selected = app.panels.files.selected;
             let mut clicked = None;
+            let nav = crate::ui::list_nav(ui.ctx(), &list, selected.as_ref());
+            if let Some((item, _)) = &nav {
+                clicked = Some(item.clone());
+            }
+            let nav_row = nav.map(|(_, r)| r);
             use egui_extras::{Column, TableBuilder};
+            use crate::ui::TableNav;
             TableBuilder::new(ui)
                 .id_salt("raw_file_table")
+                .nav_scroll(nav_row)
                 .striped(true)
                 .sense(egui::Sense::click())
                 .column(Column::remainder().at_least(160.0))

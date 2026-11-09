@@ -45,6 +45,8 @@ class Pack:
     tail: bytes = b""
     # the parsed (decompressed) pack, so same-size edits keep the exact layout
     raw: bytes = b""
+    # the bytes the pack was parsed from (still BLZ-compressed for a PACA)
+    orig: bytes = b""
 
     @staticmethod
     def is_pack(data: bytes) -> bool:
@@ -52,6 +54,7 @@ class Pack:
 
     @classmethod
     def parse(cls, data: bytes) -> "Pack":
+        orig = bytes(data)
         magic = data[:4]
         compressed = magic == b"PACA"
         if compressed:
@@ -81,12 +84,29 @@ class Pack:
         if total < len(data):
             p.tail = data[total:]
         p.raw = bytes(data)
+        # keep the file as it arrived (PACA: still BLZ-compressed); an unchanged
+        # rebuild must return these exact bytes, not this encoder's re-compression
+        p.orig = orig
         return p
 
     def build(self) -> bytes:
-        uncompressed = self._build_in_place() or self._build_relayout()
+        """Serialise the pack.
+
+        When no member changed and the original leaves room for an in-place
+        overwrite, the original bytes are returned verbatim: an unchanged
+        round-trip is byte-identical for PACK and for PACA (a BLZ re-encode of
+        an untouched stream is close to, but not byte-equal to, the original,
+        so the original must be preserved).
+        """
+        uncompressed = self._build_in_place()
+        if uncompressed is not None and self.orig and self.orig[:4] in (b"PACK", b"PACA"):
+            plain = blz.decompress(self.orig) if self.orig[:4] == b"PACA" else self.orig
+            if uncompressed == plain:
+                return self.orig
+        if uncompressed is None:
+            uncompressed = self._build_relayout()
         if self.compressed:
-            return blz.compress(uncompressed, allow_overlap=True)
+            return _compress_paca(uncompressed)
         return uncompressed
 
     def _build_in_place(self) -> bytes | None:
@@ -103,7 +123,14 @@ class Pack:
         return bytes(out)
 
     def _build_relayout(self) -> bytes:
-        """Lays the members out afresh (needed when a member changes size)."""
+        """Lays the members out afresh (needed when a member changes size).
+
+        Members keep the payload alignment they had in the retail pack (up to
+        0x80 bytes).  Textures and SARC layouts are read in place by the GPU/DMA
+        and the game returns null textures — and later crashes entering a battle
+        — when a payload moves off its 0x80 boundary, so the padding is applied
+        to the *payload* start (entry header length included), not to the entry.
+        """
         count = len(self.entries)
         hsize = 0x18 + count * 12
         while hsize % 4:
@@ -112,7 +139,7 @@ class Pack:
         body = bytearray()
         offs = []
         for e in self.entries:
-            while (hsize + len(body)) % e.align:
+            while (hsize + len(body) + len(e.raw_header)) % e.align:
                 body.append(0)
             offs.append(hsize + len(body))
             raw = bytearray(e.raw_header)
@@ -134,3 +161,75 @@ class Pack:
             hdr.append(0)
 
         return bytes(hdr + body + self.tail)
+
+
+def _compress_paca(uncompressed: bytes) -> bytes:
+    """Encode a PACK buffer as a PACA file the console accepts.
+
+    Retail PACA is ``"PACA" + u32 decompressed size + BLZ(the rest of the PACK)``:
+    the 8-byte prefix is stored literally so the loader can recognise the magic
+    before it decompresses anything.  Compressing the whole buffer instead (the
+    old behaviour) sometimes lets the BLZ stream start inside the magic, which
+    produces a file whose first four bytes are no longer ``PACA`` — the game
+    then treats it as an uncompressed PACK and fails.  Compressing only
+    ``buffer[8:]`` and keeping the prefix literal reproduces the retail layout;
+    the reference translation project builds its packs the same way.
+    """
+    compressed = blz.compress(uncompressed[8:], allow_overlap=True)
+    out = b"PACA" + struct.pack("<I", len(uncompressed)) + compressed
+    if blz.decompress(out) != uncompressed:
+        raise ValueError("PACA recompression does not decompress to the pack")
+    return out
+
+
+def audit(root: Path, limit: int | None = None) -> dict:
+    """Parse and rebuild every PACK/PACA under ``root`` and compare the bytes.
+
+    This is the modder-facing form of the promise "an unchanged pack round-trips
+    exactly": useful before a bulk edit and as a slow, exhaustive regression on a
+    machine with the extracted tree.  Returns a JSON-able summary.
+    """
+    packs = sorted(Path(root).rglob("*.pack"))
+    if limit:
+        packs = packs[:limit]
+    bad: list[dict] = []
+    compressed = 0
+    for path in packs:
+        raw = path.read_bytes()
+        try:
+            p = Pack.parse(raw)
+            compressed += int(p.compressed)
+            rebuilt = p.build()
+        except Exception as exc:                       # noqa: BLE001 - report, do not stop
+            bad.append({"path": str(path), "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        if rebuilt != raw:
+            bad.append({"path": str(path), "error": "rebuild differs",
+                        "bytes": len(raw), "rebuilt_bytes": len(rebuilt)})
+    return {"root": str(root), "packs": len(packs), "compressed": compressed,
+            "identical": len(packs) - len(bad), "bad": bad}
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+
+    ap = argparse.ArgumentParser(description="PACK/PACA round-trip audit")
+    ap.add_argument("root", nargs="?", default="game_data/romfs",
+                    help="directory to scan (default: game_data/romfs)")
+    ap.add_argument("--limit", type=int, help="only the first N packs (quick check)")
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    args = ap.parse_args(argv)
+    report = audit(Path(args.root), args.limit)
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"{report['identical']:,} / {report['packs']:,} packs round-trip "
+              f"byte-identically ({report['compressed']:,} PACA)")
+        for item in report["bad"][:20]:
+            print(f"  BAD {item['path']}: {item['error']}")
+    return 0 if not report["bad"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

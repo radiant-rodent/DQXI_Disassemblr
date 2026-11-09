@@ -74,6 +74,26 @@ TIERS = [
         "min_tests": 7,
         "description": "End-to-end integration workflows & bit-matching verification",
     },
+    {
+        "id": "tier5",
+        "name": "Tier 5: Challenger (BLZ, ROM pipeline, native decompilation)",
+        "dir": TESTS_ROOT / "tier5_challenger",
+        "min_tests": 30,
+        "description": "Stress and whole-pipeline checks",
+    },
+    {
+        "id": "tools",
+        "name": "Tool unit tests (tests/test_*.py)",
+        # test_viewer is the legacy Python viewer's smoke test; it needs game_textures/
+        # and friends extracted, which the Rust editor (DQXI Studio) no longer uses.
+        "modules": [
+            "tests.test_asset_replace", "tests.test_asset_roundtrip", "tests.test_m4_assets",
+            "tests.test_script_build", "tests.test_source_replacement",
+            "tests.test_squirrel_decompile", "tests.test_tables", "tests.test_text",
+        ],
+        "min_tests": 100,
+        "description": "Format writers, table/text editing, script compiler, layouts",
+    },
 ]
 
 
@@ -90,11 +110,16 @@ def print_banner():
 
 def run_tier(tier_info, verbose=False, failfast=False):
     loader = unittest.TestLoader()
-    suite = loader.discover(
-        start_dir=str(tier_info["dir"]),
-        pattern="test_*.py",
-        top_level_dir=str(TESTS_ROOT.parent),
-    )
+    if "modules" in tier_info:
+        if str(TESTS_ROOT.parent) not in sys.path:
+            sys.path.insert(0, str(TESTS_ROOT.parent))
+        suite = loader.loadTestsFromNames(tier_info["modules"])
+    else:
+        suite = loader.discover(
+            start_dir=str(tier_info["dir"]),
+            pattern="test_*.py",
+            top_level_dir=str(TESTS_ROOT.parent),
+        )
 
     runner = unittest.TextTestRunner(
         verbosity=2 if verbose else 1,
@@ -123,7 +148,7 @@ def main():
     )
     parser.add_argument(
         "--tier",
-        choices=["1", "2", "3", "4", "all"],
+        choices=["1", "2", "3", "4", "5", "tools", "all"],
         default="all",
         help="Select specific tier to execute (default: all)",
     )
@@ -143,8 +168,8 @@ def main():
 
     tiers_to_run = TIERS
     if args.tier != "all":
-        tier_idx = int(args.tier) - 1
-        tiers_to_run = [TIERS[tier_idx]]
+        wanted = "tools" if args.tier == "tools" else f"tier{args.tier}"
+        tiers_to_run = [t for t in TIERS if t["id"] == wanted]
 
     tier_results = []
     total_passed = 0

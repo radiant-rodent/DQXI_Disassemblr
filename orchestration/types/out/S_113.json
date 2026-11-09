@@ -1,0 +1,1159 @@
+[
+ {
+  "class": "Ui_TextSpanList",
+  "type": "UiTextSpanList",
+  "summary": "Holder of a small array of UI text-layout spans: an owner/context word at +0, six span pointers from +0x34 to +0x4B and a live span count at +0x4C; Ui_TextSpanList_Release releases each span and then deletes the holder.",
+  "size": 80,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "Only one method is recovered: Ui_TextSpanList_Release (0x00455AAC). It stores its second argument at +0, loops i < list[0x13] (byte +0x4C) calling the layout-span release 0x003E7660(list[i+0xD],1) - i.e. six pointers at +0x34..+0x4B - clears the count, then calls 0x00193E44(list) and the operator delete. No vtable is installed, so the class is a plain container, not a polymorphic object.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "maybe_owner",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Ui_TextSpanList_Release starts with '*list = newOwner' before releasing the spans; most likely the layout object the spans report back to, but the recovered body only shows the store, so the name keeps maybe_"
+   },
+   {
+    "offset": 76,
+    "name": "spanCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "loop bound and reset in Ui_TextSpanList_Release: 'if (list[0x13] != 0) { ... } while (i < (u32)list[0x13]); list[0x13] = 0;' - 0x13 words = byte 0x4C"
+   }
+  ]
+ },
+ {
+  "class": "Ui_WidgetList",
+  "type": "UiWidgetList",
+  "summary": "Two intrusive circular lists of active UI widgets used by a parent widget: a draw list (head word +4) and an event list (head word +8), both terminated at the sentinel word at +0.",
+  "size": 12,
+  "base": "",
+  "confidence": 0.55,
+  "evidence": "Ui_WidgetList_DispatchDraw (0x0070BAF0) starts at self[1], walks '->next' until '*piVar2 == *widgetList' and calls widget vtable slot +0x20 when the active byte at widget+0x25 is set; Ui_WidgetList_DispatchEvent (0x0070BB68) does the same from self[2] through slot +0x1C. Both are called from Ui_Widget_DrawSelfAndChildren, so the object is a widget-list head, not a widget.",
+  "fields": [
+   {
+    "offset": 4,
+    "name": "drawListHead",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_WidgetList_DispatchDraw: 'piVar2 = (int *)widgetList[1]; ... piVar2 = (int *)piVar2[1]; while (*piVar2 != *widgetList);' - first node of the draw list"
+   },
+   {
+    "offset": 8,
+    "name": "eventListHead",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_WidgetList_DispatchEvent: 'piVar2 = (int *)widgetList[2]; ... piVar2 = (int *)piVar2[2]; while (*piVar2 != *widgetList);' - first node of the event list"
+   }
+  ]
+ },
+ {
+  "class": "Ui_DungeonList",
+  "type": "UiDungeonList",
+  "summary": "114-byte-plus window object of the dungeon/past-place list screen: only its close-request byte at +0x11C is recovered, set when a child screen reports a hit.",
+  "size": 288,
+  "base": "",
+  "confidence": 0.35,
+  "evidence": "The only recovered method, maybe_Ui_DungeonList_CanClose (0x00398D50), queries the child screen through virtual slot +0x18 (Ui_GetCore -> *(+0x14)+0xC) and writes self->f_11c = 1 on a hit, then returns 1. 'DungeonList' is the previous batch's guess; the close-flag semantics are certain, the screen identity is not.",
+  "fields": [
+   {
+    "offset": 284,
+    "name": "isCloseRequested",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "maybe_Ui_DungeonList_CanClose sets it to 1 when the child screen's virtual +0x18 reports a hit ('if (iVar2 != 0) { self->f_11c = 1; }'); no other access in the class"
+   }
+  ]
+ },
+ {
+  "class": "Ui_ItemHaveList",
+  "type": "UiItemHaveList",
+  "summary": "Two-column 'have' counter list of an item/ingredient screen: seven rows of left/right digit counters plus a right-hand text pane; the class exposes no own field in the recovered code, only the inherited text-setter vtable slot.",
+  "size": 212,
+  "base": "",
+  "confidence": 0.2,
+  "evidence": "maybe_Ui_ItemHaveList_BuildRows (0x004B509C) builds the panes named txt_have_l0..l6 / txt_have_r0..r6 through the inherited vtable slot +0x34 (ui text setter 0x001A6680) and reads the row base id through (u16 at +0x28). The batch's only field, +0xD0, is not touched: the evidence line is the vtable call '((code**)(*param_1 + 0x34))', i.e. slot 0x34, which struct_db multiplied by 4.",
+  "fields": [
+   {
+    "offset": 208,
+    "name": "unknown_00d0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "no own-field access at +0xD0; the only reference in the batch is the inherited vtable call '(**(code **)(*param_1 + 0x34))(self, text, id<<16, name)'. The offset is a misparsed vtable slot (0x34*4), so it must not define the layout"
+   }
+  ]
+ },
+ {
+  "class": "Ui_QuestList",
+  "type": "UiQuestList",
+  "summary": "Quest-list row table: 0x35 (=53) fixed 0x8C-byte rows starting at +0 plus a live row count at +0x1CFC; maybe_Ui_QuestList_PopulateActiveQuests refills it from the 0x8C-byte rows of the save work (work+0x24A98).",
+  "size": 7424,
+  "base": "",
+  "confidence": 0.6,
+  "evidence": "maybe_Ui_QuestList_PopulateActiveQuests (0x003B1330) does 'self->f_1cfc = 0', walks uVar8 < 0x35 rows calling the row builder on 'self + self->f_1cfc * 0x8c' and increments the count when it accepts a row. 0x35*0x8C = 0x1CFC, so the whole object is the row array plus its count - this is not a Ui_MessageWindow subclass, so the batch base is dropped.",
+  "fields": [
+   {
+    "offset": 7420,
+    "name": "rowCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "cleared and incremented once per accepted row in maybe_Ui_QuestList_PopulateActiveQuests; the row array base is self+count*0x8C and the loop stops at 0x35 rows, i.e. exactly 0x1CFC bytes"
+   }
+  ]
+ },
+ {
+  "class": "Ui_Row",
+  "type": "UiRow",
+  "summary": "Equipment/status list row widget (vtable 0x00768CC8): text-layer id +0x28, an embedded text-command block at +0xC, two 0x50-byte animation-ref lists at +0x4C/+0x9C, the entry id +0x4A, the equip-slot index +0xD0, the item icon +0x138 and the page/entry counters +0x1E0..+0x1E8 used by the two-column grid cursor. The cluster also carries fields of a 7-icon initialiser and of the 0x00768E48 grid-text window.",
+  "size": 492,
+  "base": "",
+  "confidence": 0.5,
+  "evidence": "Ui_Row_Ctor (0x003B6590) allocates through Ui_Object_CtorBase and installs vtable 0x00768CC8, sets the u16 index sentinel 0xFFFF at +0x4A, zeroes +0xC8/+0xCC, sets the slot byte +0xD0 = 0xB and clears the 0x7C-byte animation block at +0x4C. Ui_Row_Render (0x003B5A44) resolves Item_LookupRecord(f_4a) and writes pane ids '(u16 at +0x28)<<16 | n'; Ui_Row_RefreshValue (0x003B5F14) and maybe_Ui_ListGrid_MoveCursor (0x003B9BF0) use +0xD0 as the equip slot and +0x1E0/+0x1E4/+0x1E8 as page/entry counters. NOT this class: Ui_Row_SetDefaultIconSet (0x0037EADC, a 7×u16 icon set), Ui_GridTextWindow_DeletingDtor (0x003B8A30, vtable 0x00768E48) and maybe_Ui_Row_SetDescriptor, which belong to other objects. The batch's Ui_AnimRef base is dropped: it came from the two embedded anim-ref lists at +0x4C/+0x9C, not from inheritance (and Ui_AnimRef's evidence size 800 is larger than this struct).",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Ui_Row_Ctor stores '*result = 0x00768CC8' and every virtual call in the row methods goes through *self"
+   },
+   {
+    "offset": 4,
+    "name": "unknown_0004",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "the only +4 write in the batch ('self[1] = 0x7a') is Ui_Row_SetDefaultIconSet, which writes seven u16 icon ids at +0..+0xD on a separate 0x46-byte icon-set object; no access on the row widget"
+   },
+   {
+    "offset": 8,
+    "name": "unknown_0008",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "the only +8 write ('self[2] = 0x78') is the same 7-icon-set initialiser, not the row widget"
+   },
+   {
+    "offset": 12,
+    "name": "textCommand",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_Row_SetItemIcon (0x00386F94) passes &self->f_c to Text_SetCommandArgs and Text_ExecuteCommand (commands 5/6/7 with the item icon); it is the embedded text-command block, not an id"
+   },
+   {
+    "offset": 16,
+    "name": "maybe_textLayerIdB",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.35,
+    "evidence": "maybe_Ui_Row_SetMessage uses '(u16 at +0x10) << 16' as the element id for the same text setter that every other row method indexes with the +0x28 layer id; a second layer id is the most plausible reading"
+   },
+   {
+    "offset": 20,
+    "name": "isEnabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Ui_Row_RefreshValue (0x003B5F14) starts with 'if (self->f_14 != 0)': only an enabled row re-resolves its value and re-renders"
+   },
+   {
+    "offset": 24,
+    "name": "maybe_textOwner",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "maybe_Ui_Row_SetMessage dereferences +0x18, adds 0x11C and passes the result to 0x00648B7C(...,0x12) - probably the parent window/text owner whose pane holds the label"
+   },
+   {
+    "offset": 40,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.85,
+    "evidence": "base of every pane id in the class: 'func_001A6680(self, (u32)*(u16*)(self+0x28) << 16 | n, text)' in Ui_Row_Render, Ui_Row_Reset, Ui_Row_Apply, maybe_Ui_Row_UpdateText and the 16 FillValueText variants"
+   },
+   {
+    "offset": 56,
+    "name": "maybe_rowRecord",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_ListGrid_MoveCursor reads self[0xE] (= +0x38) as a record pointer and uses its +0xC as the current cell index for the two-column cursor math"
+   },
+   {
+    "offset": 72,
+    "name": "maybe_useAltColor",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Ui_Row_Render selects the value colour with 'if (self->f_48 == 0) iVar10 = 0x007A872C[2]; else iVar10 = *0x007A872C;' - a two-way colour choice, purpose not proven"
+   },
+   {
+    "offset": 73,
+    "name": "scrollPos",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Ui_Row_SetScrollValueText adds step*10-sub to it and clamps the result into [0, +0x4A] before formatting the new value"
+   },
+   {
+    "offset": 74,
+    "name": "entryId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.6,
+    "evidence": "Ui_Row_Render calls Item_LookupRecord(self->f_4a) and Ui_Row_SetIndex compares/stores the row index there; ctor writes the 0xFFFF 'no entry' sentinel"
+   },
+   {
+    "offset": 76,
+    "name": "animRefListA",
+    "type": "Ui_AnimRefList",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "first of two 0x50-byte animation-ref lists cleared by Ui_Row_Ctor (func_00116AE0(&f_13,0x7C)); released by Ui_LayoutRef_Release in the deleting dtor and reset through Ui_AnimRef_ResetPanes"
+   },
+   {
+    "offset": 156,
+    "name": "animRefListB",
+    "type": "Ui_AnimRefList",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "second 0x50-byte animation-ref list at 0x4C+0x50; Ui_Row_UpdateText calls Ui_AnimRef_ResetPanes(self+0x9C,1) and the dtor releases it at self+0x27 words"
+   },
+   {
+    "offset": 204,
+    "name": "maybe_flagPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_Row_SetIndex toggles bit 0 of its +0x44 visible byte together with the pane at +0xC8; the row functions never give it a name"
+   },
+   {
+    "offset": 208,
+    "name": "equipSlotIndex",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.65,
+    "evidence": "Ui_Row_RefreshValue saves it and stores maybe_Ui_EquipSlot_FindNextForItem's result; Ui_Row_Render uses it as the index into the 0x1C-byte slot table 0x0072960C - i.e. the equipment slot the row currently edits"
+   },
+   {
+    "offset": 236,
+    "name": "maybe_viewMode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_Row_UpdateFull compares it with 1 and 2 and stores the new value, i.e. a small mode/format switch that changes how the value text is rebuilt; the code around it is damaged (coprocessor/halt_baddata), so the meaning stays a hypothesis"
+   },
+   {
+    "offset": 312,
+    "name": "iconId",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "maybe_Ui_Row_SetItemIcon stores the item display record's +0x10 (icon id) here and clears it when the item cannot be resolved"
+   },
+   {
+    "offset": 320,
+    "name": "maybe_iconPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "same function clears +0x94 of the object at +0x140 while the item has a display record: the pane that shows the item icon"
+   },
+   {
+    "offset": 352,
+    "name": "unknown_0160",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "the batch evidence is a virtual call '(**(code **)(*param_1 + 0x58))(param_1)' - slot 0x58, not +0x160; no field access at this offset"
+   },
+   {
+    "offset": 468,
+    "name": "maybe_leftIconPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "tri-state icon panes: Ui_Row_Reset clears bit 0 of +0x44 on +0x1D4 and +0x1DC and sets it on +0x1D8"
+   },
+   {
+    "offset": 472,
+    "name": "maybe_middleIconPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ui_Row_Reset sets bit 0 of its +0x44 (the visible/enabled icon of the idle row)"
+   },
+   {
+    "offset": 476,
+    "name": "maybe_rightIconPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ui_Row_Reset clears bit 0 of its +0x44 together with the left pane"
+   },
+   {
+    "offset": 480,
+    "name": "pageIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_ListGrid_MoveCursor: 'iVar8 = self[0x78]' is the row page being shown; Ui_Row_Reset sets it to 0 and the text block at +0x54 is indexed by it (self[0x78]*0x30)"
+   },
+   {
+    "offset": 484,
+    "name": "pageCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "same cursor function: 'iVar6 = self[0x79]' is the number of pages used to wrap the page index; Ui_Row_Reset initialises it to 1"
+   },
+   {
+    "offset": 488,
+    "name": "entryCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "same cursor function: 'self[0x7a]' is the row/entry count; the selected index is clamped to entryCount-1"
+   }
+  ]
+ },
+ {
+  "class": "Ui_PartyMemberRow",
+  "type": "UiPartyMemberRow",
+  "summary": "Text-pane binding of a party-member status row: the paragraph id at +0x10, four left-side pane handles (+0x30/+0x38/+0x40/+0x48) with their enable words, the visibility byte at +4 and the HP/strength value panes (+0x78/+0x7C and +0x84/+0x88) of the right-side layout.",
+  "size": 144,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "Ui_PartyMemberRow_BindPanes (0x004603AC) and BindPanesL/R (0x00460474/0x004614C8) resolve pane names like 'p1_txt_name', 'p2_txt_tl_r2', 'p1_txt_tr_hp', 'null_p1_tr_hp', 'p1_txt_tr_r4' and bind them with 0x003828B8(window, name, (u16 at +0x10)<<16 | slot). ApplyPaneVisibility (0x00460748) copies an enable byte into +0x44 of the four panes at +0x30/+0x38/+0x40/+0x48. BindPanesL (vtable 0x771DA0) and BindPanesR (vtable 0x771DBC) are two different row subclasses whose pane tables overlap, so only the left-layout pairs are named here.",
+  "fields": [
+   {
+    "offset": 4,
+    "name": "isVisible",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "both ApplyPaneVisibility variants store their argument here byte-wise ('*(u8*)(self+4) = (u8)row') and BindPanesL forwards it to virtual slot +0x10; the flag that enables the row"
+   },
+   {
+    "offset": 16,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.8,
+    "evidence": "every pane lookup in BindPanes/L/R builds ids as '(u32)*(u16*)(self+0x10) << 16 | n' (27 uses)"
+   },
+   {
+    "offset": 20,
+    "name": "maybe_textStyleId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_PartyMemberRow_BindPanes passes it to 0x003A79E8(out, styleId, layerId) together with the layer id and stores the result at +0x1C; a text style/format id is the likely argument"
+   },
+   {
+    "offset": 24,
+    "name": "maybe_ownerWindow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "BindPanesR calls virtual slot +0x48 on it (same interface as the message-window controller) and stores the returned mode byte at +0x74; it is the window that owns the row"
+   },
+   {
+    "offset": 28,
+    "name": "maybe_textHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "result of 0x003A79E8(out, +0x14, layerId) stored here by BindPanes; later only used as an opaque handle"
+   },
+   {
+    "offset": 48,
+    "name": "pane0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "first of the four left-layout text panes; ApplyPaneVisibility sets bit 0 of its +0x44 when the row is enabled, BindPanesL stores the resolved handle at +0x30 (word 0xC)"
+   },
+   {
+    "offset": 52,
+    "name": "maybe_pane0Enabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "enable flag paired with pane0: 'if (row != 0) cVar2 = self->f_34; pane0->f_44 = (row && cVar2)'"
+   },
+   {
+    "offset": 56,
+    "name": "pane1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "second left pane: 'iVar1 = self->f_38; if (iVar1 != 0) ...' - also written by BindPanesL at word 0xE and used as the value pane by the right layout"
+   },
+   {
+    "offset": 60,
+    "name": "maybe_pane1Enabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "paired enable flag for pane1 ('uVar3 = (u32)self->f_3c' before the +0x44 bit update)"
+   },
+   {
+    "offset": 64,
+    "name": "pane2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "third left pane, written by BindPanesL at word 0x10 and toggled by ApplyPaneVisibility"
+   },
+   {
+    "offset": 68,
+    "name": "maybe_pane2Enabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "paired enable flag for pane2"
+   },
+   {
+    "offset": 72,
+    "name": "pane3",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "fourth left pane, written by BindPanesL at word 0x12 and toggled by ApplyPaneVisibility"
+   },
+   {
+    "offset": 76,
+    "name": "maybe_pane3Enabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "paired enable flag for pane3"
+   },
+   {
+    "offset": 116,
+    "name": "maybe_panelState",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "BindPanesR stores the byte returned by virtual slot +0x48 of the owner window; the name 'state' is the only neutral reading"
+   },
+   {
+    "offset": 117,
+    "name": "maybe_useAlternateValuePane",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "ApplyPaneVisibilityR branches on it: 0 makes +0x78 visible and hides +0x7C, non-zero does the opposite"
+   },
+   {
+    "offset": 118,
+    "name": "maybe_flag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "BindPanesR zeroes it; no reader in the recovered class"
+   },
+   {
+    "offset": 120,
+    "name": "hpTextPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "resolved from the pane name 'p1_txt_tr_r2' in BindPanesR and toggled in ApplyPaneVisibilityR"
+   },
+   {
+    "offset": 124,
+    "name": "emptyHpPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "resolved from 'null_p1_tr_hp' - the placeholder shown when the HP value pane is hidden"
+   },
+   {
+    "offset": 128,
+    "name": "maybe_hpValueRef",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "output of func_003828D0(out, self, layerId|2) right after the HP panes are bound; the id 2 matches the 'txt_tr_r2' slot, so it is a value/label reference for the HP row"
+   },
+   {
+    "offset": 132,
+    "name": "strengthTextPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "resolved from 'p1_txt_tr_r4' in BindPanesR ('str' in the sibling name null_p1_tr_str)"
+   },
+   {
+    "offset": 136,
+    "name": "emptyStrengthPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "resolved from 'null_p1_tr_str' - placeholder for the strength value"
+   },
+   {
+    "offset": 140,
+    "name": "maybe_strengthValueRef",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "output of func_003828D0(out, self, layerId|6) after the strength panes are bound (slot 6 = tr_r4)"
+   }
+  ]
+ },
+ {
+  "class": "Ui_ListRow",
+  "type": "UiListRow",
+  "summary": "Equipment/status list row: element id +0x10 and Ui_Element +0x14 coloured per value, the row-model table +0x34 (count + 0xC-byte sorted entries), the embedded 3D weapon-preview state +0x2E8..+0x30A and the row-list pointer +0x6D4. Plain list-model accessors in the same cluster use +0x24C, not the row widget.",
+  "size": 1752,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "Ui_ListRow_ApplyValueColor (0x004603F8) writes Ui_Element_SetColor(self->f_14, (u16 at +0x10)<<16, colour at +0x1C); maybe_Ui_ListRow_UpdateWeaponPreview (0x00462F7C) calls Model_Attach_CreateWeaponAttachment(self,&self->f_2fc), stores the handle at +0x2E8, spins the model by +0x2F0 and swaps the accessory for item ids 0xAA3..0xB3A; maybe_Ui_ListRow_GetLabelText/Style/HasTableLabel (0x0062FB10/0x0062FC9C/0x0062FD44) read the row-model table at +0x34 (u16 count, relative entry base, 0xC-byte entries); Ui_ListRow_SumRowHeights (0x0063F6D4) walks the row list at +0x6D4. The batch's Model_Attach base is dropped: the row passes itself to Model_Attach_CreateWeaponAttachment (an embedded attach object), but Model_Attach's evidence size 1760 is larger than this struct's 1752 and the field names below are row fields, not attach fields.",
+  "fields": [
+   {
+    "offset": 16,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.75,
+    "evidence": "element id base: 'FUN_003A79C4(self->f_14, (u16 at +0x10)<<16, colour)' and 'FUN_00382A80(self, (u16 at +0x10)<<16, text)'"
+   },
+   {
+    "offset": 20,
+    "name": "valueElement",
+    "type": "Ui_Element*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Ui_ListRow_ApplyValueColor passes it to Ui_Element_SetColor; null-checked before the call"
+   },
+   {
+    "offset": 28,
+    "name": "maybe_normalColor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "colour word handed to Ui_Element_SetColor as the default value; for values > 0x32 the global colour 0x007AB8C4->f_10 is used instead"
+   },
+   {
+    "offset": 52,
+    "name": "maybe_rowModel",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "row table: '*self->f_34' is the entry count, f_34[1] a relative offset to the entry base and the entries are 0xC bytes with a u16 id; read by GetLabelText/GetLabelStyle/HasTableLabel/GetTextPixelWidth"
+   },
+   {
+    "offset": 152,
+    "name": "maybe_previewTransform",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "UpdateWeaponPreview starts with '(*self->f_98->f_2c)()' - an object whose virtual slot 0x2C is called once per update, most likely the preview node/transform"
+   },
+   {
+    "offset": 588,
+    "name": "maybe_listModel",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "maybe_Ui_ListRow_GetRowClass reads self->f_24c as a list model (f_60 = row count, f_58->f_24 = row base, 0xC stride); it is only present in that accessor, not in the row widget methods"
+   },
+   {
+    "offset": 632,
+    "name": "maybe_previewSpins",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "UpdateWeaponPreview only applies the per-frame Euler rotation 'if (self->f_278 != 0)'"
+   },
+   {
+    "offset": 744,
+    "name": "iconHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "handle returned by Model_Attach_CreateWeaponAttachment; Ui_ListRow_ReleaseIcon passes it to func_001C7570(scene+0x54, handle) and masks the generation bits"
+   },
+   {
+    "offset": 748,
+    "name": "maybe_sceneMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "UpdateWeaponPreview calls Ui_ListWidget_SetRowSceneMode(self, self->f_2ec) after creating the attachment"
+   },
+   {
+    "offset": 752,
+    "name": "previewSpin",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "per-frame rotation angle: 'self->f_2f0 = self->f_2f0 + *(float*)(*0x007BE370 + 0x1c) * 0.1f' then passed to Gfx_Node_SetEulerRotation"
+   },
+   {
+    "offset": 762,
+    "name": "maybe_previewDirty",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "copied into the attach parameters and re-read via func_0011FFFC(&self->f_2fa,&value); gates whether the attachment is (re)created that frame"
+   },
+   {
+    "offset": 764,
+    "name": "attachParams",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "parameter block passed by address to Model_Attach_CreateWeaponAttachment(self,&self->f_2fc) and copied to +0x306 by func_0011FFD8"
+   },
+   {
+    "offset": 770,
+    "name": "maybe_accessorySwapState",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "tested as a byte ('if (self->f_302 == 0) return;') before the weapon/accessory mesh swap and reset with '& 0xff00 | 0xffff0000'"
+   },
+   {
+    "offset": 772,
+    "name": "previewItemId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.6,
+    "evidence": "Item_LookupRecord(&local, self->f_304) decides whether to attach the accessory mesh; the u16 is the item id whose preview is built"
+   },
+   {
+    "offset": 774,
+    "name": "attachParams2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "second copy of the parameter block: 'func_0011FFD8(&self->f_306, &self->f_2fc)'"
+   },
+   {
+    "offset": 778,
+    "name": "lastPreviewItemId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.55,
+    "evidence": "UpdateWeaponPreview stores '(u16)local' (the item id it just looked up) here when the preview is complete"
+   },
+   {
+    "offset": 1748,
+    "name": "maybe_rowList",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ui_ListRow_SumRowHeights checks it for null, reads +0x60 as the row count and 'f_58->f_24' as the row-array base, then sums each row's height slot; a row-list/model pointer, called as a function pointer only because Ghidra typed the slot that way"
+   }
+  ]
+ },
+ {
+  "class": "Ui_CompareRow",
+  "type": "UiCompareRow",
+  "summary": "Stat-comparison row of the equipment/skill panel: text-layer id +0x28, compact/expanded flag +0x50, the icon pane +0x54, value/difference panes +0x58/+0x5C, the compared member reference +0x1D4, and two nested value-row blocks at +0x22C and +0x274.",
+  "size": 9284,
+  "base": "",
+  "confidence": 0.55,
+  "evidence": "Ui_CompareRow_ApplyState (0x00475614) writes pane '(u16 at +0x28)<<16 | 0', copies +0x60 into the icon pane's +0x1C and shows +0x58/+0x5C; maybe_Ui_CompareRow_ClearValue (0x00475544) does the opposite and clears +0x50; SetValueA (0x004756B4) formats '%d ls' only while +0x50 == 0, while SetValueWithDifference (0x00475728) only while +0x50 != 0. Ui_CompareRow_SetValueFromChar (0x0036E788) reads the member id as '*self->f_1d4', stores the compared id at +0x2440, and calls the nested rows at self+0x22C and self+0x274.",
+  "fields": [
+   {
+    "offset": 40,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.85,
+    "evidence": "every pane write in the class is '(u32)*(u16*)(self+0x28) << 16 | n' (13 uses: panes 0..4 in ApplyState/ClearValue/SetValueA/SetValueWithDifference)"
+   },
+   {
+    "offset": 80,
+    "name": "isExpanded",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "mode flag: SetValueA writes the single '%d ls' pane only when it is 0, SetValueWithDifference/the own-value variant write the value/separator/difference panes only when it is non-zero; ApplyState sets it to 1 and ClearValue to 0"
+   },
+   {
+    "offset": 84,
+    "name": "iconPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "ApplyState/ClearValue set its +0x1C to the current frame (+0x60) and toggle bit 4 of its +0x44 visibility byte - the row's icon/face pane"
+   },
+   {
+    "offset": 88,
+    "name": "valuePane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "ApplyState shows it (bit 0 of +0x44), ClearValue hides it; paired with the value text panes"
+   },
+   {
+    "offset": 92,
+    "name": "differencePane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "shown in ApplyState, hidden in ClearValue alongside the value pane - the up/down difference icon"
+   },
+   {
+    "offset": 96,
+    "name": "iconFrame",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "copied verbatim into the icon pane's +0x1C by ApplyState (animation/frame index)"
+   },
+   {
+    "offset": 468,
+    "name": "memberRef",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Ui_CompareRow_SetValueFromChar reads '*self->f_1d4' as the party-member id (checked '< 0x1F' and passed to func_0035EB98) and also passes the pointer itself to Ui_Part_FindAnimRecord"
+   },
+   {
+    "offset": 556,
+    "name": "maybe_diffRow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "embedded compare-value row: SetValueFromChar/Record call SetValueWithDifference(self+0x22C, category, value) and the SetOwnValueWithDifference variant on the same address"
+   },
+   {
+    "offset": 628,
+    "name": "maybe_valueRow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "second embedded compare-value row: maybe_Ui_CompareRow_SetFromCharacter calls ClearValue(self+0x274) and SetValueA(self+0x274, value)"
+   },
+   {
+    "offset": 688,
+    "name": "maybe_itemRows",
+    "type": "Ui_ItemRows",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "embedded item row block: SetValueFromChar calls maybe_Ui_ListRow_SelectByEntryId(&self->f_2b0, entryId) - the same entry-id selector used by item row lists"
+   },
+   {
+    "offset": 760,
+    "name": "maybe_textReveal",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "embedded text object: SetFromCharacter calls func_0029126C(&self->f_2f8, 1) and then (&self->f_2f8, 0, ...), the reveal-start helper used on text widgets"
+   },
+   {
+    "offset": 9280,
+    "name": "lastEntryId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Ui_CompareRow_SetValueFromChar stores '*charPtr' here as the entry/character id currently shown"
+   }
+  ]
+ },
+ {
+  "class": "Ui_ArcListRow",
+  "type": "UiArcListRow",
+  "summary": "One entry of the arc (fan) list used for battle-target markers: an anchor point and a swung end point (two 3-float vectors at +4 and +0x10), the blend timer +0x9C, the cached blend source/target vectors +0x3C0..+0x3E4 and the swing angle +0x53C.",
+  "size": 1344,
+  "base": "",
+  "confidence": 0.5,
+  "evidence": "Ui_ArcListRow_UpdateSwingPose (0x0049DDB8) converts the degree angle at +0x53C to radians, derives sin/cos offsets and writes the anchor (self+4/+8/+0xC) and the end point (self+0x10/+0x14/+0x18). Ui_ArcListRow_BlendAnchorTransforms (0x0049C848) clamps the timer at +0x9C to the battle target-marker layout limit and lerps (0x005753BC) the vectors at +0x3C0/+0x3D8 into the anchor and +0x3CC/+0x3E4 into the end point. Ui_ArcListRow_BlendPoseToTarget (0x0049DB34) interpolates +0x4AC/+0x4D4 and +0x4B8/+0x4E0 into the same outputs.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "anchorZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "third component of the anchor vector: '*(u32*)(self+4)=...; *(u32*)(self+8)=...; self->f_c=...' in UpdateSwingPose and BlendAnchorTransforms"
+   },
+   {
+    "offset": 16,
+    "name": "endPointX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "first component of the swung end point written by UpdateSwingPose/BlendAnchorTransforms"
+   },
+   {
+    "offset": 20,
+    "name": "endPointY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "second component of the end point (self->f_14 = fVar8 + fStack_54)"
+   },
+   {
+    "offset": 24,
+    "name": "endPointZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "third component of the end point (self->f_18 = fVar9 + fStack_50)"
+   },
+   {
+    "offset": 156,
+    "name": "blendTimer",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "BlendAnchorTransforms clamps it against the layout limit and turns it into the 0..1 blend phase"
+   },
+   {
+    "offset": 960,
+    "name": "anchorSource",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "first component of the source anchor vector, lerped with +0x3D8 into the anchor at +4 (func_005753BC(&out,&self->f_3c0,&self->f_3d8))"
+   },
+   {
+    "offset": 972,
+    "name": "endSource",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "first component of the source end-point vector, lerped with +0x3E4 into the end point at +0x10"
+   },
+   {
+    "offset": 984,
+    "name": "anchorTarget",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "first component of the target anchor vector (second argument of the +0x3C0 lerp)"
+   },
+   {
+    "offset": 996,
+    "name": "endTarget",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "first component of the target end-point vector (second argument of the +0x3CC lerp)"
+   },
+   {
+    "offset": 1340,
+    "name": "swingAngle",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "UpdateSwingPose: '(self->f_53c - 431.0f) * 0.025f' and 'f_53c * 0.017453 * 0.159155' - the row's swing angle in degrees"
+   }
+  ]
+ },
+ {
+  "class": "Ui_SevenSlotRow",
+  "type": "UiSevenSlotRow",
+  "summary": "Seven-cell icon row of a menu list: text-layer id +0x28, a menu-open flag +0x48, a mode byte +0x49 and seven per-slot ids +0x4A..+0x50 (0xFF = empty), written by maybe_Ui_SevenSlotRow_SetSlotIcons.",
+  "size": 84,
+  "base": "",
+  "confidence": 0.5,
+  "evidence": "maybe_Ui_SevenSlotRow_SetSlotIcons (0x003F0EC0) stores the mode at +0x49, fills the seven bytes +0x4A..+0x50 with either 0/1..6 or 0/0xFF..5/6, then writes one text per cell with Ui_TextLayer_SetText(self, slot | (u16 at +0x28)<<16, value); slot 1 uses the alternate value when +0x48 is set and the menu is open (maybe_Ui_IsMenuOpen). Whether the values are icons or text ids is still open, so slotXId keeps maybe_ semantics below 0.5 only where the value is not proven.",
+  "fields": [
+   {
+    "offset": 40,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.8,
+    "evidence": "'Ui_TextLayer_SetText(self, uVar5 | (u32)self->f_28 << 0x10, value)' - the layer base of the seven cells"
+   },
+   {
+    "offset": 72,
+    "name": "maybe_isMenuOpen",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "read once before the loop: 'f48 = self->f_48; if (slot != -1 && f48 != 0 && slot == 1) ... maybe_Ui_IsMenuOpen()' - enables the alternate icon of slot 1"
+   },
+   {
+    "offset": 73,
+    "name": "mode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "written from the argument ('self->f_49 = (char)mode'): mode 1 gives slots 0,0xFF,0xFF,0xFF,0xFF,5,6; any other mode gives 0..6"
+   },
+   {
+    "offset": 74,
+    "name": "slot0Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "first of the seven per-cell ids; 0 in both modes, written right after the mode"
+   },
+   {
+    "offset": 75,
+    "name": "slot1Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 1 id: 0xFF in mode 1, 1 otherwise; the only slot with a menu-open alternate value"
+   },
+   {
+    "offset": 76,
+    "name": "slot2Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 2 id: 0xFF in mode 1, 2 otherwise"
+   },
+   {
+    "offset": 77,
+    "name": "slot3Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 3 id: 0xFF in mode 1, 3 otherwise"
+   },
+   {
+    "offset": 78,
+    "name": "slot4Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 4 id: 0xFF in mode 1, 4 otherwise"
+   },
+   {
+    "offset": 79,
+    "name": "slot5Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 5 id: 5 in both modes"
+   },
+   {
+    "offset": 80,
+    "name": "slot6Id",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "slot 6 id: 6 in both modes"
+   }
+  ]
+ },
+ {
+  "class": "Ui_PanelRow",
+  "type": "UiPanelRow",
+  "summary": "Row of a panel/composite menu list: an embedded Ui_CompositeWindow at +0x38 that draws the row's single pane, a visibility byte +0x94, a signed delay +0x18A, an animation timer +0x228 and a pending index +0x234.",
+  "size": 568,
+  "base": "",
+  "confidence": 0.35,
+  "evidence": "maybe_Ui_PanelRow_DrawPane (0x001E1D80) builds a one-element block containing self and calls Ui_CompositeWindow_DrawPanes(self+0x38, block), so +0x38 is an embedded composite window. maybe_Ui_PanelRow_ResetAnimationState (0x001E1EC8) sets +0x228 to 10/0 from the sign of the signed byte +0x18A, stores the visibility byte at +0x94, sets +0x234 = -1 and copies a position pair into +0x30/+0x34. Both reset functions are damaged decompilation (unaff registers), so the meanings stay below 0.5 where they are inferred.",
+  "fields": [
+   {
+    "offset": 48,
+    "name": "maybe_positionX",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "first word of the position pair stored by both reset variants (source registers are lost in the damaged decompilation); the pair is copied together with +0x34"
+   },
+   {
+    "offset": 52,
+    "name": "maybe_positionY",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "second word of the position pair copied next to +0x30"
+   },
+   {
+    "offset": 56,
+    "name": "panes",
+    "type": "Ui_CompositeWindow",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Ui_CompositeWindow_DrawPanes(self+0x38, {self}) in maybe_Ui_PanelRow_DrawPane - an embedded composite window whose only pane is this row"
+   },
+   {
+    "offset": 148,
+    "name": "isVisible",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "both reset variants store their 'visible' argument into +0x94, the same visibility byte the UI panes use"
+   },
+   {
+    "offset": 394,
+    "name": "maybe_delay",
+    "type": "s8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "signed byte: 'if (0 < f18a) self->f_228 = 10; if (f18a < 0) self->f_228 = 0' - drives the initial animation timer from the sign of a delay"
+   },
+   {
+    "offset": 552,
+    "name": "maybe_animationTimer",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "set to 10 or 0 depending on the sign of +0x18A by both reset variants; the only timer-like word in the class"
+   },
+   {
+    "offset": 564,
+    "name": "maybe_pendingIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "both reset variants write 0xFFFFFFFF (the usual 'none' sentinel) into it"
+   }
+  ]
+ },
+ {
+  "class": "Ui_MonsterRow",
+  "type": "UiMonsterRow",
+  "summary": "WRONGLY NAMED cluster: the five functions are the casino poker card row (Ui_PokerCards_*, Casino_Poker_*), not a monster row. The small 0x14-byte object holds a two-word row template copied from the shared poker table 0x0072A8EC, a cursor index at +8, a mode byte at +0xD and the five card-hold flags at +0xE..+0x12.",
+  "size": 20,
+  "base": "",
+  "confidence": 0.4,
+  "evidence": "All five recovered addresses now have poker names: 0x00294C8C Casino_Poker_DealHandToUi, 0x002950AC Ui_PokerCards_ConfirmSelection, 0x0029520C Casino_Poker_ReplaceCardsToUi, 0x0029549C Ui_PokerCards_ResetSlots and maybe_Ui_PokerCards_UpdateSlotHighlight (0x00294D18). They all copy a two-word template out of the shared poker table 0x0072A8EC ('*row = *(u32*)(0x0072A8EC+0x48); row[1] = 0x0072A8EC->f_4c'), iterate the five hold flags at row+0xE and index a 0..0x27 cursor with modulo-5 math. The batch class name is kept only because the merge keys on it.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "maybe_rowTemplateWord0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "first word of the poker row template, copied from 0x0072A8EC (+0x00/+0x08/+0x18/+0x40/+0x48 depending on the state) at the end of ConfirmSelection/ResetSlots/ReplaceCardsToUi"
+   },
+   {
+    "offset": 4,
+    "name": "maybe_rowTemplateWord1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "second word of the same template pair ('row[1] = f4c / uVar1 / f44') - a style/state word whose meaning is not established"
+   },
+   {
+    "offset": 8,
+    "name": "cursorIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "maybe_Ui_PokerCards_UpdateSlotHighlight does 'row[2] % 5 == 0', '(row[2]-5) % 5 == 0 && row[2] < 0x1A' and 'row[2] > 0x27', i.e. the 0..0x27 cursor position over the five card slots"
+   },
+   {
+    "offset": 13,
+    "name": "maybe_mode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Ui_PokerCards_ResetSlots zeroes it ('*(u8*)((int)row + 0xd) = 0') together with the five hold flags; no other writer"
+   },
+   {
+    "offset": 14,
+    "name": "cardHoldFlags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "first of five consecutive per-slot bytes at +0xE..+0x12: ResetSlots sets them to 1 and pushes each through func_0023F648, ReplaceCardsToUi copies a card only where the byte is non-zero"
+   }
+  ]
+ },
+ {
+  "class": "Ui_MemberRow",
+  "type": "UiMemberRow",
+  "summary": "Party-member portrait/icon row: the portrait pane pointer at +0, a portrait-variant flag at +4 and the cached appearance id at +5; Ui_MemberRow_UpdateIconState rebuilds the 0x98-byte portrait record when the appearance changes and greys the row out from the member state.",
+  "size": 596,
+  "base": "",
+  "confidence": 0.4,
+  "evidence": "Ui_MemberRow_UpdateIconState (0x004672D0) reads the appearance id from the UI overlay manager ((work+8)->f_48 + 0x281), compares it with the cached byte at +5, fetches the portrait record with 0x0063D6B8, pushes its +0x5D to the pane through virtual slot +0x48 and chooses the icon id from +0x5E (flag 0) or +0x5F (flag 1). Only +0 and +4 are real fields of the batch; +0x120/+0x250 come from other objects' offsets in the same function.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "pane",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "'if (*param_1 == 0) return;' then '(**(code **)(*(int *)*param_1 + 0x48))((int *)*param_1, portraitId)' and '(*(u8*)(*param_1 + 0x94)) = visible' - the row's icon/portrait pane object"
+   },
+   {
+    "offset": 4,
+    "name": "maybe_useAltPortrait",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "the icon id is chosen with 'if ((char)self[1] == 0) uVar6 = rec->f_5e; else uVar6 = rec->f_5f', i.e. a two-way portrait variant flag"
+   },
+   {
+    "offset": 288,
+    "name": "unknown_0120",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "the batch evidence is '(**(code **)(*(int *)*param_1 + 0x48))((int *)*param_1, *(u8*)(iVar11 + 0x5d))' - an offset inside the portrait record, not inside this object; no field access at +0x120"
+   },
+   {
+    "offset": 592,
+    "name": "unknown_0250",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "the batch evidence is '*(u8*)(*param_1 + 0x94) = uVar6' - an offset of the pane object, not of this row; no field access at +0x250"
+   }
+  ]
+ },
+ {
+  "class": "Ui_TextRow",
+  "type": "UiTextRow",
+  "summary": "Small drawable text row: an id byte at +0, the shared UI vtable 0x00759378 at +4, the 32-bit id at +8, the text-layer id at +0x28 and three 0x50-byte animation-ref lists starting at +0x30, so the real object is at least 0x120 bytes.",
+  "size": 288,
+  "base": "",
+  "confidence": 0.5,
+  "evidence": "maybe_Ui_TextRow_Ctor (0x003DFE54) writes '*self = (char)id', 'self[1] = 0xFF', '*(u32*)(self+4) = 0x00759378' (the vtable shared by Ui_SimpleWindow/Ui_FaceIcon/Ui_List constructors), '*(u32*)(self+8) = id' and calls std_ConstructArray(self+0xC, 0x003E0454, 0x50, 3) - with a u32* self that is +0x30, three 0x50-byte anim-ref lists, so the emitted size is raised from 0x34 to 0x120. Ui_TextRow_SetSpellText (0x0045FFA8) and maybe_Ui_TextRow_SetTextFromItemName (0x00460040) both write '(u16 at +0x28)<<16 | 0'.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "maybe_idByte",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "ctor: '*self = (char)id'; the same id is stored as a full word at +8, so the byte is the low byte/kind of the row id"
+   },
+   {
+    "offset": 4,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "ctor installs 0x00759378 here ('*(u32*)(self + 4) = uVar1'), the shared UI base vtable used by Ui_SimpleWindow/Ui_FaceIcon/Ui_List; the batch line 'param_1[1] = 0xff' is the byte at +1"
+   },
+   {
+    "offset": 40,
+    "name": "textLayerId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.8,
+    "evidence": "both text setters build the pane id as '(u32)self->f_28 << 16' and pass it to func_001A6680/Ui_TextLayer_SetText"
+   },
+   {
+    "offset": 48,
+    "name": "animRefLists",
+    "type": "Ui_AnimRefList",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "std_ConstructArray(self+0xC words = +0x30, 0x003E0454, 0x50, 3) constructs three 0x50-byte animation-ref lists; this field is the first of the three (end of object = 0x30+3*0x50 = 0x120)"
+   }
+  ]
+ }
+]

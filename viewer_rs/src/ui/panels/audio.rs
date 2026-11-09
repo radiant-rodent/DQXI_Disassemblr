@@ -25,9 +25,17 @@ pub struct AudioPanel {
     info: Option<WavInfo>,
     peaks: Option<(Vec<f32>, Vec<f32>)>,
     playing: Option<std::path::PathBuf>,
+    paused: bool,
     position_ms: u64,
     length_ms: u64,
     archive_selected: Option<usize>,
+    /// Export/Replace workflow state (WAV -> BCSTM, DSP-ADPCM by default).
+    tools: crate::ui::asset_jobs::AssetTools,
+    /// 0 = DSP-ADPCM (retail bandwidth), 1 = PCM16 (lossless, larger).
+    codec: usize,
+    preview_wav: Option<std::path::PathBuf>,
+    preview_info: Option<WavInfo>,
+    preview_peaks: Option<(Vec<f32>, Vec<f32>)>,
 }
 
 impl Default for AudioPanel {
@@ -44,9 +52,15 @@ impl Default for AudioPanel {
             info: None,
             peaks: None,
             playing: None,
+            paused: false,
             position_ms: 0,
             length_ms: 0,
             archive_selected: None,
+            tools: Default::default(),
+            codec: 0,
+            preview_wav: None,
+            preview_info: None,
+            preview_peaks: None,
         }
     }
 }
@@ -273,10 +287,17 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let list = app.panels.audio.list.clone();
             let selected = app.panels.audio.selected;
             let mut clicked = None;
+            let nav = crate::ui::list_nav(ui.ctx(), &list, selected.as_ref());
+            if let Some((item, _)) = &nav {
+                clicked = Some(item.clone());
+            }
+            let nav_row = nav.map(|(_, r)| r);
             let height = (ui.available_height() * 0.55).max(120.0);
             use egui_extras::{Column, TableBuilder};
+            use crate::ui::TableNav;
             TableBuilder::new(ui)
                 .id_salt("audio_scroll")
+                .nav_scroll(nav_row)
                 .striped(true)
                 .resizable(true)
                 .sense(egui::Sense::click())
@@ -330,6 +351,9 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 });
             if let Some(index) = clicked {
                 app.panels.audio.selected = Some(index);
+                app.panels.audio.preview_wav = None;
+                app.panels.audio.preview_info = None;
+                app.panels.audio.preview_peaks = None;
                 if let Some(stream) = app.data.as_deref().and_then(|d| d.audio.streams.get(index)).cloned() {
                     app.panels.audio.info = Some(stream.info());
                     app.panels.audio.peaks = Some(waveform_peaks(&stream.path, 900));
@@ -375,6 +399,52 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             }
         });
 
+    egui::Panel::right("audio_inspector")
+        .exact_size(280.0)
+        .frame(egui::Frame::new().fill(theme::BG_PANEL).inner_margin(egui::Margin::same(8)))
+        .show(ui, |ui| {
+            ui.label(theme::heading("Inspector"));
+            ui.separator();
+            let stream = app
+                .panels
+                .audio
+                .selected
+                .and_then(|i| app.data.as_deref().and_then(|d| d.audio.streams.get(i)))
+                .cloned();
+            let Some(stream) = stream else {
+                ui.label(theme::faint_label("Select a stream in the list."));
+                return;
+            };
+            egui::CollapsingHeader::new(egui::RichText::new("Stream").strong()).default_open(true).show(ui, |ui| {
+                crate::ui::kv_rows(
+                    ui,
+                    &[
+                        ("name", stream.name.clone()),
+                        ("kind", stream.kind.clone()),
+                        ("file", stream.rel.clone()),
+                        ("size", human_size(stream.size)),
+                    ],
+                );
+            });
+            egui::CollapsingHeader::new(egui::RichText::new("Format").strong()).default_open(true).show(ui, |ui| {
+                crate::ui::kv_rows(
+                    ui,
+                    &[
+                        ("length", format!("{:.2} s", stream.duration)),
+                        ("sample rate", format!("{} Hz", stream.rate)),
+                        ("channels", stream.channels.to_string()),
+                        ("frames", stream.frames.to_string()),
+                    ],
+                );
+            });
+            egui::CollapsingHeader::new(egui::RichText::new("Actions").strong()).default_open(true).show(ui, |ui| {
+                if ui.button("Copy path").clicked() {
+                    ui.ctx().copy_text(stream.path.to_string_lossy().into_owned());
+                }
+                ui.label(theme::faint_label("Loop points and replacement are not editable yet (ED_asset_inspectors)."));
+            });
+        });
+
     egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(theme::BG_PANEL).inner_margin(egui::Margin::same(8)))
         .show(ui, |ui| {
@@ -417,35 +487,37 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             });
             ui.horizontal(|ui| {
                 let playing = app.panels.audio.playing.as_deref() == Some(path.as_path());
-                if ui.button(if playing { "\u{25b6} Playing\u{2026}" } else { "\u{25b6} Play" }).clicked() {
-                    if winsound::play(&path) {
-                        app.panels.audio.playing = Some(path.clone());
-                        app.panels.audio.length_ms = winsound::length().max(app.panels.audio.length_ms);
-                        app.panels.audio.position_ms = 0;
-                        app.status = format!("playing {name}");
-                    } else {
-                        app.status = "playback failed".into();
-                    }
+                let label = if playing && !app.panels.audio.paused { "\u{25b6} Playing\u{2026}" } else { "\u{25b6} Play" };
+                if ui.button(label).on_hover_text("Enter: play from the start").clicked() {
+                    start_playback(&mut app.panels.audio, &mut app.status, &path, &name);
+                }
+                if ui
+                    .add_enabled(playing, egui::Button::new(if app.panels.audio.paused { "Resume" } else { "Pause" }))
+                    .on_hover_text("Space")
+                    .clicked()
+                {
+                    toggle_pause(&mut app.panels.audio);
                 }
                 if ui.button("\u{25a0} Stop").clicked() {
                     winsound::stop();
                     app.panels.audio.playing = None;
+                    app.panels.audio.paused = false;
                     app.panels.audio.position_ms = 0;
                 }
-                if ui.button("\u{23ee} -10s").clicked() {
+                if ui.button("\u{ab} -10s").clicked() {
                     let pos = app.panels.audio.position_ms.saturating_sub(10_000);
                     winsound::seek(pos);
                     app.panels.audio.position_ms = pos;
-                    if app.panels.audio.playing.is_some() {
+                    if app.panels.audio.playing.is_some() && !app.panels.audio.paused {
                         winsound::resume();
                     }
                 }
-                if ui.button("\u{23ed} +10s").clicked() {
+                if ui.button("+10s \u{bb}").clicked() {
                     let max = app.panels.audio.length_ms.max(1);
                     let pos = (app.panels.audio.position_ms + 10_000).min(max);
                     winsound::seek(pos);
                     app.panels.audio.position_ms = pos;
-                    if app.panels.audio.playing.is_some() {
+                    if app.panels.audio.playing.is_some() && !app.panels.audio.paused {
                         winsound::resume();
                     }
                 }
@@ -459,6 +531,34 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                     ui.ctx().copy_text(path.to_string_lossy().into_owned());
                 }
             });
+            if !ui.ctx().egui_wants_keyboard_input() {
+                let (space, enter, left, right, shift) = ui.ctx().input(|i| {
+                    (
+                        i.key_pressed(egui::Key::Space),
+                        i.key_pressed(egui::Key::Enter),
+                        i.key_pressed(egui::Key::ArrowLeft),
+                        i.key_pressed(egui::Key::ArrowRight),
+                        i.modifiers.shift,
+                    )
+                });
+                let playing_this = app.panels.audio.playing.as_deref() == Some(path.as_path());
+                if enter || (space && !playing_this) {
+                    start_playback(&mut app.panels.audio, &mut app.status, &path, &name);
+                } else if space {
+                    toggle_pause(&mut app.panels.audio);
+                }
+                if (left || right) && app.panels.audio.playing.is_some() {
+                    let step: u64 = if shift { 10_000 } else { 5_000 };
+                    let max = app.panels.audio.length_ms.max(1);
+                    let current = app.panels.audio.position_ms;
+                    let pos = if right { (current + step).min(max) } else { current.saturating_sub(step) };
+                    winsound::seek(pos);
+                    app.panels.audio.position_ms = pos;
+                    if !app.panels.audio.paused {
+                        winsound::resume();
+                    }
+                }
+            }
             let length_ms = app.panels.audio.length_ms.max(1);
             let mut pos = app.panels.audio.position_ms.min(length_ms);
             ui.horizontal(|ui| {
@@ -473,7 +573,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 {
                     winsound::seek(pos);
                     app.panels.audio.position_ms = pos;
-                    if app.panels.audio.playing.is_some() {
+                    if app.panels.audio.playing.is_some() && !app.panels.audio.paused {
                         winsound::resume();
                     }
                 }
@@ -508,7 +608,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 let pos = (fraction * length_ms as f32) as u64;
                 winsound::seek(pos);
                 app.panels.audio.position_ms = pos;
-                if app.panels.audio.playing.is_some() {
+                if app.panels.audio.playing.is_some() && !app.panels.audio.paused {
                     winsound::resume();
                 }
             }
@@ -528,5 +628,120 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 ),
             ];
             crate::ui::kv_rows(ui, &rows);
+
+            // ---- Replace workflow -----------------------------------------
+            ui.separator();
+            ui.label(theme::heading("Replace stream"));
+            let root = app.dirs.root.clone();
+            let asset = stream
+                .path
+                .strip_prefix(&app.dirs.audio)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            let mut done: Option<String> = None;
+            {
+                let panel = &mut app.panels.audio;
+                ui.label(theme::faint_label(
+                    "Export the WAV, edit it at the same sample rate/channel count, import it here. \
+                     The default keeps the retail DSP-ADPCM codec (4-bit, lossy, streamable); PCM16 is \
+                     lossless but about four times larger in the PACK and on the SD card.",
+                ));
+                ui.add(
+                    egui::TextEdit::singleline(&mut panel.tools.import_path)
+                        .hint_text("edited WAV path")
+                        .desired_width(f32::INFINITY),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Export WAV…").clicked() {
+                        panel.tools.start_export(&root, "audio", &asset);
+                    }
+                    egui::ComboBox::from_id_salt("audio_replace_codec")
+                        .selected_text(if panel.codec == 0 { "DSP-ADPCM (retail)" } else { "PCM16 (lossless, larger)" })
+                        .width(240.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut panel.codec, 0, "DSP-ADPCM (retail)");
+                            ui.selectable_value(&mut panel.codec, 1, "PCM16 (lossless, larger)");
+                        });
+                    let extra = vec![
+                        "--codec".to_string(),
+                        if panel.codec == 0 { "dspadpcm".to_string() } else { "pcm16".to_string() },
+                    ];
+                    if ui.button("Replace + preview").clicked() {
+                        panel.tools.start_replace(&root, "audio", &asset, extra.clone(), false);
+                    }
+                    if ui.button("Replace + save to mod").clicked() {
+                        panel.tools.start_replace(&root, "audio", &asset, extra, true);
+                    }
+                });
+                let fresh = panel.tools.show_status(ui, &root);
+                if fresh {
+                    if let Some(path) = panel.tools.preview_path(&root) {
+                        panel.preview_info = crate::utils::read_wav_info(&path).ok();
+                        panel.preview_peaks = Some(crate::utils::waveform_peaks(&path, 700));
+                        panel.preview_wav = Some(path.to_path_buf());
+                    }
+                    done = Some(match panel.tools.error.clone() {
+                        Some(error) => format!("audio replace failed: {error}"),
+                        None => panel.tools.message.clone(),
+                    });
+                }
+            }
+            if let Some(message) = done {
+                app.status = message;
+            }
+            if let Some(preview) = app.panels.audio.preview_wav.clone() {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(theme::heading("Encoded preview"));
+                    if ui.button("\u{25b6} Play").clicked() {
+                        if winsound::play(&preview) {
+                            app.panels.audio.playing = Some(preview.clone());
+                            app.status = "playing the encoded replacement".into();
+                        }
+                    }
+                    if ui.button("\u{25a0} Stop").clicked() {
+                        winsound::stop();
+                        app.panels.audio.playing = None;
+                    }
+                    if let Some(info) = &app.panels.audio.preview_info {
+                        ui.label(theme::faint_label(format!(
+                            "{}  \u{b7}  {} Hz  \u{b7}  {} ch  \u{b7}  {}",
+                            info.duration_text(),
+                            info.rate,
+                            info.channels,
+                            preview.display()
+                        )));
+                    }
+                });
+                let (mins, maxs) = app.panels.audio.preview_peaks.clone().unwrap_or_default();
+                let height = ui.available_height().max(120.0);
+                ui.allocate_ui(egui::vec2(ui.available_width(), height.min(220.0)), |ui| {
+                    crate::ui::waveform(ui, &mins, &maxs, app.panels.audio.preview_info.as_ref().map(|i| i.duration()).unwrap_or(0.0), None);
+                });
+            }
         });
+}
+
+fn start_playback(panel: &mut AudioPanel, status: &mut String, path: &std::path::Path, name: &str) {
+    if winsound::play(path) {
+        panel.playing = Some(path.to_path_buf());
+        panel.paused = false;
+        panel.length_ms = winsound::length().max(panel.length_ms);
+        panel.position_ms = 0;
+        *status = format!("playing {name}");
+    } else {
+        *status = "playback failed".into();
+    }
+}
+
+fn toggle_pause(panel: &mut AudioPanel) {
+    if panel.playing.is_none() {
+        return;
+    }
+    if panel.paused {
+        winsound::resume();
+    } else {
+        winsound::pause();
+    }
+    panel.paused = !panel.paused;
 }

@@ -1,0 +1,1398 @@
+[
+ {
+  "address": "0x0041AD34",
+  "name": "maybe_Ui_Tween_ClampValue",
+  "signature": "bool maybe_Ui_Tween_ClampValue(void* self, float* out, float value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "value"
+  },
+  "summary": "Clamps an incoming float into [-300.0, 0.0], pushes it through a two-slot virtual interface (slot 0 begin, slot 1 apply to out) and returns whether the magnitude fell below 1e-5.",
+  "confidence": 0.4,
+  "evidence": "Nothing in the body proves a tween: it only clamps and reports 'is (almost) zero', which several Ui drivers do. No caller or vtable entry was found for 0x41AD34, and the decompiled body still reads `value` from an uninitialised register (in_s0), so the argument order is a guess. Still no caller, no vtable reference and no named callee; the constants -300.0/0.0/1e-5 are unchanged from the first pass. Kept honest as a clamp helper with the exact numeric range in the summary.",
+  "previous_name": "maybe_Ui_Tween_ClampValue",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00400304",
+  "name": "maybe_Battle_ActionAnim_Element_UpdateMarkerIfModel",
+  "signature": "void maybe_Battle_ActionAnim_Element_UpdateMarkerIfModel(BattleAnimElement* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Virtual of a battle action-animation element: when 0x0066A2BC(self->f_28) reports a value, it refreshes the actor's target marker through maybe_Battle_Action_UpdateTargetMarker; otherwise it does nothing.",
+  "confidence": 0.42,
+  "evidence": "The vtable slot is confirmed (0x76C4FC) and sits in the block that also holds Battle_ActionAnim_MoveLandingElement_Dtor (0x400350) and Battle_ActionAnim_LevelUpElement_Dtor (0x4003A4), so the class family is right. The guard 0x0066A2BC is still unnamed, so 'has a model' remains an inference. Vtable 0x76C4FC re-read: neighbours 0x76C4F0 Battle_ActionAnim_MoveLandingElement_Dtor and 0x76C524 Battle_ActionAnim_LevelUpElement_Dtor confirm the element class, but the predicate 0x0066A2BC has no name in any batch, so the 'IfModel' half stays unproven.",
+  "previous_name": "maybe_Battle_ActionAnim_Element_UpdateMarkerIfModel",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004006A0",
+  "name": "maybe_Battle_ActionAnim_Element_UpdateMarkerIfModelB",
+  "signature": "void maybe_Battle_ActionAnim_Element_UpdateMarkerIfModelB(BattleAnimElement* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Same three-line marker refresh as 0x00400304, used by a second action-animation element table; the vtable slot is 0x76C5CC, next to Battle_ActionAnim_RevivalElement_Dtor.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical body to 0x00400304 (guard 0x0066A2BC, then maybe_Battle_Action_UpdateTargetMarker). Only the vtable identity differs, and the guard is still unnamed. Vtable 0x76C5CC re-read: the preceding 0x76C5C0 is Battle_ActionAnim_RevivalElement_Dtor, so this is the revival element's copy of the marker update; nothing new explains what 0x0066A2BC tests.",
+  "previous_name": "maybe_Battle_ActionAnim_Element_UpdateMarkerIfModelB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00401A00",
+  "name": "Model_ObjectType0x74_Ctor",
+  "signature": "ModelObject* Model_ObjectType0x74_Ctor(ModelObject* storage)",
+  "params": {
+   "param_1": "storage"
+  },
+  "summary": "Constructor variant that the actor-model factory runs for model-definition type 0x74: allocates the status block, installs vtable 0x76C5F0, clears the two flag bytes at +0xF22/+0xF23 and writes the -1024 sentinel at +0xF24.",
+  "confidence": 0.5,
+  "evidence": "The only caller is now the named maybe_Model_CreateActorModel (0x208AE8), inside its type-0x74 branch, and the installed vtable 0x76C5F0 carries Battle_ActionModel_Dtor (0x401A38) and Battle_ActionModel_InitFromDescriptor (0x1CC360) in slots 1/2, i.e. the object is a battle action model. The name stays deliberately generic about the subclass, so it is not a wrong precise name. Caller resolved to 0x00208AE8 maybe_Model_CreateActorModel (the model factory), and rodata 0x76C5F0 shows Battle_ActionModel_Dtor / Battle_ActionModel_InitFromDescriptor as the class's other slots -- the first pass had only the bare 'definition+8 == 0x74' branch.",
+  "previous_name": "maybe_Model_ObjectType0x74_Ctor",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00402F94",
+  "name": "maybe_Ui_PartyPanel_SetFlag",
+  "signature": "void maybe_Ui_PartyPanel_SetFlag(UiPartyPanel* self, u32 on)",
+  "params": {
+   "param_1": "self",
+   "param_2": "on"
+  },
+  "summary": "Vtable slot of Ui_PartyPanel that tail-calls the shared Ui-object flag setter 0x0029126C with all registers untouched: it stores the flag byte and mirrors bit 0 into the child object's +0x44 visible bit.",
+  "confidence": 0.45,
+  "evidence": "The old name is wrong: 0x0029126C is not an abort handler. Disassembly of 0x0029126C is `ldr r2,[r0,#4]; strb r1,[r0,#0x14]; ... ldrb r2,[r0,#0x44]; and #0xfe; orr r1; strb` -- a normal setter that writes a byte and propagates the low bit to the child's visible flag, and the same address appears as a regular vtable method in the icon-cache (0x76DE7C) and monster-book (0x76E1DC) tables. Ghidra only marked the call non-returning because it is a tail branch. Read the disassembly instead of the pseudocode: 0x0029126C stores arg2 at +0x14 and propagates bit 0 to the object at (self+4)+0x10 -> +0x44, and it is referenced as an ordinary vtable slot from other classes -- so this entry is a forwarding 'set flag' override, not a pure-virtual trap. The exact flag semantics (visible/enabled) and the class name are still inferred from the neighbouring 0x76C964 table that holds Ui_PartyPanel_HpGauge_Ctor.",
+  "previous_name": "maybe_Ui_PartyPanel_PureVirtualStub",
+  "previous_confidence": 0.9,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004040B6",
+  "name": "maybe_Ui_ListWindow_UpdateRowEnable",
+  "signature": "void maybe_Ui_ListWindow_UpdateRowEnable(UiListWindow* first, u32 first2, u32 arg3, ListRows* rows)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused",
+   "param_3": "arg3",
+   "param_4": "rows"
+  },
+  "summary": "Row-enable scan: for each of up to 0x1E rows it looks the row record up in the 0x63F8F0 table, tests flag bit 0 and toggles the row control through virtual +0x40 (visibility) and +0x4C (string).",
+  "confidence": 0.35,
+  "evidence": "The body is a damaged Thumb fragment (unaff_r4/r5/r8/r11 carry the loop state, `halt`-free but reconstructed by hand) and there is no caller, so the owning window, the loop start and even the direction of the flag test are not reliable. No caller in the whole .text (checked all bl/b targets) and no vtable slot; the loop state still lives in unaff registers, so the summary was tightened to the parts that are actually visible (table 0x63F8F0, bit 0, virtuals +0x40/+0x4C).",
+  "previous_name": "maybe_Ui_ListWindow_UpdateRowEnable",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00404824",
+  "name": "maybe_Ui_PartyPanel_WriteRowOffset",
+  "signature": "void maybe_Ui_PartyPanel_WriteRowOffset(UiPartyPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fragment of the party-panel row setup: computes a signed row offset from self->f_38->f_c and self->f_28, writes the low halfword at +6 of the row record and stops at bad instruction data.",
+  "confidence": 0.3,
+  "evidence": "Only the prologue survives (halt_baddata/software_interrupt), so the argument registers and the destination record are guesses. The single caller 0x280970 is itself only maybe_Ui_PartyPanel_ConfirmMemberSlots. The caller is still only a maybe_ name (0x00280970 maybe_Ui_PartyPanel_ConfirmMemberSlots) and the readable body is still truncated by bad instruction data, so no new evidence exists.",
+  "previous_name": "maybe_Ui_PartyPanel_WriteRowOffset",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00405534",
+  "name": "Ui_ScreenObject_Ctor",
+  "signature": "UiScreenObject* Ui_ScreenObject_Ctor(UiScreenObject* storage)",
+  "params": {
+   "param_1": "storage"
+  },
+  "summary": "Constructor of a screen-level Ui container: runs the composite-object base constructor, installs vtable 0x76CEEC, clears the id bytes at +0x91..+0x93 and +0xD5 and copies the three-word default anchor from 0x7E7000 into +0x98..+0xA0.",
+  "confidence": 0.55,
+  "evidence": "Its destructor is the immediately following, confidently named Ui_ScreenObject_Dtor (0x405584), and maybe_Ui_ScreenChild_WindowObject_Ctor (0x46B81C) uses it as a base constructor -- both new since the first pass. Callers re-checked: 0x00405584 Ui_ScreenObject_Dtor (confident name, same vtable 0x76CEEC, next function in .text) and 0x0046B81C maybe_Ui_ScreenChild_WindowObject_Ctor call it as ctor/base-ctor; that pins the class better than the old 'only caller is Ui_ScreenController_InitChildren'.",
+  "previous_name": "maybe_Ui_ScreenObject_Ctor",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00405C88",
+  "name": "Ui_ListWidget_Screen_DeleteDtor",
+  "signature": "void Ui_ListWidget_Screen_DeleteDtor(UiListWidgetScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of the list-widget screen: calls the class destructor and frees the object.",
+  "confidence": 0.52,
+  "evidence": "It is the slot-1 entry of vtable 0x76CF80 whose slot 0 is 0x405C98 maybe_Ui_ListWidget_Screen_Dtor, and slot 1 of the same table is maybe_Ui_ListWidgetScreen_UpdateState -- a standard dtor/deleting-dtor pair of one class. Vtable 0x76CF80 re-read: slot 0 = 0x00405C98 maybe_Ui_ListWidget_Screen_Dtor, slot 1 = this entry, slot 2 = 0x004057DC maybe_Ui_ListWidgetScreen_UpdateState; the pair fixes the class even though the class name itself still comes from the first pass.",
+  "previous_name": "maybe_Ui_ListWidget_Screen_DeleteDtor",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00407600",
+  "name": "maybe_Effect_UpdateAttachedInstances",
+  "signature": "void maybe_Effect_UpdateAttachedInstances(EffectAttach* self, u32 arg2, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Per-frame state machine (self->f_DC = 1..4) for the effect instances attached to an actor: validates the effect handles against the 0x7B4D68 table, spawns or updates the slot effect through 0x407468/0x407534 and finally clears +0xE0 when 0x406E08 reports completion.",
+  "confidence": 0.47,
+  "evidence": "New: it is only ever called from the battle target-marker update (five call sites in maybe_Battle_TargetMarker_UpdateSlotEffects / UpdateSlots), so the owner is a target-marker, not a generic effect list. The states and handle validation are clear, but the class name 'EffectAttach' is invented and the two arg2/arg3 are unused in the body. All call sites in .text now point at 0x004D5340/0x004D5508/0x004D55B8/0x004D55EC/0x004D57F8, all inside maybe_Battle_TargetMarker_UpdateSlotEffects/UpdateSlots -- the first pass had only 'callers 0x4D5230/0x4D5794'. That fixes the owner but those callers are themselves maybe_ names, so the class is still not provable.",
+  "previous_name": "maybe_Effect_UpdateAttachedInstances",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004077B4",
+  "name": "maybe_Effect_GetAttachedInstancePtr",
+  "signature": "void* maybe_Effect_GetAttachedInstancePtr(void)",
+  "params": {},
+  "summary": "container_of-style accessor: calls 0x002DB8BC and subtracts 0x68, i.e. recovers the owner record that embeds the effect reference at +0x68.",
+  "confidence": 0.4,
+  "evidence": "The body is one subtraction, 0x002DB8BC is only maybe_Effect_RefDtor, and there is no direct caller anywhere in .text, so neither the returned offset nor the owner type is proven. No bl/b target in the whole image reaches 0x4077B4 and no vtable holds it, so nothing new supports a stronger name; the summary now says explicitly that 0x68 is the embedding offset of the record returned by 0x002DB8BC.",
+  "previous_name": "maybe_Effect_GetAttachedInstancePtr",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00408154",
+  "name": "Ui_DungeonSkillWindow_Teardown",
+  "signature": "void Ui_DungeonSkillWindow_Teardown(UiDungeonSkillWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Shuts the dungeon-skill window down: invokes the layout close callback self->f_98->f_2C and tears the embedded section block at +0x128 down through 0x289F14.",
+  "confidence": 0.5,
+  "evidence": "Vtable 0x76D1F8 slot 0; the same table holds the confidently named Ui_DungeonSkillWindow_Dtor (0x4083C8) at slot -4 and Ui_DungeonSkillWindow_InitLayout (0x4080F0) at -1, so the class is fixed and the 'teardown' role matches the two calls. Vtable 0x76D1F8 re-read: neighbours Ui_DungeonSkillWindow_Dtor (0x004083C8) and Ui_DungeonSkillWindow_InitLayout (0x004080F0) are both confident names from M1, which pins the class the first pass could only infer from the 'win_dungeon_skill' string.",
+  "previous_name": "maybe_Ui_DungeonSkillWindow_Teardown",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00409710",
+  "name": "maybe_Ui_TextWindow_DeletingDtor",
+  "signature": "void maybe_Ui_TextWindow_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor (vtable 0x76D5AC slot 0) that runs the 0x193E40 Ui-node base destructor and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The vtable shows the class belongs to the numbered-text-window family (slot +13 is 0x409E6C Ui_NumberedTextWindow_Dtor and slot +6 0x409450 maybe_Ui_NumberedTextWindow_OnValueChanged), so 'Ui_TextWindow' is a parent-class guess; the concrete window class is not provable from one vtable. Vtable 0x76D5AC re-read: its TextWindow-specific slots are Ui_NumberedTextWindow_Dtor / maybe_Ui_NumberedTextWindow_OnValueChanged, so the class is in that family -- but a second, different text-window vtable also dumps to 0x409E6C, so the exact class name stays a maybe.",
+  "previous_name": "maybe_Ui_TextWindow_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040A374",
+  "name": "maybe_Ui_PanelPart_DeletingDtorA",
+  "signature": "void maybe_Ui_PanelPart_DeletingDtorA(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of a small Ui window/panel class whose secondary (multiple-inheritance) vtable is 0x76D6A8: runs the 0x2650C4 base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "Every other slot of 0x76D6A8 is an unnamed 0x2650xx Ui-window base method plus the adjustor 0x40A370, so nothing identifies the concrete class. 'PanelPart' is a placeholder, not evidence. Vtable 0x76D6A8 re-read: slots 1..12 are all 0x00265000..0x00265028 base methods and the adjustor 0x0040A370 -- no class-specific method and no caller, so the class stays unknown.",
+  "previous_name": "maybe_Ui_PanelPart_DeletingDtorA",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040AC1C",
+  "name": "maybe_Ui_TextLabel_GetSlotDescriptor",
+  "signature": "int maybe_Ui_TextLabel_GetSlotDescriptor(UiTextLabel* self, u32 kind, int index, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "kind",
+   "param_3": "index",
+   "param_4": "arg4"
+  },
+  "summary": "Maps a label kind/index pair onto a per-kind offset inside the 0x63EB94 record selected by self->f_65 (0x160/0x1B0/0x200/0x250/0x2A0/0x2F0, 0x340, 0x368+index*0x28, 0x3B8, 0x3E0, 0x408) and returns that address.",
+  "confidence": 0.42,
+  "evidence": "The switch and offsets are solid and the only caller is maybe_Ui_LabelSlots_SubmitRotatedText (0x40B800), but what the records at 0x63EB94 are (message? item?) is still unknown, so 'slot descriptor' remains a description of the use, not of the data. Caller re-read: 0x0040B800 maybe_Ui_LabelSlots_SubmitRotatedText passes its own kind/index through and stores the returned pointer as the text source -- consistent with the old guess, but table 0x63EB94 has no named lookup function and the caller is still maybe_, so confidence stays below 0.5.",
+  "previous_name": "maybe_Ui_TextLabel_GetSlotDescriptor",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040BBA4",
+  "name": "maybe_Ui_PanelPart_DeletingDtorB",
+  "signature": "void maybe_Ui_PanelPart_DeletingDtorB(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Sibling of 0x40A374: deletes an object whose secondary vtable 0x76D6E8 has the identical 0x2650xx base-method layout, with adjustor 0x40BAE8.",
+  "confidence": 0.4,
+  "evidence": "Identical body and an anonymous secondary vtable; only the adjustor slot differs, so the concrete class is unknown. Vtable 0x76D6E8 re-read: same slot layout as 0x76D6A8 (all 0x002650xx base methods, adjustor 0x0040BAE8) and still no caller or class-specific method.",
+  "previous_name": "maybe_Ui_PanelPart_DeletingDtorB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040C3C8",
+  "name": "maybe_Ui_PanelPart_DeletingDtorC",
+  "signature": "void maybe_Ui_PanelPart_DeletingDtorC(void* self, unsigned int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "flags"
+  },
+  "summary": "Deleting destructor variant that first stores the third register argument at +0x3C, then runs the 0x2650C4 base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical to 0x40CCC4 and no vtable reference survives in rodata, so even the existence of the extra store as a real field (rather than a decompiler artefact of the freed `this`) is unproven. Body is still `self->f_3c = arg3;` + 0x002650C4 + operator delete, and 0x40C3C8 appears in no rodata table, so nothing changed since the first pass.",
+  "previous_name": "maybe_Ui_PanelPart_DeletingDtorC",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040CCC4",
+  "name": "maybe_Ui_PanelPart_DeletingDtorD",
+  "signature": "void maybe_Ui_PanelPart_DeletingDtorD(void* self, unsigned int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "flags"
+  },
+  "summary": "Fourth sibling of the 0x40A374 group: writes +0x3C, destroys the 0x2650C4 base object and frees it.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical to 0x40C3C8; the only difference is the address, and neither has a vtable entry or caller. Confirmed byte-identical pseudocode to 0x0040C3C8 and no rodata reference for 0x40CCC4; the class remains unidentified.",
+  "previous_name": "maybe_Ui_PanelPart_DeletingDtorD",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0040D8C0",
+  "name": "maybe_Field_Object2D_SyncTaskChain",
+  "signature": "u32 maybe_Field_Object2D_SyncTaskChain(Field_Object2D* self, u32 actorHandle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorHandle"
+  },
+  "summary": "Attaches or detaches the object's task chain (self->f_2C8) so that it matches the actor's state: when the flag f_2D8 is clear it removes the chain from an actor whose state byte is 7, otherwise it installs a new chain via 0x2337CC / Actor_CreateTaskChainB and reports whether it changed anything.",
+  "confidence": 0.45,
+  "evidence": "The old name says the function swaps the *actor state*, which is the opposite of what happens -- it only reads actor->f_312 and never writes it. It is a task-chain synchroniser. The two branch helpers 0x2337CC and Actor_CreateTaskChainB are still only partly named, so the name stays a maybe. Re-read the body: actor->f_312 is only compared ('\\a' == 7) and never stored; the only writes go to &self->f_2c8 via 0x002337CC (detach) and Actor_CreateTaskChainB (attach). That makes 'SwapActorState' misleading -- corrected to the task-chain sync it actually performs.",
+  "previous_name": "maybe_Field_Object2D_SwapActorState",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0040EE10",
+  "name": "Field_Object2D_DeletingDtor",
+  "signature": "void Field_Object2D_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of a Field::Object2D node: destroys the Actor2D effect-node base (0x28EFB4) and frees the object.",
+  "confidence": 0.55,
+  "evidence": "Vtable 0x76DA34 holds the confidently named Field_Object2D_OnDeactivate, Field_Object2D_PlaceEffectInFrontOfCamera and Field_Object2D_PlayIdleEffect, so the class is fixed; the base destructor 0x28EFB4 is the Actor2D::EffectNode one. Vtable 0x76DA34 re-read: slots 2/6/10 are Field_Object2D_OnDeactivate (0x0040EC7C), Field_Object2D_PlaceEffectInFrontOfCamera (0x0040E320) and Field_Object2D_PlayIdleEffect (0x0040E978), all confident names from M1.",
+  "previous_name": "maybe_Field_Object2D_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0040F918",
+  "name": "maybe_Field_Object2D_SpriteDeletingDtor",
+  "signature": "void maybe_Field_Object2D_SpriteDeletingDtor(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Destructor counterpart of Field_Object2D_CtorSprite (0x40F898): reinstalls the primary vtable and the +0x98 secondary one, tears the sprite slot down through 0x59AA7C/0x28E6C4 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The ctor/dtor pairing is consistent, but 0x59AA7C and 0x28E6C4 are unnamed and the class has no vtable reference in rodata, so 'Sprite' rests on the ctor neighbour only. No rodata table references 0x0040F918 and the two teardown callees are still unnamed; the only support remains the position next to 0x0040F898 Field_Object2D_CtorSprite in the header.",
+  "previous_name": "maybe_Field_Object2D_SpriteDeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00410168",
+  "name": "maybe_Ui_Screen_BindLayoutAnimation",
+  "signature": "void maybe_Ui_Screen_BindLayoutAnimation(Ui_Screen* self, int layoutId, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "layoutId",
+   "param_3": "arg3"
+  },
+  "summary": "Registers one table/context pair (0x7BFBD4, self->f_20C) with the Ui core updater at core+0x848 and then rebinds core+0x844 to core+0x84C -- the same registration idiom as maybe_Field_Actor_NotifyAnimUpdate (0x417DCC).",
+  "confidence": 0.42,
+  "evidence": "The core pointer 0x7AC834 is used with exactly the same two stores by 0x417DCC, which has a different table argument, so this is a 'register/notify the Ui core' helper rather than provably a layout-animation binding. arg2 and arg3 are not used in the surviving body. Cross-checked against 0x00417DCC, which performs the identical `0x707C1C(core+0x848, <table>, value)` + `core->f_844 = core+0x84C` pair with a different table constant; that weakens the specific 'BindLayoutAnimation' reading, so the summary now describes the registration pattern instead.",
+  "previous_name": "maybe_Ui_Screen_BindLayoutAnimation",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004111A0",
+  "name": "Ui_Screen_UpdateChildren",
+  "signature": "void Ui_Screen_UpdateChildren(UiScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of a composite screen: runs the screen callback at self->f_98->f_2C, updates each of the three optional child blocks at +0x148/+0x1A4/+0x1FC when its enable byte is set, then drives the trailing slot-grid cross-fade at +0x24C.",
+  "confidence": 0.52,
+  "evidence": "Vtable 0x76DD24 slot 0; the neighbouring slots are the confidently named Ui_Window_LayoutRows, Ui_Layout_UpdateFourChildTransforms and Menu_HorseRace_UpdateCourseArrows, and the three guarded children plus the last call match the 'update my children' shape. Vtable 0x76DD24 re-read (Ui_Window_LayoutRows, Ui_Layout_UpdateFourChildTransforms, Menu_HorseRace_InitUi are confident names) and the final call now resolves to maybe_Ui_SlotGrid_UpdateCrossFade -- the same sub-object 0x4111A0 guards at +0x24C.",
+  "previous_name": "maybe_Ui_Screen_UpdateChildren",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0041135C",
+  "name": "maybe_Ui_Widget_BindCallbacks",
+  "signature": "void maybe_Ui_Widget_BindCallbacks(UiWidget* self, UiWidgetHost* host, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "host",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Links the widget into two of its host's intrusive lists: the descriptor at 0x72B318 is inserted at host+0x114 into the node at self+0x9AC, and the one at 0x72B34C at host+0x98 into self+0x960.",
+  "confidence": 0.42,
+  "evidence": "Both inserts go through 0x1235A4 with a descriptor pair (pointer + flags word), which is a list/binding operation, but the descriptor globals 0x72B318/0x72B34C and the helper are unnamed and the body is register-damaged (unaff_r4..r8 passed through). Caller 0x003DF0C4 maybe_Ui_MessageWindow_CreateParts still only a maybe_ name; the two descriptor globals 0x72B318/0x72B34C are not referenced by any named function, so 'BindCallbacks' vs 'AttachLists' cannot be decided.",
+  "previous_name": "maybe_Ui_Widget_BindCallbacks",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00411C0C",
+  "name": "maybe_Ui_Row_SetCurrentChild",
+  "signature": "void maybe_Ui_Row_SetCurrentChild(UiRow* self, u32 row)",
+  "params": {
+   "param_1": "self",
+   "param_2": "row"
+  },
+  "summary": "Marks one child of a seven-pane row as current: maps the row through the table at (ctx+0x80)+0x10 with 0x633894/0x6338A8 and sets/clears bit 0 of f_44 on each of the seven children at self+0x5C.",
+  "confidence": 0.45,
+  "evidence": "The 7-child loop and the two table calls are clear, but the caller is only maybe_Ui_SlotGrid_UpdateCrossFade (0x473D68) and the class ('UiRow') is invented from the 7 slots. Caller resolved to 0x00473D68 maybe_Ui_SlotGrid_UpdateCrossFade (itself called from 0x4111A0 at +0x24C), which supports the 'select current row child' reading but is still a maybe_ name; 0x633894/0x6338A8 remain unnamed.",
+  "previous_name": "maybe_Ui_Row_SetCurrentChild",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00412970",
+  "name": "Ui_IconCache_DeletingDtor",
+  "signature": "void Ui_IconCache_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the Ui icon-cache object: the real teardown is the out-of-line vtable slot 0 (0x5646EC), so the body is only the free call.",
+  "confidence": 0.5,
+  "evidence": "The class is fixed by vtable 0x76DE50: slot 0 is the 0x5646EC teardown thunk, slot 1 this deleting destructor, slot 2 the confidently named Ui_IconCache_StartThread and slot 13 Ui_GaugeWindow_InitPanesB. Vtable 0x76DE50 re-read with M1 names: 0x00412960 now reads Ui_IconCache_StartThread (confident) and sits directly beside this slot, confirming the icon-cache class; the body-free structure is the normal 'base teardown out of line' pattern.",
+  "previous_name": "maybe_Ui_IconCache_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00413434",
+  "name": "maybe_Field_ActorAction_PropagateFlag",
+  "signature": "void maybe_Field_ActorAction_PropagateFlag(Field_ActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Takes the byte produced by 0x29E488 (read with the owning actor self->f_28) and, if the actor's model/state object at +0xB8 exists, stores it into that object's +0x128.",
+  "confidence": 0.38,
+  "evidence": "The data flow is visible but 0x29E488 is unnamed, so what the byte means (flag? state id?) and therefore what is being propagated is unknown; the function writes a single byte and nothing else. 0x0029E488 is still not named in any batch and the body is a single byte copy into f_28->f_b8->f_128, so the 'flag' reading cannot be strengthened.",
+  "previous_name": "maybe_Field_ActorAction_PropagateFlag",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413450",
+  "name": "Field_ActorAction_SnapshotActorPose",
+  "signature": "void Field_ActorAction_SnapshotActorPose(Field_ActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Copies the owning actor's ten-word pose block (actor+0x2A0..+0x2C0) into the action's own cache at self+0x34..+0x54, zeroes the blend value at +0x30 and clears the running flag at +0x2C.",
+  "confidence": 0.55,
+  "evidence": "The copy is one-for-one and self-consistent (a snapshot), and the vtable slot 0x76DED0 is in the same table whose slot 2 is maybe_Gfx_ComputeBillboardTransform. Re-read the body: exactly ten field-to-field copies from f_28+0x2A0..0x2C0 into self+0x34..0x54 plus two clears -- the pose-snapshot behaviour is unambiguous even though the first pass only had the vtable slot.",
+  "previous_name": "maybe_Field_ActorAction_SnapshotActorPose",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004137A8",
+  "name": "maybe_Field_ActorAction_TurnBase_DeletingDtor",
+  "signature": "void maybe_Field_ActorAction_TurnBase_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of the base class that the turn actions derive from: runs the 0x294BB8 base destructor and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The vtable 0x76DF00 is shared with Battle_Action_EvaluateBlendWeights / Battle_Action_UpdateClipTiming, so the base is a Battle_Action, while the derived vtable 0x76DF34 starts the concrete turn action. Calling the base 'Field_ActorAction_TurnBase' is plausible but not provable. Vtable 0x76DF00 re-read: its other slots are Battle_Action_EvaluateBlendWeights (0x00294A00, confident) and Battle_Action_UpdateClipTiming (0x00294938, confident), i.e. the base is a Battle_Action, and the turn-specific methods live in the *next* table 0x76DF34 -- so the 'TurnBase' wording is only half supported.",
+  "previous_name": "maybe_Field_ActorAction_TurnBase_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004137B8",
+  "name": "maybe_Field_ActorAction_StopTurn",
+  "signature": "void maybe_Field_ActorAction_StopTurn(FieldActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Entry point of the turn action (slot 0 of vtable 0x76DF38): runs the shared action init 0x372B00 and clears the running flag at +0xE4; the matching start entry is Field_ActorAction_TurnTowardTarget at slot 2.",
+  "confidence": 0.4,
+  "evidence": "Two statements only, and 0x372B00 is only maybe_Field_ActorAction_Init, so 'StopTurn' is an inference from the slot layout rather than from anything the body does. Vtable 0x76DF38 re-read: slot 1 is 0x00413938 and slot 2 is the confident Field_ActorAction_TurnTowardTarget (0x004137D0), so this is the first entry of the turn action -- but the callee 0x00372B00 is still maybe_Field_ActorAction_Init, so 'stop' vs 'init' stays uncertain.",
+  "previous_name": "maybe_Field_ActorAction_StopTurn",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413938",
+  "name": "maybe_Field_ActorAction_UpdateTurn",
+  "signature": "void maybe_Field_ActorAction_UpdateTurn(FieldActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame turn update: copies the action's two eight-word transform blocks (self+0x78..+0x94 and +0xA8..+0xD4) into the actor's two render nodes (actor->f_244[self->f_D8] and actor->f_160, fields +0x5F4..+0x620), releases the actor's effect slots and then calls actor vtable +0x88.",
+  "confidence": 0.45,
+  "evidence": "The body no longer matches the first pass's 'only call is 0x5F747C' note: it mostly pushes cached transforms into the actor's model nodes, then releases effect slots (maybe_Gfx_Node_ReleaseEffectSlots) and calls vtable +0x88. It is the turn action's per-frame step, but 'UpdateTurn' describes the slot, not the data flow. The readable body is now a transform upload (two blocks into actor->f_244[..]+0x5F4 and actor->f_160+0x5F4) followed by maybe_Gfx_Node_ReleaseEffectSlots(actor,1) and actor vtable +0x88 -- a correction of the old summary, which claimed a single call to 0x5F747C.",
+  "previous_name": "maybe_Field_ActorAction_UpdateTurn",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413A7C",
+  "name": "maybe_Field_ActorAction_DeletingDtor_2",
+  "signature": "void maybe_Field_ActorAction_DeletingDtor_2(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Scalar deleting destructor of a field-actor action: reinstalls the vtable passed in, runs the common action destructor 0x294C88 and frees the object.",
+  "confidence": 0.4,
+  "evidence": "No rodata reference survives for this entry, so the concrete action class is unknown; only the shared 0x294C88 base destructor ties it to the action family. 0x00413A7C appears in no rodata table, so there is still no vtable to identify the class; the base destructor 0x00294C88 is unnamed too.",
+  "previous_name": "maybe_Field_ActorAction_DeletingDtor_2",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413AA4",
+  "name": "maybe_Field_ActorAction_ApplyAnimResource",
+  "signature": "void maybe_Field_ActorAction_ApplyAnimResource(Field_ActorAction* self, int applyTwice)",
+  "params": {
+   "param_1": "self",
+   "param_2": "applyTwice"
+  },
+  "summary": "Lazily allocates a cached 0xA24-byte animation-resource buffer, resolves its sub-block with 0x63D6B8(buf,4) and hands block+0x38 to the actor twice through vtable +0x84 (and +0x88 in between) so the animation restarts.",
+  "confidence": 0.45,
+  "evidence": "The resource plumbing is clear (allocator 0x11CFAC/0x116AE0/0x11CFDC + 0x63D6B8), but 0x63D6B8 is unnamed and the actor virtuals +0x84/+0x88 are only known to take a string/animation pointer from other sites, so 'ApplyAnimResource' is a good description, not a proven identity. Vtable 0x76DFA0 re-read: slot 0 is 0x00413BC0 and slot 1 is this function, while slots 3/5 are maybe_Field_Action_UpdateAnim / Field_Action_UpdateNutState -- the class is in the Field_Action family, but 0x0063D6B8 still has no name.",
+  "previous_name": "maybe_Field_ActorAction_ApplyAnimResource",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413BC0",
+  "name": "maybe_Field_ActorAction_AnimResource_DeletingDtor",
+  "signature": "void maybe_Field_ActorAction_AnimResource_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of the class whose other virtual is the animation-resource applier (0x413AA4): runs the 0x193E44 base destructor and frees the object.",
+  "confidence": 0.48,
+  "evidence": "The dtor/apply pair in vtable 0x76DFA0 is solid, but the class name is derived from the applier, which is itself still a maybe_ -- so the name inherits that uncertainty. Vtable 0x76DFA0 re-read confirms slot 0 = this, slot 1 = 0x00413AA4, slots 3/5 = maybe_Field_Action_UpdateAnim / Field_Action_UpdateNutState: the pairing is proven, the class name is not.",
+  "previous_name": "maybe_Field_ActorAction_AnimResource_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00413C14",
+  "name": "Field_ActorAction_BeginStep",
+  "signature": "void Field_ActorAction_BeginStep(FieldActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the 'step' behaviour: calls the shared step entry (0x372Bxx, maybe_Field_Actor_BeginStep), triggers actor vtable +0x68 and stores the walk pair (speed*0.3333, 0x3FEEEEEF = 1.867) into +0x54/+0x58.",
+  "confidence": 0.5,
+  "evidence": "The two speed constants and the call to maybe_Field_Actor_BeginStep match the 'begin a step with the walk speed' reading exactly; the vtable 0x76E00C also holds the confidently named Field_Actor_UpdateBehaviour and Field_Actor_MoveAlongVector. Vtable 0x76E00C re-read (slot 1 maybe_Field_Actor_EndBehaviour, slot 2 Field_Actor_UpdateBehaviour, slot 13 Field_Actor_MoveAlongVector) plus the constant pair 0.3333/1.867 stored into the action -- the step-start reading is now supported by named behaviour siblings.",
+  "previous_name": "maybe_Field_ActorAction_BeginStep",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004143E8",
+  "name": "Field_Npc_DeletingDtor",
+  "signature": "void Field_Npc_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of the field-NPC class: runs the 0x193E44 base destructor and frees the object.",
+  "confidence": 0.52,
+  "evidence": "Vtable 0x76E050 slot 0 and slot 3 of the same table is the confidently named Field_Npc_UpdateModelFromTable, so the class is a field NPC. Vtable 0x76E050 re-read: slot 3 = 0x004141D4 Field_Npc_UpdateModelFromTable (confident), slots 1/2 = 0x004141D0/0x00414624 -- the NPC identity is now backed by a confident sibling rather than by position alone.",
+  "previous_name": "maybe_Field_Npc_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004145BC",
+  "name": "maybe_Field_ActorMove_DeletingDtor",
+  "signature": "void maybe_Field_ActorMove_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Scalar deleting destructor of the moving-actor class whose vtable 0x76E084 also carries Field_ActorAction_UpdateTurnDirection at slot 6.",
+  "confidence": 0.45,
+  "evidence": "'ActorMove' is a guess: the only identified method is a turn-direction update, and slots 1-3 (0x4143F8/0x414580/0x414570) are anonymous, so the class could just as well be a 'turn/move behaviour' object. Vtable 0x76E084 re-read: slot 6 = Field_ActorAction_UpdateTurnDirection (confident) but slots 1-3 are unnamed and no caller exists, so the class name stays inferred.",
+  "previous_name": "maybe_Field_ActorMove_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00414610",
+  "name": "maybe_Field_ActorMove_DeletingDtorB",
+  "signature": "void maybe_Field_ActorMove_DeletingDtorB(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second deleting destructor in the moving-actor group: vtable 0x76E0B8, whose slots 1-3 (0x4145CC/0x4145D4/0x4145D0) are all anonymous, runs the 0x193E44 base destructor and frees the object.",
+  "confidence": 0.42,
+  "evidence": "Nothing in the vtable identifies this class -- even less than its sibling 0x4145BC -- and the name only says it is another deleting destructor in the same neighbourhood. Vtable 0x76E0B8 re-read: slots 1-3 are 0x004145CC/0x004145D4/0x004145D0 (unnamed) and slot 12/13 belong to the next table; no class-specific named method exists.",
+  "previous_name": "maybe_Field_ActorMove_DeletingDtorB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00417DCC",
+  "name": "maybe_Field_Actor_NotifyAnimUpdate",
+  "signature": "void maybe_Field_Actor_NotifyAnimUpdate(void)",
+  "params": {},
+  "summary": "Calls maybe_Field_Actor_PlayQueuedAnim, then registers its result with the Ui core (core+0x848, callback id 0x640025) and rebinds core+0x844 to core+0x84C.",
+  "confidence": 0.4,
+  "evidence": "The 'NotifyAnimUpdate' wording describes the two-step pattern, but the function has no parameters in the recovered prototype, no caller in .text, and 0x640025 is an opaque core callback id -- so neither the subject (which actor) nor the notified event is proven. No bl/b target reaches 0x417DCC and the core call uses the same two stores as 0x410168/0x413AA4 with a different table/id; the 'which actor' half of the name remains unknown.",
+  "previous_name": "maybe_Field_Actor_NotifyAnimUpdate",
+  "previous_confidence": 0.38,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00417EE8",
+  "name": "maybe_Field_Actor_CtorAnimState",
+  "signature": "void maybe_Field_Actor_CtorAnimState(Field_Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Large (0x49C-byte) initialiser in the field-actor animation block that clears the 0x7F0/0x820 state areas, allocates through 0x116AE0 and builds eight entries with 0x66B0F8 -- probably the actor's direction/anim ring.",
+  "confidence": 0.35,
+  "evidence": "The exported body is empty (halt_baddata: the whole function decodes as bad instruction data), so the first pass's description came from a raw-byte walk, not from C. Nothing can be confirmed. Re-read the readable file: the entire body is `halt_baddata()`, i.e. Ghidra could not decode the function at all; only the size and the neighbour 0x417E20 remain as evidence.",
+  "previous_name": "maybe_Field_Actor_CtorAnimState",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00418384",
+  "name": "maybe_Gfx_Sprite_UpdateOrientationFromLayout",
+  "signature": "void maybe_Gfx_Sprite_UpdateOrientationFromLayout(GfxSprite* sprite)",
+  "params": {
+   "param_1": "sprite"
+  },
+  "summary": "Recomputes a sprite/glyph orientation: reads two packed 16-bit values through 0x65DBC8 from the linked Gfx object, converts the s16 pair in f_99 to floats, writes pitch/height/0 into f_1C/f_20/f_24 and sets the transform-dirty bit 0x10 of f_44.",
+  "confidence": 0.45,
+  "evidence": "New: it is called once from the confidently named Ui_MonsterBook_InitData (0x419730), so it initialises monster-book sprites. The maths (a -2.0f..) offset and the layout record meaning are still only partly understood, and 0x65DBC8 is unnamed. Call site now resolved: 0x00419730 Ui_MonsterBook_InitData (confident) calls it while building the monster-book sprite set, which fits the 'orientation from the layout/packed angle' reading much better than the old 'no caller in decomp'.",
+  "previous_name": "maybe_Gfx_Sprite_UpdateOrientationFromLayout",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041B1F4",
+  "name": "maybe_Ui_TalkWindow_ApplyRowAnims",
+  "signature": "void maybe_Ui_TalkWindow_ApplyRowAnims(Ui_TalkWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Runs the talk window's own callback (self->f_98->f_2C) and then applies a per-row animation call (0x5930EC) to each of the eight selection rows at self+0x1508 (stride 0xEC).",
+  "confidence": 0.42,
+  "evidence": "The old name said it *stops* the row animations, but the callee 0x5930EC is now named maybe_Ui_CriticalPopup_PlayAnim elsewhere, so the verb is wrong or that callee name is. Since both are uncertain the honest name only states that each row gets the same call. The row callee now reads maybe_Ui_CriticalPopup_PlayAnim at 0x005930EC (a maybe_ name from a later batch), which contradicts 'StopRowAnims'; reworded to 'ApplyRowAnims' so the name no longer asserts a direction that the call graph may contradict.",
+  "previous_name": "maybe_Ui_TalkWindow_StopRowAnims",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0041B23C",
+  "name": "maybe_Ui_Widget_SetChildVisible",
+  "signature": "void maybe_Ui_Widget_SetChildVisible(UiWidget* widget, u32 on)",
+  "params": {
+   "param_1": "widget",
+   "param_2": "on"
+  },
+  "summary": "Forwards a boolean to the widget's sub-object at +0x128: 0x0029126C stores it as the object's +0x14 flag and mirrors bit 0 into the child's +0x44 visible bit.",
+  "confidence": 0.45,
+  "evidence": "Reading 0x0029126C's disassembly turns 'SetChildFlag' into something more specific: the mirrored bit is the same 0x44 bit-0 that maybe_Ui_SetThreeObjectVisibility (0x2912E8) and the attach helpers use for visibility. The child type and the exact meaning (visible vs enabled) are still not proven, and all four callers are maybe_ names. Disassembled 0x0029126C instead of trusting the stub: it writes arg2 to self+0x14, then ORs bit 0 into the object found at (self+4)+0x10 -> +0x44 -- the engine's visible flag. Hence 'SetChildVisible' rather than the vague 'SetChildFlag'; callers 0x4E7C68/0x625180/0x6252C8/0x625688 are all maybe_ names, so it stays below 0.5.",
+  "previous_name": "maybe_Ui_Widget_SetChildFlag",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0041D350",
+  "name": "maybe_Ui_Widget_SetTextByPaneName",
+  "signature": "void maybe_Ui_Widget_SetTextByPaneName(Ui_Widget* self, int arg2, Ui_TextSource* src)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "src"
+  },
+  "summary": "Pushes a value into the layout text pane named \"txt_txt\" through virtual slot +0x54, choosing between src->f_C and *(src+4) on the caller's Z flag.",
+  "confidence": 0.45,
+  "evidence": "The body is explicit: `(*(*self + 0x54))(self, \"txt_txt\", &value)` with the literal at 0x41D37C, and the two possible sources are the two words of the incoming struct. The only unresolved part is the Z-flag protocol, which is a caller convention, not the function's identity. The string literal \"txt_txt\" (0x0041D37C) is passed straight to the widget's +0x54 text-setter, so the pane name and the action are directly visible -- but the value argument is chosen by the caller's Z flag (the `cmp` before the call), and the raw disassembly at 0x0041D350 is only a `push {r3,lr}` plus an indirect call, so which of the two source words is used cannot be recovered from this function alone.",
+  "previous_name": "maybe_Ui_Widget_SetTextByPaneName",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041E5CC",
+  "name": "maybe_Field_Object2D_AttachChildSprites",
+  "signature": "void maybe_Field_Object2D_AttachChildSprites(Field_Object2D* self, u32 list, Ui_Object* parent, u32 ctx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "list",
+   "param_3": "parent",
+   "param_4": "ctx"
+  },
+  "summary": "Attaches up to five child sprites (self+0x4C..+0x5C) to a parent: hides each non-null child, inserts it into the given list through 0x53CD1C, runs the 0x2912E8 base attach, then sets the visible bit on all five.",
+  "confidence": 0.47,
+  "evidence": "The five-slot loop, the hide/attach/show sequence and the twin at 0x41EFBC are all clear, but 0x53CD1C and 0x2912E8 are unnamed (the latter is only maybe_Ui_SetThreeObjectVisibility), so 'sprites' and 'list' are interpretations. The call resolves to 0x0053CD1C (still unnamed) with the list anchor at list+4, and the base attach to 0x002912E8 (only maybe_Ui_SetThreeObjectVisibility); the five children and the visible-bit handling are unchanged from the first pass.",
+  "previous_name": "maybe_Field_Object2D_AttachChildSprites",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041E79C",
+  "name": "maybe_Field_Object2D_DispatchFrame",
+  "signature": "void maybe_Field_Object2D_DispatchFrame(Field_Object2D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Frame dispatch: only when the global gate 0x47B470 reports non-zero does it call this object's own virtual frame handler at slot 0x64.",
+  "confidence": 0.4,
+  "evidence": "The gate 0x47B470 is now named maybe_Field_Marker_IsAnyVisible, which makes 'DispatchFrame' a guess: the object's frame handler only runs while that marker condition holds. Both halves are unproven. The gate is still maybe_Field_Marker_IsAnyVisible (0x0047B470) and the vtable 0x76EA68 has no confident sibling for this slot; the name says what the code does mechanically but not why.",
+  "previous_name": "maybe_Field_Object2D_DispatchFrame",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041EFBC",
+  "name": "maybe_Field_Object2D_AttachChildSpritesB",
+  "signature": "void maybe_Field_Object2D_AttachChildSpritesB(Field_Object2D* self, u32 list, Ui_Object* parent, u32 ctx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "list",
+   "param_3": "parent",
+   "param_4": "ctx"
+  },
+  "summary": "Second copy of the attach-five-child-sprites loop (same code as 0x41E5CC), decompiled with the loop state in unaff registers so Ghidra produced a mangled do/while.",
+  "confidence": 0.4,
+  "evidence": "It is the same code as 0x41E5CC (which also appears as the only 'caller' in the readable cross-reference), and the decompiled body is unusable for verification; the name can be no better than its twin. Confirmed the body is the same five-slot hide/insert/show loop as 0x0041E5CC but with unaff_r4/r5/r6/r7/r8/r10 carrying the loop state; no new independent evidence.",
+  "previous_name": "maybe_Field_Object2D_AttachChildSpritesB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041F150",
+  "name": "maybe_Field_SpriteActor_DeletingDtor",
+  "signature": "void maybe_Field_SpriteActor_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a field sprite-actor class: the teardown is the out-of-line 0x5646F0 thunk at slot 0, so the body is a tail call to operator delete.",
+  "confidence": 0.45,
+  "evidence": "The assembly (push {r4,lr}; pop {r4,lr}; b 0x10F6CC) is clear and the vtable 0x76EB44 holds the 0x41F160 teardown thunk at slot 0, but this class's own identity rests on the 0x41F168 'Run'/'Walk' animation selector, which is not enough to call it 'SpriteActor' with confidence. Re-read vtable 0x76EB44/0x76EB5C: slot 0 of the sparse table is the teardown thunk and slot 5 is 0x0041F6D0, while the Run/Walk selector 0x0041F168 is at slot 6 of the other table -- the hierarchy is more tangled than the first pass assumed, so 'SpriteActor' stays a maybe.",
+  "previous_name": "maybe_Field_SpriteActor_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041F6D0",
+  "name": "maybe_Field_SpriteActor_RunWalk_DeletingDtor",
+  "signature": "void maybe_Field_SpriteActor_RunWalk_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the sprite-actor class that owns the Run/Walk animation selector: vtable 0x76EB5C slot 0, base destructor 0x193E44, then operator delete.",
+  "confidence": 0.48,
+  "evidence": "The class really does contain the Run/Walk selector (0x41F168, slot 1) and the camera-relative sprite update (0x41F19C, slot 3), but the selector itself was only named from the two string literals, so the descriptive name is still one step removed from proof. Vtable 0x76EB5C re-read: slot 1 = 0x0041F168 (dispatches the \"Run\"/\"Walk\" strings), slot 3 = 0x0041F19C maybe_Field_Object2D_UpdateCameraRelativeSprite; the composition is confirmed but 'sprite actor' is still a description of the members.",
+  "previous_name": "maybe_Field_SpriteActor_RunWalk_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041FA9C",
+  "name": "maybe_Ui_List_AppendEntryA",
+  "signature": "void maybe_Ui_List_AppendEntryA(Ui_Row* self, Ui_Window* owner, Ui_RowDesc* desc)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "desc"
+  },
+  "summary": "Appends a row to its window's intrusive entry list (anchor owner+0x80) and caches the descriptor's two words on the row (self->f_150/f_154); returns immediately when the descriptor is empty.",
+  "confidence": 0.42,
+  "evidence": "The insert helper 0x1235A4 and the three cached fields are visible, but the guard `f_18 == 0 && ((f_1C & 1) == 0 || f_1C == 0)` is an odd double test and the descriptor type is unknown, so 'AppendEntry' is a description of the shape. No caller and no vtable entry for 0x41FA9C; the guard and the three store fields are unchanged, and the near-twin 0x420144 (different list anchor) still has no user either.",
+  "previous_name": "maybe_Ui_List_AppendEntryA",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00420144",
+  "name": "maybe_Ui_List_AppendEntryB",
+  "signature": "void maybe_Ui_List_AppendEntryB(Ui_Row* self, Ui_Window* owner, Ui_RowDesc* desc)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "desc"
+  },
+  "summary": "Mirror of 0x41FA9C for a different list: inserts into the anchor at owner+0x14 and caches the descriptor words at self+0x1D0..+0x1D8.",
+  "confidence": 0.42,
+  "evidence": "Same shape as 0x41FA9C with a different anchor and field block, so the same uncertainty applies -- the class and the descriptor type are unknown. Still no caller or vtable entry; the only change is the anchor (owner+0x14 vs owner+0x80) and the field block (+0x1C4 vs +0x140).",
+  "previous_name": "maybe_Ui_List_AppendEntryB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00420808",
+  "name": "maybe_Ui_Object_DtorWithTwoLists",
+  "signature": "void maybe_Ui_Object_DtorWithTwoLists(void* self, int vtable, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable",
+   "param_3": "arg3"
+  },
+  "summary": "Deleting destructor of a Ui object that owns two intrusive list anchors: installs the base vtable 0x759388, unlinks the anchors at 0x4C/0x4D and 0x49/0x4A, runs 0x1D8C2C and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The body unlinks the 0x4C pair twice (a Ghidra duplication or a real double unlink) and passes `arg3` -- not `self` -- to the base destructor 0x1D8C2C, so the argument recovery is still unreliable; 0x1D8C2C is unnamed. No rodata reference for 0x420808; the base destructor 0x001D8C2C is still unnamed, and the duplicated 0x4C unlink plus the odd `arg3` argument keep the body untrustworthy.",
+  "previous_name": "maybe_Ui_Object_DtorWithTwoLists",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00420F74",
+  "name": "maybe_Monster_ModelInstance_Delete",
+  "signature": "void maybe_Monster_ModelInstance_Delete(MonsterModelInstance* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 0 of vtable 0x780820: runs the 0x47E984 teardown body and frees the object.",
+  "confidence": 0.42,
+  "evidence": "0x47E984 is not an unnamed monster-model destructor: read directly, it installs vtable 0x7743A0 (whose slot 1 is the confident Ui_AllocWidget_Dtor), frees the +0xD0 allocation and returns Gfx_SceneNode_DtorBase(self+4)-4. So the object being destroyed is a Ui / scene-node holder, and the rest of vtable 0x780820 is the Ui draw-list / Battle_Ui_UnitModel family. 'Monster_ModelInstance' may still be the derived class, but the first pass's evidence for it is wrong. Disassembled/read 0x0047E984: it installs vtable 0x7743A0 (slot 1 = Ui_AllocWidget_Dtor), frees +0xD0 and runs Gfx_SceneNode_DtorBase -- so it is a Ui holder destructor, not the monster-model dtor the old evidence claimed. The remaining 0x780820 slots are Ui_DrawList / Battle_Ui_UnitModel methods, so the class is in the battle-UI model family but the concrete name is unresolved.",
+  "previous_name": "maybe_Monster_ModelInstance_Delete",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00421288",
+  "name": "maybe_Monster_Model_StartSubTween",
+  "signature": "void maybe_Monster_Model_StartSubTween(Monster_Model* self, float target)",
+  "params": {
+   "param_1": "self",
+   "param_2": "target"
+  },
+  "summary": "Starts a tween on the model's embedded sub-node (self->f_14, resolved through its own +0x14 virtual) towards `target` using the shared tween starter 0x31F214 at self+0x100.",
+  "confidence": 0.45,
+  "evidence": "The tween call 0x31F214 (maybe_Ui_Widget_StartSubTween) and the node resolution are clear, but the class is only 'Monster_Model' by neighbourhood (vtable 0x780924 also holds maybe_Monster_Model_SetDepthOffset) and 0x31F214 is a maybe_ name. Vtable 0x780924 re-read: slots 0/1 are 0x004215D0/0x00421420 (depth offsets) and slot 2 is this -- the class is a small render-node wrapper, but nothing proves 'monster'.",
+  "previous_name": "maybe_Monster_Model_StartSubTween",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00421420",
+  "name": "Monster_Model_ApplyDepthOffset",
+  "signature": "void Monster_Model_ApplyDepthOffset(Monster_Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Writes the sum of the model's two depth bytes (self->f_FC + self->f_FD) into the parent render node's priority/depth field +0x6C, i.e. re-applies the combined draw depth.",
+  "confidence": 0.5,
+  "evidence": "The body is one addition and one store into the resolved parent node, and the caller is now the confidently named Battle_UnitModel_SetAlpha, which re-applies depth after changing alpha. Caller resolved: 0x0042A730 Battle_UnitModel_SetAlpha (confident) calls it, and the vtable 0x780928 holds it beside 0x004212CC Monster_Model_ApplyScreenOffset (confident) -- the alpha/depth ordering role is now supported by a confident caller.",
+  "previous_name": "maybe_Monster_Model_ApplyDepthOffset",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004215D0",
+  "name": "Monster_Model_SetDepthOffset",
+  "signature": "void Monster_Model_SetDepthOffset(Monster_Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Sets the parent render node's depth field (+0x6C) to the single depth byte self->f_FD, the one-byte variant of 0x421420.",
+  "confidence": 0.5,
+  "evidence": "One-store variant of 0x421420 with the same resolved parent node; the caller is the confidently named Battle_UnitModel_SetAlpha. Same caller evidence as 0x00421420 (0x0042A730 Battle_UnitModel_SetAlpha) and vtable 0x780924 slot 0 is this function, with slot 1 the combined-depth variant -- the pair is consistent.",
+  "previous_name": "maybe_Monster_Model_SetDepthOffset",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0042164C",
+  "name": "maybe_Container_IntrusiveListResetNode",
+  "signature": "void maybe_Container_IntrusiveListResetNode(void* arg1, IntrusiveNode* node)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "node"
+  },
+  "summary": "Four-instruction wrapper that tail-calls the intrusive-list unlink+reinit helper 0x10EBE4.",
+  "confidence": 0.45,
+  "evidence": "The exported body is empty (halt_baddata) and the header's claim rests on the `bl 0x10EBE4` in the raw assembly; 0x10EBE4 is not a named function in any batch, so the 'remove+init' description is still unverified. Re-read the readable file: the whole body is halt_baddata (Ghidra mis-indexed it as Thumb); only the raw `bl 0x0010EBE4` remains, and that helper has no name.",
+  "previous_name": "maybe_Container_IntrusiveListResetNode",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00422164",
+  "name": "maybe_Ui_AnimSequence_UpdateChildren",
+  "signature": "void maybe_Ui_AnimSequence_UpdateChildren(AnimOwner* self, u32 arg2, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Drives the child animation delegates stored between self+0x278 and +0x280: on a state change it calls their +0x24 (reset) or +0x28 (update) virtuals, restarts the current step when a child reports completion, and finishes with 0x3F7718(&self->f_2A0).",
+  "confidence": 0.42,
+  "evidence": "The two virtual calls and the step restart are clear, but the owner class name is invented, 0x1BBC0C and 0x3F7718 are unnamed, and the vtable 0x780A48's siblings are all maybe_ names. Vtable 0x780A48 re-read: neighbours 0x004227A8 maybe_Monster_Model_DispatchSubUpdate and 0x0064D8E8 maybe_Ui_SmithMenu_AllSlotsIdle are both maybe_, so nothing new pins the class or the animation role.",
+  "previous_name": "maybe_Ui_AnimSequence_UpdateChildren",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0042277C",
+  "name": "maybe_Ui_Widget_ResetTwoSubObjects",
+  "signature": "void maybe_Ui_Widget_ResetTwoSubObjects(Ui_Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Calls the shared 0x576A10 helper on the two sub-objects at self+0x18 and self+0x148.",
+  "confidence": 0.45,
+  "evidence": "0x576A10 is now named maybe_Model_Node_DestroyChildList, which suggests the call destroys child lists rather than 'resets' sub-objects. Both the callee name and the class are maybe_, so the verb cannot be settled. The callee resolves to 0x00576A10 maybe_Model_Node_DestroyChildList (a maybe_ name), which conflicts with the old 'Reset' wording; vtable 0x780A30 has no confident sibling.",
+  "previous_name": "maybe_Ui_Widget_ResetTwoSubObjects",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004227A8",
+  "name": "maybe_Monster_Model_DispatchSubUpdate",
+  "signature": "void maybe_Monster_Model_DispatchSubUpdate(Monster_Model* self, int useSecondary)",
+  "params": {
+   "param_1": "self",
+   "param_2": "useSecondary"
+  },
+  "summary": "Calls the update hook at +0x24 of either the primary embedded node (self->f_14) or the secondary one (self->f_144), selected by a stack-spilled argument.",
+  "confidence": 0.45,
+  "evidence": "The selection and the two node fields are visible, but 'Monster_Model' is inferred from the vtable neighbourhood and there is no caller for the entry, so the class and the reason for the switch are unknown. Vtable 0x780A44 re-read: slot 0 is this, slot 1 0x00422164 (maybe_), slot 3/4 0x0064D8D8/0x0064D9A8 (unnamed); no confident sibling and no caller.",
+  "previous_name": "maybe_Monster_Model_DispatchSubUpdate",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0042357C",
+  "name": "maybe_Ui_List_IsCursorCellEmpty",
+  "signature": "u32 maybe_Ui_List_IsCursorCellEmpty(int* list, u32 cell)",
+  "params": {
+   "param_1": "list",
+   "param_2": "cell"
+  },
+  "summary": "Returns 1 when the cursor cell must not be used: either 0x62CB64 reports -1, or 0x62C23C finds key 10 on the cell, or (when maybe_Ui_List_CanMoveCursor accepts the move) key 8 is present.",
+  "confidence": 0.42,
+  "evidence": "The three probes are visible but all three callees are unnamed or maybe_, and the inverted return convention is exactly what makes the name ambiguous -- it may be 'cell is blocked' rather than 'cell is empty'. The body depends on 0x0062CB64 and 0x0062C23C (both unnamed) and on 0x003BCC30 maybe_Ui_List_CanMoveCursor; the key values 8 and 10 select cursor glyphs but nothing defines the polarity.",
+  "previous_name": "maybe_Ui_List_IsCursorCellEmpty",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00423604",
+  "name": "Ui_PlaceWidgetInFreeCellThunk",
+  "signature": "void Ui_PlaceWidgetInFreeCellThunk(void)",
+  "params": {},
+  "summary": "Tail-call thunk: forwards untouched arguments to Ui_PlaceWidgetInFreeCell (0x4231B4) and returns; kept as a separate symbol because it is reached through a function pointer.",
+  "confidence": 0.55,
+  "evidence": "The old name implied a second placement implementation ('B'), but the body is a single call to the now confidently named Ui_PlaceWidgetInFreeCell, so it is an interworking/tail-call thunk and nothing else. 0x004231B4 now reads Ui_PlaceWidgetInFreeCell (confident, no maybe_ prefix) and the readable body is exactly `Ui_PlaceWidgetInFreeCell(); return;` -- the first pass had the callee unnamed and therefore assumed a variant implementation.",
+  "previous_name": "maybe_Ui_PlaceWidgetInFreeCellB",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0042381C",
+  "name": "maybe_Field_Object2D_InitEmbedded",
+  "signature": "Field_Object2D* maybe_Field_Object2D_InitEmbedded(unsigned char* self, unsigned int id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Initialises a composite that embeds a Field::Object2D and a scene node: stores the id at +0 and +4, constructs the Object2D at +8 (0x40DC0C), constructs the scene node inside it (0x5923A0) and returns the outer pointer (node-0x14).",
+  "confidence": 0.45,
+  "evidence": "0x40DC0C and 0x5923A0 are unnamed, so the two embedded types are identified only by neighbourhood; the double store of `id` and the -0x14 return offset are decompiler-level detail. Neither 0x0040DC0C nor 0x005923A0 has a name in any batch, and 0x42381C has no caller, so the embedded types remain inferred from position.",
+  "previous_name": "maybe_Field_Object2D_InitEmbedded",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00423970",
+  "name": "maybe_Math_EvalQuadraticCurve",
+  "signature": "float maybe_Math_EvalQuadraticCurve(float a, float b, float c, float t, float scale)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c",
+   "param_4": "t",
+   "param_5": "scale"
+  },
+  "summary": "Evaluates a*scale*t*t + b*t + c and then calls 0x6731EC, choosing between two argument setups depending on whether the result is above 0.0.",
+  "confidence": 0.4,
+  "evidence": "Both arms call the same unnamed 0x6731EC, so the function may be a sign test that forwards a different value per branch rather than a curve evaluator; the parameters all come from registers Ghidra did not name. 0x006731EC is still unnamed and both branches tail into it, so it is impossible to tell whether the quadratic is returned, compared or used to pick an argument.",
+  "previous_name": "maybe_Math_EvalQuadraticCurve",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004239E0",
+  "name": "maybe_Ui_List_ReserveCellRange",
+  "signature": "void maybe_Ui_List_ReserveCellRange(u32 out, u32 arg2, u32 arg3, u32 arg4, u32 cell)",
+  "params": {
+   "param_1": "out",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4",
+   "param_5": "cell"
+  },
+  "summary": "Thin wrapper that calls maybe_Ui_List_FindFirstFreeSlot (0x3BD008) with a two-element block descriptor {2, 1} built on the stack.",
+  "confidence": 0.42,
+  "evidence": "The wrapper's only contribution is the {2,1} descriptor, and 0x3BD008 is only maybe_Ui_List_FindFirstFreeSlot, so whether this reserves a 2x1 block or *finds* one is unknown. 0x003BD008 is still maybe_Ui_List_FindFirstFreeSlot and the {2,1} local pair is the only distinguishing feature; no caller exists beyond the header note.",
+  "previous_name": "maybe_Ui_List_ReserveCellRange",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00423C24",
+  "name": "maybe_ActorFace_GetExpressionIds",
+  "signature": "void maybe_ActorFace_GetExpressionIds(ActorPartId* out, u32 kind, u8 extra)",
+  "params": {
+   "param_1": "out",
+   "param_2": "kind",
+   "param_3": "extra"
+  },
+  "summary": "Fills a 5-byte part descriptor per kind: (0, 0xD6, 0) for kind 1, (0, 0x20..0x26, extra) for kinds 2-8, the live state id pair for kind 9 and (1, 0x29, 0) for kind 10; unknown kinds return 0xFF/0xFFFF/0xFF.",
+  "confidence": 0.45,
+  "evidence": "The table is real and deterministic, but the ids are not verified against any table (item? face? monster part?), and 0x31AB74/0x31AB8C are only maybe_Field_GetStateId / unnamed. The kind-9 path still goes through 0x0031AB74 maybe_Field_GetStateId and 0x0031AB8C (unnamed); no record table lookup exists in the body to confirm that these are face/expression ids.",
+  "previous_name": "maybe_ActorFace_GetExpressionIds",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00424030",
+  "name": "maybe_Field_ActorActionSeq_FormatEntryText",
+  "signature": "void maybe_Field_ActorActionSeq_FormatEntryText(int self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Secondary entry point inside the action-sequence text builder (0x5E0-byte stack frame); the exported body is empty, so only the raw code around it (wide formatter 0x6F0DDC + std_wcsncat with a Japanese \"%d\" template at 0x424164) describes it.",
+  "confidence": 0.35,
+  "evidence": "There is no C to review (the readable body is `return;`), and the entry is an interior address of a larger function, so the name is a description of the surrounding code, not of a function. Re-read the readable file: the whole body is `return;` -- Ghidra found no instructions for this entry, confirming it is a fragment of the 0x4241xx sequence-text builder rather than a standalone function.",
+  "previous_name": "maybe_Field_ActorActionSeq_FormatEntryText",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00424088",
+  "name": "maybe_Field_ActorActionSeq_SetEntryTag",
+  "signature": "void maybe_Field_ActorActionSeq_SetEntryTag(unsigned char* self, unsigned int type, unsigned char tag)",
+  "params": {
+   "param_1": "self",
+   "param_2": "type",
+   "param_3": "tag"
+  },
+  "summary": "Writes the entry tag byte at +0 and the entry type 0x24 at +2 of an action-sequence entry.",
+  "confidence": 0.4,
+  "evidence": "Only the prologue of a 0x118-byte region survived, so the two stores are all that is known; the argument names 'type'/'tag' are guesses and the entry layout comes from Field_ActorActionSeq_ClearEntry. No caller and no vtable entry; the body still consists of only the two stores `*self = tag; *(u16*)(self+2) = 0x24;`.",
+  "previous_name": "maybe_Field_ActorActionSeq_SetEntryTag",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00424E4C",
+  "name": "maybe_Field_ActorActionSeq_FlushPending",
+  "signature": "void maybe_Field_ActorActionSeq_FlushPending(BattleUi* self, u32 party)",
+  "params": {
+   "param_1": "self",
+   "param_2": "party"
+  },
+  "summary": "Loops ten battle-unit slots (byte at self+i*4+0x546) and, for every slot whose state is 5, calls the unit getter at vtable+0x60 and re-runs the command-window update 0x4282C0 with the 'extra' flag set.",
+  "confidence": 0.4,
+  "evidence": "The loop and the state value 5 are clear, but 0x4282C0 is unnamed, the caller 0x3C1144 is only maybe_Field_ActorActionSeq_RunExtraEntry, and the class ('BattleUi' vs 'Field_ActorActionSeq') is inconsistent with the caller's subsystem. Caller 0x003C1144 maybe_Field_ActorActionSeq_RunExtraEntry is still a maybe_ name and contradicts the 'BattleUi' parameter type used in the header; 0x004282C0 remains unnamed.",
+  "previous_name": "maybe_Field_ActorActionSeq_FlushPending",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00428450",
+  "name": "maybe_Battle_UpdateConditionIcons",
+  "signature": "void maybe_Battle_UpdateConditionIcons(BattleUnit* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Counts the non-zero entries of the 32-slot array at self+0x1BAC and, when one of the two condition masks at +0x169E/+0x16A0 is set, re-spawns the model-attached popup text for index 0 or 1.",
+  "confidence": 0.45,
+  "evidence": "The 32-slot count and the two mask fields are clear, but the callee 0x3FF200 is only maybe_Ui_PopupEntry_SpawnModelDebugText and the function never touches an icon sprite, so 'ConditionIcons' is a guess. Callers are now 0x00388E9C maybe_Battle_Ui_InitPartyLayout, 0x003F6914 maybe_Battle_ActionUi_InitEntryEffects and 0x004D0DA8 maybe_Battle_Ui_RebuildUnitPopups -- all maybe_ -- so the battle-UI context is right but 'icons' is still unsupported by the body.",
+  "previous_name": "maybe_Battle_UpdateConditionIcons",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00429434",
+  "name": "maybe_Battle_Ui_CreateUnitNameLabel",
+  "signature": "void maybe_Battle_Ui_CreateUnitNameLabel(Battle_Unit* unit)",
+  "params": {
+   "param_1": "unit"
+  },
+  "summary": "Builds a battle unit's name/caption string (strlen + memcpy into a stack buffer), computes a placement matrix from the unit's u16 at +0xCC and spawns the 2D text node through 0x35FF3C.",
+  "confidence": 0.4,
+  "evidence": "The exported body is empty (halt_baddata), so the whole description comes from the first pass's raw-byte analysis; only the neighbours (0x429260 reset, 0x42963C unit-object ctor) remain as support. Re-read the readable file: the body is `halt_baddata()` only, so nothing in the C supports the name; 0x002D6AF8/0x0035FF3C are also unnamed or only vaguely named.",
+  "previous_name": "maybe_Battle_Ui_CreateUnitNameLabel",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0042AA60",
+  "name": "maybe_Monster_PatternNode_Ctor",
+  "signature": "void* maybe_Monster_PatternNode_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of a small battle-scene node: installs vtable 0x76EF7C, sets three (id=0xFFFF, payload=0) pairs at +0x128..+0x136, a float 256.0 at +0x130/+0x134 and the flag bytes +0x141..+0x143 = 0/1/0.",
+  "confidence": 0.4,
+  "evidence": "New: it is called from the battle scene initialiser 0x4BACFC/0x4BAD2C/0x4BAD64 (maybe_Battle_SceneInit_Shared), so it is a battle-scene object -- but 'monster pattern node' is not supported by any field or callee, and the base ctor 0x47E894 is unnamed. Callers resolved to three sites inside 0x004BACFC maybe_Battle_SceneInit_Shared; the object is a battle-scene node with three 0xFFFF-terminated pairs, but nothing connects it to a monster attack pattern, so the name is kept only as a maybe.",
+  "previous_name": "maybe_Monster_PatternNode_Ctor",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0042B148",
+  "name": "maybe_Battle_ActorAction_DeletingDtorA",
+  "signature": "void maybe_Battle_ActorAction_DeletingDtorA(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 0 of vtable 0x76F03C: runs the 0x200220 base destructor and frees the object.",
+  "confidence": 0.42,
+  "evidence": "Vtable 0x76F03C shares slots 1-4/7-9 with the other 0x76F0xx tables (FieldParty_InitFromParams, FieldParty_ResetMemberSlot, Battle_Ui_Update), so the family is battle-unit UI; the class-specific slot 6 is only maybe_Battle_ActorAction_ShowAttackPopup. Vtable 0x76F03C re-read: slot 6 = 0x0042AB48 maybe_Battle_ActorAction_ShowAttackPopup and the rest are shared FieldParty/Battle_Ui base methods, so 'ActorAction' is plausible but every class-specific method is still maybe_.",
+  "previous_name": "maybe_Battle_ActorAction_DeletingDtorA",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0042B300",
+  "name": "maybe_Battle_ActorAction_DeletingDtorB",
+  "signature": "void maybe_Battle_ActorAction_DeletingDtorB(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 0 of vtable 0x76F150, immediately before Battle_ActorAction_ApplyAddedState (0x42B318); runs the 0x200220 base destructor and frees the object.",
+  "confidence": 0.42,
+  "evidence": "Same shared base layout as 0x42B148; its class-specific slot 6 is only maybe_Battle_ActorAction_WaitStep, and the next function's name is itself unproven. Vtable 0x76F150 re-read: slot 6 = 0x0042B158 maybe_Battle_ActorAction_WaitStep, slot 13 = maybe_FieldParty_ClearSlotTypeFlags -- a battle-unit class, but no confident method names it.",
+  "previous_name": "maybe_Battle_ActorAction_DeletingDtorB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00430270",
+  "name": "maybe_Battle_ActorAction_SyncCameraParam",
+  "signature": "unsigned int maybe_Battle_ActorAction_SyncCameraParam(Battle_ActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Vtable slot 12 of the battle-action class: calls the action's own +0x11C and +0x3C virtuals, then 0x66A244, and caches the incoming float (a register argument Ghidra lost) at +0x1304.",
+  "confidence": 0.38,
+  "evidence": "Only three calls and one store are visible; 0x66A244 is unnamed and the float source is not even in the prototype, so 'camera parameter' is unsupported. 0x0066A244 is unnamed and the stored float arrives in an unrecovered register, so neither the value nor the consumer at +0x1304 can be identified; the vtable 0x76F348 has no confident neighbour for slot 12.",
+  "previous_name": "maybe_Battle_ActorAction_SyncCameraParam",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004359B8",
+  "name": "maybe_Battle_ActorAction_UpdateCompositeA",
+  "signature": "void maybe_Battle_ActorAction_UpdateCompositeA(Battle_ActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Large (0x610-byte) per-frame update of a battle action: damage popups, aura/effect spawning, SE playback, monster-size scaling and the next sequence step for the acting unit.",
+  "confidence": 0.45,
+  "evidence": "The exported body is empty (halt_baddata), so this description is inherited from the first pass; the function is real and large, but nothing can be re-verified from C. Re-read the readable file: the body is `halt_baddata()`, i.e. the 1552-byte function did not decompile at all; the call list in the old evidence cannot be checked.",
+  "previous_name": "maybe_Battle_ActorAction_UpdateCompositeA",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00438C72",
+  "name": "maybe_Battle_ActorAction_ApplyStateFlags",
+  "signature": "void maybe_Battle_ActorAction_ApplyStateFlags(Battle_ActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fragment of the battle-action state handling: calls 0x1CAE90 (add state flags) and 0x1F43D4 and then writes -1 to the cached target field before branching back into 0x438C10.",
+  "confidence": 0.35,
+  "evidence": "The body is a truncated fragment (`b 0x438C10`), so the argument registers are unreliable and both callees are unnamed -- the name is a best guess from the one call. Body is still halt_baddata in the readable C; only the raw bytes (bl 0x001CAE90, bl 0x001F43D4, str -1) remain, and neither callee has a name.",
+  "previous_name": "maybe_Battle_ActorAction_ApplyStateFlags",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00438D38",
+  "name": "maybe_Battle_ActorAction_StatusIcon_DeletingDtor",
+  "signature": "void maybe_Battle_ActorAction_StatusIcon_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 0 of vtable 0x76F40C: runs the 0x200220 base destructor and frees the object.",
+  "confidence": 0.4,
+  "evidence": "The 'StatusIcon' part is contradicted by the vtable: 0x76F40C's class-specific slots are 0x438CD4 and 0x438B10 (Battle_ActorAction_ShowRevivePopup), while Battle_ActorAction_ClearStatusIcons sits in the *other* table 0x76F520. So this is the revive-popup class's destructor, not the status-icon one. Read both tables: 0x76F40C has ShowRevivePopup at slot 6, 0x76F520 has ClearStatusIcons at slot 6 -- the two names are attached to the wrong tables in the first pass. Rather than swap them on this evidence alone (the slots could be inherited), the entry keeps the old name with the conflict recorded.",
+  "previous_name": "maybe_Battle_ActorAction_StatusIcon_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00438FD4",
+  "name": "maybe_Battle_ActorAction_Motion_DeletingDtor",
+  "signature": "void maybe_Battle_ActorAction_Motion_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 0 of vtable 0x76F520, whose slot 6 is Battle_ActorAction_ClearStatusIcons and whose next function (0x438FE4) is maybe_Battle_ActorAction_UpdateMotionB.",
+  "confidence": 0.43,
+  "evidence": "Both 'Motion' (from 0x438FE4) and 'StatusIcon' (from ClearStatusIcons in the same table) are only maybe_ names, so the class could be either; the body itself (0x200220 + delete) says nothing. Vtable 0x76F520 re-read: slot 6 = 0x00438D48 Battle_ActorAction_ClearStatusIcons (confident) and slot 5 = 0x00438FD0, next function 0x00438FE4 (maybe_UpdateMotionB) -- two plausible readings, so the name stays.",
+  "previous_name": "maybe_Battle_ActorAction_Motion_DeletingDtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043BCF0",
+  "name": "maybe_Battle_Actor_ResetActionState",
+  "signature": "void maybe_Battle_Actor_ResetActionState(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets a battle actor's action slot: stores -1 at +0x4E0, re-initialises the block at +0x127C with 0x111394 and, when virtual +0x48 reports an entry with +0x10 set, clears +0x72C on the object returned by virtual +0x3C.",
+  "confidence": 0.45,
+  "evidence": "The stores are visible, but the actor class comes only from the 0x43BD68 constructor installing the same vtable, and the two virtual slots (+0x3C/+0x48) are unnamed. Vtable 0x76F630 re-read: entry 6 is this function between FieldParty_ResetMemberSlot (slot 5) and Battle_Actor_Update (slot 7) -- the position supports 'actor action reset' but slots +0x3C/+0x48 and 0x00111394 remain unnamed.",
+  "previous_name": "maybe_Battle_Actor_ResetActionState",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043C5E8",
+  "name": "maybe_Ui_BattleScreen_DtorDelete",
+  "signature": "void maybe_Ui_BattleScreen_DtorDelete(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor at slot 1 of vtable 0x76F8A0: runs the 0x200220 Ui_Screen base destructor and frees the object.",
+  "confidence": 0.42,
+  "evidence": "The vtable 0x76F8A0 is installed by 0x6C0A3C, which is now named Field_ObjectFactory_Type1358 -- not a battle-screen constructor -- so the 'BattleScreen' assertion is unsupported; the table does carry Battle_Ui_Update and FieldParty_ResetMemberSlot, i.e. a battle-UI screen. The constructor that installs 0x76F8A0 resolves to 0x006C0A3C Field_ObjectFactory_Type1358 (confident), which does not support 'battle screen'; only the shared slots (Battle_Ui_Update, FieldParty_ResetMemberSlot) place it in the battle UI, so the exact screen is unknown.",
+  "previous_name": "maybe_Ui_BattleScreen_DtorDelete",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043C678",
+  "name": "maybe_Battle_ActionAnim_PreMove2_UpdateBody",
+  "signature": "void maybe_Battle_ActionAnim_PreMove2_UpdateBody(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Not a real entry point: 0x43C678 is 0x0C bytes into Battle_ActionAnim_PreMove2_Update (0x43C66C) and Ghidra indexed the second half as a Thumb function, which is why the body decodes as an add of unaff_r8.",
+  "confidence": 0.45,
+  "evidence": "The old evidence (raw bytes at 0x43C678 decode as ARM `bl 0x669DD4`) still holds, but the exported C is meaningless, so the name can only describe the containing function. Re-read the readable file: the body is `return unaff_r8 + self;`, an artefact of decoding the middle of 0x0043C66C; no separate function exists here.",
+  "previous_name": "maybe_Battle_ActionAnim_PreMove2_UpdateBody",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043C6D4",
+  "name": "maybe_Battle_ActionAnim_PreMove3_UpdateBody",
+  "signature": "void maybe_Battle_ActionAnim_PreMove3_UpdateBody(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Interior address (0x0C into 0x43C6C8 Battle_ActionAnim_PreMove3_Update) wrongly indexed as Thumb; the recovered body is a jumble of unaff registers and arg2..arg4.",
+  "confidence": 0.45,
+  "evidence": "Same artefact as 0x43C678; the readable C cannot be attributed to a function. The readable body uses unaff_r4/r8, in_s0 and arg2..arg4 that were never declared as parameters, confirming the address is not a real function start.",
+  "previous_name": "maybe_Battle_ActionAnim_PreMove3_UpdateBody",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043C730",
+  "name": "maybe_Battle_ActionAnim_PreMove4_UpdateBody",
+  "signature": "void maybe_Battle_ActionAnim_PreMove4_UpdateBody(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Interior address (0x0C into 0x43C724 Battle_ActionAnim_PreMove4_Update) wrongly indexed as Thumb; the body is a linked-list walk over unaff registers.",
+  "confidence": 0.45,
+  "evidence": "The only new fact is that this artefact *is* reachable by two real branches (0x43CC02/0x43CC1E inside Anim_TimeTrack_InsertRange), which does not make it a function with its own identity. Two branch sites in 0x0043CC02/0x0043CC1E (Anim_TimeTrack_InsertRange) target 0x43C730, so the address is used as a label by the compiler's code; the body is still a mid-function fragment.",
+  "previous_name": "maybe_Battle_ActionAnim_PreMove4_UpdateBody",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043E040",
+  "name": "maybe_Battle_CommandListRow_UpdateName",
+  "signature": "void maybe_Battle_CommandListRow_UpdateName(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Updates the short label of a battle command-list row: resolves the owning actor's command id and writes it through Ui_TextTable_GetStringById / Ui_TextElement_SetSecondColumn.",
+  "confidence": 0.42,
+  "evidence": "The exported body is empty (halt_baddata); the description comes from the first pass's call list, and the two column helpers are only named in this same batch's neighbourhood. Re-read the readable file: `halt_baddata()` only, so the old call list (0x2AB62C, Game_GetWork, 0x35EB98, 0x43EABC, 0x43EBAC) cannot be re-verified.",
+  "previous_name": "maybe_Battle_CommandListRow_UpdateName",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0043E0B8",
+  "name": "maybe_Battle_CommandListRow_UpdateDetail",
+  "signature": "void maybe_Battle_CommandListRow_UpdateDetail(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the detail line of a battle command-list row: dispatches on the row kind, looks the referenced item up with Item_LookupRecord, copies its 0x140-byte record and pushes one or two formatted strings into the row's text element.",
+  "confidence": 0.45,
+  "evidence": "The exported body is empty (halt_baddata), so the 0x70C-byte switch is only known from the first pass; Item_LookupRecord and the text helpers are real names, but they are not visible in the C. Re-read the readable file: `halt_baddata()` only; the size (1804 bytes) and the first pass's call list are the only evidence.",
+  "previous_name": "maybe_Battle_CommandListRow_UpdateDetail",
+  "previous_confidence": 0.48,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0041EA68",
+  "name": "Field_NpcObject_DeletingDtor",
+  "signature": "void Field_NpcObject_DeletingDtor(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the field NPC object class: runs the 0x18132C field-scene-object destructor and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Vtable 0x76E9EC (installed by the confidently named Field_NpcObject_Ctor at 0x41E9B8) holds it at slot 2, and the same table carries the confident Field_RegisterNpcActions and Field_Object_ReleaseChildList. Vtable 0x76E9EC re-read: slot 3 = Field_RegisterNpcActions, slot 4 = Field_Object_ReleaseChildList (both confident) and the ctor Field_NpcObject_Ctor (0x0041E9B8) installs the same table -- the class is now backed by two confident siblings, only the slot (2) is unusual for a destructor.",
+  "previous_name": "maybe_Field_NpcObject_DeletingDtor",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0043FFC8",
+  "name": "maybe_Ui_ChildWindowList_Init",
+  "signature": "UiChildList* maybe_Ui_ChildWindowList_Init(UiChildList* self, u32 owner)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner"
+  },
+  "summary": "Initialises a small object: installs vtable 0x7610B0, clears words 1/2 and 7..11, stores the owner at +0xC, sets +0x1C to -1.0f, initialises the embedded block at +0x10 with 0x2ACF08 and then swaps in vtable 0x76FE10.",
+  "confidence": 0.4,
+  "evidence": "Both installed vtables have the Anim_Interp init/update pair (0x2E4288 / 0x2E40B8) at slots 2 and 5, and the -1.0f initial value looks like an alpha, so this is more likely an anim-interpolation/state object than a 'child window list'. Nothing in the body touches a window list, so the old name is unsupported but the replacement is not proven either. Re-read the two vtables: 0x7610B0 and 0x76FE10 share maybe_Anim_Interp_Init (slot 2) and Anim_Interp_Update (slot 5), and the caller is 0x004ACCD0 maybe_Ui_ListRowData_Ctor -- so 'ChildWindowList_Init' has no support in the body; kept as a maybe rather than inventing a new class name.",
+  "previous_name": "maybe_Ui_ChildWindowList_Init",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0049CFDC",
+  "name": "maybe_Ui_ArcListWindow_CommitSelection",
+  "signature": "void maybe_Ui_ArcListWindow_CommitSelection(UiArcListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Applies the pending selection with 0x1CEE24(self+0x79, self+1) and then notifies the owner through vtable +0xC4.",
+  "confidence": 0.45,
+  "evidence": "The call and the notify are clear, but 0x1CEE24 is unnamed and 'self+0x79' / 'self+1' are byte offsets into a struct Ghidra did not recover, so what is committed is unknown. 0x001CEE24 is still unnamed and both arguments are raw byte offsets; vtable 0x772C6C slot 24 holds this entry but its neighbours are unnamed.",
+  "previous_name": "maybe_Ui_ArcListWindow_CommitSelection",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0049D008",
+  "name": "maybe_Ui_ArcListWindow_RefreshAfterSelection",
+  "signature": "u32 maybe_Ui_ArcListWindow_RefreshAfterSelection(UiArcListWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Calls its own vtable +0xC8 entry and always returns 1; slot 26 of vtable 0x772C6C, two slots after the selection commit.",
+  "confidence": 0.4,
+  "evidence": "The body is a virtual call plus `return 1`; the 'refresh after selection' reading depends entirely on its position after 0x49CFDC, which is itself only maybe_. Vtable 0x772C6C re-read: slot 26 is this entry and slot 24 is 0x0049CFDC (maybe_); no named callee and no field access.",
+  "previous_name": "maybe_Ui_ArcListWindow_RefreshAfterSelection",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0049EA68",
+  "name": "maybe_Ui_ArcListWindow_UpdateRowHighlight",
+  "signature": "void maybe_Ui_ArcListWindow_UpdateRowHighlight(UiArcListWindow* self, int row)",
+  "params": {
+   "param_1": "self",
+   "param_2": "row"
+  },
+  "summary": "Copies the six anchor words self+4..+0x18 into +0x560..+0x574, scans one row's 0x1A child slots for the id 0x34A and calls 0x49EB60(self, &f_548, &f_554, found), then sets +0x528 = 0 and +0x52C = 0.2f.",
+  "confidence": 0.45,
+  "evidence": "The anchor copy and the id scan are clear, but 0x49EB60 is unnamed and 'highlight' is inferred from the two floats written at the end. 0x0049EB60 is still unnamed and the only named thing in the body is the id constant 0x34A; vtable 0x7750B4 slot 0 is Ui_ArcListWindow_DtorDeleteB (confident), which fixes the class but not the method.",
+  "previous_name": "maybe_Ui_ArcListWindow_UpdateRowHighlight",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004A00B4",
+  "name": "Ui_MotionPath_Ctor",
+  "signature": "void* Ui_MotionPath_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of a Ui_MotionPath: runs the Ui composite-object base constructor, copies the default vector from 0x7E7000, installs vtable 0x775184 and builds the embedded path object at +0x2E with a 30-degree default angle.",
+  "confidence": 0.55,
+  "evidence": "The old name was a placeholder ('ScreenCtor_vt775184'). Vtable 0x775184's slots 0 and 1 are the confidently named Ui_MotionPath_Dtor / Ui_MotionPath_DtorDelete and slots 2/4 are maybe_Ui_MotionPath_SetSourceTransform / UpdateTransform, so the class is Ui_MotionPath and this is its constructor. Vtable 0x775184 read from rodata: slot 0 = 0x004A0150 Ui_MotionPath_Dtor, slot 1 = 0x004A0140 Ui_MotionPath_DtorDelete, slot 2/4 = Ui_MotionPath transform methods -- the class is no longer a guess, so the placeholder name was replaced.",
+  "previous_name": "maybe_Ui_ScreenCtor_vt775184",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004AF40C",
+  "name": "maybe_Actor_HandleRef_Dtor",
+  "signature": "void maybe_Actor_HandleRef_Dtor(ActorHandleRef* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the small handle-forwarding object built by 0x4AF3F4: runs Ui_Object_DtorBody and frees it.",
+  "confidence": 0.48,
+  "evidence": "Vtable 0x77630C's slots 0/1 are 0x17C330 and this entry and slot 7 is the confident Field_MapObject2D_DispatchCommand, so the class is a field map-object helper -- but 'Actor_HandleRef' is still a description of the 0x4AF3F4 allocation pair. Vtable 0x77630C re-read: slot 7 = Field_MapObject2D_DispatchCommand (confident) and slot 0 = 0x0017C330, so the class sits in the Field_MapObject2D family; the 'handle ref' role is unproven.",
+  "previous_name": "maybe_Actor_HandleRef_Dtor",
+  "previous_confidence": 0.5,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004E1EC0",
+  "name": "maybe_Field_Object_ApplyPlacementAnim",
+  "signature": "void maybe_Field_Object_ApplyPlacementAnim(FieldObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Applies the placement record to a field scene object: copies the record's node flags, resolves the current record with 0x63EFF0, sets the node position through actor vtable +0xA0/+0xA4, then plays one of four animation names from the table at 0x7A3230 (or \"sp13_start\") depending on the three flag bytes at +0x30..+0x32, and finally applies the screen-size LOD.",
+  "confidence": 0.45,
+  "evidence": "Nothing supports the 'ObjectKind15' in the old name -- there is no kind comparison anywhere in the body. What the function demonstrably does is pick an animation name by flag combination and apply the placement, so the name was corrected to that; 'Field_Object' is still generic because the class comes only from the vtable slot 0x77A8C8. Re-read the body: `(*(actor_vtable+0x84))(actor, *(u32*)(0x7A3230 + i*4))` selects an animation-name pointer (the same +0x84 slot that 0x41F168 uses for \"Run\"/\"Walk\"), and \"sp13_start\" is played when the +0x31 flag is set; no kind-15 check exists, so the old 'Kind15' wording was unsupported.",
+  "previous_name": "maybe_Field_ObjectKind15_UpdateAttachment",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004EFC80",
+  "name": "Field_BattleTrigger_DeletingDtor",
+  "signature": "void Field_BattleTrigger_DeletingDtor(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Deleting destructor of the field battle-trigger class: reinstalls vtable 0x77C1C8, runs Ui_Object_DtorBody and frees the object.",
+  "confidence": 0.5,
+  "evidence": "The old name called this a Ui_ScreenObject, but vtable 0x77C1C8 is installed by the confidently named Field_BattleTrigger_Gated_Ctor (0x4EFC44) immediately before this entry (0x4EFC7C loads the vtable and falls through into 0x4EFC80), so the class is a field battle trigger that derives from Ui_Object. Vtable 0x77C1C8 is installed by 0x004EFC44 Field_BattleTrigger_Gated_Ctor (confident name from M1) and the 4-byte adjustment 0x004EFC7C loads the same vtable before falling into this body -- that fixes the class and contradicts the 'Ui_ScreenObject' label.",
+  "previous_name": "maybe_Ui_ScreenObject_DtorDeleting_77C1C8",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004EFCDC",
+  "name": "maybe_Ui_ScreenObject_DtorDeleting_77C230",
+  "signature": "void maybe_Ui_ScreenObject_DtorDeleting_77C230(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Same deleting-destructor body for the class whose primary vtable is 0x77C230: install the vtable, run Ui_Object_DtorBody, free.",
+  "confidence": 0.48,
+  "evidence": "No constructor for 0x77C230 could be located (the companion non-deleting entry 0x4EFCF4 installs the base vtable 0x77D8BC), so the class of this second trigger-like object is still unidentified. Searched every .text branch target: 0x004EFCDC and 0x004EFC7C are the only references, and the ctor that installs 0x77C230 was not found; 0x004EFCF4 installs the base 0x77D8BC instead.",
+  "previous_name": "maybe_Ui_ScreenObject_DtorDeleting_77C230",
+  "previous_confidence": 0.48,
+  "change": "kept_maybe"
+ }
+]

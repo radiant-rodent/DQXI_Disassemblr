@@ -1,0 +1,1405 @@
+[
+ {
+  "address": "0x0064D488",
+  "name": "maybe_Ui_List_CountSelectableRows",
+  "signature": "int maybe_Ui_List_CountSelectableRows(UiListSource* self)",
+  "params": {
+   "param_1": "list source object (f_b0/f_b4 = byte-array begin/end of entry ids)"
+  },
+  "summary": "Counts how many ids in the object's byte array (f_b0..f_b4) are selectable: the id must not have its roster flag bit set (Party roster bitset) and its per-id byte in the roster table must be below 10. Used to size a dynamic list of entries that are still locked/unavailable.",
+  "confidence": 0.35,
+  "evidence": "Loops puVar6 = self->f_b0 .. unaff_r6 = self->f_b4, reads u8 id; func_0066B534(Work+0x24a98, id) == 0 (bit test id<0x5A in bitset at +0x89A8) and func_0066AF08(Work+0x24a98, id) < 10 (byte at +0x3165+id). Neighbours in the range are Ui_SmithMenu_GetCellIndex (0x64D59C) and Ui_EquipmentList_GetClampedRow (0x64E010), i.e. bag/equipment list code. | Work+0x24A98 is the work sub-object: party member id list at +4 (count at Work+0x27218, as read by IsInParty), 90-bit flag bitset at +0x89A8, per-id byte table at +0x3165, u16 slot table at +0x27C4 (0xFFFF = free), 5-byte per-id records at +0x2D2D and two 0x8C-byte row tables at +0x5FE4 / +0x7B3C whose rows hold a UTF-16 name and an id at +0x88 (N_030 read them as bag/row tables). Character work records are Work+4+id*0x12EC: 31 slots ending exactly where this sub-object starts"
+ },
+ {
+  "address": "0x0064DB70",
+  "name": "maybe_Actor_CheckVisibleFlags",
+  "signature": "int maybe_Actor_CheckVisibleFlags(Actor* actor, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "actor object (vtable +0x48 = sub-object getter, +0x3c = id getter, byte 0x4e1 = 'shown' flag, byte 0x1385 = second flag)",
+   "param_2": "unused / forwarded to vtable getter",
+   "param_3": "unused",
+   "param_4": "unused (stack slot for Work getter)"
+  },
+  "summary": "Decides whether an actor should currently be considered visible/active: asks its sub-object (vtable +0x48 then +0x18) and otherwise combines the two actor flags at 0x4E1 and 0x1385, and when Work byte 0x27C57 is set additionally requires the actor id to pass the two global lookup tests at 0x669DD4/0x669E24.",
+  "confidence": 0.35,
+  "evidence": "Body: (**(code**)(*arg1+0x48))(arg1,0) -> (**(code**)(*piVar2+0x18))(); if 0 returns *(char*)(arg1+0x1385). Else Work byte +0x27C57 selects between the flag-only path and a path that calls (**(code**)(*arg1+0x3c))(arg1) then func_00669DD4(id) / func_00669E24(id) (both also used by IsEndActorActionSeq). Result is a 0/1 visibility answer."
+ },
+ {
+  "address": "0x0064DFF0",
+  "name": "maybe_Ui_List_GetDisplayedRowCount",
+  "signature": "int maybe_Ui_List_GetDisplayedRowCount(UiList* list)",
+  "params": {
+   "param_1": "list object (byte +4 = 'has extra row' flag)"
+  },
+  "summary": "Returns the number of party battle units plus one when the object's extra-row flag at +4 is set; used by list windows that show the party members followed by a trailing entry.",
+  "confidence": 0.4,
+  "evidence": "func_0063A8A0() = func_00643504(Work) which is the party battle-unit count (0x654710 uses it as the bound of a loop over func_0035F6C0(Work,i)); result = count + (*(char*)(arg1+4) != 0)."
+ },
+ {
+  "address": "0x0064E054",
+  "name": "maybe_Ui_List_IsCursorAtEnd",
+  "signature": "bool maybe_Ui_List_IsCursorAtEnd(UiList* list)",
+  "params": {
+   "param_1": "list object (its +0x410 sub-object is passed to the row accessor)"
+  },
+  "summary": "True when the window's current cursor row (func_0063A794) equals the row stored in the list's +0x410 field (func_0063A8A0), i.e. the cursor sits on the last/current end row.",
+  "confidence": 0.4,
+  "evidence": "func_0063A794 reads record+0x38 -> u16 at +0xc then subtracts 1 (row index of the active window); func_0063A8A0 calls func_00643504(Work) but here Ghidra passed arg1+0x410, i.e. it is the same row accessor applied to the sub-object. Returns the equality."
+ },
+ {
+  "address": "0x0064E88C",
+  "name": "maybe_Ui_List_HitTestRow",
+  "signature": "u32 maybe_Ui_List_HitTestRow(UiList* list)",
+  "params": {
+   "param_1": "list object (int fields: f_e = id table, f_15 = row array, f_13 = current row)"
+  },
+  "summary": "Converts the cursor position into an absolute row index: takes the table size from f_e, adds the current row (f_13) times 5, subtracts the viewport base from vtable +0x68 and resolves the resulting 5-unit offset through func_00650860/func_00648348; returns 0xFFFFFFFF when there is no row array.",
+  "confidence": 0.3,
+  "evidence": "uVar3 = *(u16*)(arg1[0xe]+0xc); iVar1 = (**(code**)(*arg1+0x68))(); func_00650860(tmp, arg1[0x15], (uVar3 + arg1[0x13]*5) - iVar1) then func_00648348(tmp); returns 0xffffffff if arg1[0x15]==0. The '5' matches the 5-unit row records used by the 0x650804/0x651424 accessors."
+ },
+ {
+  "address": "0x0064EF98",
+  "name": "maybe_Battle_Encounter_BuildConditions",
+  "signature": "void maybe_Battle_Encounter_BuildConditions(u32 unused, EncounterDesc* enc, int buildText)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)",
+   "param_2": "encounter descriptor: +1 touch-back side, +4 first-strike byte, +0x3C[6] enemy ids, +0x4C enemy group count, +0x59 'reincarnation present'",
+   "param_3": "when 0 only zeroes the output byte and returns"
+  },
+  "summary": "Builds the battle-start condition flags for one field encounter: classifies the base enemy as weak/equal/strong against the hero's level, notes touch-back side, group size and party size, flags reincarnation enemies and LL (large) enemies, then rolls the 3-way result through func_005F9650 and stores it in enc->f_00.",
+  "confidence": 0.5,
+  "evidence": "String literals in the body: 'base_enemy_weak/equal/strong', 'touch_back_pc_>enemy', 'touch_back_enemy_>pc', '1..4_enemy_group', 'pc_1_member', 'pc_5_member', 'exist_reincarnation', 'exist_LL_enemy', 'player_first_attack', 'enemy_first_attack'. Uses func_0035EB98(Work, func_0066B0E4(party,0))->f_d8 (hero level) versus func_0063DCA4(Work,enemyId)->f_c and the thresholds f_90/f_94; enemy ids come from enc+0x3C with 10-byte entries; result = func_005F9650(&three,3,*g_0064f828). Companion of Battle_DecideFirstStrike (0x654710), which builds the same kind of tag string for the player/enemy pre-emptive roll."
+ },
+ {
+  "address": "0x00650804",
+  "name": "maybe_Party_GetSlotCountPlusPending",
+  "signature": "int maybe_Party_GetSlotCountPlusPending(PartySlot* slot, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "party/character slot (byte +4 = character id or 0xFF, byte +5 = 'pending' flag)",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Returns the number of filled entries of a character work record (count of non-0xFFFF u16 values in the 24-entry list at +0xEC) plus one when the slot has its 'pending' byte set and the count is still below 0x18; 0 for an empty slot (id 0xFF).",
+  "confidence": 0.4,
+  "evidence": "*(char*)(arg1+4) == -1 -> 0; else func_0035EB98(Work,id) then func_00629150(record) (0x629150: counts 24 u16 at record+0xEC that differ from 0xFFFF) and result < 0x18 plus *(char*)(arg1+5). Same record accessor as PlayerStatusAllReset (loops 0..0x1E records)."
+ },
+ {
+  "address": "0x006511E0",
+  "name": "maybe_Ui_ListRow_DrawDispatchA",
+  "signature": "void maybe_Ui_ListRow_DrawDispatchA(UiRow* row, u32 paneId, u16* entry, u32 arg4)",
+  "params": {
+   "param_1": "row object (byte +4 = draw-handler index into the table at 0x651280)",
+   "param_2": "entry/record id passed to func_0035EB98",
+   "param_3": "list entry (u16 at +0 = id, +2 = row record pointer)",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Draws one list row: looks up the list entry (func_0066C5CC), copies it into the shared 0x3C0-byte row buffer (func_0045A5C8), sets the pane colours and flushes the pane, then tail-jumps into the row-kind handler table indexed by row+4.",
+  "confidence": 0.45,
+  "evidence": "func_0066C5CC(arg3) guard; func_0045A5C8(g_00651278, record); func_00111384(g_0065127c,0xc,0xff) (colour/alpha); func_0045A5A0(g_00651278,*arg3,0); func_0045BD14(g_00651278,0); then (**(code**)(g_00651280 + bVar1*4))() with bVar1 = *(u8*)(arg1+4). Ghidra warns 'could not recover jumptable'. Same shape as 0x6526D0/0x652798."
+ },
+ {
+  "address": "0x00651424",
+  "name": "maybe_Party_GetRecordSlotCount",
+  "signature": "u32 maybe_Party_GetRecordSlotCount(PartySlot* slot, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "party slot (u16 at +0x50 = record index, < 0x1F)",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Returns the filled-entry count (func_00629150) of the character work record selected by the slot's +0x50 index, or 0 when the index is out of the 31-record range.",
+  "confidence": 0.4,
+  "evidence": "if (self->f_50 < 0x1f) { func_0035EB98(Work, self->f_50); return func_00629150(); } else 0. The 0x1F bound matches the 31 character records that end exactly at the roster object (31*0x12EC = 0x24A94)."
+ },
+ {
+  "address": "0x006526D0",
+  "name": "maybe_Ui_ListRow_DrawDispatchB",
+  "signature": "void maybe_Ui_ListRow_DrawDispatchB(UiRow* row, u32 paneId, u16* entry, u32 arg4)",
+  "params": {
+   "param_1": "row object (byte +4 = handler index, byte +5 = required sub-kind or -1)",
+   "param_2": "entry/record id",
+   "param_3": "list entry",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Same row renderer as 0x6511E0 but for entries that carry a sub-record: skips rows whose sub-record kind byte (+0x29) does not match the row's filter byte, then copies the entry into the shared row buffer, flushes the pane and dispatches through the table at 0x652794.",
+  "confidence": 0.45,
+  "evidence": "func_0066C5A8(arg3) guard; if *(char*)(arg1+5) != -1 compares *(char*)(entry[2]+0x29) with it and returns on mismatch; then the same func_0045A5C8/0x111384/0x45A5A0/0x45BD14 sequence and (**(code**)(g_00652794 + bVar1*4))()."
+ },
+ {
+  "address": "0x00652798",
+  "name": "maybe_Ui_ListRow_DrawDispatchC",
+  "signature": "void maybe_Ui_ListRow_DrawDispatchC(UiRow* row, u32 paneId, u16* entry, u32 arg4)",
+  "params": {
+   "param_1": "row object (byte +4 = handler index, byte +5 = required sub-kind)",
+   "param_2": "entry/record id",
+   "param_3": "list entry",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Variant of the row renderer that only draws entries whose sub-record kind equals the row filter byte (+5) and submits with the 'selected/alternate' flag 1 to func_0045A5A0 before dispatching through the table at 0x652854.",
+  "confidence": 0.45,
+  "evidence": "func_0066C5A8(arg3) then cVar3 = *(char*)(*(int*)(arg3+2)+0x29); only when cVar3 == *(char*)(arg1+5) does it run func_0045A5C8 / func_00111384 / func_0045A5A0(pane,id,1) / func_0045BD14 and the indirect table jump (g_00652854)."
+ },
+ {
+  "address": "0x00652A6C",
+  "name": "std_compare_flagwords_by_bit",
+  "signature": "u32 std_compare_flagwords_by_bit(u32* ctx, u32* lhs, u32* rhs)",
+  "params": {
+   "param_1": "mask word: bits already handled are masked out before comparing",
+   "param_2": "left key word",
+   "param_3": "right key word"
+  },
+  "summary": "Ordering predicate comparing two bit-mask keys: first by the 'primary' bit class returned by func_0055E6BC, then by the position (lowest set bit) of the first remaining bit, ignoring bits already masked in *ctx. Used as the comparator of the 16-byte-record introsort at 0x71B8A8.",
+  "confidence": 0.4,
+  "evidence": "bVar1 = func_0055E6BC(*arg2), bVar2 = func_0055E6BC(*arg3); if equal, compares func_0055E6BC((-u & u) - 1) for u = *key & ~*ctx (i.e. index of the lowest set bit) and returns lhs<rhs; otherwise returns bVar1 < bVar2. Callers: introsort 0x71B8A8 (16-byte records) only."
+ },
+ {
+  "address": "0x00654164",
+  "name": "maybe_Work_FindFirstFreeSlot",
+  "signature": "int maybe_Work_FindFirstFreeSlot(void)",
+  "params": {
+   "param_1": "unused (stack slot for Work getter)"
+  },
+  "summary": "Returns the index of the first free entry in the u16 slot table at Work+0x24A98+0x27C4 (scans the 90 entries until the 0xFFFF sentinel), i.e. the next free slot of that table.",
+  "confidence": 0.45,
+  "evidence": "Only body: func_0066B4F4(*Work + 0x24a98); 0x66B4F4 walks u16 from +0x27C4 to +0x2878 (90 entries) until 0xFFFF and returns the index. Same table used by the 90-bit flag array at +0x89A8. | Work+0x24A98 is the work sub-object: party member id list at +4 (count at Work+0x27218, as read by IsInParty), 90-bit flag bitset at +0x89A8, per-id byte table at +0x3165, u16 slot table at +0x27C4 (0xFFFF = free), 5-byte per-id records at +0x2D2D and two 0x8C-byte row tables at +0x5FE4 / +0x7B3C whose rows hold a UTF-16 name and an id at +0x88 (N_030 read them as bag/row tables). Character work records are Work+4+id*0x12EC: 31 slots ending exactly where this sub-object starts"
+ },
+ {
+  "address": "0x006542CC",
+  "name": "maybe_Item_CheckCraftRequirements",
+  "signature": "u32 maybe_Item_CheckCraftRequirements(u32 arg1, RecipeWork* recipe, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "recipe work (int +4 = array of 10-byte material entries, 6 of them)",
+   "param_3": "scratch",
+   "param_4": "scratch (stack slot for Work getter)"
+  },
+  "summary": "Checks whether a crafting/alchemy recipe can be executed: returns 1 when the debug/skip flag is clear, otherwise walks the six 10-byte material entries and requires each referenced item to pass func_005E8560.",
+  "confidence": 0.35,
+  "evidence": "*(char*)(g_006543b8 + *Work) == 0 && *(char*)(*Work + 0x2d54a) == 0 -> 1; else loops i<6 over entries at recipe+4 (u16 item id compared to g_006543bc, bytes at +2,+3,+4,+5,+6,+7) and calls func_005E8560(); the entry layout matches the 10-byte rows also used by maybe_Battle_Encounter_BuildConditions for enemy groups."
+ },
+ {
+  "address": "0x00654710",
+  "name": "Battle_DecideFirstStrike",
+  "signature": "void Battle_DecideFirstStrike(BattleParticipant* self, EncounterDesc* enc, int arg3)",
+  "params": {
+   "param_1": "battle set-up object (vtable +0x44 fills the two 'pre-emptive' flags)",
+   "param_2": "encounter descriptor, byte +4 receives 0=none, 1=player first, 2=enemy first",
+   "param_3": "1 = normal speed class, else slower (adds 3 to the weight instead of 2)"
+  },
+  "summary": "Rolls the pre-emptive strike: asks the battle set-up object which side may strike first, builds the weighted condition string ('player_first_attack N s<dexterty_memberNum N equip' or 'enemy_first_attack N'), evaluates it through the 0x28B820/0x28B70C/0x28B71C condition evaluator and writes the winning side into enc->f_04.",
+  "confidence": 0.5,
+  "evidence": "Literals 'player_first_attack' (0x6548F8), 's<dexterty_memberNum' (0x654916+2), 'equip' (0x65492C), 'enemy_first_attack' (0x654934). Calls (**(code**)(*arg1+0x44))(arg1,arg2,..) to get the two candidate flags, func_0028B820 (build condition), func_0028B70C (append weight), func_0028B71C (evaluate -> bool). Counts party units with func_00643504 + func_0035F6C0 and skips units with f_da & 0x10 (dead/absent)."
+ },
+ {
+  "address": "0x00654EF0",
+  "name": "maybe_Gfx_Effect_SetOwnerFrame",
+  "signature": "void maybe_Gfx_Effect_SetOwnerFrame(u32 unused, EffectOwner* owner, int frame)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "object owning the effect (func_0065D448 resolves its effect)",
+   "param_3": "effect frame/step offset"
+  },
+  "summary": "Sets the animation frame of the effect attached to an object: resolves the effect through func_0065D448, pushes the frame with func_0053E220, clears effect flag bit 0x08 and applies the transform at frame+0x14.",
+  "confidence": 0.45,
+  "evidence": "iVar1 = func_0065D448(arg2); func_0053E220(iVar1->f_78,arg3); iVar1->f_7c &= 0xf7; func_0053E9A4(arg2,0,arg3+0x14). func_0065D448 itself (in this batch) calls vtable +0x24/+0x28 to find the effect object, and 0x53xxxx is the particle/effect module."
+ },
+ {
+  "address": "0x00658EB8",
+  "name": "Field_Clock_GetMilliseconds",
+  "signature": "int Field_Clock_GetMilliseconds(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value (two words)"
+  },
+  "summary": "Converts a 64-bit field-clock tick into the millisecond part of the displayed clock (remainder modulo 1000).",
+  "confidence": 0.6,
+  "evidence": "64-bit divide helper func_00126198 with the constants at 0x658EFC..0x659008 (divisor 1000) then remainder - divisor*quotient = value mod 1000. Same constant-pair pattern as the sibling conversions and sits directly after the named Field_Clock_ConvertTimestamp (0x658D18)."
+ },
+ {
+  "address": "0x00658F0C",
+  "name": "maybe_Field_Clock_GetDayOfMonth",
+  "signature": "int Field_Clock_GetDayOfMonth(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Divides the tick value by one day and asks the calendar helper func_0050EB54 for the day field (first out-pointer of the three), returning the day of month.",
+  "confidence": 0.45,
+  "evidence": "func_00126198(*arg1, arg1[1], g_00658f5c) + g_00658f60 then func_0050EB54(0,0,&out,days) and returns out. The sibling functions call the same helper with the first and second out-pointers, which is the year/month/day split of a single date conversion."
+ },
+ {
+  "address": "0x00658F64",
+  "name": "Field_Clock_GetHour",
+  "signature": "int Field_Clock_GetHour(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Returns the hour (0..23) of the field clock by shifting the tick value down and taking it modulo 24.",
+  "confidence": 0.6,
+  "evidence": "func_00126198(...)/constant then (v >> 0x14) and remainder modulo 0x18. Time-of-day remainder chain (24 -> 60 -> 60) shared with Field_Clock_GetMinute/GetSecond."
+ },
+ {
+  "address": "0x00658FCC",
+  "name": "maybe_Field_Clock_GetYear",
+  "signature": "int Field_Clock_GetYear(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Divides the tick value by one day and returns the year through the first out-pointer of func_0050EB54.",
+  "confidence": 0.45,
+  "evidence": "func_0050EB54(&out,0,0,days) -> returns out; same divisor/offset as Field_Clock_GetDayOfMonth (0x658F0C) which uses the third out-pointer, and Field_Clock_GetMonth (0x659024) the second."
+ },
+ {
+  "address": "0x00659024",
+  "name": "maybe_Field_Clock_GetMonth",
+  "signature": "int Field_Clock_GetMonth(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Divides the tick value by one day and returns the month through the second out-pointer of func_0050EB54.",
+  "confidence": 0.45,
+  "evidence": "func_0050EB54(0,&out,0,days) -> returns out; companion of the year and day-of-month variants."
+ },
+ {
+  "address": "0x0065907C",
+  "name": "Field_Clock_GetMinute",
+  "signature": "int Field_Clock_GetMinute(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Returns the minute (0..59) of the field clock (tick value shifted to minute resolution, modulo 60).",
+  "confidence": 0.6,
+  "evidence": "func_00126198(...)/constant then (v >> 0xe) modulo 0x3c. Same family as GetHour (mod 24) and GetSecond."
+ },
+ {
+  "address": "0x006590E8",
+  "name": "Field_Clock_GetSecond",
+  "signature": "int Field_Clock_GetSecond(u64* timestamp)",
+  "params": {
+   "param_1": "pointer to a 64-bit field-clock tick value"
+  },
+  "summary": "Returns the second (0..59) of the field clock (tick value shifted to second resolution, modulo 60).",
+  "confidence": 0.6,
+  "evidence": "func_00126198(...)/constant then (v >> 6) modulo 0x3c."
+ },
+ {
+  "address": "0x0065D448",
+  "name": "maybe_Gfx_Effect_GetOwnerEffect",
+  "signature": "Effect* maybe_Gfx_Effect_GetOwnerEffect(EffectOwner* owner)",
+  "params": {
+   "param_1": "object that may own an effect (vtable +0x24 = 'has effect', +0x28 = 'activate/disable')"
+  },
+  "summary": "Returns the owner's effect object, activating it through the second virtual slot when the first one reports one is present.",
+  "confidence": 0.45,
+  "evidence": "iVar1 = (**(code**)(*arg1+0x24))(arg1); if (iVar1 != 0) (**(code**)(*arg1+0x28))(arg1,0); used by 0x654EF0 and 0x670954 to obtain an effect whose f_78/f_7c are then manipulated."
+ },
+ {
+  "address": "0x0065D534",
+  "name": "maybe_Gfx_Sprite_BuildQuadTransforms",
+  "signature": "void maybe_Gfx_Sprite_BuildQuadTransforms(SpriteDesc* self, u32 dst, u32 count, SpriteEntry* entries, float scale)",
+  "params": {
+   "param_1": "sprite/render object",
+   "param_2": "destination buffer (4 vertices per quad)",
+   "param_3": "destination capacity/count",
+   "param_4": "entry list (byte +0x74/+0x76 = frame and transform flags, +0x78 = UV/pivot table, +0x65/+0x66 = cached counts, +0x7c = state bits)",
+   "param_5": "scale factor or 0 for default"
+  },
+  "summary": "Turns the object's 0x14-byte sprite entries into the 4x2 vertex coordinates of each quad, handling rotation via the sincos helper func_0051B158 and the arbitrary-quad UV path, and caches the result (entry count and flag word at +0x65/+0x66).",
+  "confidence": 0.45,
+  "evidence": "Rotates with func_0051B158 (sincos) and writes 8 floats per entry (0x20 bytes) plus 0x10-byte vertex records; reads the 0x14-byte table at arg4->f_78 indexed by (f_74 & 3)*0x20 + ((f_74 & 0xf) >> 2)*0x14 and the 0x20-byte table at arg5. Sets f_7c |= 8 (built flag) and stores iVar13 (entry count) at arg4+100. Callers are in the 0x53xxxx sprite module."
+ },
+ {
+  "address": "0x00663FB8",
+  "name": "maybe_Text_BuildCharTransform",
+  "signature": "float* maybe_Text_BuildCharTransform(TextRenderer* self, u32 charIndex, GlyphEntry* glyph, u32 styleId, float* out, int arg6, float* uvOut)",
+  "params": {
+   "param_1": "text renderer (f_28 = glyph/quad table, f_... = font metrics)",
+   "param_2": "character index inside the run, 0 returns out unchanged",
+   "param_3": "glyph record",
+   "param_4": "style index",
+   "param_5": "destination matrix",
+   "param_6": "second destination slot",
+   "param_7": "UV output, may be 0"
+  },
+  "summary": "Builds the per-character 3x4 transform (and optional UV quad) used to draw one glyph, applying the active rotation/scale/skew style and the glyph's cell from the font table; returns the next free output pointer.",
+  "confidence": 0.35,
+  "evidence": "Uses func_0011CD80 (integer divide) for cell indices, func_0051B158 (sincos) and writes 12 floats (3x4) then 16 floats for the UV quad; reads 0x14-byte glyph cells from arg1->f_28. Callers 0x55B984/0x55C84E live in the 0x55xxxx text/font module (HeapAlloc/TextBox code)."
+ },
+ {
+  "address": "0x00666D2C",
+  "name": "maybe_Party_GetIdValueIfAtLeast",
+  "signature": "u8 maybe_Party_GetIdValueIfAtLeast(u32 unused, u8* query, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "query: byte 0 = id, byte 1 = minimum, byte 2 = value to return",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Table lookup helper: reads the per-id byte from the roster's 5-byte record table, and returns the query's third byte when the table value is not 0xFF and is at least the query's threshold.",
+  "confidence": 0.4,
+  "evidence": "uVar2 = func_0066B17C(Work+0x24a98, *arg2); func_0066B17C reads *(u8*)(base + id*5 + 0x2D2D) (id 0xFF -> 0xFF). Returns arg2[2] when uVar2 != 0xFF && arg2[1] <= uVar2."
+ },
+ {
+  "address": "0x00666D7C",
+  "name": "maybe_MonsterBook_CompareSortIndex",
+  "signature": "bool MonsterBook_CompareSortIndex(u32 unused, u32 lhsId, u32 rhsId, u32 arg4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "left monster/entry id",
+   "param_3": "right monster/entry id",
+   "param_4": "unused"
+  },
+  "summary": "Ordering predicate for monster-book entries: resolves both ids through the monster table (func_0063E3C8) and compares their sort-index field at +0x11; used to sort an array of monster-id bytes.",
+  "confidence": 0.45,
+  "evidence": "func_0063E3C8(entry, arg2) / (entry, arg3) then returns lhs->f_11 < rhs->f_11. Sole callers are the byte-array introsort at 0x71CC08 (std_introsort_monsterId8), which sorts 1-byte monster ids with this predicate."
+ },
+ {
+  "address": "0x00668CCC",
+  "name": "maybe_Actor_ResolveReferenceObject",
+  "signature": "u8* maybe_Actor_ResolveReferenceObject(u8* ref, int index)",
+  "params": {
+   "param_1": "reference record: byte 0 = kind (0..4), then kind-specific ids",
+   "param_2": "index inside the referenced list"
+  },
+  "summary": "Resolves a compact 'actor reference' record into the actual Work sub-object: kind 0 indexes the roster's 20 named 0x8C-byte entries (via the free-slot/id table), kind 1 indexes a second table of 20 entries with a 0x44-byte header, kind 2 maps a u16 id through the string/table helper, kinds 3 and 4 return the two global default objects at the 0x213D54 ids 0xE/0xF.",
+  "confidence": 0.4,
+  "evidence": "switch(*arg1): case 0 -> iVar15 + 0x24a98 + idx*0x8c + 0x5fe4 (with func_0066B11C bounds check); case 1 -> func_0066749C copies a 0x44-byte header, then entry base + i*0x8C; case 2 -> func_0028DDB0 + func_0063A46C; case 3/4 -> func_00213D54(0xe)/(0xf). Also uses func_00116C10 (memcpy helper) and func_00100050 (assert/panic)."
+ },
+ {
+  "address": "0x0066A604",
+  "name": "maybe_Party_MemberFlagPairA",
+  "signature": "bool maybe_Party_MemberFlagPairA(PartyMemberWork* member)",
+  "params": {
+   "param_1": "character/party member work (u32 flags at +0x74)"
+  },
+  "summary": "Tests two of the member's flag bits, choosing which pair to test from the two global switch bytes at Work+0x27C5A/0x27C5B (bits 0x10/0x1000 or 0x20/0x800). Exact complement of 0x66A660, so the pair selects one of two mutually exclusive member groupings controlled by those bytes.",
+  "confidence": 0.3,
+  "evidence": "uVar3 = Work[0x27C5A] ? 0x20 : 0x10; uVar2 = Work[0x27C5B] ? 0x800 : 0x1000; return ((uVar2|uVar3) & arg1->f_74) != 0. Only 0x66A604 and its complement 0x66A660 read Work+0x27C5A/0x27C5B."
+ },
+ {
+  "address": "0x0066A660",
+  "name": "maybe_Party_MemberFlagPairB",
+  "signature": "bool maybe_Party_MemberFlagPairB(PartyMemberWork* member)",
+  "params": {
+   "param_1": "character/party member work (u32 flags at +0x74)"
+  },
+  "summary": "Complement of 0x66A604: tests the other member flag pair (0x20/0x800 or 0x10/0x1000) selected by the same two global bytes, i.e. 'is the member in the other group'.",
+  "confidence": 0.3,
+  "evidence": "Identical body to 0x66A604 with the two bit pairs swapped (Work[0x27C5A] ? 0x10 : 0x20, Work[0x27C5B] ? 0x1000 : 0x800)."
+ },
+ {
+  "address": "0x0066AD94",
+  "name": "maybe_Work_FindLastNamedRow",
+  "signature": "int maybe_Work_FindLastNamedRow(WorkRowTable* table)",
+  "params": {
+   "param_1": "roster object (table at +0x7B3C, 20 entries of 0x8C bytes)"
+  },
+  "summary": "Returns the index of the last used entry of the 20-entry 0x8C-byte row table: an entry counts as used when its wide-string is non-empty, shorter than 7 characters and its id field at +0x88 is not -1.",
+  "confidence": 0.45,
+  "evidence": "Loops i<0x14 over base+0x7B3C+i*0x8C calling func_00100B74 (Thumb 0x100B74 = u16-wide strlen): strlen < 7, u16[0] != 0 and *(int*)(entry+0x88) != -1; returns (index of last hit) - 1. The 0x8C entry with a wide name and an id at +0x88 matches 0x66AF34 (maybe_Party_EntryMatchesSelectedId)."
+ },
+ {
+  "address": "0x0066B19C",
+  "name": "maybe_Work_CountNamedRows",
+  "signature": "int maybe_Work_CountNamedRows(WorkRowTable* table)",
+  "params": {
+   "param_1": "roster object (table at +0x7B3C)"
+  },
+  "summary": "Counts the used entries of the 20-entry 0x8C-byte row table (non-empty wide name shorter than 7 characters and id at +0x88 != -1).",
+  "confidence": 0.45,
+  "evidence": "Same loop and tests as 0x66AD94 but returns the count r6 instead of the last index; func_00100B74 = wide-char strlen."
+ },
+ {
+  "address": "0x0066B1FC",
+  "name": "maybe_Work_CountNamedRowsB",
+  "signature": "int maybe_Work_CountNamedRowsB(WorkRowTable* table)",
+  "params": {
+   "param_1": "roster object (table at +0x5FE4)"
+  },
+  "summary": "Same count as 0x66B19C for the second 20-entry row table at +0x5FE4.",
+  "confidence": 0.4,
+  "evidence": "Identical body with the base offset 0x5FE4 instead of 0x7B3C (both tables are also indexed by maybe_Actor_ResolveReferenceObject)."
+ },
+ {
+  "address": "0x0066B264",
+  "name": "maybe_Work_AreAllNamedRowsUsed",
+  "signature": "bool maybe_Work_AreAllNamedRowsUsed(WorkRowTable* table)",
+  "params": {
+   "param_1": "roster object (table at +0x7B3C)"
+  },
+  "summary": "True when all 20 entries of the 20-entry 0x8C-byte row table are used (count == 0x14), i.e. the table is full.",
+  "confidence": 0.45,
+  "evidence": "Same counting loop as 0x66B19C, returns (count == 0x14)."
+ },
+ {
+  "address": "0x0066D398",
+  "name": "maybe_Actor_DtorThunk",
+  "signature": "void maybe_Actor_DtorThunk(Actor* self, u32 arg2, u32 arg3, u32 arg4, u32 arg5)",
+  "params": {
+   "param_1": "actor sub-object (base pointer is -0x70 from the enclosing object)",
+   "param_2": "forwarded",
+   "param_3": "forwarded",
+   "param_4": "forwarded",
+   "param_5": "forwarded"
+  },
+  "summary": "Destructor-style thunk: first calls an unrecovered routine on the base sub-object at self-0x70 and then chains into func_0041DD7C, the common component/scene-node teardown.",
+  "confidence": 0.35,
+  "evidence": "drN(arg1 + -0x70) (Ghidra could not recover the callee) followed by func_0041DD7C(arg1,arg2,..). Same -0x70/-0x220/-0x22C base adjustments as the neighbouring actor helpers 0x66DAD0 and 0x66DBA0."
+ },
+ {
+  "address": "0x0066DAD0",
+  "name": "maybe_Actor_ReleaseComponent",
+  "signature": "void maybe_Actor_ReleaseComponent(Actor* self)",
+  "params": {
+   "param_1": "component pointer (its owner starts 0x220 bytes earlier)"
+  },
+  "summary": "Releases the owner object and its optional sub-component: frees the pointer at +4 through func_0040A680 when present and then runs the resource-release routine func_00377440 on the enclosing object at self-0x220.",
+  "confidence": 0.4,
+  "evidence": "if (*(int*)(arg1+4) != 0) func_0040A680(); func_00377440(arg1 + -0x220). func_00377440 is the common 'release/recycle object' helper; the -0x220 base offset matches 0x66DBA0."
+ },
+ {
+  "address": "0x0066DBA0",
+  "name": "maybe_Actor_StopAttachedEffect",
+  "signature": "void maybe_Actor_StopAttachedEffect(Actor* component)",
+  "params": {
+   "param_1": "component pointer (owner at -0x22C; owner+0x5C and +0xAC are reset)"
+  },
+  "summary": "If the owning actor is currently active (func_0047B470), stops its attached sound/effect by name (func_002D11F4 with g_0066DBF4), detaches it (func_005F4F5C), switches the object to state 4 via vtable +0x58 and clears two counters.",
+  "confidence": 0.4,
+  "evidence": "func_0047B470(owner) != 0; func_002D11F4(owner, g_0066dbf4, 0) (name-keyed stop), func_005F4F5C(owner), (**(code**)(*piVar2+0x58))(piVar2,4), then self->f_5c = 0, self->f_ac = 0."
+ },
+ {
+  "address": "0x0066DD10",
+  "name": "maybe_Actor_HandleFlagEvent",
+  "signature": "u32 maybe_Actor_HandleFlagEvent(Actor* component, char* arg2)",
+  "params": {
+   "param_1": "component pointer (owner at -0x22C)",
+   "param_2": "event argument, only byte 0 used"
+  },
+  "summary": "Small event callback: when the passed value is non-zero it tells the owning actor to enter state 1 (func_00364014) and always reports success, the usual 'handled' return of an event handler.",
+  "confidence": 0.35,
+  "evidence": "if (*arg2 != '\\0') func_00364014(arg1 + -0x22c, 1); return 1. Registered-style callback shape (no side effects otherwise) next to the actor event handlers 0x66E2BC/0x66E67C."
+ },
+ {
+  "address": "0x0066E2BC",
+  "name": "maybe_Actor_OnEvent",
+  "signature": "void maybe_Actor_OnEvent(Actor* component, int eventId)",
+  "params": {
+   "param_1": "component pointer (owner at -0x258, sub-object at -0x20C, handler object at +0x18)",
+   "param_2": "event id: 0, 2, 3 and 6 are handled, everything else is only forwarded"
+  },
+  "summary": "Actor event dispatcher: event 0 resets the sub-object with func_0021AF9C, event 6 finalises it with func_00219BCC, events 2/3 toggle the owner's sub-object through vtable +0x14 (on/off), and finally the event id is forwarded to the handler object through vtable +0x84.",
+  "confidence": 0.5,
+  "evidence": "switch: arg2==0 -> func_0021AF9C(arg1-600,&arg1->f_c0,0); arg2==6 -> func_00219BCC(arg1-600); arg2==2/3 -> (**(code**)(*piVar1+0x14))(piVar1,1/0); then (**(code**)(*piVar1+0x84))(piVar1,arg2) with piVar1 = arg1->f_18. Base -600 (0x258) matches the actor object base used by 0x66E67C."
+ },
+ {
+  "address": "0x0066E67C",
+  "name": "maybe_Actor_OnEventB",
+  "signature": "void maybe_Actor_OnEventB(Actor* component, int eventId, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "component pointer (owner at -0x258, state byte at +0x70, sub-object at -0x20C)",
+   "param_2": "event id (only 6 acts)",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Second half of the actor event handling: runs func_0028EDCC on the owner, maps the actor's state byte at +0x70 to one of three Work flags (0x27508+0x1A8 or one of two constants) and on event 6 pushes that flag into the sub-object through vtable +0x14.",
+  "confidence": 0.4,
+  "evidence": "func_0028EDCC(arg1-600); switch on arg1->f_70 (0 -> offset 0x1a8, 1/2 -> g_0066e6fc/g_0066e700, other -> return); if arg2==6 calls (**(code**)(**(int**)(arg1-0x20c)+0x14))(sub, *(char*)(*Work + iVar3 + 0x27508) != 0)."
+ },
+ {
+  "address": "0x0066FEE0",
+  "name": "Party_ResolveMemberId",
+  "signature": "int Party_ResolveMemberId(int wantedId)",
+  "params": {
+   "param_1": "requested character id (1..10 select a variant family, other ids are looked up as-is)"
+  },
+  "summary": "Maps a requested character id to the id actually present in the party: for the variant families it prefers the alternate form (e.g. 0xB/0xC, 0xD/0x1B, 0xE/0x1C, 0x1D) and returns 0xFF when neither form is in the party. Used to pick the right model/record for characters that change form.",
+  "confidence": 0.5,
+  "evidence": "switch(arg1) over 1..7 and 10 searches Work->f_27218 party ids (func_0066B0E4(party,i)) for a candidate alternate id and overwrites arg1 with it, then a final scan returns arg1 if found else 0xff. Examples: case 3 looks for 0xD then 0x1B, case 4 for 0xE then 0x1C, case 10 for 0x1D."
+ },
+ {
+  "address": "0x00670344",
+  "name": "maybe_Gfx_Node_SetFromEulerTransform",
+  "signature": "u32 maybe_Gfx_Node_SetFromEulerTransform(u32 node, u32 parent, TransformEuler* transform)",
+  "params": {
+   "param_1": "scene node / draw object",
+   "param_2": "destination matrix/buffer",
+   "param_3": "transform: +0xC/+0x10/+0x14 = angles (radians), +4/+8 = position"
+  },
+  "summary": "Applies a rotation given as three Euler angles plus an offset: converts each angle to sin/cos (func_006731EC/func_00672E44), composes the 3x3 matrix and position, hands the world position to func_003D9A00 and the local offset to func_005F6C4C.",
+  "confidence": 0.4,
+  "evidence": "Uses SQRT and the sincos wrappers func_006731EC/func_00672E44 (also used by std_* math code), builds local_54/local_50/local_4c from arg3->f_c/f_10/f_14/f_18, then func_003D9A00(arg1,arg2,0,&local_54,0) and func_005F6C4C(arg1,&offset,1). Returns 1."
+ },
+ {
+  "address": "0x00670668",
+  "name": "maybe_Party_RemoveMemberAndRelease",
+  "signature": "void maybe_Party_RemoveMemberAndRelease(ActorRef* self, Component* component, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "actor reference (f_298 = descriptor with f_1a/f_1c ids)",
+   "param_2": "component to tear down",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Removes a character pair from the party (func_006136BC with the two ids from the actor's descriptor) and then releases the associated component/actor by running func_00335A18 and the state-4 virtual calls.",
+  "confidence": 0.4,
+  "evidence": "func_006136BC(Work+0x24a98, self->f_298->f_1c, self->f_298->f_1a); func_00335A18(arg2); (**(code**)(*arg2+0x58))(arg2,4); (**(code**)(*arg2+0x40))(arg2,4). The sibling 0x6709C0 does the same with a u16 id from the descriptor and 0x670900 resets everything (func_00192DE4)."
+ },
+ {
+  "address": "0x00670900",
+  "name": "maybe_Party_RemoveAllMembersAndRelease",
+  "signature": "void maybe_Party_RemoveAllMembersAndRelease(u32 unused, Component* component, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "component to tear down",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Resets the whole party (func_00192DE4 on Work+0x24A98) and releases the component with the same teardown sequence as 0x670668.",
+  "confidence": 0.4,
+  "evidence": "func_00192DE4(*Work + 0x24a98); func_00335A18(arg2); vtable +0x58(4) and +0x40(4)."
+ },
+ {
+  "address": "0x00670954",
+  "name": "maybe_Actor_FindEffectComponentValue",
+  "signature": "u32 maybe_Actor_FindEffectComponentValue(Actor* self, u32 componentId)",
+  "params": {
+   "param_1": "actor (f_10 = component container used through vtable +0x2c)",
+   "param_2": "component id to look for"
+  },
+  "summary": "Walks the actor's component list looking for the component whose vtable equals g_006709BC and returns that effect's f_78 value (effect frame/handle), 0 when not found.",
+  "confidence": 0.4,
+  "evidence": "piVar2 = (**(code**)(*self->f_10+0x2c))(self->f_10,arg2,1); then walks the linked list starting at vtable+8 of that component comparing each node with g_006709bc; on a match calls func_0065D448() and returns result->f_78."
+ },
+ {
+  "address": "0x006709C0",
+  "name": "maybe_Party_RemoveMemberAndReleaseB",
+  "signature": "void maybe_Party_RemoveMemberAndReleaseB(ActorRef* self, Component* component, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "actor reference (f_298 = descriptor: u16 id at +2, word at +0xC)",
+   "param_2": "component to tear down",
+   "param_3": "unused",
+   "param_4": "stack slot for Work getter"
+  },
+  "summary": "Variant of 0x670668 that removes the party members referenced by the descriptor's u16 id at +2 and word at +0xC, then releases the component.",
+  "confidence": 0.4,
+  "evidence": "func_006136BC(Work+0x24a98, *(u16*)(self->f_298+2), self->f_298->f_c); then the shared func_00335A18 + vtable(0x58,4)/(0x40,4) teardown."
+ },
+ {
+  "address": "0x006D3EDC",
+  "name": "maybe_Text_ResetChannelSlotA",
+  "signature": "void maybe_Text_ResetChannelSlotA(int index)",
+  "params": {
+   "param_1": "slot index inside the global 0x108-byte entry array at g_006D3F14"
+  },
+  "summary": "Resets slot `index` of one of the global 0x108-byte wide-text channels (N_028 read the same structure at 0x6D3EA0 as a 16-slot UTF-16 message channel): destroys the heap buffer at +8 (func_00707C1C) and points the data pointer at +4 back at the inline storage +0xC.",
+  "confidence": 0.35,
+  "evidence": "if (*g_006d3f14 != 0) { func_00707C1C(*g_006d3f14 + index*0x108 + 8); *(int*)(entry+4) = entry+0xC; }. The identical bodies at 0x6D3F18 and 0x6D3F54 use g_006D3F50 and g_006D3F8C, so three such tables exist."
+ },
+ {
+  "address": "0x006D3F54",
+  "name": "maybe_Text_ResetChannelSlotC",
+  "signature": "void maybe_Text_ResetChannelSlotC(int index)",
+  "params": {
+   "param_1": "slot index inside the global 0x108-byte entry array at g_006D3F8C"
+  },
+  "summary": "Third copy of the 0x108-byte wide-text channel reset (table at g_006D3F8C): destroys the heap buffer and restores the inline-string pointer.",
+  "confidence": 0.35,
+  "evidence": "Identical to 0x6D3EDC/0x6D3F18 with the global pointer g_006d3f8c. Callers 0x467730 and 0x4D09B4 are battle/UI code."
+ },
+ {
+  "address": "0x006D76A0",
+  "name": "Ui_Window_PopPaneUntilId",
+  "signature": "u32 Ui_Window_PopPaneUntilId(UiWindow* self, int paneId, u32 flags)",
+  "params": {
+   "param_1": "window object (f_84 = pane stack depth, pane records 0xC bytes each)",
+   "param_2": "pane/entry id to stop at (0 matches any)",
+   "param_3": "pane flags to match"
+  },
+  "summary": "Pops panes until the top pane record matches the requested id and flags (or the stack becomes empty), used by the pop-until helpers of the various menu windows.",
+  "confidence": 0.55,
+  "evidence": "Loop: func_006D7454(self) (Ui_Window_PopPane) until it fails, checks self->f_84 != 0, indexes the pane stack at self + f_84*0xC and compares the record's +4 id with arg2 and +8 flags with arg3; returns 1 on a match. Same shape as 0x6D8410 but using the second pop primitive 0x6D81BC."
+ },
+ {
+  "address": "0x006D79DC",
+  "name": "Ui_Window_PopPaneRaw",
+  "signature": "u32 Ui_Window_PopPaneRaw(PaneStack* stack)",
+  "params": {
+   "param_1": "pane stack: [0] = pane array, [1] = vtable/instance, [2] = flags, [3..] = entries, [0xF] = depth"
+  },
+  "summary": "Raw pop of the top pane entry: releases the entry (func_0010EBD8), decrements the depth, calls the stored callback (directly or through the table indexed by flag bit 0), then schedules the deferred remove func_001A5F9C; returns 0 when the stack was already empty.",
+  "confidence": 0.5,
+  "evidence": "arg1[0xf] depth; func_0010EBD8(*arg1) on the top entry; arg1[0xf]--; callback = arg1[1] or *(code**)(arg1[1] + arg1[arg1[2]>>1]) when arg1[2]&1; then func_001A5F9C(arg1[depth*3],1). 0x6D7454 (Ui_Window_PopPane) delegates here."
+ },
+ {
+  "address": "0x006D81BC",
+  "name": "Ui_Window_PopPaneRawB",
+  "signature": "u32 Ui_Window_PopPaneRawB(PaneStack* stack)",
+  "params": {
+   "param_1": "second pane stack variant (same layout as 0x6D79DC, different flags element)"
+  },
+  "summary": "Identical raw pop implementation for the second pane-stack flavour; used by Ui_Window_PopPaneUntilId (0x6D8410).",
+  "confidence": 0.5,
+  "evidence": "Byte-for-byte the same body as 0x6D79DC (only address and the flag word used differ); callers are 0x6D8410 and two 0x3B0xxx functions."
+ },
+ {
+  "address": "0x006D8410",
+  "name": "Ui_Window_PopPaneUntilIdB",
+  "signature": "u32 Ui_Window_PopPaneUntilIdB(UiWindow* self, int paneId, u32 flags)",
+  "params": {
+   "param_1": "window object (f_3C = pane stack depth)",
+   "param_2": "pane id",
+   "param_3": "flags"
+  },
+  "summary": "Pop-until variant for the window flavour that keeps its pane depth at +0x3C and pops through 0x6D81BC.",
+  "confidence": 0.5,
+  "evidence": "Same loop as 0x6D76A0 with self->f_3c instead of f_84 and func_006D81BC instead of func_006D7454."
+ },
+ {
+  "address": "0x006D8698",
+  "name": "maybe_Ui_Window_PopPaneRawC",
+  "signature": "u32 Ui_Window_PopPaneRawC(PaneStack* stack)",
+  "params": {
+   "param_1": "third pane stack variant (depth at [0xC])"
+  },
+  "summary": "Third raw pop implementation, identical logic but with the depth stored at element 0xC.",
+  "confidence": 0.45,
+  "evidence": "Same body as 0x6D79DC with arg1[0xc] as the depth; callers 0x3B0440/0x3B0C54/0x3B0D70."
+ },
+ {
+  "address": "0x006E4DC8",
+  "name": "Ui_ListCursor_SeekToIndex",
+  "signature": "void Ui_ListCursor_SeekToIndex(UiListCursor* cursor, int targetIndex)",
+  "params": {
+   "param_1": "cursor: [0] = id buffer, [1] = buffer length, [2] = byte position, [3] = entry index",
+   "param_2": "entry index to seek to"
+  },
+  "summary": "Moves a list cursor over a byte array of entry ids to the requested entry index, forward or backward, skipping ids that the roster filter rejects (flag bit set or per-id byte >= 10).",
+  "confidence": 0.55,
+  "evidence": "Keeps cursor[3] (selectable index) in sync while walking cursor[2] (byte position) between cursor[1] (length); each candidate id passes the same test as 0x64D488: func_0066B534(Work+0x24a98,id)==0 && func_0066AF08(Work+0x24a98,id)<10. Sibling 0x6E4F98 is the forward-only version. | Work+0x24A98 is the work sub-object: party member id list at +4 (count at Work+0x27218, as read by IsInParty), 90-bit flag bitset at +0x89A8, per-id byte table at +0x3165, u16 slot table at +0x27C4 (0xFFFF = free), 5-byte per-id records at +0x2D2D and two 0x8C-byte row tables at +0x5FE4 / +0x7B3C whose rows hold a UTF-16 name and an id at +0x88 (N_030 read them as bag/row tables). Character work records are Work+4+id*0x12EC: 31 slots ending exactly where this sub-object starts"
+ },
+ {
+  "address": "0x006E4F98",
+  "name": "Ui_ListCursor_AdvanceToSelectable",
+  "signature": "UiListCursor* Ui_ListCursor_AdvanceToSelectable(UiListCursor* cursor, u32 start)",
+  "params": {
+   "param_1": "cursor (see 0x6E4DC8)",
+   "param_2": "byte position to start from"
+  },
+  "summary": "Advances the byte position to the next id that passes the roster filter and increments the selectable-entry counter; returns the cursor.",
+  "confidence": 0.55,
+  "evidence": "Walks cursor[2] forward while < cursor[1], testing func_0066B534==0 and func_0066AF08<10, and does cursor[3]++ on a hit; otherwise returns cursor unchanged. | Work+0x24A98 is the work sub-object: party member id list at +4 (count at Work+0x27218, as read by IsInParty), 90-bit flag bitset at +0x89A8, per-id byte table at +0x3165, u16 slot table at +0x27C4 (0xFFFF = free), 5-byte per-id records at +0x2D2D and two 0x8C-byte row tables at +0x5FE4 / +0x7B3C whose rows hold a UTF-16 name and an id at +0x88 (N_030 read them as bag/row tables). Character work records are Work+4+id*0x12EC: 31 slots ending exactly where this sub-object starts"
+ },
+ {
+  "address": "0x006E505C",
+  "name": "Ui_ListCursor_MoveToSelectable",
+  "signature": "void Ui_ListCursor_MoveToSelectable(UiListCursor* cursor, int targetEntry)",
+  "params": {
+   "param_1": "cursor (see 0x6E4DC8; +4 is the record array passed to func_0064923C)",
+   "param_2": "selectable entry index to land on"
+  },
+  "summary": "Moves the cursor until exactly `targetEntry` selectable entries precede it, re-seeking from the start (or from the end) depending on the direction; the per-entry validity test is func_0064923C(cursor+0x10).",
+  "confidence": 0.5,
+  "evidence": "Same structure as 0x6E4DC8 but the predicate is func_0064923C(arg1+4) and the cursor also rewinds to *arg1-4 before scanning; used by the 0x3C2xxx UI list windows."
+ },
+ {
+  "address": "0x006E57E4",
+  "name": "Ui_ScrollList_ScrollToIndex",
+  "signature": "void Ui_ScrollList_ScrollToIndex(UiScrollList* self, int index, int animate)",
+  "params": {
+   "param_1": "scroll list (vtable +100 = entry count, +0x60 = refresh, +0x68 = base offset, f_e = pane/scroll object, f_13 = scroll offset)",
+   "param_2": "entry index to make visible",
+   "param_3": "non-zero plays the scroll SE"
+  },
+  "summary": "Scrolls a 12-rows-per-page list so that the given entry becomes visible: computes the page base, optionally plays the scroll sound (0xB/0xC frame limit) and pushes the new scroll value to the pane object before refreshing.",
+  "confidence": 0.55,
+  "evidence": "iVar1 = (**(code**)(*arg1+100))(arg1) (entry count); page = (count*? )/12 - 1 logic with constants g_006e58fc and 0xC; func_001A61FC(self,0,frame) plays the SE; func_001D809C(pane, base+index+... | u16(self+0x28)<<16) updates the scroll; self->f_13 = row offset; (**(code**)(*arg1+0x60))(arg1) refreshes. Neighbour 0x6E51E4 is maybe_Ui_ScrollList_WrapCursorA."
+ },
+ {
+  "address": "0x006E5900",
+  "name": "Ui_ScrollList_ScrollToTop",
+  "signature": "void Ui_ScrollList_ScrollToTop(UiScrollList* self)",
+  "params": {
+   "param_1": "scroll list (f_13 = scroll offset, f_e = pane object)"
+  },
+  "summary": "Resets the list scroll offset to the top, plays the scroll sound and refreshes the pane position.",
+  "confidence": 0.55,
+  "evidence": "self->f_13 = 0; func_001D809C(self->f_e, base | u16(self+0x28)<<16); clamp of the SE frame to 0xB..0xC; func_001A61FC(self,0,frame); (**(code**)(*self+0x60))(self)."
+ },
+ {
+  "address": "0x006E59C4",
+  "name": "maybe_Ui_ScrollList_ScrollBy",
+  "signature": "void Ui_ScrollList_ScrollBy(UiScrollList* self, int delta, u32 arg3, int arg4)",
+  "params": {
+   "param_1": "scroll list",
+   "param_2": "scroll delta (0 = no-op)",
+   "param_3": "unused",
+   "param_4": "direction/limit selector"
+  },
+  "summary": "Scrolls the list by a delta and clamps it inside the valid page range; the decompiled body is truncated by bad branch data, but the arithmetic is the same as the animated variant at 0x6E5EE4.",
+  "confidence": 0.4,
+  "evidence": "self->f_13 += arg2; iVar1 = (**(code**)(*self+100))(self); limit = ((count-1)*const)>>32 >>1; if (self->f_13 < 0) self->f_13 = limit; Ghidra reports 'bad instruction data' at 0x6E5B98+ and truncates the rest."
+ },
+ {
+  "address": "0x006E5EE4",
+  "name": "maybe_Ui_ScrollList_ScrollByAnimated",
+  "signature": "void Ui_ScrollList_ScrollByAnimated(UiScrollList* self, int delta, u32 arg3, int arg4)",
+  "params": {
+   "param_1": "scroll list",
+   "param_2": "scroll delta or animation step",
+   "param_3": "unused",
+   "param_4": "scroll offset to commit"
+  },
+  "summary": "Animated variant of 0x6E59C4: when called without an explicit offset it re-centres the pane at the cursor (func_003D9BF4) and otherwise clamps and stores the new scroll offset, updates the pane position and plays the scroll SE.",
+  "confidence": 0.4,
+  "evidence": "Same constant/clamp sequence plus func_003D9BF4(self,..,&stack_00000044) for the recentre path; the body is partially unrecoverable (Ghidra 'bad instruction data') but the tail func_001D809C(pane, base+arg4+... | u16<<16) and vtable +0x60 refresh match 0x6E57E4."
+ },
+ {
+  "address": "0x006F20C0",
+  "name": "Game_GetWork",
+  "signature": "u32* Game_GetWork(u32* out)",
+  "params": {
+   "param_1": "return slot; *out receives the global game-work pointer"
+  },
+  "summary": "Accessor for the single global game-work object: on first use it lazily constructs the Work structure (heap allocate + constructor via func_00100050) and thereafter returns the cached pointer. Almost every subsystem reaches the save/party state through this function.",
+  "confidence": 0.75,
+  "evidence": "Checks the once-flag g_006F2200, allocates via func_0011FE8C/func_0011CFAC, runs the constructor stored at g_006F2210..18 through func_00100050, stores into g_006F2204 and copies it to *arg1. Used by 400+ functions as the entry point to Work (party at +0x24A98, counts at +0x27218)."
+ },
+ {
+  "address": "0x006F2224",
+  "name": "maybe_Game_GetRootSingletonB",
+  "signature": "u32* maybe_Game_GetRootSingletonB(u32* out)",
+  "params": {
+   "param_1": "return slot for the lazily created singleton"
+  },
+  "summary": "Lazily creates and returns a second global root singleton (a 128-byte object with vtable g_006F2298), built right next to the Ui core accessor at 0x6F229C.",
+  "confidence": 0.3,
+  "evidence": "Same lazy field pattern as Game_GetWork but with g_006F228C (flag), g_006F2290 (slot), g_006F2294 (size, rounded to 0x10) and g_006F2298 (vtable); allocation through func_00384050. Ui_GetCore (0x6F229C) immediately follows."
+ },
+ {
+  "address": "0x006F41A4",
+  "name": "std_List_MergeSort",
+  "signature": "void std_List_MergeSort(u32 allocator, ListNode* first, ListNode* last)",
+  "params": {
+   "param_1": "allocator/list owner passed to func_001235A4 (splice/relink)",
+   "param_2": "first node of the run",
+   "param_3": "one-past-last node (the list 'end' sentinel)"
+  },
+  "summary": "Merge sort for a circular doubly linked list: measures the run length, then repeatedly merges sub-runs using the node comparator at vtable +0x10 and relinks through func_001235A4.",
+  "confidence": 0.55,
+  "evidence": "Walks *arg2 / node[1] until *arg3 to count the run, then the classic libstdc++ __merge_sort/_Merge_sort loop with (**(code**)(*(int*)*piVar7+0x10))() as the less-than comparator and func_001235A4 as the splice helper; the g_006F4324 constant is the insertion-sort threshold."
+ },
+ {
+  "address": "0x007088A8",
+  "name": "maybe_Text_NormalizeKanaName",
+  "signature": "void maybe_Text_NormalizeKanaName(char* name)",
+  "params": {
+   "param_1": "name string (wide) to normalise; the surrounding globals hold the kana tables"
+  },
+  "summary": "Normalises a player-entered name: measures the string against the global kana tables at 0x7C2204/0x7C2208 (which contain 'ヴ', the dakuten '゛', 'う', '%' etc.) and rewrites the characters, i.e. the hiragana/katakana + dakuten handling of the name-entry dialog.",
+  "confidence": 0.35,
+  "evidence": "Calls func_00100B74 (Thumb 0x100B74 = wide strlen) on g_00708BD4 (-> 0x7C2204) and g_00708BD8 (-> 0x7C2208) and on the argument, then walks/composes the strings; the tables at 0x7C2204 contain U+30F4, U+309B, U+3046, '%'. Sole caller 0x147DC4 sits among the player-data natives (GetPlayerID is 0x1480C4)."
+ },
+ {
+  "address": "0x0070BC10",
+  "name": "Party_GetLevelSlot0",
+  "signature": "u8 Party_GetLevelSlot0(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 0, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 0) = Work+4+0*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BC30",
+  "name": "Party_GetLevelSlot1",
+  "signature": "u8 Party_GetLevelSlot1(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 1, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 1) = Work+4+1*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BC50",
+  "name": "Party_GetLevelSlot2",
+  "signature": "u8 Party_GetLevelSlot2(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 2, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 2) = Work+4+2*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BC70",
+  "name": "Party_GetLevelSlot3",
+  "signature": "u8 Party_GetLevelSlot3(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 3, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 3) = Work+4+3*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BC90",
+  "name": "Party_GetLevelSlot4",
+  "signature": "u8 Party_GetLevelSlot4(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 4, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 4) = Work+4+4*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BCB0",
+  "name": "Party_GetLevelSlot5",
+  "signature": "u8 Party_GetLevelSlot5(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 5, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 5) = Work+4+5*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BCD0",
+  "name": "Party_GetLevelSlot6",
+  "signature": "u8 Party_GetLevelSlot6(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 6, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 6) = Work+4+6*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BCF0",
+  "name": "Party_GetLevelSlot7",
+  "signature": "u8 Party_GetLevelSlot7(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the level byte (f_D8) of character work record 7, i.e. the hard-coded accessor for one party slot used by the script/native tables.",
+  "confidence": 0.6,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 7) = Work+4+7*0x12EC; return record->f_D8. f_D8 is the level field also used by maybe_Battle_Encounter_BuildConditions to compare the hero level with an enemy level."
+ },
+ {
+  "address": "0x0070BF2C",
+  "name": "maybe_Party_GetListCountSlot0",
+  "signature": "int maybe_Party_GetListCountSlot0(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 0. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 0); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BF4C",
+  "name": "maybe_Party_GetListCountSlot1",
+  "signature": "int maybe_Party_GetListCountSlot1(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 1. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 1); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BF6C",
+  "name": "maybe_Party_GetListCountSlot2",
+  "signature": "int maybe_Party_GetListCountSlot2(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 2. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 2); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BF8C",
+  "name": "maybe_Party_GetListCountSlot3",
+  "signature": "int maybe_Party_GetListCountSlot3(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 3. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 3); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BFAC",
+  "name": "maybe_Party_GetListCountSlot4",
+  "signature": "int maybe_Party_GetListCountSlot4(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 4. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 4); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BFCC",
+  "name": "maybe_Party_GetListCountSlot5",
+  "signature": "int maybe_Party_GetListCountSlot5(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 5. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 5); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070BFEC",
+  "name": "maybe_Party_GetListCountSlot6",
+  "signature": "int maybe_Party_GetListCountSlot6(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 6. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 6); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070C00C",
+  "name": "maybe_Party_GetListCountSlot7",
+  "signature": "int maybe_Party_GetListCountSlot7(void)",
+  "params": {
+   "param_1": "unused register (stack slot for Work getter)"
+  },
+  "summary": "Returns the number of valid entries (values != 0xFFFF) in the 60-entry u16 list at +0x122 of character work record 7. The two banks of eight accessors expose the same two per-slot fields for slots 0..7.",
+  "confidence": 0.5,
+  "evidence": "*func_006F20C0() -> Work; func_0035EB98(Work, 7); tail call func_006291A8(record) which loops over record+0x122..0x19A and counts u16 values different from 0xFFFF (predicate 0x6C29A0). The value is used as a small list length by the 0x6E4xxx list code."
+ },
+ {
+  "address": "0x0070E0EC",
+  "name": "Gfx_SpriteBatch_AllocQuad",
+  "signature": "void Gfx_SpriteBatch_AllocQuad(SpriteQuad** out, SpriteBatch* batch, SpriteVertex* src, u16* uv, int flag)",
+  "params": {
+   "param_1": "out slot receiving the quad",
+   "param_2": "sprite batch (f_18/f_1c/f_20/f_24 = free list and cursor, f_14 = used count)",
+   "param_3": "source vertex/quad descriptor",
+   "param_4": "u16 pair (UV or palette index)",
+   "param_5": "flag: non-zero forces the 'clipped' path"
+  },
+  "summary": "Allocates one 16-byte quad record from the batch's free list (or bumps the bump-allocator cursor), fills its two u32 words from the UV pair and submits it through func_005E9100, incrementing the batch's used count.",
+  "confidence": 0.55,
+  "evidence": "Free list f_18 -> *node, else f_1c += f_24 while f_1c != f_20; writes puVar3[4] = *(u32*)arg4 and the next word; uVar1 = (arg5==0 && arg3 != arg2+4 && arg3->f_10 <= *arg4); func_005E9100(quad,arg3,arg2+4,uVar1); arg2->f_14++; *arg1 = quad."
+ },
+ {
+  "address": "0x0070E494",
+  "name": "std_vector16_insert",
+  "signature": "void std_vector16_insert(u32** vec, u32* pos, u32* value)",
+  "params": {
+   "param_1": "vector: [0] = begin, [1] = end, [2] = capacity",
+   "param_2": "insert position",
+   "param_3": "value (16 bytes) to copy in"
+  },
+  "summary": "std::vector-style insert of a 16-byte element: shifts the tail right by one element with memmove and grows the buffer (doubling) when the vector is full.",
+  "confidence": 0.65,
+  "evidence": "If end != capacity: copies *end = end[-4..-1], memmoves [pos,end) to [pos+1,end+1) with func_00116C10(...,0xd) and writes value at pos. Else reallocates with capacity*2 and copies begin..pos, value, pos..end. The 0x10-byte element and the [begin,end,cap] triple are the standard libstdc++ vector layout."
+ },
+ {
+  "address": "0x0070EDEC",
+  "name": "std_vector16_push_back_default",
+  "signature": "u32* std_vector16_push_back_default(Vector16* vec)",
+  "params": {
+   "param_1": "vector: +0 = begin, +4 = end, +8 = capacity"
+  },
+  "summary": "push_back for a vector of 16-byte elements that initialises the new element with the packed defaults (flag word g_0070EEC0, byte 0xFF and two -64 values); used to append placeholder vertices/entries.",
+  "confidence": 0.55,
+  "evidence": "If end < capacity writes *end (u32 & 0xfffff800 | g_0070EEC0, u16 from g_0070EEC0>>16, byte 0xFF, 0xffffffc0, 0xffffffc0) and returns end-0x10; else calls func_0070EC50(vec, end, &tmp) to grow."
+ },
+ {
+  "address": "0x0070F3BC",
+  "name": "std_vector_u16_insert",
+  "signature": "void std_vector_u16_insert(u32* vec, u32 value, u32 pos)",
+  "params": {
+   "param_1": "vector: [0] = begin, [1] = end, [2] = capacity",
+   "param_2": "u16 value to insert",
+   "param_3": "byte position of the insertion"
+  },
+  "summary": "Inserts one u16 into a u16 vector at the given position by shifting the tail, asserting through func_00111378 when the position is out of range.",
+  "confidence": 0.55,
+  "evidence": "if (begin == end) func_00111378(0,*arg1,arg2-*arg1) (out-of-range/assert helper); copies puVar1[-1] and then calls func_00111378 with the shifted range; same vector layout as std_vector16_insert."
+ },
+ {
+  "address": "0x0071428C",
+  "name": "std_less_itemId8",
+  "signature": "u32 std_less_itemId8(u32* ctx, u16* lhs, u16* rhs)",
+  "params": {
+   "param_1": "sort context (byte 0 = category filter)",
+   "param_2": "left 8-byte record",
+   "param_3": "right 8-byte record"
+  },
+  "summary": "Less-than predicate for the bag/equipment item list: compares the record ids, then the bag category order table (g_007143A0) and finally the item table fields (func_0061BD4C: category byte at +0xE) so items are grouped by the same order the bag UI uses.",
+  "confidence": 0.6,
+  "evidence": "Compares u8 at +4 (record class) with the context filter, u16 at +2, u16 at +0, then indexes g_007143A0[class] and builds the order key CONCAT22(item->f_e, id). Used by push_heap 0x715FA4 and introsort 0x719750; func_0061BD4C is the item-record lookup also used by AddItemInPlayer."
+ },
+ {
+  "address": "0x007143A8",
+  "name": "std_less_itemName8",
+  "signature": "u32 std_less_itemName8(u32* ctx, u16* lhs, u16* rhs)",
+  "params": {
+   "param_1": "sort context (byte 0 = category filter)",
+   "param_2": "left 8-byte record",
+   "param_3": "right 8-byte record"
+  },
+  "summary": "Same ordering as std_less_itemId8 but the final tie-break uses func_0066C304, the item's display name key, so equal-class items sort alphabetically.",
+  "confidence": 0.6,
+  "evidence": "Identical structure except the last comparison calls func_0066C304(itemRecord) on both sides instead of the CONCAT22(f_e,id) key. Used by push_heap 0x716198 and introsort 0x719B24."
+ },
+ {
+  "address": "0x00715FA4",
+  "name": "std_push_heap_itemId8",
+  "signature": "void std_push_heap_itemId8(u32* ctx, int hole, int top, u32 value)",
+  "params": {
+   "param_1": "sort context / base of the 8-byte record array",
+   "param_2": "hole index",
+   "param_3": "heap top index",
+   "param_4": "value being sifted (id + class word)"
+  },
+  "summary": "libstdc++ __push_heap for 8-byte item records using std_less_itemId8 as the comparator.",
+  "confidence": 0.6,
+  "evidence": "Sift-up loop comparing (arg1 + child*8) with the value through func_0071428C(local, base+idx, &value) and moving elements with func_0011FFFC (8-byte copy); called by introsort 0x719750."
+ },
+ {
+  "address": "0x00716198",
+  "name": "std_push_heap_itemName8",
+  "signature": "void std_push_heap_itemName8(u32* ctx, int hole, int top, u32 value)",
+  "params": {
+   "param_1": "sort context / base",
+   "param_2": "hole index",
+   "param_3": "heap top",
+   "param_4": "value"
+  },
+  "summary": "libstdc++ __push_heap for 8-byte item records using std_less_itemName8 (name tie-break).",
+  "confidence": 0.6,
+  "evidence": "Same sift-up loop as 0x715FA4 but with func_007143A8 as comparator; called by introsort 0x719B24."
+ },
+ {
+  "address": "0x007164D0",
+  "name": "std_push_heap_itemId8_entry",
+  "signature": "void std_push_heap_itemId8_entry(u32* base, int hole, int top, u32 value)",
+  "params": {
+   "param_1": "base of the 8-byte record array",
+   "param_2": "hole index",
+   "param_3": "heap top",
+   "param_4": "value"
+  },
+  "summary": "Second __push_heap instance for item records (kept inline by the compiler, uses its own copy of the id comparator); called by introsort 0x72157C.",
+  "confidence": 0.5,
+  "evidence": "Same sift-up code as 0x715FA4 with the comparator inlined as func_0071428C; the caller 0x72157C passes the array base as arg1 and arg1[iVar6] as the value."
+ },
+ {
+  "address": "0x007164F6",
+  "name": "std_push_heap_itemName8_entry",
+  "signature": "void std_push_heap_itemName8_entry(u32* base, u32 hole, u32 top, u32 value)",
+  "params": {
+   "param_1": "base of the record array",
+   "param_2": "hole index",
+   "param_3": "heap top",
+   "param_4": "value"
+  },
+  "summary": "Name-ordered __push_heap instance whose parameters arrive partly in registers the decompiler could not track (unaff_r4..r8); same algorithm as 0x716198.",
+  "confidence": 0.4,
+  "evidence": "Uses func_0071428C for the comparison and func_0011FFFC for the 8-byte moves, but the hole/top indices come from live registers (unaff_r*), which is why Ghidra shows no parameters."
+ },
+ {
+  "address": "0x00716690",
+  "name": "std_push_heap_itemName4",
+  "signature": "void std_push_heap_itemName4(u32 base, int hole, int top, u32 value)",
+  "params": {
+   "param_1": "base of the 4-byte record array (u16 id + u16 class)",
+   "param_2": "hole index",
+   "param_3": "heap top",
+   "param_4": "packed value (u16 id | class<<16)"
+  },
+  "summary": "libstdc++ __push_heap for the smaller 4-byte item entries (u16 id + class byte) with the name comparator built from func_0061BD4C + func_0066C304.",
+  "confidence": 0.55,
+  "evidence": "Compares func_0066C304(itemRecord(id)) of the child and the value, moves elements as u16 + byte; the same 4-byte entry layout is used by std_introsort_u16_itemName (0x71DA08) which includes this function inline."
+ },
+ {
+  "address": "0x00716C90",
+  "name": "std_insertion_sort_itemId8",
+  "signature": "void std_insertion_sort_itemId8(u16* first, u16* last, u32 ctx)",
+  "params": {
+   "param_1": "first record",
+   "param_2": "one-past-last record",
+   "param_3": "sort context"
+  },
+  "summary": "Insertion sort for the 8-byte item records with the id comparator (std_less_itemId8); the unguarded variant used by the introsort partition tails.",
+  "confidence": 0.55,
+  "evidence": "For each element from first+4 to last it shifts the prefix right while func_0071428C(ctx, candidate, prev) says 'less', moving 8-byte records with func_0011FFFC."
+ },
+ {
+  "address": "0x00716EE4",
+  "name": "std_insertion_sort_itemName8",
+  "signature": "void std_insertion_sort_itemName8(u16* first, u16* last, u32 ctx)",
+  "params": {
+   "param_1": "first record",
+   "param_2": "one-past-last",
+   "param_3": "sort context"
+  },
+  "summary": "Insertion sort for 8-byte item records using the name comparator std_less_itemName8.",
+  "confidence": 0.55,
+  "evidence": "Same loop as 0x716C90 with func_007143A8 as the comparator."
+ },
+ {
+  "address": "0x0071777C",
+  "name": "std_insertion_sort_itemName2",
+  "signature": "void std_insertion_sort_itemName2(u16* first, u16* last)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last u16 item id"
+  },
+  "summary": "Unguarded insertion sort of a plain u16 item-id array ordered by the item name key (func_0061BD4C + func_0066C304).",
+  "confidence": 0.55,
+  "evidence": "Moves single u16 values (puVar7[-1] = puVar9[-1]) while comparing func_0066C304 of both ids; no context argument, so the key is the item name only."
+ },
+ {
+  "address": "0x007178FC",
+  "name": "std_insertion_sort_itemId2",
+  "signature": "void std_insertion_sort_itemId2(u16* first, u16* last)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last"
+  },
+  "summary": "Insertion sort of a u16 item-id array using the compact item order key CONCAT22(item->f_e, id) and, for ids that share a key, the numeric id.",
+  "confidence": 0.55,
+  "evidence": "Builds the order key like std_less_itemId8 (uVar9 = CONCAT22(local_34->f_e, id)) and also calls func_00611460 as the fallback comparison for the deeper scan."
+ },
+ {
+  "address": "0x00717AB4",
+  "name": "std_insertion_sort_itemName2b",
+  "signature": "void std_insertion_sort_itemName2b(u16* first, u16* last)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last"
+  },
+  "summary": "Unguarded insertion sort of u16 item ids ordered by item name, with a numeric-id tie-break.",
+  "confidence": 0.5,
+  "evidence": "Compares func_0066C304 of both ids and, when equal, the raw ids; one of the four near-identical insertion-sort templates for the bag list."
+ },
+ {
+  "address": "0x007181B8",
+  "name": "std_insertion_sort_itemName4",
+  "signature": "void std_insertion_sort_itemName4(u32* first, u32* last)",
+  "params": {
+   "param_1": "first 4-byte entry (u16 id + set/class byte)",
+   "param_2": "one-past-last"
+  },
+  "summary": "Insertion sort of the 4-byte bag entries (u16 id + byte) by item name, moving the u16 and the byte separately.",
+  "confidence": 0.5,
+  "evidence": "Copies *(u16*) + byte pairs and compares via func_006112EC plus func_0066C304; same entry layout as std_push_heap_itemName4."
+ },
+ {
+  "address": "0x007183A8",
+  "name": "std_insertion_sort_itemName4b",
+  "signature": "void std_insertion_sort_itemName4b(u32* first, u32* last)",
+  "params": {
+   "param_1": "first 4-byte entry",
+   "param_2": "one-past-last"
+  },
+  "summary": "Second 4-byte bag-entry insertion sort, ordered by item name then id.",
+  "confidence": 0.45,
+  "evidence": "Same u16+byte moves and func_0066C304 comparisons as 0x7181B8; kept separate by the compiler for the slightly different comparison order (name first, then id)."
+ },
+ {
+  "address": "0x00719750",
+  "name": "std_introsort_itemId8",
+  "signature": "void std_introsort_itemId8(u32 first, u32 last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first 8-byte item record",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "sort context"
+  },
+  "summary": "libstdc++ introsort_loop instantiated for 8-byte item records with the id comparator: heap-sort fallback when the depth limit is exhausted, median-of-three pivot, then recursion on the right half.",
+  "confidence": 0.6,
+  "evidence": "Calls func_00715FA0 (push_heap helper, 4 bytes before 0x715FA4) in the depth==0 branch, uses func_0071428C for all comparisons and func_0011FFFC (8-byte copy) for the swaps; the 0x81 threshold and depth/2 recursion are the libstdc++ constants."
+ },
+ {
+  "address": "0x00719B24",
+  "name": "std_introsort_itemName8",
+  "signature": "void std_introsort_itemName8(u32 first, u32 last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first 8-byte item record",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "sort context"
+  },
+  "summary": "Same introsort instantiation with the name comparator std_less_itemName8.",
+  "confidence": 0.6,
+  "evidence": "Identical to 0x719750 with func_007143A8 as comparator and func_00716194 as the push_heap helper."
+ },
+ {
+  "address": "0x00719ECC",
+  "name": "std_introsort_u16_fnptr",
+  "signature": "void std_introsort_u16_fnptr(u16* first, u16* last, int depth, CompareFn cmp)",
+  "params": {
+   "param_1": "first u16",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "comparison function pointer (called as cmp(a,b) -> non-zero when a<b)"
+  },
+  "summary": "Generic introsort over a u16 array that takes the comparator as a function pointer (the 15-instruction __adjust_heap/__push_heap are inlined instead of specialised).",
+  "confidence": 0.6,
+  "evidence": "Every comparison is (*arg4)(...) and the depth==0 branch contains the full inlined heap sort; the 0x21 size threshold fits a u16 array. This is the only sort in the group that is comparator-generic."
+ },
+ {
+  "address": "0x0071A3B0",
+  "name": "std_introsort_u16_item",
+  "signature": "void std_introsort_u16_item(u16* first, u16* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "sort context"
+  },
+  "summary": "Introsort over a u16 item-id array using func_00644154 as the item comparator (the one used by the equipment list window at 0x644154).",
+  "confidence": 0.55,
+  "evidence": "All comparisons call func_00644154(ctx, u16*, u16*); element size 2 bytes; same libstdc++ structure. func_00644154 lives next to Ui_ListWidget_GetSelectedItemId (0x64448C)."
+ },
+ {
+  "address": "0x0071B8A8",
+  "name": "std_introsort_16byte",
+  "signature": "void std_introsort_16byte(u32* first, u32* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first 16-byte record",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "mask/context for std_compare_flagwords_by_bit"
+  },
+  "summary": "Introsort over 16-byte records ordered by std_compare_flagwords_by_bit (bit-set ordering), used for the list of entries that carry a flag word plus three payload words.",
+  "confidence": 0.55,
+  "evidence": "Comparisons call func_00652A6C(ctx, a, b); moves use func_00116C10(...,0xd) (16-byte memcpy); the 0x100 threshold shows the 16-byte element size."
+ },
+ {
+  "address": "0x0071CC08",
+  "name": "std_introsort_monsterId8",
+  "signature": "void std_introsort_monsterId8(u8* first, u8* last, int depth)",
+  "params": {
+   "param_1": "first monster id byte",
+   "param_2": "one-past-last",
+   "param_3": "depth limit"
+  },
+  "summary": "Introsort over an array of 1-byte monster ids ordered by MonsterBook_CompareSortIndex; sorts the monster-book list into its display order.",
+  "confidence": 0.55,
+  "evidence": "All comparisons call func_00666D7C(ctx, idA, idB) and elements are single bytes (arg1[i]); the 0x11 threshold and the inlined heap fallback are the libstdc++ pattern."
+ },
+ {
+  "address": "0x0071D530",
+  "name": "std_introsort_u16_monster",
+  "signature": "void std_introsort_u16_monster(u16* first, u16* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first u16 (monster/book id)",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "unused context"
+  },
+  "summary": "Introsort of a u16 id array ordered by func_0018C4C0, the same monster-table comparison used by the monster-book detail screens.",
+  "confidence": 0.5,
+  "evidence": "Every comparison is func_0018C4C0(ctx, u16*, u16*) and elements are u16; 0x18C4C0 is in the 0x18Cxxx block next to the 0x18C184 monster-table accessor used by MonsterBook code."
+ },
+ {
+  "address": "0x0071DA08",
+  "name": "std_introsort_u16_itemName",
+  "signature": "void std_introsort_u16_itemName(u16* first, u16* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "sort context"
+  },
+  "summary": "Introsort over a u16 item-id array ordered by the item name key (func_0061BD4C + func_0066C304) with the heap fallback inlined.",
+  "confidence": 0.55,
+  "evidence": "Inlines the comparator at every step (func_0061BD4C then func_0066C304 on both ids) instead of calling one of the shared predicates; used by the bag list sorting."
+ },
+ {
+  "address": "0x0071E0D4",
+  "name": "std_introsort_u16_itemB",
+  "signature": "void std_introsort_u16_itemB(u16* first, u16* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first u16 item id",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "context"
+  },
+  "summary": "Introsort over u16 ids using func_0063C16C as the comparison predicate (a different item ordering than the bag lists, e.g. the shop or alchemy view).",
+  "confidence": 0.5,
+  "evidence": "All comparisons call func_0063C16C(ctx, idA, idB); element size 2; 0x63C16C sits next to the message/condition helpers of the 0x63xxxx block."
+ },
+ {
+  "address": "0x0071E598",
+  "name": "std_insertion_sort_u16_item",
+  "signature": "void std_insertion_sort_u16_item(u16* first, u16* last, u16* sortedEnd, u32 ctx)",
+  "params": {
+   "param_1": "first",
+   "param_2": "one-past-last",
+   "param_3": "end of the already-sorted prefix",
+   "param_4": "context"
+  },
+  "summary": "Insertion-sort step used by the introsort partitioners: inserts the range [sortedEnd,last) into the sorted prefix [first,sortedEnd) using the combined item comparators.",
+  "confidence": 0.45,
+  "evidence": "Shift loop with func_0011FFFC and both func_0066C304 and func_0063C16C comparisons; the 'Control flow encountered bad instruction data' warning at 0x71EFC4 means the tail is truncated."
+ },
+ {
+  "address": "0x0071ECF8",
+  "name": "std_introsort_u16_itemC",
+  "signature": "void std_introsort_u16_itemC(u16* first, u16* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first u16 id",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "ctx"
+  },
+  "summary": "Introsort over u16 ids using func_00611538 as the comparison predicate (third item ordering variant).",
+  "confidence": 0.45,
+  "evidence": "All comparisons are func_00611538(ctx, a, b); 0x611538 belongs to the item-table block (0x611460/0x6112EC are the other two predicates used by the sibling instantiations)."
+ },
+ {
+  "address": "0x00720CD8",
+  "name": "std_quicksort_4byte_bytekey",
+  "signature": "void std_quicksort_4byte_bytekey(u32* first, u32* last, int depth)",
+  "params": {
+   "param_1": "first 4-byte record",
+   "param_2": "one-past-last",
+   "param_3": "depth limit"
+  },
+  "summary": "In-place quicksort for 4-byte records whose primary key is the signed byte at +2; used to order entries by a small numeric sort key (class/order index) without any table lookups.",
+  "confidence": 0.45,
+  "evidence": "Median-of-three on *(char*)(p+2), Hoare partition comparing the same byte, no helper calls at all; the 0x40 address threshold equals 16 records."
+ },
+ {
+  "address": "0x0072157C",
+  "name": "std_introsort_itemEntry8",
+  "signature": "void std_introsort_itemEntry8(u32* first, u32* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first 8-byte item record",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "context"
+  },
+  "summary": "Introsort for 8-byte item records that reuses the entry push_heap (0x7164D0) and func_006112EC for the median-of-three comparisons.",
+  "confidence": 0.45,
+  "evidence": "Depth 0 branch calls func_007164D0(arg1, i, count, arg1[i]); pivot selection uses func_006112EC; 0x41 byte threshold = 8 records."
+ },
+ {
+  "address": "0x007218A8",
+  "name": "std_introsort_itemName4",
+  "signature": "void std_introsort_itemName4(u32* first, u32* last, int depth, u32 ctx)",
+  "params": {
+   "param_1": "first 4-byte entry (u16 id + class byte)",
+   "param_2": "one-past-last",
+   "param_3": "depth limit",
+   "param_4": "context"
+  },
+  "summary": "Introsort for the 4-byte bag entries using the entry push_heap 0x716690 and func_006113D0 for the pivot comparisons.",
+  "confidence": 0.45,
+  "evidence": "Depth 0 calls func_00716690(arg1,i,count,arg1[i]); comparisons use func_006113D0 plus func_0066C304; 0x41 threshold = 16 four-byte entries."
+ }
+]

@@ -1,0 +1,527 @@
+[
+  {
+    "class": "Ui_CommandQueue",
+    "type": "UiCommandQueue",
+    "summary": "64-byte UI command stack: a three-word header (target, flags, object) followed by four 12-byte command entries and a depth counter at +0x3C, popped one command per frame by Ui_CommandQueue_Advance.",
+    "size": 64,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ui_CommandQueue_Advance (0x006D7200) reads queue[0xF] as the depth, indexes entries as `queue + depth*3` words (Ui_CommandQueue_FindEntry uses `queue + f_3c*0xC` bytes), releases `*queue` through func_0010EBD8 and broadcasts the next entry. The 4 entry blocks of 3 words occupy +0xC..+0x3B and the depth sits at +0x3C, so the 64-byte size is exact. AdvanceAlt (0x006D7F34) is instruction-identical and all its callers are Ui_SakusenWindow_* helpers.",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "commandTarget",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "queue[1] is called directly (`(*pcVar2)()`); when bit 0 of queue[2] is set it is instead treated as an object and a code pointer is read as `*(code**)(pcVar2 + *(int*)(*queue + (queue[2]>>1)))`, so it is either a plain callback or an object/table base - the dual use blocks a more specific name"
+      },
+      {
+        "offset": 8,
+        "name": "commandFlags",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "bit 0 (=1) selects the indirect dispatch branch and queue[2] is compared with the requested flags in Ui_CommandQueue_FindEntry, with a special case for command id 0 + bit 0"
+      },
+      {
+        "offset": 60,
+        "name": "depth",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "queue[0xF] is decremented after each pop, 0 means empty, and it multiplies the entry stride (`queue[queue[0xf]*3]`, and `queue + queue->f_3c*0xC` bytes in FindEntry)"
+      }
+    ]
+  },
+  {
+    "class": "Ui_DiveFormEx",
+    "type": "UiDiveFormEx",
+    "summary": "Large dive-form screen object (Ui_Object-derived) whose only recovered ctor installs the form vtable and in-place constructs an embedded Ui_Object member pair at +0x3574 with a 20-entry 0x18-byte table.",
+    "size": 13688,
+    "base": "Ui_Object",
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_DiveFormEx_Ctor (0x003096D4, asm) does `str <literal>, [self]`, `r0 = self+0x3574`, `bl 0x0021C2DC` (Ui_Object_InitMemberPair), then stores a second vtable at the returned pointer, stores self at inner+0x20 and calls `std_ConstructArray(inner+0x24, ctor, 0x18, 0x14)`. Driver: `<add r0,r4,#0x3400; add r0,r0,#0x174`, `mov r3,#0x14`, `mov r2,#0x18`. There is no decompiled C for this address, so the class name is only the batch's M1-derived label.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "the ctor loads a literal-pool word (`ldr r0,[pc,#0x8ac]`) and stores it at [self]; the batch's `uRam00309f94` is that vtable address"
+      },
+      {
+        "offset": 32,
+        "name": "unknown_innerOwnerAlias",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "the recorded write is `puVar3[8] = puVar2` where puVar3 is the member pair returned by Ui_Object_InitMemberPair(self+0x3574). The stored word is that sub-object's owner back-pointer at inner+0x20 (absolute +0x3594), which the extractor reported relative to puVar3; it is NOT a DiveFormEx field at +0x20"
+      },
+      {
+        "offset": 13684,
+        "name": "maybe_embeddedPart",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`puVar3 = Ui_Object_InitMemberPair(puVar2 + 0xd5d)` (0xd5d words = +0x3574) returns an embedded Ui_Object-derived part with its own vtable, an owner word at +0x20 and a 0x14-entry 0x18-byte table at +0x24, so the real object ends at 0x3574+0x24+0x1E0 = 0x3778, not 0x3578"
+      }
+    ]
+  },
+  {
+    "class": "Ui_DiveStartWindowPart",
+    "type": "UiDiveStartWindowPart",
+    "summary": "Dive-start window part: runs the Ui_DiveStartWindow base ctor, installs the part vtable and in-place constructs an embedded Ui_Object member pair at +0x35C with a 12-entry 0x18-byte table.",
+    "size": 864,
+    "base": "Ui_Object",
+    "confidence": 0.5,
+    "evidence": "Ui_DiveStartWindowPart_Ctor (0x002C2688) calls Ui_DiveStartWindow_Ctor(0x0032BDD8), stores vtable 0x00760024 (sibling of the Ui_DiveStartWindow vtable 0x00760028), then `Ui_Object_InitMemberPair(self+0xD7*4 = self+0x35C)`, stores vtable 0x0075AB10 at the returned part, `puVar3[8] = self` and `std_ConstructArray(part+0x24, 0x006C7CA0, 0x18, 0xC)`. Only callers are maybe_Ui_CompositeWindow_CreatePartB / maybe_Ui_DiveStartWindow_CreatePart.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "`*puVar2 = 0x00760024` right after the base ctor returns (Ghidra prints DAT_002c2b94); the DiveStartWindow base vtable is 0x00760028 in structs.json"
+      },
+      {
+        "offset": 32,
+        "name": "unknown_innerOwnerAlias",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "`puVar3[8] = puVar2` with puVar3 = Ui_Object_InitMemberPair(self+0x35C): the word is the embedded part's owner back-pointer at inner+0x20 (absolute +0x37C), recorded relative by the extractor; not a field of self at +0x20"
+      },
+      {
+        "offset": 860,
+        "name": "maybe_embeddedPart",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`Ui_Object_InitMemberPair(puVar2 + 0xd7)` = embedded Ui_Object part at +0x35C (vtable 0x0075AB10, self at +0x20, 12 x 0x18 table at +0x24), real object end 0x35C+0x24+0x120 = 0x4A0, so the 864-byte size is only a lower bound"
+      }
+    ]
+  },
+  {
+    "class": "Ui_DragScroll",
+    "type": "UiDragScroll",
+    "summary": "12-byte touch drag-scroll state record owned by a list window: the start point copied from the list, the UI overlay class index and a state byte at +9.",
+    "size": 12,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "Ui_DragScroll_Begin (0x003DD068) copies list[0x88]/list[0x89] (UiListWindow +0x220/+0x224) into drag[0]/drag[1], stores the overlay manager's mode byte at +8 and state 1 at +9; maybe_Ui_DragScroll_Update (0x003DCC3C) subtracts the list's current point (list[0x1E]/list[0x1F]) from both words and adds the deltas to the list's scroll offsets list[0x31]/list[0x32], then walks state 1 -> 2 -> 3.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "dragStartX",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "`*drag = list[0x88]` at Begin; Update computes `*drag - list[0x1e]` and accumulates it into the list's +0xC4 offset - a start-point X coordinate"
+      },
+      {
+        "offset": 4,
+        "name": "dragStartY",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "`drag[1] = list[0x89]`; Update computes `drag[1] - list[0x1f]` and accumulates it into the list's +0xC8 offset - a start-point Y coordinate"
+      },
+      {
+        "offset": 8,
+        "name": "overlayClassIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.55,
+        "evidence": "Begin stores `((work+8)->f_48->f_281)` here (the UI overlay manager's mode byte) and Update uses `(char)drag[2]` both as the index into the overlay class table at `manager+0x4C + idx*4` and as a compare against 8; the state byte lives at +9 (`*(u8*)((int)drag+9)`)"
+      }
+    ]
+  },
+  {
+    "class": "Ui_EmotionBalloon",
+    "type": "UiEmotionBalloon",
+    "summary": "Field-actor emotion/expression balloon: an object head (vtable-or-owner at +0, 'null_ex' pane at +4) with an embedded Ui_AnimRefList bound to the 'emotion_chara_ex' pane at +8.",
+    "size": 52,
+    "base": "",
+    "confidence": 0.5,
+    "evidence": "Ui_EmotionBalloon_Init (0x0039B2F0) resolves 'null_ex' from actor->f_ac->f_10 (vtable +0x2C), stores it at self[1], hides itself through vtable slot 3 and calls Ui_AnimRef_Bind(self+2, actor->f_ac, 'emotion_chara_ex', 0). The paired ctor 0x0039B40C stores its third argument at +0, clears +4 and calls Ui_AnimRefList_Ctor(self+8) - so +8 is an EMBEDDED anim-ref list, not a base class; the generated base Ui_AnimRefList was cleared. Size 52 is only the outer cluster stop (the embedded list extends past +0x58).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "maybe_ownerOrVtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.3,
+        "evidence": "the ctor (0x0039B40C: `str r2,[r0],#4`) writes its third argument here, described as an owner by the decompiler, but Ui_EmotionBalloon_Init calls `(**(code**)(*self+0xc))(self,0)` through this word exactly like the self-hide idiom in Ui_FieldSignboard, which requires it to be a vtable; both readings fit"
+      },
+      {
+        "offset": 4,
+        "name": "nullExPane",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`self[1] = (**(code**)(*f10+0x2c))(f10,'null_ex',1)` - the resolved 'null_ex' dummy pane of the actor's UI layout"
+      },
+      {
+        "offset": 48,
+        "name": "unknown_vtableSlotAlias0c",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "the recorded evidence `(**(code **)(*param_1 + 0xc))(param_1,0)` is a virtual call through the word at +0 (vtable slot 3), not an access to +0x30"
+      }
+    ]
+  },
+  {
+    "class": "Ui_EquipCharacterIconGrid",
+    "type": "UiEquipCharacterIconGrid",
+    "summary": "Equipment-screen character icon grid: binds the seven 'null_txt_l0' row texts plus title/pager texts and copies a 6 x 8 grid of 'icon_charaE_pc*_*' icons from the 'icon_charaE_pc0_0' template, one row per party member.",
+    "size": 292,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Ui_EquipCharacterIconGrid_Init (0x0046D7E0) builds six 'null_txt_l0'-derived names and six 'icon_charaE_pc<i>_<j>' names, calls vtable slots 0x34/0x38 (add text row) and 0x48, and stores the 48 icon pane pointers at `self[0x14 + i*8 + j]` (int* indexing => byte +0x50). The batch's three offsets are all vtable-slot artefacts, so the real data fields (+0x28 text group id, 48 pane pointers at +0x50) are not in this batch; the size 292 is consistent with that pane array ending at +0x110.",
+    "fields": [
+      {
+        "offset": 208,
+        "name": "unknown_vtableSlotAlias34",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "evidence is `(**(code **)(*param_1 + 0x34))(param_1, name, group<<16|6, 0, arg5)` - vtable slot 13 (add text row), not an access to +0xD0"
+      },
+      {
+        "offset": 224,
+        "name": "unknown_vtableSlotAlias38",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "evidence is `(**(code **)(*param_1 + 0x38))(param_1, local_48, group<<16|6, 0, 0, i)` - vtable slot 14 (second text column), not an access to +0xE0"
+      },
+      {
+        "offset": 288,
+        "name": "unknown_vtableSlotAlias48",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "evidence is `(**(code **)(*param_1 + 0x48))(param_1, group<<16)` - vtable slot 18, not an access to +0x120"
+      }
+    ]
+  },
+  {
+    "class": "Ui_EquipCompare",
+    "type": "UiEquipCompare",
+    "summary": "Equipment-comparison pane setter state: records which party member's equipped items are being compared and a 'filled' flag after the six slot panes have been populated.",
+    "size": 260,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_EquipCompare_SetSlotPanes (0x00409974) stores its character argument at +0x49, resolves the member with func_0035EB98(work, idx), loops six equipment slots (func_006292F0 + Item_LookupRecord + Text_FormatMessageArg + Ui_TextLayer_SetText), treats slot 1 as the two-handed case, and sets +0x4A = 1 at the end. No named caller identifies the owning window.",
+    "fields": [
+      {
+        "offset": 73,
+        "name": "partyMemberIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.7,
+        "evidence": "`*(char*)((int)self+0x49) = (char)characterId`, and the same value is the second argument of func_0035EB98(work, idx) = party member record lookup"
+      },
+      {
+        "offset": 74,
+        "name": "hasEquipData",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.5,
+        "evidence": "`*(u8*)((int)self+0x4a) = 1` only after all six slot panes have been written"
+      },
+      {
+        "offset": 256,
+        "name": "unknown_vtableSlotAlias40",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "evidence is `(**(code **)(*param_1 + 0x40))(param_1,0)` - vtable slot 16, not an access to +0x100"
+      }
+    ]
+  },
+  {
+    "class": "Ui_Fade",
+    "type": "UiFade",
+    "summary": "Mixed fade/panel cluster: a frame-based fade stepper (Ui_Fade_UpdateWithSe) plus a panel object that owns a state-sequence sub-controller at +0x48, an embedded widget at +0x11C and a hit latch at +0x250.",
+    "size": 596,
+    "base": null,
+    "confidence": 0.35,
+    "evidence": "Ui_Fade_UpdateWithSe (0x003E2C5C) advances a frame counter and drives the target's f_144 vertical offset with cubic easing (SE 0x2E at frame 0x14, done after 0x38). maybe_Ui_Fade_IsIdle (0x004C74AC) advances func_006D169C(self+0x48,1); maybe_Ui_Fade_PollEvent (0x004D97F8) sets self->f_250 and drives the widget at self+0x11C to state 10. The three functions do not obviously share one class, hence the low class confidence.",
+    "fields": [
+      {
+        "offset": 72,
+        "name": "stateSequence",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "`func_006D169C(param_1 + 0x48,1)` = std_StateSequence73_ChangeState on the embedded state sequence at +0x48"
+      },
+      {
+        "offset": 284,
+        "name": "embeddedWidget",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "`piVar1 = (int*)(param_1+0x11c)`; PollEvent calls `(**(code**)(*piVar1+0x14))(piVar1,10)` and `(*piVar1+0x10)(piVar1)` - an embedded object with a vtable that is advanced to state 10 and committed"
+      },
+      {
+        "offset": 592,
+        "name": "hasHit",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.5,
+        "evidence": "`self->f_250 = 1` only when Ui_GetCore()->f_14->f_1C virtual +0x14 reports a hit; the byte latches the hit for the following frames"
+      }
+    ]
+  },
+  {
+    "class": "Ui_FieldSignboard",
+    "type": "UiFieldSignboard",
+    "summary": "Field signboard UI object holding the resolved signboard window pane and its 'txt_kanban_left' text pane so later code can update the board text.",
+    "size": 52,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ui_FieldSignboard_BindPanes (0x004D3E34) resolves two panes from object->f_ac->f_10 by name - the first name literal is at 0x004D3EB4 ('win' per the documented name) and the second is 'txt_kanban_left' at 0x004D3EB8 - stores them at self[1]/self[2] and then hides itself through vtable slot 3. Guarded by func_0062AB3C((work+8)).",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "windowPane",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`self[1] = (**(code**)(*layout+0x2c))(layout, &name_at_0x004d3eb4, 1)` - the signboard's own window pane"
+      },
+      {
+        "offset": 8,
+        "name": "signTextPane",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "`self[2] = (**(code**)(*layout+0x2c))(layout, 'txt_kanban_left', 1)` - the text pane the board text is written to"
+      },
+      {
+        "offset": 48,
+        "name": "unknown_vtableSlotAlias0c",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "evidence is `(**(code **)(*param_1 + 0xc))(param_1,0)` - vtable slot 3 (hide), not an access to +0x30"
+      }
+    ]
+  },
+  {
+    "class": "Ui_HitNumber",
+    "type": "UiHitNumber",
+    "summary": "Hit-number popup widget: plays the 'hit_num_in' animation, counts 15 frames after it finishes, then plays 'hit_num_out' and hides itself.",
+    "size": 88,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "Ui_HitNumber_Show (0x004E7310) releases the previous anim handle, starts 'hit_num_in' through Ui_PlayAnimByName, resets the frame counter and sets visible=1; Ui_HitNumber_Update (0x004E7270) waits for the animation-finished sentinel then increments the counter and at >15 starts 'hit_num_out' and clears visible; Ui_HitNumber_SelectPane (0x004E738C) clears the visible bit of every child of 'null_hit_num' and shows 'hit_num<index>'.",
+    "fields": [
+      {
+        "offset": 76,
+        "name": "animHandle",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "`self->f_4c = Ui_PlayAnimByName(...)` holds the 'hit_num_in'/'hit_num_out' animation instance; it is released via `(**(code**)(**(int**)(self+4)+0xc))()` and advanced with vtable +0x54"
+      },
+      {
+        "offset": 80,
+        "name": "frameCount",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "Show sets it to 0, Update does `iVar1 = self->f_50 + 1; self->f_50 = iVar1; if (0xf < iVar1)` - a frame counter that triggers the out-animation after 15 frames"
+      },
+      {
+        "offset": 84,
+        "name": "isVisible",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.75,
+        "evidence": "set to 1 by Show, tested at the top of Update and cleared to 0 when the out-animation starts"
+      }
+    ]
+  },
+  {
+    "class": "Ui_ItemDetail",
+    "type": "UiItemDetail",
+    "summary": "Item/action window detail pane: shows the selected entry's message arguments (name through Message_SetArg 5, party stats through arg 6) and then reveals the detail pane group at +0x3120.",
+    "size": 13684,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_ItemDetail_Setup (0x001956A8) reads the selected entry pointer at self+0x3570 (msgId at entry+0x51C with -1 = empty, argument text at entry+0x530), installs the format string through the message-format singleton *0x007AC834, copies party member 0 through Message_SetArg(6,...), calls Ui_Object_SelectEmbeddedNode(self,&self->f_34d8) and finally Ui_Pane_SetVisibleWithAnim(&self->f_3120,1).",
+    "fields": [
+      {
+        "offset": 12576,
+        "name": "detailPane",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`Ui_Pane_SetVisibleWithAnim(param_1 + 0x3120, 1)` is the last call of Setup - the embedded detail pane group that is revealed"
+      },
+      {
+        "offset": 13528,
+        "name": "maybe_detailNode",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`Ui_Object_SelectEmbeddedNode(self, &self->f_34d8)` passes this embedded node as the element to select; the helper's fixed +0x3430 offset means the exact element identity cannot be fully confirmed"
+      },
+      {
+        "offset": 13680,
+        "name": "selectedEntry",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`piVar6 = &self->f_3570->f_51c; Message_SetArg(5,&self->f_3570->f_530,0); if (*piVar6 != -1) ...` - pointer to the selected message/entry record"
+      }
+    ]
+  },
+  {
+    "class": "Ui_ItemListComposite",
+    "type": "UiItemListComposite",
+    "summary": "Small Ui_Object-derived item-list composite (88 bytes): installs a vtable, writes an initial constant at +0x18 and initialises an embedded container/owner pair at +0x54.",
+    "size": 88,
+    "base": "Ui_Object",
+    "confidence": 0.35,
+    "evidence": "The only recovered function (ctor 0x002D946C, no decompiled C) installs a literal vtable at +0, writes the constant 0xE at +0x18 and calls func_00622248(self+0x54, self). The generated base Ui_Object is kept, but structs.json's Ui_Object size (5016) comes from a derived ctor and is unrelated to this 88-byte object. No string, caller or vtable slot identifies the class beyond the batch label.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "the ctor stores a literal-pool address (`*puVar2 = uRam002d954c`) and immediately overwrites the same word with a second constant (`*puVar2 = uVar1`) - a vtable/type-info pair"
+      },
+      {
+        "offset": 24,
+        "name": "maybe_initialKind",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.25,
+        "evidence": "`puVar2[6] = 0xe` stores 14 at +0x18 in the ctor; no reader exists, so it is either a kind/type tag or an initial count - not provable"
+      },
+      {
+        "offset": 84,
+        "name": "maybe_container",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "`func_00622248(puVar2 + 0x15, puVar2)` initialises a sub-object at +0x54 with the object itself as second argument (container-with-owner shape); the callee has no decompiled C"
+      }
+    ]
+  },
+  {
+    "class": "Ui_LayoutChild",
+    "type": "UiLayoutChild",
+    "summary": "Holder of two embedded layout-child objects at +0x4C and +0xD18; a byte at +0x49 selects which one Ui_LayoutChild_InitDispatch initialises with the parent and layout pointers.",
+    "size": 3356,
+    "base": null,
+    "confidence": 0.55,
+    "evidence": "Ui_LayoutChild_InitDispatch (0x002A4714) reads self->f_49, picks `&self->f_4c` or `&self->f_d18`, writes the parent at child[8] (+0x20) and the layout word at child[9] (+0x24), then dispatches the child's virtual +0x18. Callers are Ui_SmithMenu_ExecuteCommand and Ui_SlotTable_BuildEntriesFromRecords. The 3356-byte size is only where the second child starts (0xD18+4); each child extends further.",
+    "fields": [
+      {
+        "offset": 73,
+        "name": "useSecondChild",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.6,
+        "evidence": "`if (self->f_49 == '\\0') piVar1 = &self->f_4c; else piVar1 = &self->f_d18;` - selects the child block to initialise"
+      },
+      {
+        "offset": 76,
+        "name": "firstChild",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "embedded layout child at +0x4C: the init dispatch stores the parent at +0x20, the layout at +0x24 and calls its vtable +0x18"
+      },
+      {
+        "offset": 3352,
+        "name": "secondChild",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "second embedded layout child at +0xD18, initialised exactly like firstChild when f_49 != 0"
+      }
+    ]
+  },
+  {
+    "class": "Ui_LayoutRef",
+    "type": "UiLayoutRef",
+    "summary": "Layout reference: a resource/owner pointer at +0 with a cleared flag at +4 and an embedded Ui_AnimRefList at +8 that binds the referenced pane; released by detaching the pane and dropping the owner's reference.",
+    "size": 64,
+    "base": "",
+    "confidence": 0.45,
+    "evidence": "Ui_LayoutRef_InitList (0x003A6570) stores the owner argument at +0, clears +4, calls Ui_AnimRefList_Ctor(self+8), seeds -1 at element+0x50 and builds the intrusive list head. Ui_LayoutRef_Release (0x003E04BC, 171 callers, nearly every UI destructor) does `if (*ref != 0) { func_00537714(ref+8); func_0011FCBC(*ref+4, ref+3); *ref = 0; }` then destroys the embedded element. Because the anim-ref list is constructed at self+8, the generated base Ui_AnimRefList was cleared; size 64 is a lower bound (the embedded list runs past +0x70).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "ownerRef",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "written by InitList (`*self = owner`), non-null-guarded in Release and its +4 field is passed to the reference-drop helper func_0011FCBC - a reference-counted owner object, not a vtable (Release would otherwise pass a code address)"
+      },
+      {
+        "offset": 4,
+        "name": "unknown_flags",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "`param_1[1] = 0` in InitList; no reader anywhere, so the purpose is unknown"
+      },
+      {
+        "offset": 60,
+        "name": "maybe_embeddedListHead",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.35,
+        "evidence": "Release compares `*(int**)((int)(ref+8) + iVar2)` with `ref + 0xf` (= +0x3C); iVar2 comes from the 0x007A7714 table and resolves to 0x34, so the word at +0x3C is a self-referential list head inside the embedded anim-ref element, not a LayoutRef-owned value"
+      }
+    ]
+  },
+  {
+    "class": "Ui_MenuInstance",
+    "type": "UiMenuInstance",
+    "summary": "Fragment of a menu/panel object that owns an embedded effect link instance at +0x70 and sixteen inline 0xE4-byte effect entries from +0xC8; the recorded deleting destructor is a template copy of the battle target-marker destructor.",
+    "size": 204,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_MenuInstance_DtorEmbeddedArrays (0x004A0668) stores the passed vtable at +0, runs `std_destroy_range(self+0xC8, dtor, 0xE4, 0x10)`, calls Effect_LinkInstance_Dtor(self+0x70), then writes at negative offsets around the returned pointer (-0xDE80, -0x2A1C) and frees a 0x58 x 0x10 sub-array - meaning this object is itself a sub-object of a much larger allocation. The code is identical to Ui_TargetMarker_ObjectDtor 0x003D3DC4, so the class identity is unproven. Real size is at least 0xC8 + 16*0xE4 = 0xF08.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "`*self = vtable` is the first statement of the deleting destructor"
+      },
+      {
+        "offset": 112,
+        "name": "effectLinkInstance",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "`Effect_LinkInstance_Dtor(self+0x1c)` where self is an int* (= byte +0x70); the dtor releases the effect handle at *this and destroys its +8 sub-object"
+      },
+      {
+        "offset": 200,
+        "name": "effectEntries",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`std_destroy_range(self+0x32, PTR_LAB_004a06cc, 0xE4, 0x10)` with int* self (= byte +0xC8): sixteen 0xE4-byte inline effect records"
+      }
+    ]
+  }
+]

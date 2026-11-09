@@ -8,7 +8,7 @@ are still understood so the panel keeps working with historical extractions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import utils

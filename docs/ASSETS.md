@@ -89,12 +89,12 @@ glTF node. They stay in the files (editing round-trips); the viewer's "Hand vari
 shows them, and Open in Blender imports them hidden.
 
 Expressions are texture-coordinate animations in `game_data/packs/3d/motion/`: unit 0 slides the
-eye atlas, unit 1 the mouth atlas. `python tools/face_expressions.py scan` catalogues all of them
+eye atlas, unit 1 the mouth atlas. `python -m tools.face_expressions scan` catalogues all of them
 into `game_assets/models/face_expressions.json` (2,855 animations, 185 distinct eye/mouth poses),
 and `bake` writes a model's face for any pose:
 
 ```powershell
-python tools/face_expressions.py bake game_data/packs/3d/model/cha01000a_h/cha01000a_h.bch `
+python -m tools.face_expressions bake game_data/packs/3d/model/cha01000a_h/cha01000a_h.bch `
     --eyes 0,0.797 --mouth 0,0.75 --out face.png
 ```
 
@@ -130,7 +130,7 @@ without its own shading, glTF gets the clamped product in `COLOR_0`.
 
 ### In-game names
 
-`python tools/build_model_names.py` writes `game_assets/models/model_names.json`
+`python -m tools.build_model_names` writes `game_assets/models/model_names.json`
 (model id -> English name) and `game_assets/maps/area_names.json` (area code -> place name):
 
 - monsters from `enemy_base`;
@@ -144,7 +144,7 @@ name is used. The viewer shows these names in the model list and the Maps sectio
 
 ### Texture audit
 
-`python tools/audit_model_textures.py` checks every BCH texture pixel by pixel against the SPICA
+`python -m tools.audit_model_textures` checks every BCH texture pixel by pixel against the SPICA
 reference reader, checks the PNGs next to every exported model, and checks material assignments.
 The report is `audit/MODEL_TEXTURE_AUDIT.json`. `--dump` rebuilds `tools/spica_ref` and the
 reference images first (needs the .NET 9 SDK).
@@ -165,7 +165,7 @@ locals, line info and one `[pc] OPCODE a b c d` line per instruction. It round-t
 through `tools/sqbin.py` and is the file you edit.
 
 `script.decompiled.nut` beside it is readable pseudo-source written by
-`python tools/squirrel_decompile.py --all` (one script: `python tools/squirrel_decompile.py
+`python -m tools.squirrel_decompile --all` (one script: `python -m tools.squirrel_decompile
 game_data/packs/script/a_000/script.cnut`). The scripts use Squirrel 2.2 bytecode, so the
 decompiler matches the 2.2 compiler's patterns: it rebuilds expressions from register writes
 (calls, member access, arithmetic, comparisons, `&&`/`||`, `?:`, table literals with their
@@ -177,29 +177,43 @@ VM register it could not express, so the output is never wrong, only less pretty
 769 scripts (8,960 functions) structure fully with no fallback block; the per-opcode coverage
 is in `audit/SCRIPT_DECOMPILE.md` / `.json`.
 
-The decompiled file is **read-only**: there is no compiler back to bytecode, so edit
-`script.nut`. The viewer's Scripts section shows the decompiled view by default with a
-Decompiled / Disassembly toggle; `tools/verify_assets.py` and the viewers skip
+Both files are editable. The readable source is compiled by `tools/script_build.py` (unchanged
+functions are copied byte-for-byte from retail; see [SCRIPTS.md](SCRIPTS.md)); the assembly listing
+is the bit-exact tier. The viewer's Scripts section shows the readable view by default with a
+Squirrel source / Assembly listing toggle; `tools/verify_assets.py` and the viewers skip
 `*.decompiled.nut` when counting scripts.
 
 ## Round-trip tools
 
-- textures: `python tools/texture_tool.py rebuild PNG --orig BFLIM --out OUT.bflim`
-- BCH model textures: `python tools/bch_texture_patch.py --bch model.bch --texture NAME --png new.png --out patched.bch`
-- audio: `python tools/bcstm_encode.py --template original.bcstm --wav new.wav --out patched.bcstm`
-- layouts: `python tools/layout_tool.py rebuild JSON --out out.bflyt`
+The editor-facing entry point is `tools/asset_replace.py`; it validates the edit, chooses the
+original 3DS format, writes a preview and stages the containing PACK into `mod/romfs/`. Each
+family also keeps its lower-level tool for scripting.
+
+- all families: `python -m tools.asset_replace inspect|export|replace --family texture|model|model-texture|audio|layout|map ...`
+- textures: `python -m tools.texture_tool rebuild PNG --orig BFLIM --out OUT.bflim`
+- BCH model textures: `python -m tools.bch_texture_patch --bch model.bch --texture NAME --png new.png --out patched.bch`
+- audio: `python -m tools.bcstm_encode --template original.bcstm --wav new.wav --out patched.bcstm --codec dspadpcm`
+- DSP-ADPCM codec: `tools/dspadpcm_encode.py` (encoder + frame layout documented in its docstring)
+- SARC archives: `tools/sarc_tool.py` (same-size in-place patch is byte-identical; a size-changing rebuild keeps every member and closes retail alignment gaps)
+- layouts: `python -m tools.layout_tool rebuild JSON --out out.bflyt` (pane transforms and
+  same-capacity text are written back into the raw sections)
 - scripts: `tools/sqbin.py` has both binary and text assembly support (decompiled view is
   read-only; see [Scripts](#scripts))
 - tables: string-table JSON round-trips through `Bxon.build_from_json`; a general semantic
   object-graph writer is still planned
-- levels: `tools/patch_game.py`
+- levels: `tools/patch_game.py` / the editor's **Save to mod**
+
+`tools/texture_tool.encode_tiled` / `decode_tiled` cover every uncompressed PICA format exactly;
+`tools/bch_texture_patch.py` now handles all of them, not only ETC1. The BCH texture round-trip is
+byte-identical for RGB565/RGBA4/RGBA8/L8/…; ETC1 and ETC1A4 are re-encoded and therefore close,
+not identical. See `tests/test_asset_replace.py` for the per-family evidence.
 
 ## Re-running one family
 
 ```powershell
-python tools/convert_assets.py --textures
-python tools/convert_assets.py --models --workers 12   # processes, ~135 s on 12 cores
-python tools/convert_assets.py --audio --workers 6
+python -m tools.convert_assets --textures
+python -m tools.convert_assets --models --workers 12   # processes, ~135 s on 12 cores
+python -m tools.convert_assets --audio --workers 6
 ```
 
 Heavy conversions are safe to re-run; outputs are replaced per source file.
@@ -219,7 +233,7 @@ For now, table edits use exact byte offsets from the structural JSON:
 ```
 
 ```powershell
-python tools/bxon_patch.py project.json --out patched.bxon
+python -m tools.bxon_patch project.json --out patched.bxon
 ```
 
 This preserves the object graph and file size. String-table JSON can be rebuilt bit-identically;
@@ -230,10 +244,10 @@ a general semantic object-graph writer is still future work.
 `tools/model_tool.py` now exports OBJ vertices with round-trip float formatting. To edit a model:
 
 ```powershell
-python tools/model_tool.py convert path\to\model.bch --out game_assets\models_edit
+python -m tools.model_tool convert path\to\model.bch --out game_assets\models_edit
 # edit the .obj in Blender/any editor, keep vertex order and count
-python tools/model_patch.py original.bch edited.obj --out patched.bch
-python tools/patch_asset.py --pack 3d/model/name.pack --member name.bch --replacement patched.bch
+python -m tools.model_patch original.bch edited.obj --out patched.bch
+python -m tools.patch_asset --pack 3d/model/name.pack --member name.bch --replacement patched.bch
 ```
 
 `model_patch` writes edited OBJ vertex positions or triangle indices back into the original BCH in
@@ -284,5 +298,5 @@ matches draws on that pair: SPICA's model -> mesh -> submesh order is not always
 draw commands. `obj` writes SPICA's own placement of one model, handy for checking an export.
 If a manifest is absent, the structural suffix matcher is used and bone placement is skipped.
 
-- material colour: `python tools/model_material.py model.bch --material 0 --rgba 255,128,64,255 --out patched.bch`
-- topology: `python tools/model_patch.py model.bch edited.obj --indices --out patched.bch`
+- material colour: `python -m tools.model_material model.bch --material 0 --rgba 255,128,64,255 --out patched.bch`
+- topology: `python -m tools.model_patch model.bch edited.obj --indices --out patched.bch`

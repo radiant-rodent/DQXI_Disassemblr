@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "dqxi-tools"
+LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "opencode-tools"
 TOOLCHAIN = LOCAL / "xpack-arm-none-eabi-gcc-15.2.1-1.1" / "bin"
 ORIGINAL = ROOT / "original" / "exefs" / "code.decompressed.bin"
 OUT = ROOT / "build" / "replacements"

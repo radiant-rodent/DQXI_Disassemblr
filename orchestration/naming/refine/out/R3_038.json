@@ -1,0 +1,754 @@
+[
+  {
+    "address": "0x0036C258",
+    "name": "maybe_Field_HorseAction_CommitTransform",
+    "signature": "void maybe_Field_HorseAction_CommitTransform(FieldHorseAction* action)",
+    "params": {
+      "action": "horse/mount action instance; +0x28 actor, +0x30/+0x34 two words copied to the actor, +0x38/+0x39 flags"
+    },
+    "summary": "Copies the action's two words at +0x30/+0x34 into the actor at +0x138/+0x13c, resets the actor's sub-object field (+0x160->+0x4c8 = +0x4ec), and when the +0x38/+0x39 flags are set deactivates the actor's children and tail-calls the motion-reset helper 0x005F5DA8 (clears actor+0x144, copies a 3-word default vector into +0x148..+0x150, sets bit 11 of +0x154).",
+    "confidence": 0.4,
+    "evidence": "Class is now certain: the neighbours Field_HorseAction_Ctor (0x0036C54C), Field_HorseAction_DeletingDtor and Field_HorseAction_UpdateMotion are confirmed names, so the Field_HorseAction prefix is right. The 'transform' half is NOT proven: the actor's real position is the float triple at +0x9c..+0xa4 (see Field_HorseAction_UpdateMotion), while this writes the plain words +0x138/+0x13c, and the function has no callers at all, so what +0x30/+0x34 mean stays unknown. Disassembly of the tail target 0x005F5DA8 (a split symbol inside 0x005F5D3C) shows it is a motion/impulse reset, not a transform commit.",
+    "previous_name": "maybe_Field_HorseAction_CommitTransform",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0036C440",
+    "name": "Field_HorseAction_Update",
+    "signature": "void Field_HorseAction_Update(FieldHorseAction* action, float dt)",
+    "params": {
+      "action": "horse/mount action instance; +0x28 actor, +0x2c step timer, +0x30 mounted flag",
+      "dt": "frame delta time, passed in s0 and forwarded to Actor_UpdateTurnBlend"
+    },
+    "summary": "Per-frame update of the mount action: runs the arrival check, the owner sync and the turn blend, asks the action's vtable+0x34 for the next motion id and plays it on the actor, and when the motion is finished and the actor is mounted (+0x2d4) starts the mounted step timer and plays the mounted step sound.",
+    "confidence": 0.55,
+    "evidence": "Disassembly shows the real signature is (self, float dt): s0 is saved to s16, restored before Actor_UpdateTurnBlend and before the epilogue. The body is the same skeleton as the base action update 0x0036D2E8 plus one extra branch, and that branch is byte-for-byte the mounted branch of the already-named Field_HorseAction_Start (0x0036C314): same actor+0x2d4 mounted flag, same Sound_Emitter_PlayStepSe(actor,1), same actor+0x276 = 1. Class confirmed by Field_HorseAction_Ctor/DeletingDtor/UpdateMotion.",
+    "previous_name": "maybe_Field_HorseAction_Update",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x0036D2E8",
+    "name": "Field_ActorAction_Update",
+    "signature": "void Field_ActorAction_Update(FieldActorAction* self, float dt)",
+    "params": {
+      "self": "actor action instance; vtable at +0, actor at +0x28",
+      "dt": "frame delta time, passed in s0 and forwarded to Actor_UpdateTurnBlend"
+    },
+    "summary": "Base per-frame update of a field actor action: runs the arrival check, the owner sync and the turn blend, asks the action's vtable+0x34 for the next motion id and plays it on the actor, then clears the actor's pending-turn counter at +0x290.",
+    "confidence": 0.5,
+    "evidence": "Corrected: the old name called it an Actor method, but self is the ACTION (vtable at +0, actor at +0x28) and the body is exactly the action-update skeleton that the confirmed Field_HorseAction_Update (0x0036C440) overrides - same three helpers, same vtable+0x34 motion-id query, same actor+0x290 clear, and 0x0036C440 even tail-jumps into this function's shared epilogue at 0x0036D350. It sits directly before Field_ActorAction_CtorBase (0x0036D364) and next to the other Field_ActorAction_* helpers, so it is the base class's Update slot.",
+    "previous_name": "maybe_Actor_UpdateTurnState",
+    "previous_confidence": 0.42,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0036E870",
+    "name": "maybe_Ui_CompareRow_SetValueFromByte",
+    "signature": "void maybe_Ui_CompareRow_SetValueFromByte(CompareRow* self, const u8* memberIdPtr)",
+    "params": {
+      "self": "row object; the target pane is at +0x22c",
+      "memberIdPtr": "pointer to one byte holding the party member index"
+    },
+    "summary": "Sets a row's value to a party member's remaining amount: resolves the member record from the byte at memberIdPtr, computes (u16 at member+0x12dc) - (u16 at member+0xe6) clamped at 0, and stores it on the pane at self+0x22c.",
+    "confidence": 0.45,
+    "evidence": "Disassembly of the split symbol 0x00629280 pins the arithmetic exactly: ldrh r1,[r0,#0xe6]; ldrh r0,[r2,r0] with r2 = 0x12dc (pc-relative literal 0x000012DC), so it is *(u16*)(member+0x12dc) - *(u16*)(member+0xe6), clamped to 0 and zero-extended. That is a remaining/available value, which is why the row is fed a computed number rather than a raw record field. What the +0x12dc limit and the +0xe6 counter actually are is still unknown, and 'CompareRow' is only the shape of the caller's pane, so maybe_ stays.",
+    "previous_name": "maybe_Ui_CompareRow_SetValueFromByte",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00377584",
+    "name": "Model_Actor_UpdateAttachment",
+    "signature": "void Model_Actor_UpdateAttachment(ModelActor* self)",
+    "params": {
+      "self": "model actor; +0x160 render object, +0x273 battle unit index, +0x71c 12-byte effect/attachment slot, +0x71e/+0x722 cached item ids"
+    },
+    "summary": "Keeps the model actor's attached equipment effect in sync with its battle unit: looks the unit up in the battle weapon lists (+0x4254, then +0x4270), releases the attachment while the model is still fading in (alpha +0x5b4 < 1.0), and creates or re-targets the effect in the slot at +0x71c whenever the unit's two item ids no longer match the cached +0x71e/+0x722.",
+    "confidence": 0.5,
+    "evidence": "The attachment slot is now identifiable: the release path calls the named Ui_GlyphSlot_Reset (0x004EE2F0), whose body is Effect_ReleaseHandle on two handles plus three u16 ids reset to 0xffff - i.e. an effect-handle slot, not a glyph. The create/update pair 0x004EE4E4 / 0x004EE3A0 takes (slot, itemId, renderObject, &position, owner, unitIndex), and the item ids come from the unit via 0x00639FA8(unit,0,1) and (unit,0,3). Battle context is fixed by the +0x4254/+0x4270 unit lists and the +0x273 unit index.",
+    "previous_name": "maybe_Model_Actor_UpdateAttachment",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003788E8",
+    "name": "maybe_ModelActor_DtorBody",
+    "signature": "void maybe_ModelActor_DtorBody(ModelActor* self)",
+    "params": {
+      "self": "model actor; +0x41 owned-node flag, +0x700 handle array"
+    },
+    "summary": "Destructor body of a model actor: when the owned-node flag at +0x41 is set it releases the handle array at +0x700 and then runs the base node destructor Gfx_Node_Dtor on itself; otherwise it does nothing.",
+    "confidence": 0.45,
+    "evidence": "Disassembly confirms a complete 48-byte function (push {r4,lr} ... pop {r4,pc} at 0x00378910) that only does the guarded release + base-destructor tail call, so 'destructor body' is right. The previously reported caller Field_CreateActorRenderObject is a Ghidra split-symbol artifact: that function actually calls 0x00378914, the constructor that starts right after this one, so there is no independent confirmation of the class name 'ModelActor' - hence maybe_.",
+    "previous_name": "maybe_ModelActor_DtorBody",
+    "previous_confidence": 0.42,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00378CDC",
+    "name": "maybe_Ui_Panel_UpdateStateB",
+    "signature": "void maybe_Ui_Panel_UpdateStateB(UiPanel* self, BattleUi* ui)",
+    "params": {
+      "self": "panel step object; +0x8 frame timer, +0xc/+0x10 two member indices to skip",
+      "ui": "battle UI root; +0x100 u16 party member ids, +0x190 layout object"
+    },
+    "summary": "Battle party-panel step B: at timer 10 it fires cue 0xEA4 and plays layout animation 0x007BFBEE, at timer 0x1e it fills the four member rows from the battle party list at ui+0x100 (skipping the two indices at self+0xc/self+0x10) and fires cue 0xE9C, and from timer 0x33 it enters panel state 0x0B.",
+    "confidence": 0.4,
+    "evidence": "The three A/B/C functions are one family with an identical timer skeleton, and the row loop is now readable: it reads u16 ids from *(u16*)(battleUi + 2*n + 0x100) and pushes them into the layout widgets via 0x0023F844/0x0023F880, so 'party panel member rows' is solid. What is still missing is which panel state owns each variant - there are no callers (vtable slots) and the three differ only in the cue ids, the layout animation resource and the state they enter (0x0B here), so the A/B/C labels stay.",
+    "previous_name": "maybe_Ui_Panel_UpdateStateB",
+    "previous_confidence": 0.38,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00378B8C",
+    "name": "maybe_Ui_Panel_UpdateStateA",
+    "signature": "void maybe_Ui_Panel_UpdateStateA(UiPanel* self, BattleUi* ui)",
+    "params": {
+      "self": "panel step object; +0x8 frame timer, +0xc/+0x10 two member indices to skip",
+      "ui": "battle UI root; +0x22c party count, +0x24c cue player, +0x100 u16 party member ids"
+    },
+    "summary": "Battle party-panel step A: at timer 0x14 it picks cue 0x3a/0x3b/0x3c from the party count at ui+0x22c, sets the row widget and plays layout animation 0x007BFBE8; at timer 0x15 it fills the four member rows from ui+0x100 (skipping self+0xc/self+0x10) and fires cue 0xE9C; past timer 0x28 it advances the party counter.",
+    "confidence": 0.4,
+    "evidence": "Same family as step B: the row loop reads u16 ids from *(u16*)(battleUi + 2*n + 0x100) and pushes them into the layout widgets, and the cue choice is driven by the party count at ui+0x22c (cue 0x3a for <7, 0x3b for 7..9, 0x3c for >=10). No callers (vtable slot) and no way to tell which panel state this variant belongs to, so the A/B/C labels stay.",
+    "previous_name": "maybe_Ui_Panel_UpdateStateA",
+    "previous_confidence": 0.38,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00378DBC",
+    "name": "maybe_Ui_Panel_UpdateStateC",
+    "signature": "void maybe_Ui_Panel_UpdateStateC(UiPanel* self, BattleUi* ui)",
+    "params": {
+      "self": "panel step object; +0x8 frame timer, +0xc/+0x10 two member indices to skip",
+      "ui": "battle UI root; +0x100 u16 party member ids, +0x190 layout object"
+    },
+    "summary": "Battle party-panel step C: at timer 10 it plays layout animation 0x007BFBF4, at timer 0x1e it fills the four member rows from the battle party list at ui+0x100 (skipping self+0xc/self+0x10) and fires cue 0xE9C, and from timer 0x33 it enters panel state 0x0E or 0x10.",
+    "confidence": 0.4,
+    "evidence": "Same family as steps A and B, with the same u16 party-id row loop from ui+0x100 and the same cue 0xE9C; it differs only in the layout animation resource (0x007BFBF4) and in entering Ui_PanelState_Enter0EOr10 instead of 0x0B. No callers (vtable slot), so which panel state owns it stays unknown and the A/B/C labels stay.",
+    "previous_name": "maybe_Ui_Panel_UpdateStateC",
+    "previous_confidence": 0.38,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003802FC",
+    "name": "Casino_Slot_PlaceBet",
+    "signature": "u32 Casino_Slot_PlaceBet(SlotRecord** record)",
+    "params": {
+      "record": "slot record handle; +0x0c UI panel object, +0x44 current bet amount"
+    },
+    "summary": "Places the current slot-machine bet: turns the payout rank (0/1/2) into the 1x/10x/100x stake multiplier, subtracts multiplier x bet from the casino coin counter at work+0x31f4 (capped at 9,999,999, dirty bit set at work+0x5be0) and refreshes the coin display pane at record[0xc]+0x128.",
+    "confidence": 0.55,
+    "evidence": "Disassembly of the split symbol 0x0061251C settles the currency question: it adds a signed delta to *(u32*)(work+0x31f4), clamps it to 0x0098967F and sets bit 2 of *(u32*)(work+0x5be0) - a separate 9,999,999-capped counter, not the gold field at bag+0x28 that the neighbouring 0x00612570 adjusts. The delta is negated, so the bet is deducted. The multiplier comes from the already-named Casino_Slot_GetPayoutRank and the read-back 0x0066B2CC(work+0x24a98,0) returns the same +0x31f4 counter, which is then shown via 0x00405D90.",
+    "previous_name": "maybe_Casino_Slot_PlaceBet",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x00384C64",
+    "name": "maybe_Battle_ActionAnimTable_ProcessEntry",
+    "signature": "void maybe_Battle_ActionAnimTable_ProcessEntry(void)",
+    "params": {},
+    "summary": "Large dispatcher over one battle action-animation table entry: fetches the entry with Battle_ActionAnimTable_FindEntry, reads its bytes at +4/+5/+6/+8/+0xa, resolves the party member through Party_ResolveMemberId and func_0035EB98, and switches on the entry's action byte (0x0b..0x2d) to the per-action handlers, using the bag work at work+0x24a98.",
+    "confidence": 0.3,
+    "evidence": "Corrected: the old name claimed a 'Release', but the disassembly shows a ~1.9 KB function (0x00384C64..0x003853F0, the literal pool sits at 0x003853EC) that only READS an entry and dispatches on it - it calls Battle_ActionAnimTable_FindEntry, Game_GetWork, Party_ResolveMemberId (0x0066FEE0), func_0035EB98 and a 19-entry jump table on (byte-0x0b). The recorded 28-byte body is a Ghidra truncation at a bad instruction, and the reported caller GetDisplayMode (0x0014DB60) does not call it at all, so the entry's exact role stays unknown - hence maybe_ at 0.3.",
+    "previous_name": "maybe_Battle_ActionAnimTable_Release",
+    "previous_confidence": 0.35,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0038F0EC",
+    "name": "Ui_EquipListWindow_OpenForSlot",
+    "signature": "void Ui_EquipListWindow_OpenForSlot(UiEquipContainer* self)",
+    "params": {
+      "self": "container; +0x10 window manager, +0x14 equip-list window, +0x18 page object, +0x1c saved slot index (-1 = none), +0x28 current page"
+    },
+    "summary": "Opens the equipment-list sub-window (id 0x15) and points it at the saved slot: stores the window, sets its row count from the page object at +0x58, rebuilds the entries for the saved slot index and refreshes the cursor info text; with no saved slot it falls back to the container's own page switch instead.",
+    "confidence": 0.5,
+    "evidence": "Both tail calls are already-named equip-list functions - Ui_EquipListWindow_RebuildEntries (0x004AB170) and Ui_EquipListWindow_UpdateCursorInfoText (0x004AB66C) - and the window is opened by id 0x15 through the manager's vtable+0x4c, so the equip-list reading is fixed. The saved slot is the signed byte at self+0x1c (compared against -1) and is passed straight to RebuildEntries.",
+    "previous_name": "maybe_Ui_EquipListWindow_OpenForSlot",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x00394094",
+    "name": "maybe_Ui_UpdateElementArray5",
+    "signature": "void maybe_Ui_UpdateElementArray5(UiObject* self)",
+    "params": {
+      "self": "slot-window object; five 0x238-byte element records start at +0x5c0"
+    },
+    "summary": "Updates the five slot-window element records at self+0x5c0 (stride 0x238) by calling the per-element update routine on each; the caller is the slot window's pattern processor, so these are the five payline/hit indicators.",
+    "confidence": 0.4,
+    "evidence": "The caller is the named Ui_SlotWindow_ProcessPatterns and the callee is maybe_Ui_HitIcon_Update, so 'update five elements of the slot window' is solid and the first-pass 'Release' reading is dead. What the five elements are is still only inferred from the callee's own maybe_ name, so the generic name and maybe_ stay.",
+    "previous_name": "maybe_Ui_UpdateElementArray5",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00397364",
+    "name": "Model_LookupEntryValue",
+    "signature": "u32 Model_LookupEntryValue(ModelContext* ctx, u32 packetId, u32 unused, int index, u32 key, int* out)",
+    "params": {
+      "ctx": "context; +0x1c own resource descriptor, +0x30 descriptor table (8-byte rows), +0x140 table count",
+      "packetId": "id resolved to a model record by 0x005F5818",
+      "index": "row index into the ctx+0x30 descriptor table",
+      "key": "value key looked up in each candidate",
+      "out": "receives the found value"
+    },
+    "summary": "Three-stage value lookup by key: first the model record reached through packetId (record+0x160 -> +0x11c -> Model_FindEntryById), then the context's own resource descriptor, then the descriptor in the ctx+0x30 table at the given index; writes the first non-zero result to *out and returns 1, or returns 0.",
+    "confidence": 0.5,
+    "evidence": "Both named callees pin the chain: Model_FindEntryById (0x00641738) resolves the entry whose +0x28 word is the value, and Gfx_ResDesc_GetValueB (0x001943B8) is the fallback used twice - once on ctx+0x1c and once on the descriptor at ctx+0x30+index*8+4, guarded by index < ctx+0x140. That is a model/asset value lookup, not the script int table the first pass had guessed.",
+    "previous_name": "maybe_Model_LookupEntryValue",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003A24D4",
+    "name": "maybe_Field_Gadget_HandleTouchArea",
+    "signature": "u32 maybe_Field_Gadget_HandleTouchArea(FieldGadget* self, int* event, u32 area)",
+    "params": {
+      "self": "gadget object; +0x24c and +0x298 are two embedded input areas, +0x297 drag latch, +0x2f0/+0x2f4 press delta",
+      "event": "input event",
+      "area": "address of the embedded area that was hit"
+    },
+    "summary": "Dispatches a touch on one of the gadget's two embedded input areas: for the area at +0x24c it builds a six-field action record from the gadget and the current actor and plays it through Actor_TryPlayActionSeq0C, for the area at +0x298 it stores the press delta (+0x2f0/+0x2f4) and arms the drag latch +0x297; any other area returns 0.",
+    "confidence": 0.45,
+    "evidence": "The two-area dispatch is confirmed by the body (area == self+0x24c / self+0x298), and the actor comes from the known field-object manager path (work+8)->+0x54->+0x20. The 'Gadget' class name is still only inferred from the module grouping, and the reported caller Field_SceneObject_SpawnByTypeB is a Ghidra split-symbol artifact, so maybe_ stays.",
+    "previous_name": "maybe_Field_Gadget_HandleTouchArea",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003A6348",
+    "name": "maybe_Ui_Element_HandleActivateCommand",
+    "signature": "void maybe_Ui_Element_HandleActivateCommand(UiElement* self, const u8* cmd)",
+    "params": {
+      "self": "UI element; +0x08 layout object, +0x24 busy flag, +0x54 tween duration, +0x58 state byte",
+      "cmd": "two-byte command; handled when cmd[0] != 0 and cmd[1] == 0"
+    },
+    "summary": "Handles a plain activate command on a UI element: when the element is not already busy it forwards the command to the layout object at +8, sets the tween duration at +0x54, starts the shake animation, sets the state byte at +0x58 to 3 and sets bit 0 of +0x44 on every child pane.",
+    "confidence": 0.45,
+    "evidence": "Corrected: the old name asserted a show direction, but the direction is still unresolved - the helper 0x003E043C is a split symbol that only tail-calls 0x005360FC(layoutObject+8, flag) when the object's +0x14 is non-zero, and the previous pass found it used as the hide path in Ui_KyoukaiSelectWindow_BuildSlotList. What IS confirmed is the command shape (cmd[0]!=0, cmd[1]==0), the named callee Ui_AnimShake_Update, and the child-pane bit-0 write that matches Ui_RaceWindow_BindPanels.",
+    "previous_name": "maybe_Ui_Element_ShowOnCommand",
+    "previous_confidence": 0.45,
+    "change": "corrected"
+  },
+  {
+    "address": "0x005F4E94",
+    "name": "maybe_Field_SceneObject_SetSubObjectBc",
+    "signature": "void maybe_Field_SceneObject_SetSubObjectBc(FieldSceneObject* self, void* handle)",
+    "params": {
+      "self": "scene object; +0x54/+0x58 child list head, +0xbc attached sub-object",
+      "handle": "new sub-object, or 0 to clear"
+    },
+    "summary": "Replaces the attached sub-object at +0xbc: removes the old handle from the child list at +0x54/+0x58, stores the new handle and inserts it into that list.",
+    "confidence": 0.45,
+    "evidence": "Disassembly of the two split-symbol helpers pins the mechanism: 0x005E785C walks the list at self+0x54/+0x58 to find the old handle and calls its vtable+0x10 (detach), and 0x005E7650 inserts the new handle into the same list via 0x001235A4. Both bail out immediately when the handle is 0. The class name 'Field_SceneObject' is still inferred from the module grouping, so maybe_ stays.",
+    "previous_name": "maybe_Field_SceneObject_SetSubObjectBc",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003AE1CC",
+    "name": "ActorAction_CreateMoveActionB",
+    "signature": "FieldActorAction* ActorAction_CreateMoveActionB(void* owner, int arg2, int arg3, int arg4)",
+    "params": {
+      "owner": "owner forwarded untouched to Actor_Action_BaseCtor",
+      "arg2": "forwarded to Actor_Action_BaseCtor",
+      "arg3": "forwarded to Actor_Action_BaseCtor",
+      "arg4": "forwarded to Actor_Action_BaseCtor"
+    },
+    "summary": "Constructor of the second scripted-move field action: runs the shared action base constructor, installs the move-action vtable variant B, copies the two descriptor words from 0x007BE2D4 into +0x2c/+0x30 and clears the state byte at +0xd.",
+    "confidence": 0.5,
+    "evidence": "The readable C now shows the vtable symbol by name - *puVar2 = &g_fieldActorActionMoveVtableB - so the 'move action, variant B' reading is no longer a guess. The signature is fixed too: the arguments are forwarded untouched into Actor_Action_BaseCtor (0x003E3A90), which is why Ghidra dropped them and printed 'void f(void)'.",
+    "previous_name": "maybe_ActorAction_CreateMoveActionB",
+    "previous_confidence": 0.4,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003E3F70",
+    "name": "maybe_Field_ActorAction_DerivedCtor",
+    "signature": "FieldActorAction* maybe_Field_ActorAction_DerivedCtor(void* owner, int arg2, int arg3, int arg4)",
+    "params": {
+      "owner": "owner forwarded untouched to Actor_Action_BaseCtor",
+      "arg2": "forwarded to Actor_Action_BaseCtor",
+      "arg3": "forwarded to Actor_Action_BaseCtor",
+      "arg4": "forwarded to Actor_Action_BaseCtor"
+    },
+    "summary": "Derived field-action constructor: runs the shared action base constructor, installs vtable 0x0076AEB8, sets the mode byte at +0xb to 3 and clears +0x30 and +0xd.",
+    "confidence": 0.4,
+    "evidence": "The base constructor is the named Actor_Action_BaseCtor (0x003E3A90) and the body is a pure vtable install plus three field writes, so 'derived constructor' is right. Which concrete action it builds is not knowable from 52 bytes and the vtable address 0x0076AEB8 has no symbol in symbols.json / native_names.json, so the generic 'Derived' wording and maybe_ stay.",
+    "previous_name": "maybe_Field_ActorAction_DerivedCtor",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003B249C",
+    "name": "maybe_Ui_SortedIdList_AddTableIds",
+    "signature": "void maybe_Ui_SortedIdList_AddTableIds(SortedIdList* list, int tableId, int arg3, int rowId)",
+    "params": {
+      "list": "sorted u16 container",
+      "tableId": "data-manager table id resolved by 0x0063ECA4",
+      "rowId": "unused row selector"
+    },
+    "summary": "Reads a game-data table through the data manager and inserts every u16 id it contains (stride 4, starting at record + record[1] + 4) into the sorted id list via Container_SortedInsertU16; the loop is bounded by the table's count word at *record.",
+    "confidence": 0.45,
+    "evidence": "The body is a clean table walk: Game_GetDataManager, then the table accessor 0x0063ECA4(dm, tableId), then Container_SortedInsertU16(list, *(u16*)(base + i*4)) for i < *record. The 'Ui_' prefix is still unverified - the list is a generic sorted u16 container and the function has no direct callers - so maybe_ stays.",
+    "previous_name": "maybe_Ui_SortedIdList_AddTableIds",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003B27BC",
+    "name": "maybe_Ui_QuestWindow_AddEntry",
+    "signature": "void maybe_Ui_QuestWindow_AddEntry(UiQuestWindow* self, const u16* id)",
+    "params": {
+      "self": "sorted id list",
+      "id": "pointer to the u16 id to insert; rejected when >= 0x413"
+    },
+    "summary": "Bounds-checks one id against the list capacity 0x413 and inserts it into the sorted id list with Container_SortedInsertU16; the rest of the body is a Ghidra misdecode of the literal pool at 0x003B2944.",
+    "confidence": 0.3,
+    "evidence": "Body is damaged (unaff_r8, software_interrupt(0x747874), halt_baddata) so per FACTS.md it stays maybe_ at <= 0.3. The only trustworthy part is the 0x413 capacity test and the Container_SortedInsertU16 call; the 'QuestWindow' owner is still inferred from the neighbouring row helpers (0x003B2428 / 0x003B249C / 0x003B28D4), not proven.",
+    "previous_name": "maybe_Ui_QuestWindow_AddEntry",
+    "previous_confidence": 0.3,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003B7298",
+    "name": "maybe_Data_CollectLinkedRecords",
+    "signature": "void maybe_Data_CollectLinkedRecords(DbLinkList* self, const DbRecord* record)",
+    "params": {
+      "self": "result list; +0x04/+0x08 two header words, +0x0c, +0x10[n] up to five resolved objects, +0x24 count",
+      "record": "source record whose id lists are walked"
+    },
+    "summary": "Builds a list of at most five related objects for a record: reads the record's id lists, resolves each id through the generation-tagged handle table (0x7ff index mask plus generation compare) and stores the object into self+0x10[n], bumping the count at +0x24; ids that resolve to nothing are skipped.",
+    "confidence": 0.3,
+    "evidence": "The generation-handle resolution and the '4 < i' five-entry limit are visible in the body, so 'collect linked records' describes the shape correctly. Which relation is collected is still open: the callee names reported for this address (Ui_Message_SetItemNameArg, Ui_Talk_LoadDialogueLayout, Ui_Part_GetSpriteSubOffset) come from wrong function boundaries in decomp/functions_index.json, and the reported caller Ui_MessageWindow_SetTextByIdAnimated does not reference this address at all. The real bl targets are 0x00670334 (x3), 0x00641F88, 0x006444F4, 0x00644BAC, 0x006445C4, 0x0063E998, 0x0011CFAC/DC, 0x00116AE0.",
+    "previous_name": "maybe_Data_CollectLinkedRecords",
+    "previous_confidence": 0.3,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003BC418",
+    "name": "maybe_Ui_Marker_RetryBindTarget",
+    "signature": "void maybe_Ui_Marker_RetryBindTarget(int self, int* request)",
+    "params": {
+      "self": "marker object; +0x08 retry counter",
+      "request": "bind request"
+    },
+    "summary": "Throttled rebind step of a UI marker: counts up the retry counter at +0x08, then samples an id through 0x00649050 (0xff = not ready), stores it on the target object and commits it.",
+    "confidence": 0.3,
+    "evidence": "Body is damaged - Ghidra emits coprocessor_movefromRt and halt_baddata right after the counter branch - so per FACTS.md it stays maybe_ at <= 0.3. Only the 'if (self+8 < 10) self+8 += 1' throttle is readable; the rest of the summary restates the disassembly notes in the header and is not independently verified.",
+    "previous_name": "maybe_Ui_Marker_RetryBindTarget",
+    "previous_confidence": 0.3,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003BCC30",
+    "name": "maybe_Ui_List_CanMoveCursor",
+    "signature": "u32 maybe_Ui_List_CanMoveCursor(u32 cursor, u32 target, u32 arg3, u32 direction)",
+    "params": {
+      "cursor": "current cell id",
+      "target": "candidate cell id",
+      "direction": "move direction passed to the cell matcher"
+    },
+    "summary": "Cursor-move gate: when Field2D_MapChip_CanWalkDirection reports that the map chip cannot be walked it asks maybe_Ui_List_CellMatchesAtPoint about the {cursor, target} pair in the given direction, otherwise the move is allowed and it returns 1.",
+    "confidence": 0.45,
+    "evidence": "Both callees are now readable: the gate is the named Field2D_MapChip_CanWalkDirection (0x005A34E4) and the real test is maybe_Ui_List_CellMatchesAtPoint (0x00642248), called with a three-word {cursor, target, 0} record. That combination belongs to the 2D field screen rather than a plain menu list, and the callers (maybe_Ui_List_IsCursorCellFree / _Empty) are themselves maybe_ names, so the 'Ui_List_' prefix stays a maybe_.",
+    "previous_name": "maybe_Ui_List_CanMoveCursor",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003BD200",
+    "name": "Ui_ListWindow_AddRowToView",
+    "signature": "u32 Ui_ListWindow_AddRowToView(void* self, u32 rowId)",
+    "params": {
+      "self": "window action object (unused beyond the call)",
+      "rowId": "index of the source row in the 50-entry table at bagWork+0x5fe4"
+    },
+    "summary": "Action step that copies one data row into the list window's view: tail-calls 0x00612848(bagWork, rowId), which rejects rows whose name is 7+ characters or whose id/key is empty, finds the first free slot of the 20-entry view table at bagWork+0x7b3c and copies the 0x84-byte row plus its flags and owner key into it; returns 1 on success, 0 when the row is unusable or the view is full.",
+    "confidence": 0.5,
+    "evidence": "Disassembly of the callee settles it: 0x00612848 computes bag + rowId*0x8c + 0x5fe4, calls wcslen on it and bails when the length is >= 7, then scans the 20 entries at bag+0x7b3c for a free slot and memcpys 0x84 bytes. So the merged name Ui_DataPanel_GetRowNameLength is a misnomer - the length test is only a guard - and the wrapper really adds a row to the view. The caller is the named Ui_Window_StartActionBOr2.",
+    "previous_name": "maybe_Ui_ListWindow_AddRowToView",
+    "previous_confidence": 0.42,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003BD228",
+    "name": "Ui_ListWindow_RemoveRowByKey",
+    "signature": "u32 Ui_ListWindow_RemoveRowByKey(void* self, const u32* key)",
+    "params": {
+      "self": "window action object (unused beyond the call)",
+      "key": "pointer to the owner key of the row to drop"
+    },
+    "summary": "Action step that removes one row from the list window's view: loads the owner key and calls 0x00612fc8(bagWork, &key), which finds the row of the 20-entry view table at bagWork+0x7b3c whose +0x88 key matches, shifts the following rows down one 0x8c record and clears the last row (key = -1).",
+    "confidence": 0.5,
+    "evidence": "The callee is the already-named Ui_DataPanel_RemoveRowByOwner (0x00612FC8), which matches the reading exactly, and both callers are named window action handlers (Ui_Window_StartAction8Or18, Ui_Window_StartAction8Or2) that pass a record field as the key. The wrapper itself is a 56-byte load-and-call, so there is nothing left to doubt.",
+    "previous_name": "maybe_Ui_ListWindow_RemoveRowByKey",
+    "previous_confidence": 0.42,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003BDE6C",
+    "name": "maybe_ActorActionSeq_CollectPendingNodes",
+    "signature": "int maybe_ActorActionSeq_CollectPendingNodes(ActorSeqRunner* self)",
+    "params": {
+      "self": "sequence runner; the node vector lives at self+0x3570 (+0x34 begin, +0x38 end, 0x10-byte nodes)"
+    },
+    "summary": "Collects into a 50-entry buffer the ids (first word of each 0x10-byte node) of the action-sequence nodes that are enabled (+9 non-zero) but not started (+3 zero), then blanks the matching rows of the 50-entry work table at bagWork+0x5fe4 through Ui_DataPanel_ResetRowsByIndexList, and returns how many nodes were collected.",
+    "confidence": 0.45,
+    "evidence": "The body is fully readable and the callees are named (std_memmove, Ui_DataPanel_ResetRowsByIndexList, Game_GetWork), so the collect-then-blank behaviour is certain. What stays open is whether the collected words are node ids or row ids, and the runner object at self+0x3570 is only identified by the sibling 0x003BD908, so maybe_ stays.",
+    "previous_name": "maybe_ActorActionSeq_CollectPendingNodes",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003BEEB8",
+    "name": "maybe_Ui_GridList_AllocRows",
+    "signature": "void maybe_Ui_GridList_AllocRows(UiGridList* self, GridParams* params)",
+    "params": {
+      "self": "grid list; +0x04 allocator tag, +0x0d row count, +0x0e column count, +0x94/+0x98 the two arrays",
+      "params": "parameter block; +0x12 rows, +0x14 columns"
+    },
+    "summary": "Allocates the two row arrays of a grid list: clamps the row and column counts from the parameter block to at least 1, stores them at +0x0d/+0x0e, and allocates the 0x34-byte and 0x2c-byte record arrays through Mem_AllocAligned plus std_ConstructArray, each with a [elementSize, count] header.",
+    "confidence": 0.4,
+    "evidence": "The body is readable and the callees are named (Mem_AllocAligned, std_ConstructArray), so the allocation shape is certain. There is still no caller and no table reference, so neither the 'Ui_GridList' owner nor the meaning of the two record types is proven; maybe_ stays.",
+    "previous_name": "maybe_Ui_GridList_AllocRows",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003C3118",
+    "name": "Battle_ActionSequence_BuildMemberRow",
+    "signature": "u32 Battle_ActionSequence_BuildMemberRow(BattleActionSequence* self, u32 actorIndex, u32 actionId, u32 flags)",
+    "params": {
+      "self": "battle action sequence; +0x3780 current slot, +0x2eab slot records (0x1a bytes), +0x2ec1 slot UI objects, +0xbb0a slot actor bytes",
+      "actorIndex": "party member index",
+      "actionId": "action being built",
+      "flags": "forwarded to Text_BuildRowForMember"
+    },
+    "summary": "Fills the current member slot of a battle action sequence and builds its display row: clears the 0x1a-byte slot record, takes the slot's UI object from vtable+0x10c, records the actor index byte, builds the row with Text_BuildRowForMember and attaches the paired slots with maybe_Ui_Row_AttachPairedSlots.",
+    "confidence": 0.5,
+    "evidence": "The caller is the named Battle_ActionSequence_ExecuteMemberActions and the main callee is the named Text_BuildRowForMember (0x00491E3C), so 'build the member action row' is fixed. The slot layout is consistent with the sibling 0x003C5990, which fills the same +0x2ec1 / +0xbb0a arrays at index self+0x3780.",
+    "previous_name": "maybe_Battle_ActionSequence_BuildMemberRow",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003C5990",
+    "name": "maybe_Battle_ActionSequence_ExecuteSpecialAction",
+    "signature": "void maybe_Battle_ActionSequence_ExecuteSpecialAction(BattleActionSequence* self, u32* actorIndex, u32 arg3, u32 arg4)",
+    "params": {
+      "self": "battle action sequence; +0x3780 current slot, +0x377c 3D counter, +0x2ec1 slot UI objects, +0xbb0a slot actor bytes, +0x4af 0x90-byte table",
+      "actorIndex": "party member index"
+    },
+    "summary": "Registers one member action in the current sequence slot: stores the slot's UI object and the actor index byte, finds a free entry in the 0x90-byte table at +0x4af, spawns the balloon, scans the eight member records for the '!' and '0' status markers and raises the matching indicator, plays the member action sound in 3D mode, then advances the slot cursor (clamped at 0x47).",
+    "confidence": 0.4,
+    "evidence": "The body is readable and the callees are named (Battle_ActionSequence_PlayMemberActionSound, Battle_Ui_SpawnSlotEffectB, Os_GetGameWork), and the slot arrays match the confirmed sibling Battle_ActionSequence_BuildMemberRow. What is not proven is the 'Special' part: the only caller is the still-maybe_ 0x0032100C, so nothing shows this runs only for special actions rather than for every member action - maybe_ stays.",
+    "previous_name": "maybe_Battle_ActionSequence_ExecuteSpecialAction",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003CB3D0",
+    "name": "maybe_Battle_Ui_MemberWidget_ChooseMessage",
+    "signature": "u32 maybe_Battle_Ui_MemberWidget_ChooseMessage(BattleUiMemberWidget* self)",
+    "params": {
+      "self": "battle member widget; +0x50 actor, +0x50+0x12d8 message context, +0xd2 busy flag"
+    },
+    "summary": "Decides whether the member gets a battle message this step and queues it: checks the actor's state and the message context, resolves the message row with Battle_Message_ResolveRowOffset, sets the busy flag at +0xd2 and queues either action 0x552 or the balloon id 0x23/0x24 through Battle_QueueActionEx; returns 1 when something was queued.",
+    "confidence": 0.45,
+    "evidence": "Both callees are named - Battle_QueueActionEx (0x001F8534) and Battle_Message_ResolveRowOffset (0x00485D90) - so 'queue a battle message for this member' is solid, and the two balloon ids 0x23/0x24 are chosen from the context byte at +0xb0f7. The 'MemberWidget' class and the 'slot 12' role are still inherited from the vtable family, and 'Choose' is an interpretation of the guard, so maybe_ stays.",
+    "previous_name": "maybe_Battle_Ui_MemberWidget_ChooseMessage",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003D09EC",
+    "name": "Battle_TargetMarker_AssignSlots",
+    "signature": "u32 Battle_TargetMarker_AssignSlots(BattleTargetMarkerList* self)",
+    "params": {
+      "self": "marker list; 26 entries of 8 bytes, +0xd0 target actor, +0xd4 used flag"
+    },
+    "summary": "Gives every target marker its own target: for each marker it scans the 26 slots for a free one (+0xd0 set, +0xd4 clear), builds a row for the candidate actor with Text_BuildRowForActor and keeps the slot with the smallest vtable+0x90 metric, marks it used and moves on; returns 1 when all markers were served, 0 when the marker list runs out first.",
+    "confidence": 0.5,
+    "evidence": "The caller is the named Battle_TargetMarker_Update (0x003D0B68) and the callee is the named Text_BuildRowForActor (0x00490994), so both the 'target marker' owner and the row-building step are fixed. The body is two 26-entry loops with the +0xd0/+0xd4 free-slot test and the vtable+0x90 comparison, exactly as the summary says.",
+    "previous_name": "maybe_Battle_TargetMarker_AssignSlots",
+    "previous_confidence": 0.4,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003D83C0",
+    "name": "maybe_Ui_DiveForm_OnPageSelect",
+    "signature": "void maybe_Ui_DiveForm_OnPageSelect(UiDiveForm* self)",
+    "params": {
+      "self": "dive form; +0x3770 flag word, +0x3d4 page selector, +0x984 page entry list, +0x134 pane stack"
+    },
+    "summary": "Handles a page-selection notification on the dive form: with flag bit 4 it pops the pane, with bit 0x142 it reads the selected page and - unless the page is the 'none' sentinel 9 - rebuilds the page entries, releases the row tweens and commits through 0x0029126C, and with bit 1 it forwards the three bytes at +0x3772..+0x3774 to 0x001A60A0.",
+    "confidence": 0.45,
+    "evidence": "The DiveForm owner is confirmed by the named callees Ui_DiveForm_BuildPageEntries, Ui_DiveForm_PopPane, Ui_DiveForm_PushPane and maybe_Ui_DiveForm_ReleaseRowTweens, and the page read plus the sentinel 9 support the 'page select' reading. What is not proven is the trigger: the function is a flag-driven dispatcher with three independent branches and both page branches end in the non-returning 0x0029126C, so maybe_ stays.",
+    "previous_name": "maybe_Ui_DiveForm_OnPageSelect",
+    "previous_confidence": 0.42,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003D95F8",
+    "name": "maybe_Field_TalkBalloon_Dtor",
+    "signature": "void maybe_Field_TalkBalloon_Dtor(TalkBalloon* self, u32 vtable)",
+    "params": {
+      "self": "object; embedded Ui_Object at +0x00, sprite at +0x64",
+      "vtable": "vtable pointer stamped into the object before teardown"
+    },
+    "summary": "Deleting destructor of a small object that owns one sprite at +0x64 and one embedded Ui_Object at +0: stamps the passed vtable, destroys the sprite with Gfx_Sprite_DtorAlt, destroys the Ui_Object body and frees the instance.",
+    "confidence": 0.4,
+    "evidence": "The teardown shape is certain (stamp vtable, Gfx_Sprite_DtorAlt(self+0x64), Ui_Object_DtorBody(self), free via 0x0010F6CC) and both callees are named. The class is not: there is no caller and no data table points here, and the same three-step body appears at several addresses with only the sprite offset changed, so 'TalkBalloon' stays a guess.",
+    "previous_name": "maybe_Field_TalkBalloon_Dtor",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x004D7714",
+    "name": "maybe_Field_ObjectSprite_Dtor_D7714",
+    "signature": "void maybe_Field_ObjectSprite_Dtor_D7714(FieldObjectSprite* self, u32 vtable)",
+    "params": {
+      "self": "object; embedded Ui_Object at +0x00, sprite at +0x4c",
+      "vtable": "vtable pointer stamped into the object before teardown"
+    },
+    "summary": "Deleting destructor of a field sprite object: stamps the passed vtable, destroys the sprite at +0x4c with Gfx_Sprite_DtorAlt, destroys the embedded Ui_Object body and frees the instance.",
+    "confidence": 0.45,
+    "evidence": "Same three-step teardown as 0x003D95F8 with only the sprite displacement changed (+0x4c instead of +0x64), and both callees are named. No caller and no data table reference this address, so the class stays unknown and the address suffix is kept as the disambiguator between the identical copies.",
+    "previous_name": "maybe_Field_ObjectSprite_Dtor_D7714",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00592160",
+    "name": "maybe_Field_Actor_DeleteSubObjects",
+    "signature": "void maybe_Field_Actor_DeleteSubObjects(FieldActor* actor, u32 vtable)",
+    "params": {
+      "actor": "large actor object; two sprites and three Ui_Object bodies below +0x37c",
+      "vtable": "vtable pointer stamped into the object before teardown"
+    },
+    "summary": "Deleting destructor of a large field-actor class: stamps the vtable, destroys the two sprites and three Ui_Object bodies reached by the folded displacements from +0x37c, then frees the actor.",
+    "confidence": 0.45,
+    "evidence": "The body is the same stamp-vtable / nested-teardown / free shape as the other small-object destructors in this batch, with five members instead of one, so it is a deleting destructor and not just a member cleanup. The class is still a layout inference (the address is in no data table) and the name Field_Actor_DeletingDtor is already taken by 0x003A4F48, so the existing name is kept with the destructor role spelled out in the summary.",
+    "previous_name": "maybe_Field_Actor_DeleteSubObjects",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003DB0A4",
+    "name": "maybe_Battle_SetUnitModelVariant",
+    "signature": "void maybe_Battle_SetUnitModelVariant(BattleUnit* self, u32 setId, int index, u8* colors, u32 stored)",
+    "params": {
+      "self": "unit; +0x69 set id, +0x6a variant index, +0x6b last-variant flag, +0x6c..+0x6e colour overrides",
+      "setId": "model-set id resolved through the data manager",
+      "index": "variant row inside the set",
+      "colors": "three colour override bytes",
+      "stored": "word stored at self+0x64"
+    },
+    "summary": "Applies one variant of a battle model set: resolves the set through Game_GetDataManager and 0x0063f108, takes the u16 model id at the requested index from the set's table, runs Battle_SetupUnitModelParts on it, copies the three colour overrides and records the set id, the variant index and whether this was the last variant.",
+    "confidence": 0.45,
+    "evidence": "Both principal callees are named (Game_GetDataManager, Battle_SetupUnitModelParts) and the body stores setId/index/last-flag/three colours, so the model-variant reading holds. The 20 reported callers are all field/scene functions, but spot-checking shows they do not actually branch to this address (0x0044B8AC and 0x003DA0C8 contain no reference to 0x003DB0A4), so they are split-symbol artifacts and do not contradict the Battle/Unit owner - which is still inherited rather than proven, hence maybe_.",
+    "previous_name": "maybe_Battle_SetUnitModelVariant",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003E2310",
+    "name": "maybe_Ui_MessageWindow_BuildPartTable",
+    "signature": "void maybe_Ui_MessageWindow_BuildPartTable(UiMessageWindow* self, UiMessageCommand* cmd)",
+    "params": {
+      "self": "message window; +0x158 part records (0xa8 bytes), +0x15c part count, +0x178 entry table (0x18 bytes), +0xa78 entry count",
+      "cmd": "message command; +0x04 part array (0x1c bytes)"
+    },
+    "summary": "Builds the drawable part entries for a message command: for every part whose animation state is 3 it writes a 0x18-byte entry (pane state, part record, colour pair, alpha defaults 0x1e/0x2a) and then adds the six sub-parts with flags 0x10/0x20/1/2/4/8.",
+    "confidence": 0.4,
+    "evidence": "The caller is the named Ui_MessagePage_ExecuteCommand and the callees are named (Ui_Part_GetAnimState, Ui_MessageWindow_ClampTextPosition), and the 0x18-byte entry stride and the six sub-part flags are readable. The body is still damaged - it ends in halt_baddata and the two alpha defaults arrive in lost registers (unaff_r10/unaff_r11) - so per FACTS.md it stays maybe_ below 0.5.",
+    "previous_name": "maybe_Ui_MessageWindow_BuildPartTable",
+    "previous_confidence": 0.42,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x003E8CD8",
+    "name": "Field_Npc_ApplyModelVariant",
+    "signature": "void Field_Npc_ApplyModelVariant(FieldNpc* self, int forwarded, int arg3, int arg4)",
+    "params": {
+      "self": "NPC object; +0x43 override flag, +0x22c party member index",
+      "forwarded": "forwarded untouched to the variant setter 0x005E7848"
+    },
+    "summary": "Picks the NPC's model variant: variant 3 when the override flag at +0x43 is set, otherwise variant 2 when the party member at +0x22c has bit 0x10 of +0xda set, else variant 1; the choice is applied through 0x005E7848.",
+    "confidence": 0.5,
+    "evidence": "The confirmed sibling Field_Actor_ApplyModelVariant (0x003E7660, no maybe_) has the identical body with only the id field changed (+0x200 vs +0x22c), and the caller is the named Field_Npc_UpdateModelFromTable - the NPC twin pattern. The three-way 1/2/3 choice is exactly what the sibling's confirmed name calls a model variant.",
+    "previous_name": "maybe_Field_Npc_ApplyModelVariant",
+    "previous_confidence": 0.45,
+    "change": "confirmed"
+  },
+  {
+    "address": "0x003EE7A8",
+    "name": "maybe_Ui_SmithMenu_CommitSelection",
+    "signature": "void maybe_Ui_SmithMenu_CommitSelection(UiSmithMenu* self, u32 controller)",
+    "params": {
+      "self": "smith menu; +0x11b4 controller object, +0x11c detail pane",
+      "controller": "controller passed on to the accessory reset"
+    },
+    "summary": "Applies the smith controller result: when the controller object at +0x11b4 reports a pending value at +0x1e18 it clears the flashing accessory and pops the detail pane at +0x11c.",
+    "confidence": 0.45,
+    "evidence": "The pane callee is the named Ui_SmithMenu_PopPaneDetail (0x006D8EC0) and the sibling 0x003EE794 installs this address as a vtable slot, so it is a controller-result handler of the smith menu. Calling that result a 'commit' is still an interpretation, and the other callee is only maybe_Model_ClearFlashingAccessory, so maybe_ stays.",
+    "previous_name": "maybe_Ui_SmithMenu_CommitSelection",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0040AC1C",
+    "name": "Model_Equip_GetBoneTransformDescriptor",
+    "signature": "int Model_Equip_GetBoneTransformDescriptor(void* modelEquip, u32 equipCategory, int index, u32 unused)",
+    "params": {
+      "modelEquip": "model-equip object; +0x65 character id (-1 = none)",
+      "equipCategory": "ItemRecord->u8_29 equip category 0..9",
+      "index": "sub-index for the multi-slot categories (6 and the default arm)"
+    },
+    "summary": "Returns the bone-transform descriptor for one equipment category: resolves the CharacterRecord through the data manager and 0x0063eb94, then returns the per-category sub-record (0x160/0x1b0 for category 0, 0x200, 0x250, 0x2a0, 0x2f0, 0x340, 0x368+index*0x28, 0x3b8, 0x3e0, 0x408) that holds the bone name and Euler angles the item model is attached with.",
+    "confidence": 0.55,
+    "evidence": "Corrected: the old name put this in the UI text-label subsystem, but FACTS.md and the caller both place it in Model_Equip - the only caller is the confident Model_Equip_AttachItemSlot (0x0040B7A8, 0.72), which calls it as 0x0040AC1C(modelEquip, itemRec->u8_29) and then builds a 3x4 matrix from the returned Euler angles, defaulting to bone \"N_ALL\". The body matches: it resolves the CharacterRecord with 0x0063EB94(dm, self->f_65) and returns record + a per-equip-category offset.",
+    "previous_name": "maybe_Ui_TextLabel_GetSlotDescriptor",
+    "previous_confidence": 0.42,
+    "change": "corrected"
+  },
+  {
+    "address": "0x0064A298",
+    "name": "maybe_Game_LookupDataRowById",
+    "signature": "int maybe_Game_LookupDataRowById(int owner)",
+    "params": {
+      "owner": "object whose +0x04 word is the row id (-1 = none)"
+    },
+    "summary": "Id-to-row lookup: returns 0 when the id at owner+4 is -1, otherwise fetches the game data manager and resolves that id through 0x0063f2f0.",
+    "confidence": 0.45,
+    "evidence": "The callee is the confident Game_GetDataManager, so 'resolve the id at owner+4 through the data manager' is certain and the old 'payout multiplier' reading is dead. Which table 0x0063f2f0 indexes is still unknown (it is a split symbol inside 0x0063E064), and the function has no callers, so the generic name and maybe_ stay.",
+    "previous_name": "maybe_Game_LookupDataRowById",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00412B6C",
+    "name": "maybe_Str_WStringInitFromLiteral",
+    "signature": "void maybe_Str_WStringInitFromLiteral(void* out, const unsigned short* text)",
+    "params": {
+      "out": "wide-string header; +0x00 capacity tag, +0x04 size",
+      "text": "source wide string measured by wcslen"
+    },
+    "summary": "Prologue of a wide-string temporary: writes the capacity tag 1 and the small-string size 3 into the header and then tail-calls the wide strlen helper 0x00100b74 to measure the source.",
+    "confidence": 0.4,
+    "evidence": "Only the prologue is recovered (the entry point has size 0 in decomp/functions_index.json), so the body stops at the wcslen tail call and the actual copy is not visible. The header words 1 and 3 look like a small-string capacity/size pair and the callers are string-assignment sites, but nothing proves the exact std::wstring layout, so maybe_ stays.",
+    "previous_name": "maybe_Str_WStringInitFromLiteral",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0041792C",
+    "name": "maybe_Container_FixedArrayCtor5",
+    "signature": "void maybe_Container_FixedArrayCtor5(Container* self)",
+    "params": {
+      "self": "container; two header words at +0x00/+0x04, inline array of five 2-byte entries at +0x08"
+    },
+    "summary": "Constructor of a small fixed container: clears the two header words and default-constructs the inline five-element array of 2-byte entries through std_ConstructArray with element ctor 0x005e94e0.",
+    "confidence": 0.45,
+    "evidence": "The body is a clean two-word clear plus std_ConstructArray(self+2, 0x005e94e0, 2, 5), and the only caller is the named Ui_PokerWindow_Ctor, which runs it on the member at +0x18 - so it is a sub-object constructor. The element type and the owner are still unknown, so the descriptive name and maybe_ stay.",
+    "previous_name": "maybe_Container_FixedArrayCtor5",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x005AF454",
+    "name": "maybe_Ui_Window_DispatchToChildPane",
+    "signature": "void maybe_Ui_Window_DispatchToChildPane(UiWindow* self, u32* slot, LayoutElement* child, u32 value)",
+    "params": {
+      "self": "window; +0x10 attached pane object",
+      "slot": "value slot; the word at +0x10 is forwarded",
+      "child": "layout element; +0x60c is temporarily set to the slot",
+      "value": "forwarded to the layout call"
+    },
+    "summary": "Forwards a value to a layout element when the attached pane is visible (bit 0 of f_44) and resolves to a material: publishes the slot at child+0x60c, calls 0x0053cd1c with the slot value, writes the result back and clears the publication.",
+    "confidence": 0.4,
+    "evidence": "The caller is the confident Ui_Window_UpdateChildren and the callees are named (Gfx_SpritePane_GetPrimaryMaterial, and 0x0053CD1C which is a split symbol inside Ui_LayoutText_BuildBlockLayoutQuads), so 'forward a value into the layout' is solid. 'Child pane' is still an interpretation of the f_44 visibility test, and the target is a layout-text quad builder rather than a pane, so maybe_ stays.",
+    "previous_name": "maybe_Ui_Window_DispatchToChildPane",
+    "previous_confidence": 0.4,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00418384",
+    "name": "maybe_Gfx_Sprite_UpdateOrientationFromLayout",
+    "signature": "void maybe_Gfx_Sprite_UpdateOrientationFromLayout(GfxSprite* sprite)",
+    "params": {
+      "sprite": "sprite; +0x99 packed s16 angle pair, +0x3c/+0x40 material sizes, +0x1c/+0x20/+0x24 computed transform, +0x44 flags"
+    },
+    "summary": "Recomputes a sprite's orientation: reads two packed 16-bit values from the linked material through 0x0065dbc8, converts the s16 angle pair in f_99 to floats, writes the angle, the height offset (value - 128.0f) * 0.5f and 0 into f_1c/f_20/f_24, and sets the transform-dirty bit 0x10 of f_44.",
+    "confidence": 0.45,
+    "evidence": "The caller is the confident Ui_MonsterBook_InitData and the maths is now readable: f_1c = (float)(s16)f_99, f_20 = (float)(s16)(f_99>>16) + (u16 - 128.0f) * 0.5f, f_24 = 0, then bit 0x10 of f_44 is set. The values come from the material (0x0065DBC8), not from a layout record, so the 'FromLayout' wording is still loose and maybe_ stays.",
+    "previous_name": "maybe_Gfx_Sprite_UpdateOrientationFromLayout",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x00418478",
+    "name": "maybe_Ui_TextWindow_LoadEffect",
+    "signature": "void maybe_Ui_TextWindow_LoadEffect(UiTextWindow* self, u32 arg2, code* callback)",
+    "params": {
+      "self": "window; +0x04 anim owner, +0x4c text clip, +0x50 effect clip",
+      "callback": "invoked first with the window and arg2"
+    },
+    "summary": "Loads the window's text and effect clips: calls the supplied callback, then resolves and loads the 'txt_1' clip into self+0x4c and the '_effect' clip into self+0x50, starting each clip through its vtable+0x54.",
+    "confidence": 0.35,
+    "evidence": "The two literals ('txt_1' at 0x00417BAC and '_effect' at 0x00417BBB) and the two Ui_AnimClip_Load calls are clear, but the body is damaged: the table index arrives in a lost register (unaff_r6) and the callback is invoked with a nonsense first argument (self >> 0xe). The only caller, Ui_MonsterBook_InitData, does not settle whether 'effect' means a visual effect or a pane group, so maybe_ stays at 0.35.",
+    "previous_name": "maybe_Ui_TextWindow_LoadEffect",
+    "previous_confidence": 0.35,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0041A678",
+    "name": "maybe_Ui_List_GetVisibleRowValue",
+    "signature": "int maybe_Ui_List_GetVisibleRowValue(UiList* self)",
+    "params": {
+      "self": "list; +0x38 row count, +0x38+0x2c cursor, +0x38+0x2e current row"
+    },
+    "summary": "Returns 0xff unless the list has room for its visible rows, in which case it seeks the list cursor to the first visible row with Ui_ListCursor_SeekToIndex and returns that row's first byte.",
+    "confidence": 0.45,
+    "evidence": "The seek callee is the named Ui_ListCursor_SeekToIndex (0x006E4DC8) and the callers are the named Ui_PanelGroup_Update and maybe_Ui_PanelGroup_Push, so 'read a value from the first visible row' is solid and the old GetScrollOffset wording is dead. What the returned byte means is still unknown, so maybe_ stays.",
+    "previous_name": "maybe_Ui_List_GetVisibleRowValue",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0041CFA4",
+    "name": "maybe_Ui_SetBusyFlagAndLeave",
+    "signature": "void maybe_Ui_SetBusyFlagAndLeave(UiContext* ctx, int condition, u32 arg3, u32 arg4)",
+    "params": {
+      "ctx": "UI context; +0x14 state byte",
+      "condition": "non-zero enables the flag write and is forwarded to 0x0029126c"
+    },
+    "summary": "UI helper: when the context has no state yet and the condition is non-zero it sets the u16 at UI-core+0x94 to 1 (the busy/locked flag), then always transfers control to the non-returning 0x0029126c with the context and condition.",
+    "confidence": 0.4,
+    "evidence": "The callers are the named Ui_DiveWindow_InitPanes and Ui_DiveWindow_HandleInputD and the callee is the named Ui_GetCore, so the UI subsystem is fixed and the old Os_Assert prefix is dead. What the non-returning 0x0029126c does is still unknown, and the flag is a plain u16 write at +0x94 rather than a bit, so maybe_ stays.",
+    "previous_name": "maybe_Ui_SetBusyFlagAndLeave",
+    "previous_confidence": 0.35,
+    "change": "kept_maybe"
+  },
+  {
+    "address": "0x0044D780",
+    "name": "maybe_Field_PathMover_OnEvent",
+    "signature": "void maybe_Field_PathMover_OnEvent(FieldPathMover* self, int eventId, uintptr_t arg3)",
+    "params": {
+      "self": "object; +0x2f0 sampled flag",
+      "eventId": "event id; 1 and 2 sample the global flag",
+      "arg3": "forwarded to the base anim-object handler"
+    },
+    "summary": "Event hook: on events 1 and 2 it samples the global riding/attached byte at (work+8)+0x44 into +0x2f0, then always forwards the event to the base anim-object handler.",
+    "confidence": 0.45,
+    "evidence": "The forwarding is certain - the callees are the named AnimObject_ForwardEvent, Ui_ResolveObjectHandle and Os_GetGameWork - and the sampled byte is the known (work+8)+0x44 field. 'PathMover' still comes only from the class vtable and there is no confident caller, so maybe_ stays.",
+    "previous_name": "maybe_Field_PathMover_OnEvent",
+    "previous_confidence": 0.45,
+    "change": "kept_maybe"
+  }
+]

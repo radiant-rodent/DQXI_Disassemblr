@@ -1,0 +1,1792 @@
+[
+ {
+  "address": "0x0011fb18",
+  "name": "maybe_Os_IpcSendCommand3D",
+  "signature": "u32 maybe_Os_IpcSendCommand3D(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Sends one SDK IPC request: builds header 0x003D0040 (command 0x3D, one normal parameter) plus the byte parameter in the thread-local IPC buffer at TPIDRURO+0x80, loads the service handle from the global at 0x7B0054 and executes svc 0x32 (SendSyncRequest). On success it returns the reply word the kernel leaves at TLS+0x84, otherwise the raw Result.",
+  "confidence": 0.45,
+  "evidence": "svc #0x32 = svcSendSyncRequest; TLS+0x80 command header (3DS IPC layout cmd<<16|normal<<6|translate); header 0x003D0040; handle from *(u32*)0x7B0054; caller 0x114728 passes a status byte and ignores the reply."
+ },
+ {
+  "address": "0x0011fb90",
+  "name": "maybe_Os_IpcSendCommand13",
+  "signature": "u32 maybe_Os_IpcSendCommand13(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Same checked IPC stub as 0x11FB18 but for header 0x00130040 (command 0x13, one normal parameter): writes the byte parameter into the TLS IPC buffer and issues svc 0x32, returning the TLS reply word.",
+  "confidence": 0.45,
+  "evidence": "identical instruction sequence to 0x11FB18 with header literal 0x00130040; caller 0x114728 sends 0 after reading the status bytes."
+ },
+ {
+  "address": "0x0011fbcc",
+  "name": "Math_ClampVectorToRing",
+  "signature": "int Math_ClampVectorToRing(u16* outX, u16* outY, int dx, int dy, int innerRadius, int outerRadius)",
+  "params": {
+   "param_1": "outX",
+   "param_2": "outY",
+   "param_3": "dx",
+   "param_4": "dy",
+   "param_5": "innerRadius",
+   "param_6": "outerRadius"
+  },
+  "summary": "Clamps a 2D offset into an annulus: computes length^2 = dx^2+dy^2, returns zero vectors when it is inside the inner radius, otherwise derives the integer square root with a bit-wise loop (0x11CD80 = unsigned division) and writes dx and dy scaled by (limit-inner)*128/sqrt to outX/outY, returning the remaining signed radial distance.",
+  "confidence": 0.6,
+  "evidence": "uses 0x11CD80 (__aeabi_uidiv) for the integer sqrt and the scaling divisions; fixed-point constants 0x4000 and 0x80; early-out when dx^2+dy^2 <= innerRadius^2; callers 0x112518 and 0x11E448."
+ },
+ {
+  "address": "0x0011fe34",
+  "name": "Mem_Pool_DestroyAllEntries",
+  "signature": "void Mem_Pool_DestroyAllEntries(MemPool* pool, u32 arg)",
+  "params": {
+   "param_1": "pool",
+   "param_2": "arg"
+  },
+  "summary": "Destroys every entry of a small-block pool: walks the intrusive list anchored at pool+4, destroys each element body (node-0x110) with the element destructor 0x123558, unlinks the node with 0x11FCBC and finally releases it with 0x123588. Used when a pool is torn down.",
+  "confidence": 0.55,
+  "evidence": "callers maybe_Mem_PoolInit (0x11ADAC, N_002) and the sound stream reset pair 0x541F10/0x541F1C; loop until the sentinel at pool+4; element base offset -0x44 words."
+ },
+ {
+  "address": "0x001200d8",
+  "name": "maybe_Gfx_CmdList_PushTextureRows",
+  "signature": "void maybe_Gfx_CmdList_PushTextureRows(u32 cmdWord, u32 count, const u32* src)",
+  "params": {
+   "param_1": "cmdWord",
+   "param_2": "count",
+   "param_3": "src"
+  },
+  "summary": "Appends raw texture rows to the GPU command list in chunks of at most 0x80 32-bit pixels: writes the first pixel, a header word built from the constant at 0x120268 plus size<<20 with 0x0F0000 and the caller's cmdWord, then the remaining pixels, advancing the global write pointer g_00120264. If the list would overflow it resets the pointer to the buffer end instead.",
+  "confidence": 0.42,
+  "evidence": "globals 0x120264 (current pointer) and 0x120268; header mask 0xf0000 and shift 0x100000; 0x11CD00 is a 64-byte block copy; loops in 0x80-pixel steps; callers 0x11BC44 and 0x6740E8/0x674E66 (GPU bring-up)."
+ },
+ {
+  "address": "0x0012033c",
+  "name": "maybe_Gfx_CmdList_ResetSlot",
+  "signature": "void maybe_Gfx_CmdList_ResetSlot(u32 index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Marks a GPU command-list slot empty: takes the command-list lock twice (0x12032C) around resolving the slot for `index` with 0x120368 and stores -1 into the 0x98-byte slot header.",
+  "confidence": 0.35,
+  "evidence": "lock helper 0x12032C called before and after; store 0xffffffff at (slot-0x98); only neighbours 0x1200D8/0x120368 in the same GX module."
+ },
+ {
+  "address": "0x001221c0",
+  "name": "maybe_Os_SvcCallChecked",
+  "signature": "u32 maybe_Os_SvcCallChecked(void)",
+  "params": {},
+  "summary": "Checked variant of a raw kernel call: invokes the svc wrapper 0x117AB8 and, when it returns a negative Result other than 'not found' (0xFFFFFFF9), reports it to the SDK error handler 0x11ED40 together with the call-site address; returns the Result unchanged.",
+  "confidence": 0.45,
+  "evidence": "calls 0x117AB8 (svc wrapper that writes a 0x90000 header); compares error class -7; error path 0x11ED40(result, 0x1221F4); same shape as 0x1228AC and 0x123750."
+ },
+ {
+  "address": "0x00122484",
+  "name": "maybe_Os_PerfSample_Loop",
+  "signature": "u32 maybe_Os_PerfSample_Loop(void)",
+  "params": {},
+  "summary": "One sampling pass of the SDK timing/profiling loop: for each of g_122638->count entries it starts the counter for the per-entry byte kept in the table at 0x7B0080, sleeps and accumulates the elapsed microseconds through 0x1237A0, stopping early on the 0x3FE marker; finally reads 0x1239F8 and sets the state word g_122640 to 3 or 0.",
+  "confidence": 0.32,
+  "evidence": "constant 1000000 (1e6 us) at 0x12263C, table 0x7B0080, state bytes 0x7B00E0, calls 0x123750/0x1237A0/0x1239F8, state values 2/3/0."
+ },
+ {
+  "address": "0x00122650",
+  "name": "maybe_Os_RecordReadWithRetry",
+  "signature": "int maybe_Os_RecordReadWithRetry(u32 dst, u32* outLen, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "outLen",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Reads one SDK record with a three-attempt retry: queries the record provider for command 0x45 (vtable call at 0x122894), accepts only a reply whose first byte equals 0x11, then copies the payload to `dst` with 0x116A14 and returns its length through outLen. Any error leaves *outLen = 0.",
+  "confidence": 0.3,
+  "evidence": "func_00123BAC(6,0x45) opens the query, retry loop i<3, reply tag byte 0x11, payload copy 0x116A14, event 0x122C6C/0x122440; only caller 0x1223B0."
+ },
+ {
+  "address": "0x001228ac",
+  "name": "maybe_Os_SvcCallCheckedAlt",
+  "signature": "u32 maybe_Os_SvcCallCheckedAlt(void)",
+  "params": {},
+  "summary": "Conditional arm of the checked-svc macro: picks between the two raw svc wrappers 0x123C54 and 0x123D68 depending on the incoming condition flags (carry/zero), then applies the same 'ignore 0xFFFFFFF9, otherwise 0x11ED40' error policy as 0x1221C0.",
+  "confidence": 0.4,
+  "evidence": "in_CY/in_ZR condition inputs; calls 0x123C54 or 0x123D68; compares 0xfffffff9 and reports through 0x11ED40."
+ },
+ {
+  "address": "0x00123360",
+  "name": "Os_MessageQueue_Push",
+  "signature": "u32 Os_MessageQueue_Push(OsMessageQueue* queue, const OsMessage* msg)",
+  "params": {
+   "param_1": "queue",
+   "param_2": "msg"
+  },
+  "summary": "Lock-free push of an eight-word (0x20-byte) message into a 15-slot ring buffer: copies the payload to base + 0x20 + index*0x20, issues a data-synchronisation barrier and increments the 16-bit index field (bits 8..15, modulo 15) with LDREX/STREX. When the queue goes from empty to non-empty it wakes the consumer through 0x11F730 and 0x12412C. Rejects a null queue or a kind byte >= 0xF.",
+  "confidence": 0.6,
+  "evidence": "LDREX/STREX pair on *queue, 16-bit index field at bits 8..15 wrapping modulo 15 (magic 0x88888889), kind byte at +1 must be below 0xF, 0x20-byte element with 8 words, sentinel loop, empty-to-full wake path 0x11F730 + 0x12412C, two SDK error literals on the reject paths."
+ },
+ {
+  "address": "0x00123750",
+  "name": "maybe_Os_IpcSetByteCommand06",
+  "signature": "u32 maybe_Os_IpcSetByteCommand06(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Forwards one byte to the IPC stub for command 0x06 (0x124C64), then clears the pending word at [g_12379C+4]; uses the same checked-error pattern as its neighbours and is called once per profiler iteration from 0x122484.",
+  "confidence": 0.4,
+  "evidence": "calls 0x124C64 whose TLS header is 0x00060040; stores 0 at 0x7B2D30; caller 0x122484 passes *(u8*)(entry+1)."
+ },
+ {
+  "address": "0x001237a0",
+  "name": "maybe_Os_Timer_ConvertTicks",
+  "signature": "void maybe_Os_Timer_ConvertTicks(s64* outMs, int stem, s64 ticksA, int stemB, u32 perSecond, int scale)",
+  "params": {
+   "param_1": "outMs",
+   "param_2": "stem",
+   "param_3": "ticksA",
+   "param_4": "stemB",
+   "param_5": "perSecond",
+   "param_6": "scale"
+  },
+  "summary": "Converts two 64-bit tick stamps into milliseconds: subtracts the stamps, scales by a calibration factor (float constants 0.5 and 1.0 at 0x1239E4/0x1239EC), converts through 0x124ACC and rounds with 0x125034, then stores value*1000 into outMs.",
+  "confidence": 0.35,
+  "evidence": "64-bit magic constant 0x20C49BA5E353F7CF (multiplicative inverse of 1000) as a literal, float constants 0.5/1.0, final multiply by 1000; sole caller 0x122484."
+ },
+ {
+  "address": "0x00123b68",
+  "name": "maybe_Os_Timer_ReadCounter",
+  "signature": "void maybe_Os_Timer_ReadCounter(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Reads the two-word timer state through 0x124CA0 into a stack temporary, closes the previously stored handle with svc 0x23 when present, then writes the new value to *out.",
+  "confidence": 0.4,
+  "evidence": "local temporary passed to 0x124CA0; software_interrupt(0x23) = svcCloseHandle; error routed to 0x11ED40; caller 0x122484."
+ },
+ {
+  "address": "0x0012412c",
+  "name": "maybe_Os_IpcSendCommand0C",
+  "signature": "u32 maybe_Os_IpcSendCommand0C(u32* handleSlot)",
+  "params": {
+   "param_1": "handleSlot"
+  },
+  "summary": "Sends the parameterless IPC command 0x0C (TLS header 0x000C0000) using the handle held at *handleSlot and returns the reply word from TLS+0x84. This is the wake-up call issued after a message queue push.",
+  "confidence": 0.45,
+  "evidence": "header 0x000C0000; ldr r0,[r0] loads the handle; svc 0x32; called with no useful argument from 0x123360 after 0x11F730."
+ },
+ {
+  "address": "0x00124c64",
+  "name": "maybe_Os_IpcSendCommand06",
+  "signature": "u32 maybe_Os_IpcSendCommand06(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "IPC stub for command 0x06 (TLS header 0x00060040) with a single byte parameter: stores the byte in the thread-local IPC buffer, sends svc 0x32 and returns the reply word from TLS+0x84.",
+  "confidence": 0.45,
+  "evidence": "header 0x00060040; svc 0x32; handle from *(u32*)0x7B2D2C; called by 0x123750."
+ },
+ {
+  "address": "0x00124ca0",
+  "name": "maybe_Os_IpcQueryCommand0C",
+  "signature": "int maybe_Os_IpcQueryCommand0C(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Sends the parameterless IPC command 0x0C with the handle stored at 0x7B2D2C, copies the second reply word (TLS+0x0C) to *out and returns the first reply word (TLS+0x04). The two-word reply is the value/handle pair the timer code at 0x123B68 stores.",
+  "confidence": 0.45,
+  "evidence": "header 0x000C0000; reply read from TLS+0x0C and TLS+0x04; handle from *(u32*)0x7B2D2C; caller 0x123B68 (timer read)."
+ },
+ {
+  "address": "0x00155380",
+  "name": "maybe_Pack_ParseL2Header",
+  "signature": "u32 maybe_Pack_ParseL2Header(const char* data, u32* outKey, s16* outLength)",
+  "params": {
+   "param_1": "data",
+   "param_2": "outKey",
+   "param_3": "outLength"
+  },
+  "summary": "Validates and decodes a 12-byte record header that starts with the ASCII magic 'L','2': reassembles the mixed byte order of the 32-bit key words, re-derives the stored 16-bit checksum with the constant 0xAAAA and, on a match, writes the key pair to outKey and the byte-swapped length+1 to outLength, returning 1.",
+  "confidence": 0.45,
+  "evidence": "inline compare with 'L' and '2', XOR checksum against 0xAAAA, byte swaps on both the key and the length, single caller 0x5EC700."
+ },
+ {
+  "address": "0x0017c570",
+  "name": "maybe_Ui_Object_DtorPooledA",
+  "signature": "void maybe_Ui_Object_DtorPooledA(UiObject* self, u32 vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Destructor of a pooled UI object: installs the vtable, drains the intrusive child list at self+0x20 calling each node's virtual destructor (vtable+4), resets both list ends, releases the optional child at self+0x88 through vtable+0xC, disposes the inline string and returns the 8-byte pool slot at 0x7C64C + (index & 0x3FF)*8 to the free list.",
+  "confidence": 0.4,
+  "evidence": "pool table 0x17C64C with (*(u16*)(self+4) & 0x3FF)*8 indexing, string dispose 0x10EC00/0x10EC14, block free 0x10F6CC, child vtable slots +4 and +0xC."
+ },
+ {
+  "address": "0x0017c9fc",
+  "name": "Sound_PlayMenuSeByMode",
+  "signature": "void Sound_PlayMenuSeByMode(u8* initFlag, u32 mode, u32 param)",
+  "params": {
+   "param_1": "initFlag",
+   "param_2": "mode",
+   "param_3": "param"
+  },
+  "summary": "Lazily creates the shared sound-work singleton (0x10B2C4 constructor, 0x1EB0 bytes) and plays a UI sound effect selected by `mode`: 0 -> 0x21, 1 -> 0x23, 2 -> 0x22, 5 -> stop 0x21, 6 -> stop 0x22. Other modes play nothing.",
+  "confidence": 0.55,
+  "evidence": "switch on arg2 mapping to Sound_PlaySeById ids 0x21/0x22/0x23 (0x1EBC68, named by N_042), lazy ctor pattern, guard byte *(u8*)(work+4) bit 1."
+ },
+ {
+  "address": "0x00181848",
+  "name": "maybe_Sound_PlaySeOnceId9",
+  "signature": "void maybe_Sound_PlaySeOnceId9(u8* initFlag)",
+  "params": {
+   "param_1": "initFlag"
+  },
+  "summary": "Lazily creates the shared sound-work singleton (0x10B2C4, 0x1EB0 bytes) on first call and then plays sound effect id 9 once.",
+  "confidence": 0.45,
+  "evidence": "Sound_PlaySeById(work, 9, 0, 0); identical lazy-init shape to 0x17C9FC; no other callers."
+ },
+ {
+  "address": "0x0018fd04",
+  "name": "maybe_Ui_Part_ConfirmWithSe1",
+  "signature": "void maybe_Ui_Part_ConfirmWithSe1(UiPart* self, int arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg"
+  },
+  "summary": "Wrapper used by the skill-panel handlers: when the part has not been initialised yet (f_14 == 0) and `arg` is non-zero, it lazily creates the sound work and plays SE 1; in all cases it ends by tail-calling the common handler 0x29126C(self, arg).",
+  "confidence": 0.45,
+  "evidence": "callers Ui_JewelShopWindow_InitPanes, Ui_SkillPanel_OnConfirm/OnCursorMove/OnClose/OnPageInput, Ui_MemoriesWindow_UpdateScene; SE 1; tail call 0x29126C."
+ },
+ {
+  "address": "0x0019adc8",
+  "name": "maybe_Ui_Window_AdvancePageState",
+  "signature": "void maybe_Ui_Window_AdvancePageState(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One UI-window update step: refreshes the layout widget at self+0x1A8 and then, while the page counter f_1164 is below 1, lazily creates two shared singletons and either pops the page panes (0x6D7454 / 0x6D7630) or decrements the repeat counter f_1168 (falling back to 3 when the shared window flag is set).",
+  "confidence": 0.4,
+  "evidence": "calls Ui_Widget_Update (0x1DAD58, N_042) and Ui_Window_PopPane (0x6D7454/0x6D7630); page counters f_1164/f_1168; lazy singletons 0x1EE220."
+ },
+ {
+  "address": "0x001b6de4",
+  "name": "maybe_Gfx_Movie_IsPlayable",
+  "signature": "u32 maybe_Gfx_Movie_IsPlayable(MoviePlayer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns 1 while a movie/clip is in a playable state: true when f_1054 is set, otherwise caches the mode byte f_ABC into f_104C and answers 1 only for modes 1 and 7.",
+  "confidence": 0.4,
+  "evidence": "mode byte f_ABC compared against 1 and 7, cached into f_104C; callers 0x1DB660 and 0x1DBB74 (movie state machine)."
+ },
+ {
+  "address": "0x001b70e8",
+  "name": "maybe_Gfx_Movie_UpdatePlayback",
+  "signature": "int maybe_Gfx_Movie_UpdatePlayback(MoviePlayer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame movie/animation update: advances the interpolation counter f_1040 against f_1044, applies the playback rate f_1048 (optionally scaled by the shared 0x630688 speed), drives the movie thread through 0x4FC65C/0x4FC66C/0x4FE0A4 and compares the elapsed time with f_1028/f_102C to set the finished flag f_1056.",
+  "confidence": 0.45,
+  "evidence": "callees 0x4FC65C/0x4FC66C/0x4FE0A4/0x4FE88C/0x4FE9D4 (movie-thread family named by N_033), fields f_1040..f_1057, return value is f_1050."
+ },
+ {
+  "address": "0x001b7514",
+  "name": "maybe_Gfx_MoviePlayer_Init",
+  "signature": "int maybe_Gfx_MoviePlayer_Init(u32 a1, u32 a2, u32 a3, int flag)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "flag"
+  },
+  "summary": "Constructs the movie-player work object: clears the roughly 0x9C8-byte state block, initialises the stream and buffer channels (0x500408, 0x5006F0, 0x500938, 0x500BF4, 0x5012B4), chooses the buffer size with a power-of-two calculation and registers the four Gfx layer states; returns the object base (this-0xAB0).",
+  "confidence": 0.45,
+  "evidence": "field writes up to f_9E9, object base arithmetic this-0xAB0, callees named by N_007 (Gfx_StreamSlot_Init, Gfx_BufferChannel_Init), layer-state calls 0x1F336C..0x1F34C8 (N_032), caller Gfx_InitRenderDevice."
+ },
+ {
+  "address": "0x001b9ef0",
+  "name": "Anim_Sequence_ResetAndOpen",
+  "signature": "void Anim_Sequence_ResetAndOpen(AnimSequencePlayer* self, int arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg"
+  },
+  "summary": "Releases the four effect/part handle slots (f_94/f_98 for each of four 8-byte entries) and then replays two named sequences through the actor animation table: \"opend_line\" with argument 0 and \"reset\" with the current frame count f_58->f_AC.",
+  "confidence": 0.55,
+  "evidence": "inline strings \"opend_line\" at 0x1B9F94 and \"reset\" at 0x1B9FA0, played through 0x1BA12C(self, name, arg) named Ui_AttachLayoutAnimationEx by N_010; guard f_B4 and loop count f_58."
+ },
+ {
+  "address": "0x001bb798",
+  "name": "Ui_List_ScrollOrPopPane",
+  "signature": "void Ui_List_ScrollOrPopPane(UiList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Offers the input to the vertical scroller (0x2C5808 returns 1 when it consumed the scroll); if the list did not consume it, pops the owning sub-pane (0x37E600).",
+  "confidence": 0.5,
+  "evidence": "return value of 0x2C5808 decides whether 0x37E600 (Ui_Window_PopSubPane, N_015) runs; self+0x38 is the scroll state."
+ },
+ {
+  "address": "0x001c3958",
+  "name": "Ui_List_UpdateCursorAndScroll",
+  "signature": "void Ui_List_UpdateCursorAndScroll(UiList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame list input update: forwards the input to the child widget through vtable+0x2C, then while f_194 is clear runs cursor auto-repeat (0x220364 of N_012) and the vertical scroller (0x2C5808), latching f_194 at the end.",
+  "confidence": 0.5,
+  "evidence": "caller-less vtable method; calls Ui_Cursor_ApplyRepeat (0x220364) and 0x2C5808; flag f_194; vtable call *(self->f_98->f_2C)."
+ },
+ {
+  "address": "0x001c5c14",
+  "name": "maybe_Ui_System_Shutdown",
+  "signature": "void maybe_Ui_System_Shutdown(u8* createdFlag)",
+  "params": {
+   "param_1": "createdFlag"
+  },
+  "summary": "Tears down the UI support objects in reverse creation order: releases the 0x28-byte task object, shuts down the sound system (0x1EE09C), the icon/texture cache (0x383EC8) and the string work; each block runs only while its 'created' flag byte is still non-zero.",
+  "confidence": 0.45,
+  "evidence": "four guarded lazy blocks with sizes 0x28/0x80/0x37C, callees Sound_System_Teardown (0x542580) and icon-cache 0x383EC8; paired with the init at 0x1C5DD8."
+ },
+ {
+  "address": "0x001c5dd8",
+  "name": "Ui_Subsystem_Init",
+  "signature": "void Ui_Subsystem_Init(void)",
+  "params": {},
+  "summary": "One-time UI subsystem boot: creates the 0x37C-byte icon work, binds the icon texture set (0x383764), creates the sound work (0x1EB880), registers the SE bank with id 0xE (0x1EC504) and initialises the interface work; the pattern repeats a lazy-create block per subsystem.",
+  "confidence": 0.55,
+  "evidence": "calls Ui_LoadIconTextures (0x383764, N_004), Sound_InitSystem (0x1EB880, N_002), 0x1EC9A8/0x1EC504 with 0xE; allocation sizes 0x37C/0x80/0x28."
+ },
+ {
+  "address": "0x001c60c0",
+  "name": "maybe_Ui_System_Update",
+  "signature": "void maybe_Ui_System_Update(void)",
+  "params": {},
+  "summary": "Per-frame UI system tick: pops pending panes through 0x383DAC, then, if the shared interface object has both a non-zero field at +0xC and a set mode byte at +0x1C, advances it with 0x1DBB74.",
+  "confidence": 0.45,
+  "evidence": "calls 0x383DAC then conditional 0x1DBB74 on a lazily created 0x28-byte interface object; same object family as 0x1C5DD8."
+ },
+ {
+  "address": "0x001c635c",
+  "name": "maybe_Ui_Object_DtorStringAndLists",
+  "signature": "void maybe_Ui_Object_DtorStringAndLists(UiObject* self, u32 vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Destructor of a pooled UI object that owns an inline string plus two intrusive lists: installs the vtable, disposes the string at self+0x1C, unlinks both list heads (self+0x8/self+0x10 and self+0x14/self+0x18) and frees the block with 0x10F6CC.",
+  "confidence": 0.45,
+  "evidence": "vtable literal g_001C63BC, string flag byte at self+0xB, two list-head pairs at words 2/3 and 5/6, free 0x10F6CC."
+ },
+ {
+  "address": "0x001c6540",
+  "name": "maybe_Ui_SoundQueue_PopAndPlay",
+  "signature": "void maybe_Ui_SoundQueue_PopAndPlay(SoundQueue* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Pops one 16-bit command from the head of the sound queue (memmoving the remaining words over it), then plays the low byte of the command as an SE (0x1F0BE4) and, when the high byte is non-zero, advances the secondary sound work (0x1EE018).",
+  "confidence": 0.45,
+  "evidence": "queue head/end at self+4/self+8, 16-bit element, 0x1F0BE4(seId), high-byte guard, 0x1EE018."
+ },
+ {
+  "address": "0x001c70b4",
+  "name": "maybe_Ui_Object_DtorStringOnly",
+  "signature": "void maybe_Ui_Object_DtorStringOnly(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Minimal destructor of a pooled object: disposes the inline string at self+0x10 when the flag at self+0x14 is set, then frees the block with 0x10F6CC.",
+  "confidence": 0.45,
+  "evidence": "same string-dispose idiom 0x10EC00/0x10EC14, free 0x10F6CC, no vtable store."
+ },
+ {
+  "address": "0x001d0134",
+  "name": "maybe_Os_SyncObject_Init",
+  "signature": "void maybe_Os_SyncObject_Init(OsSync* self, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "flags"
+  },
+  "summary": "Initialises a synchronisation object at self: stores the flags, installs the embedded list head at self+0x44, then calls the SDK object-init helper 0x10EAB0 with the stack pointer, size 0x1000, alignment 0x10 and the special permission word 0xFFFFFFFE.",
+  "confidence": 0.4,
+  "evidence": "call 0x10EAB0(self, 0x1D0170(), 0x1000, 0x10, 0xfffffffe); embedded list at self+0x44; same shape as 0x1D0378."
+ },
+ {
+  "address": "0x001d0218",
+  "name": "maybe_Fs_Request_Build",
+  "signature": "void maybe_Fs_Request_Build(u64* out, FsRequest* req, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "out",
+   "param_2": "req",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Builds an async file request from the two key fields f_1C/f_20/f_24 plus the caller's flags: fills a 0x655xxx request block, calls the low-level open (0x502490, 0x503298) and returns the resulting 64-bit cookie in *out.",
+  "confidence": 0.45,
+  "evidence": "request descriptors 0x502490/0x503298, poll 0x655398, DMA/cache 0x6BA35C/0x6BA4AC, structure fields f_1C/f_20/f_24; callers 0x2EB658 and 0x408D38 (file job state machines)."
+ },
+ {
+  "address": "0x001d033c",
+  "name": "maybe_Fs_Request_Prepare",
+  "signature": "void maybe_Fs_Request_Prepare(u32 handle, u32 flags)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "flags"
+  },
+  "summary": "Prepares a file-name based request: initialises the temporary string block (0x51CBF8), stores the handle, then runs the 0x51BA34/0x51CC68 helpers to package the path for the read.",
+  "confidence": 0.4,
+  "evidence": "calls 0x51CBF8, 0x51BA34, 0x51CCF8, 0x51CD28, 0x51CC68 on a 0xFA0-byte stack buffer; callers 0x2EB658/0x408D38/0x32F5BC."
+ },
+ {
+  "address": "0x001d0378",
+  "name": "maybe_Fs_AsyncIo_Register",
+  "signature": "bool maybe_Fs_AsyncIo_Register(FsAsyncIo* io)",
+  "params": {
+   "param_1": "io"
+  },
+  "summary": "Reserves an async-IO slot: checks the free-slot bitmap with 0x51BA24 and, when free, marks the byte in the g_1D03CC slot table, installs the embedded list head and initialises the sync object (0x10EAB0 with the same 0x1000/0x10 parameters). Returns true when the slot was obtained.",
+  "confidence": 0.45,
+  "evidence": "slot byte table 0x1D03CC indexed by the object pointer delta, 0x1D0170 stack query, 0x10EAB0 init; caller 0x2EB658."
+ },
+ {
+  "address": "0x001d6d48",
+  "name": "maybe_Ui_Object_DtorPooledB",
+  "signature": "void maybe_Ui_Object_DtorPooledB(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Pooled-object destructor: installs the vtable, releases the child at word 0xB through vtable+4, destroys the child at word 0xA through vtable+0xC, disposes the inline string and clears the object's entry in the 8-byte pool table at 0x1D6DE8.",
+  "confidence": 0.4,
+  "evidence": "pool table g_001D6DE8 with the (*(u16*)(self+4) & 0x3FF)*8 index, string dispose idiom, free 0x10F6CC."
+ },
+ {
+  "address": "0x001db660",
+  "name": "maybe_Gfx_Movie_IsWaiting",
+  "signature": "u32 maybe_Gfx_Movie_IsWaiting(MovieCtrl* self, u32 arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg"
+  },
+  "summary": "Returns 1 when the movie controller has already latched its end flag (f_1F) or when the referenced player reports a playable state through 0x1B6DE4; the state machine at 0x1DBB74 uses it to decide whether to stop.",
+  "confidence": 0.4,
+  "evidence": "flag f_1F, call 0x1B6DE4(arg2), returns 0/1; caller 0x1DBB74."
+ },
+ {
+  "address": "0x001dbb74",
+  "name": "maybe_Gfx_Movie_UpdateStateMachine",
+  "signature": "void maybe_Gfx_Movie_UpdateStateMachine(MovieCtrl* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the movie controller state machine: on f_1C plus a pending trigger it asks 0x1B6DE4 whether playback may start, calls 0x1B7340 to launch it and sets f_1F; then runs 0x1B70E8 and, if 0x62AFCC reports completion, clears the pending flags (f_1C/f_20) or latches f_1D.",
+  "confidence": 0.45,
+  "evidence": "flags f_1C..f_20, calls 0x1B6DE4/0x1B7340/0x1B70E8/0x62AFCC; caller 0x1C60C0."
+ },
+ {
+  "address": "0x001dbffc",
+  "name": "maybe_Gfx_MoviePlayer_Dtor",
+  "signature": "void maybe_Gfx_MoviePlayer_Dtor(MoviePlayer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the movie-player object: installs the vtable, invalidates the slot field at word 0x113, releases the owned block at word 0x115, then destroys the two sub-objects at words 4 and 5 (0x515058/0x5099F8) and frees the object.",
+  "confidence": 0.45,
+  "evidence": "vtable literal, arg1[0x113] = -1, 0x515058/0x5099F8 sub-destructors, 0x10F69C/0x10F6CC frees."
+ },
+ {
+  "address": "0x001e3c74",
+  "name": "maybe_Sound_PlaySeWithWorkInit",
+  "signature": "void maybe_Sound_PlaySeWithWorkInit(u8* initFlag, u32 seId)",
+  "params": {
+   "param_1": "initFlag",
+   "param_2": "seId"
+  },
+  "summary": "Lazily creates the shared sound-work singleton and plays the sound effect passed in `seId`; the generic form of the SE-once helpers (0x181848 and friends).",
+  "confidence": 0.45,
+  "evidence": "Sound_PlaySeById(work, arg2, 0, 0) with the 0x1EB0-byte lazy singleton; no callers in readable C (vtable/bound)."
+ },
+ {
+  "address": "0x001e8e0c",
+  "name": "maybe_Effect_List_DestroyAll",
+  "signature": "void maybe_Effect_List_DestroyAll(EffectList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destroys a tree/map of effect entries: iterates the red-black tree at f_C (iterator helpers 0x115358/0x115390), frees every 0x10-byte entry body, then destroys the tree object itself; finally, if the active-effect byte at self+5 is not -1, removes that effect (0x3603F0) and clears the flag before calling 0x5634E0.",
+  "confidence": 0.45,
+  "evidence": "tree iterator helpers 0x115358/0x115390, string-free idiom per node, 0x3603F0 effect removal, 0x5634E0; callers 0x30BF90 and Container_Vector_PushBack."
+ },
+ {
+  "address": "0x001ee09c",
+  "name": "Sound_System_Teardown",
+  "signature": "void Sound_System_Teardown(SoundSystem* self, int arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg"
+  },
+  "summary": "Shuts down the sound system when the 'active' bit (self+4 & 1) is set: releases the effect list at f_1A9C, the 0x14-byte track array at f_7C, the voice at f_78, stops the stream (0x542580 Sound_System_Teardown of N_034), clears the global 0x1EE21C and frees the owned buffer at f_14.",
+  "confidence": 0.55,
+  "evidence": "calls 0x542580 (named Sound_System_Shutdown by N_034) and 0x54D868; clears f_1A9C..f_1AAC and f_78..f_AC; called from the UI teardown 0x1C5C14."
+ },
+ {
+  "address": "0x001f0340",
+  "name": "maybe_Gfx_PostEffect_ApplyPair",
+  "signature": "void maybe_Gfx_PostEffect_ApplyPair(PostEffectCtx* self, u32 chain, GfxCmdList* cmd, GfxCmdEntry* entry)",
+  "params": {
+   "param_1": "self",
+   "param_2": "chain",
+   "param_3": "cmd",
+   "param_4": "entry"
+  },
+  "summary": "Applies the two post-processing passes stored at f_34 and f_38 to a GPU command list: brackets the inner pass with 0x53CDE0/0x53CD1C, saves and restores the output target byte entry->f_B0, and emits the outer pass when present.",
+  "confidence": 0.45,
+  "evidence": "guards (f_34->f_44 & 1) and f_38, 0x53CD1C/0x53CDE0 apply helpers, cmd->f_183 scratch slot, target byte f_B0; callers 0x615818/0x616DB4."
+ },
+ {
+  "address": "0x001f0510",
+  "name": "maybe_Gfx_PostEffect_ApplySlot50",
+  "signature": "void maybe_Gfx_PostEffect_ApplySlot50(PostEffectCtx* self, u32 chain, GfxCmdList* cmd)",
+  "params": {
+   "param_1": "self",
+   "param_2": "chain",
+   "param_3": "cmd"
+  },
+  "summary": "Applies the single post-processing pass stored at f_50 when its enable bit is set, using the command-list scratch slot f_60C.",
+  "confidence": 0.4,
+  "evidence": "guard (f_50->f_44 & 1), 0x53CD1C, scratch f_60C; callers 0x615818/0x616DB4."
+ },
+ {
+  "address": "0x001f0554",
+  "name": "maybe_Gfx_PostEffect_ApplySlot3C",
+  "signature": "void maybe_Gfx_PostEffect_ApplySlot3C(PostEffectCtx* self, u32 chain, GfxCmdList* cmd)",
+  "params": {
+   "param_1": "self",
+   "param_2": "chain",
+   "param_3": "cmd"
+  },
+  "summary": "Applies the single post-processing pass stored at f_3C when its enable bit is set, using the command-list scratch slot f_60C.",
+  "confidence": 0.4,
+  "evidence": "guard (f_3C->f_44 & 1), 0x53CD1C, scratch f_60C; same shape as 0x1F0510."
+ },
+ {
+  "address": "0x001f0598",
+  "name": "maybe_Gfx_PostEffect_ApplyFourSlots",
+  "signature": "void maybe_Gfx_PostEffect_ApplyFourSlots(PostEffectCtx* self, u32 chain, GfxCmdList* cmd, u32 arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "chain",
+   "param_3": "cmd",
+   "param_4": "arg"
+  },
+  "summary": "Applies up to four post-processing passes (slots f_40, f_44, f_48, f_4C) in order when each one's enable bit is set, all through the command-list scratch slot f_60C.",
+  "confidence": 0.4,
+  "evidence": "four sequential guarded 0x53CD1C calls on f_40/f_44/f_48/f_4C; callers 0x615818/0x616DB4."
+ },
+ {
+  "address": "0x00212bfc",
+  "name": "maybe_Ui_Part_ConfirmWithSe1B",
+  "signature": "void maybe_Ui_Part_ConfirmWithSe1B(UiPart* self, int arg)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg"
+  },
+  "summary": "Second instance of the skill-panel confirm wrapper: same logic as 0x18FD04 (lazy sound work, SE 1 on the first confirmed call, tail call 0x29126C) but with a different singleton set, because it is compiled for another window class.",
+  "confidence": 0.45,
+  "evidence": "byte-identical body to 0x18FD04 with different globals 0x212CD4..0x212CE4; caller 0x37B224."
+ },
+ {
+  "address": "0x0021677c",
+  "name": "maybe_Ui_Window_UpdateCursor",
+  "signature": "u32 maybe_Ui_Window_UpdateCursor(UiWindow* self, u32 a2, u32 a3, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "mode"
+  },
+  "summary": "Menu-window cursor update: refreshes the child widget (0x220364), queries the attached list object through three vtable slots (+8/+C/+10) and stores the clamped index into f_7C, then walks up to three 0xC-byte entries looking for a matching cursor cell (0x66BDE8) and finally notifies the layout (0x17E2DC).",
+  "confidence": 0.35,
+  "evidence": "vtable slots +8/+C/+10 on f_1C, f_7C index store, 3-entry loop with 0xC stride, 0x66BDE8/0x17E2DC; caller 0x626BC8."
+ },
+ {
+  "address": "0x00222858",
+  "name": "Model_Preview_ApplyParts",
+  "signature": "u32 Model_Preview_ApplyParts(ModelPreview* self, u32 partSet)",
+  "params": {
+   "param_1": "self",
+   "param_2": "partSet"
+  },
+  "summary": "Applies a character model's part set to the preview actor: resolves the part name with 0x633E24, binds it (0x3BEFA4), then toggles the cape/face-off bits at f_554 according to the part flags and updates the part count, returning 1 on success.",
+  "confidence": 0.5,
+  "evidence": "calls Actor_ModelHasCapePart (0x62B620) and Actor_ModelHasFaceOffPart (0x62B69C) from N_074, Model_BindIndexedResource (0x3BEFA4) from N_004, bits 0x2 in f_554; caller maybe_Ui_SmithMenu_UpdatePageLabel."
+ },
+ {
+  "address": "0x00222a38",
+  "name": "Model_Preview_BindResource",
+  "signature": "u32 Model_Preview_BindResource(ModelPreview* self, int resourceId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "resourceId"
+  },
+  "summary": "Binds one model resource to the preview actor: only for window states 1/2 with an attached part object, resolves the resource name (0x633E24) and binds it through Model_BindSingleResource (0x3BF200), returning 1 when the resource existed.",
+  "confidence": 0.5,
+  "evidence": "caller Field_Actor_PlayTalkMotionFromTable (0x5F5B94, N_073); Model_BindSingleResource 0x3BF200; state byte f_5C must be 1 or 2."
+ },
+ {
+  "address": "0x00223cbc",
+  "name": "maybe_Actor_OnUpdateTick",
+  "signature": "u32 maybe_Actor_OnUpdateTick(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Small update hook: when the actor has a valid model slot at word 0x56 and 0x641960 reports that model as ready, it calls the actor's virtual update (vtable+8) and always returns 1.",
+  "confidence": 0.35,
+  "evidence": "arg1[0x56] model pointer, 0x641960 predicate, vtable+8 dispatch, constant return 1."
+ },
+ {
+  "address": "0x00224394",
+  "name": "Actor_Model_ApplyByNameWithParts",
+  "signature": "u32 Actor_Model_ApplyByNameWithParts(ActorModel* self, u32 name, int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name",
+   "param_3": "flags"
+  },
+  "summary": "Applies a named model set to an actor: builds the model name into a local buffer (0x11142C/0x100990), looks the entry up (0x641738) and binds it, then sets the swing/cape/face-off part flags from the model's part table and updates the related effect/parts. Returns 1 on success.",
+  "confidence": 0.55,
+  "evidence": "caller Actor_ApplyModelSetByName (0x220B20, N_024); callees Actor_ModelHasSwingOffPart/CapePart/FaceOffPart (0x62B5A0/0x62B620/0x62B69C, N_074), Model_FindEntryById 0x641738 (N_008), Script_GetIntTable2/3 (0x194300/0x19434C)."
+ },
+ {
+  "address": "0x00240778",
+  "name": "maybe_Ui_Part_PlaySe50WhenThrottled",
+  "signature": "void maybe_Ui_Part_PlaySe50WhenThrottled(UiPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Update hook for a timed UI part: forwards to the child object (vtable+0x2C) and, while the part is active (f_1C4) and 0x649BFC reports the timer still running and 0x240894 is below f_18C, plays SE 0x32 once and clears f_1C4.",
+  "confidence": 0.4,
+  "evidence": "SE id 0x32 via Sound_PlaySeById, guard f_1C4, timer predicate 0x649BFC, global threshold 0x240894."
+ },
+ {
+  "address": "0x0024870c",
+  "name": "Save_LoadTask_Update",
+  "signature": "void Save_LoadTask_Update(SaveTask* task)",
+  "params": {
+   "param_1": "task"
+  },
+  "summary": "Advances the save-data load task: inspects the game work byte at +0xE3C5 (load active) and the mode byte at +0xE3C4 (0/3/4/6/7). Mode 4 hands the slot to 0x2CD6D0, mode 3 finds a slot whose state at +0xE1C0 is 2 and starts it (0x24932C), mode 6/7 calls the completion hook 0x111D0C, anything else clears the task with error 0x10000.",
+  "confidence": 0.55,
+  "evidence": "work offsets 0xE3C0..0xE3C5 and slot table +0xE1C0 stride 0xA8, calls 0x2CD6D0/0x24932C/0x111D0C/0x248CCC (maybe_Save_BeginLoad / maybe_Ui_ClearLoadTask from N_022/N_012); caller maybe_Event_DispatchScriptCallback."
+ },
+ {
+  "address": "0x00248870",
+  "name": "maybe_Save_LoadTask_StartSlot",
+  "signature": "void maybe_Save_LoadTask_StartSlot(SaveTask* task, int slot)",
+  "params": {
+   "param_1": "task",
+   "param_2": "slot"
+  },
+  "summary": "Starts loading one of the four save slots: if the slot state at work+0xE1C0+slot*0xA8 is 1 (valid), stores the slot number at task+8, opens it with 0x2CCC00 and sets state 5; otherwise flags error 0x10000 and state 1.",
+  "confidence": 0.45,
+  "evidence": "slot table stride 0xA8, state value 1, open helper 0x2CCC00, states 5/1, error mask 0x10000."
+ },
+ {
+  "address": "0x00248a88",
+  "name": "maybe_Save_LoadTask_Abort",
+  "signature": "void maybe_Save_LoadTask_Abort(SaveTask* task)",
+  "params": {
+   "param_1": "task"
+  },
+  "summary": "Aborts the pending load: drains every queued request (0x62F070 count / 0x10EBD8 free), clears the task's queue field f_814, calls the completion hook 0x111D0C and marks the load as finished (f_810 = 1).",
+  "confidence": 0.4,
+  "evidence": "drain loop on 0x62F070/0x10EBD8, f_814/f_810 fields, 0x111D0C (maybe_Save_BeginLoad, N_022)."
+ },
+ {
+  "address": "0x00248af0",
+  "name": "maybe_Save_LoadTask_ResolveObject",
+  "signature": "void maybe_Save_LoadTask_ResolveObject(SaveTask* task, u32 slot, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "task",
+   "param_2": "slot",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Resolves the object that owns the requested save chunk through the type/hash table at 0x248BFC/0x248C00, derives its two dwords via a virtual call, then hands them plus the slot to 0x2CE5A8 and sets state 7.",
+  "confidence": 0.35,
+  "evidence": "hash table g_00248BFC/g_00248C00 keyed by (f_C>>12), type id g_00248C04, 0x2CE5A8 call, state 7."
+ },
+ {
+  "address": "0x00248c08",
+  "name": "maybe_Save_SaveTask_StartSlot",
+  "signature": "void maybe_Save_SaveTask_StartSlot(SaveTask* task, int slot, u32 data)",
+  "params": {
+   "param_1": "task",
+   "param_2": "slot",
+   "param_3": "data"
+  },
+  "summary": "Starts writing one save slot: when the slot state at +0xE1C0+slot*0xA8 is 1 or 4 it records the slot at task+8, calls 0x2CD498(slot, data) and sets state 2; when it is 2 or 3 it only requests a reload (0x111D0C) and sets state 1, otherwise it fails with 0x10000.",
+  "confidence": 0.45,
+  "evidence": "states 1/2/3/4, stride 0xA8, write helper 0x2CD498, states 2/1, error 0x10000; caller 0x25BE44."
+ },
+ {
+  "address": "0x0024932c",
+  "name": "Save_SaveTask_BeginSlot",
+  "signature": "void Save_SaveTask_BeginSlot(SaveTask* task, int slot, int markUsed)",
+  "params": {
+   "param_1": "task",
+   "param_2": "slot",
+   "param_3": "markUsed"
+  },
+  "summary": "Begins writing a slot: validates that its state is 1/2/4, calls 0x2CD6A8(slot) and sets state 4; when markUsed is set it also sets the per-slot flag 0x1000/0x2000/0x4000/0x8000 according to slot 0..3, so the caller knows which slot was touched.",
+  "confidence": 0.5,
+  "evidence": "slot flag masks 0x1000/0x2000/0x4000/0x8000 for slots 0..3, write helper 0x2CD6A8, state 4; callers 0x24870C and maybe_Event_DispatchScriptCallback."
+ },
+ {
+  "address": "0x002598b4",
+  "name": "maybe_Ui_Object_DtorStringDoubleListB",
+  "signature": "void maybe_Ui_Object_DtorStringDoubleListB(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of another pooled UI object: installs the vtable, disposes the string at self+0x1C and unlinks the same two list-head pairs as 0x1C635C, then frees the object.",
+  "confidence": 0.4,
+  "evidence": "vtable literal g_00259914, two list-head pairs at words 2/3 and 5/6, string flag byte +0xB, 0x10F6CC."
+ },
+ {
+  "address": "0x0025b508",
+  "name": "maybe_Save_SaveTask_Continue",
+  "signature": "void maybe_Save_SaveTask_Continue(SaveTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Continues an interrupted save: fetches event id 0x13 (0x1F0BE4), stores it into f_918, ticks the list (0x6722D8), then validates the selected slot state (1/2/4) and restarts the write through 0x2CD6A8 with state 4, or fails with 0x10000.",
+  "confidence": 0.4,
+  "evidence": "0x1F0BE4(0x13), f_918/f_810/f_814 fields, 0x2CD6A8, state 4, slot byte read from a table at 0x25B548."
+ },
+ {
+  "address": "0x0025be44",
+  "name": "maybe_Save_SaveTask_StartFromWindow",
+  "signature": "void maybe_Save_SaveTask_StartFromWindow(SaveTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Collects the slot number and a one-byte flag from the owning save window (f_724, f_728->f_39) into a small descriptor and starts the write via 0x248C08.",
+  "confidence": 0.4,
+  "evidence": "f_724 slot, f_728->f_39 flag, descriptor {1, flag, 0}, call 0x248C08."
+ },
+ {
+  "address": "0x0025c978",
+  "name": "maybe_Save_LoadTask_Begin",
+  "signature": "void maybe_Save_LoadTask_Begin(SaveTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts a load: drains the queue down to one entry, updates the window (0x123594), re-selects the page (0x259928), fetches event 0x21 into f_918, ticks the list and calls 0x2CDB5C to begin the read, setting f_820 = 1.",
+  "confidence": 0.45,
+  "evidence": "queue drain 0x62F070/0x10EBD8, 0x259928 select, 0x1F0BE4(0x21), 0x2CDB5C (load), f_820/f_824 fields."
+ },
+ {
+  "address": "0x0025d734",
+  "name": "maybe_Save_LoadTask_StartSlotB",
+  "signature": "void maybe_Save_LoadTask_StartSlotB(SaveTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Window-driven variant of 0x248870: reads the slot byte from the window table, and if that slot's state at +0xE1C0 is 1 stores it at f_818, opens it with 0x2CCC00 and sets f_810 = 5; otherwise flags 0x10000 and sets f_810 = 1.",
+  "confidence": 0.45,
+  "evidence": "slot table 0x25D75C/self, state 1, open 0x2CCC00, f_810/f_814/f_818, error 0x10000."
+ },
+ {
+  "address": "0x0025d9b4",
+  "name": "maybe_Save_LoadTask_Step",
+  "signature": "void maybe_Save_LoadTask_Step(SaveTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One step of a load task: if the global save state at +0xE3C0 is 3 it aborts the read (0x2CDB5C) with error 0x10000 and state 1, otherwise it advances the slot list (0x2CE318) and sets state 2.",
+  "confidence": 0.4,
+  "evidence": "work+0xE3C0 state 3, 0x2CDB5C abort, 0x2CE318 advance, f_820/f_824."
+ },
+ {
+  "address": "0x002a258c",
+  "name": "maybe_Ui_CommandWindow_Advance",
+  "signature": "void maybe_Ui_CommandWindow_Advance(UiCommandWindow* self, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Advances a command window after a script callback: updates the layout (0x1DAD58), and if 0x249074 reports a pending event it advances the command queue (0x6D7F34), compares the entry id (0x6496A0) and pushes a new pane with 0x6D7FE8, choosing SE 0x50/0x54/0x56 or 0x5C..0x60 for the available commands.",
+  "confidence": 0.4,
+  "evidence": "SE ids 0x50/0x54/0x56/0x5C..0x60, calls Ui_CommandQueue_AdvanceAlt (0x6D7F34, N_076), Ui_SakusenWindow_PushPane (0x6D7FE8, N_021), maybe_Event_DispatchScriptCallback (0x249074, N_045)."
+ },
+ {
+  "address": "0x002a5458",
+  "name": "maybe_Task_ThreadEntry",
+  "signature": "void maybe_Task_ThreadEntry(ThreadTask* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Thread/task entry point: resets the state fields (f_8 = 0, f_C = 0, f_10 = 0xFF) and then calls 0x100B74 with a static descriptor, which does not return - the usual shape of a worker-thread start routine.",
+  "confidence": 0.45,
+  "evidence": "non-returning 0x100B74(&g_002A55E0); callers 0x45DCF8 and 0x45E6A0 (slot UI workers)."
+ },
+ {
+  "address": "0x002acd34",
+  "name": "maybe_Container_Map_UpdateStringByKey",
+  "signature": "u32 maybe_Container_Map_UpdateStringByKey(Container* self, StringKey* key)",
+  "params": {
+   "param_1": "self",
+   "param_2": "key"
+  },
+  "summary": "Looks up a std::map entry keyed by a nine-word descriptor (0x6F2EE4) and, when the found value differs from the current one, replaces the string at self+0x1C with the entry's string; returns 1 when it changed something.",
+  "confidence": 0.45,
+  "evidence": "map lookup 0x6F2EE4 with 0x2ACE10 comparator, string copy 0x10EC14, key fields f_54..f_78; caller Container_NamedMap_Insert (0x2ACAA4, N_048)."
+ },
+ {
+  "address": "0x002adc10",
+  "name": "maybe_Container_List3_Destroy",
+  "signature": "void maybe_Container_List3_Destroy(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Thin destroy wrapper: runs the element destructor 0x2ADC20 and then frees the container block.",
+  "confidence": 0.45,
+  "evidence": "call 0x2ADC20 followed by 0x10F6CC."
+ },
+ {
+  "address": "0x002adc20",
+  "name": "maybe_Container_List3_Dtor",
+  "signature": "Container* maybe_Container_List3_Dtor(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a container that owns three child pointers and one intrusive list: installs the vtable, destroys the three children through vtable+4, splits both ends of the list at words 0xD/0xE and disposes the list nodes and the inline string.",
+  "confidence": 0.45,
+  "evidence": "vtable g_002ADD38, 3 child slots (words 3..5), list heads 0xD/0xE, tree/list iterator helpers 0x115358/0x115390, string dispose."
+ },
+ {
+  "address": "0x002af870",
+  "name": "maybe_Container_List15_Destroy",
+  "signature": "void maybe_Container_List15_Destroy(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Thin destroy wrapper for the 15-child container: runs 0x2AF880 and frees the block.",
+  "confidence": 0.45,
+  "evidence": "call 0x2AF880 then 0x10F6CC."
+ },
+ {
+  "address": "0x002af880",
+  "name": "maybe_Container_List15_Dtor",
+  "signature": "Container* maybe_Container_List15_Dtor(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a container with fifteen child object slots plus an intrusive list: installs the vtable, destroys every non-null child through vtable+4, unlinks the list at words 0x19/0x1A and disposes the nodes and the inline string.",
+  "confidence": 0.45,
+  "evidence": "loop i<0xF over child slots, vtable g_002AF998, list heads 0x19/0x1A, iterator helpers 0x115358/0x115390."
+ },
+ {
+  "address": "0x002bff8c",
+  "name": "maybe_Sound_PlaySe52or53",
+  "signature": "void maybe_Sound_PlaySe52or53(BattleUiPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays SE 0x52 or 0x53 depending on a flag read from the battle-object data (f_28->f_3C4), using the lazily created sound work.",
+  "confidence": 0.45,
+  "evidence": "Sound_PlaySeById with id 0x53 (flag clear) and 0x52 (flag set), flag at [self->f_28 + 0x3C4], lazy singleton."
+ },
+ {
+  "address": "0x002c4da8",
+  "name": "Gfx_Resource_AttachByHandle",
+  "signature": "void Gfx_Resource_AttachByHandle(UiObject* self, u32* handle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handle"
+  },
+  "summary": "Resolves a packed resource handle through the object hash (g_2C4EA0/g_2C4EA4), finds the matching object by type id (g_2C4EA8) and attaches it to the resource list with 0x193FA0, then releases the scene entry of self->f_20 (0x14C3EC).",
+  "confidence": 0.5,
+  "evidence": "hash-table constants g_002C4EA0..g_002C4EAC, Gfx_ResourceList_Attach 0x193FA0 (N_040), Gfx_Sprite_SetupPattern 0x14C3EC (N_010); callers Ui_StoryListWindow_BindRowModels and 0x2C5808."
+ },
+ {
+  "address": "0x002c5808",
+  "name": "Ui_List_ScrollVertical",
+  "signature": "u32 Ui_List_ScrollVertical(UiList* self, InputState* input)",
+  "params": {
+   "param_1": "self",
+   "param_2": "input"
+  },
+  "summary": "Vertical list scroller: releases and rebinds the row models when needed, clamps the selected index f_30 to [0, f_31-1] from the stick/button delta in input->f_16, rebuilds the rows (0x2C4EB4) when the index changed and plays SE 0x26. Returns 1 when it consumed the input.",
+  "confidence": 0.6,
+  "evidence": "clamp to f_31-1, index f_30, input fields f_14/f_16, row rebuild 0x2C4EB4, SE 0x26; callers 0x1BB798, 0x1C3958 and Ui_StoryListWindow (0x1C38C4, N_011)."
+ },
+ {
+  "address": "0x002cc834",
+  "name": "maybe_Save_WriteSlotRecords",
+  "signature": "u32 maybe_Save_WriteSlotRecords(u32 a1, int a2, int a3)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "a2",
+   "param_3": "a3"
+  },
+  "summary": "Ghidra-damaged save writer: serialises two text blocks through the formatting vtable (g_2CD028), converts them with 0x504DB4/0x505DE0 and checks each result with 0x2CDB84, i.e. writes the per-slot string records and their counts into the save file.",
+  "confidence": 0.35,
+  "evidence": "calls 0x504DB4/0x505DE0/0x505040 plus the error classifier 0x2CDB84, format vtable g_002CD028, buffer size 0x108; Ghidra lost the prologue."
+ },
+ {
+  "address": "0x002ccc50",
+  "name": "Save_WriteSlotStrings",
+  "signature": "int Save_WriteSlotStrings(SaveWork* save, u32 slot)",
+  "params": {
+   "param_1": "save",
+   "param_2": "slot"
+  },
+  "summary": "Writes the two variable-length string blocks of one save slot: formats the slot text with the save formatter (g_2CD018), converts it to the on-disk encoding (0x504DB4), writes it (0x505DE0) and validates each step with 0x2CDB84; the second block is the 0x14-byte record at save+0xE0E0.",
+  "confidence": 0.5,
+  "evidence": "format vtable g_002CD018, converters 0x504DB4/0x505DE0, classifier 0x2CDB84, second block at save+0xE0E0 size 0x14, buffer 0x108; caller 0x2CDF54."
+ },
+ {
+  "address": "0x002cd02c",
+  "name": "maybe_Save_WriteSlotMeta",
+  "signature": "int maybe_Save_WriteSlotMeta(SaveWork* save, u32 slot)",
+  "params": {
+   "param_1": "save",
+   "param_2": "slot"
+  },
+  "summary": "Writes the binary header of a save slot: first calls the metadata writer 0x6D92C4, then converts and writes the 0x108-byte name block (0x504DB4/0x505F18) plus the 0x1830 record and finally updates the second half through 0x6D909C.",
+  "confidence": 0.4,
+  "evidence": "calls 0x6D92C4 at the start and 0x6D909C at the end, string writer 0x505F18 with 0x1830-sized record, classifier 0x2CDB84, buffer 0x108."
+ },
+ {
+  "address": "0x002cd6f4",
+  "name": "maybe_Save_DeleteSlotFiles",
+  "signature": "u32 maybe_Save_DeleteSlotFiles(u32 save, u32 slot)",
+  "params": {
+   "param_1": "save",
+   "param_2": "slot"
+  },
+  "summary": "Builds the two on-disk names for a slot (0x51BA9C with g_2CD84C and g_2CD858) and deletes both files with 0x504F0C; a negative result is a fatal error reported through 0x11ED40.",
+  "confidence": 0.4,
+  "evidence": "two name templates g_002CD84C/g_002CD858, formatter 0x51BA9C, delete 0x504F0C, error checks."
+ },
+ {
+  "address": "0x002cd948",
+  "name": "maybe_Save_WriteSlotHeader",
+  "signature": "int maybe_Save_WriteSlotHeader(SaveWork* save, u32 slot)",
+  "params": {
+   "param_1": "save",
+   "param_2": "slot"
+  },
+  "summary": "Writes the header block of a save slot: formats the 0x108-byte text through the vtable at g_2CDB4C, converts and writes it, then writes the 0x1830 record at save+8 and validates both operations with 0x2CDB84.",
+  "confidence": 0.4,
+  "evidence": "format vtable g_002CDB4C, 0x504DB4/0x505DE0, classifier 0x2CDB84, destination save+8; caller 0x2CE494."
+ },
+ {
+  "address": "0x002cdb84",
+  "name": "Fs_ClassifyResult",
+  "signature": "u32 Fs_ClassifyResult(u32 a1, u32* result)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "result"
+  },
+  "summary": "Classifies a 3DS file-system Result code into the save layer's small status enum: 0 when the call succeeded, 1 for module 0x4400 codes 100..179, 2 for 199..219, 3 for codes at or above g_2CDC40 up to 399, and 5 (after reporting a fatal error through 0x11ED40) for anything else.",
+  "confidence": 0.6,
+  "evidence": "masks 0x80000000/0x3FC00/0x3FF with module 0x4400, range checks 100..180, 199..220 and g_002CDC40..400, fatal 0x11ED40."
+ },
+ {
+  "address": "0x002cde6c",
+  "name": "Fs_ClassifyResultB",
+  "signature": "u32 Fs_ClassifyResultB(u32 a1, u32* result)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "result"
+  },
+  "summary": "Second variant of the save-layer Result classifier: 0 for success, 1 for module 0x4400 codes 0x154..0x167, 2 for everything else after reporting a fatal error through 0x11ED40.",
+  "confidence": 0.5,
+  "evidence": "module 0x4400 with range 0x154..0x168, bounds 0x168..0x185 and g_002CDF50..400, fatal 0x11ED40; callers 0x2CDF54 and 0x2CE494."
+ },
+ {
+  "address": "0x002cdf54",
+  "name": "maybe_Save_MigrateAllSlots",
+  "signature": "u32 maybe_Save_MigrateAllSlots(SaveWork* save)",
+  "params": {
+   "param_1": "save"
+  },
+  "summary": "Save-data upgrade pass over all four slots: opens the migration file (0x503E08 with the name at g_2CE2F0, prefix \"data:\"), rewrites each slot's strings with 0x2CCC50 and verifies two marker values (0x5E) read through 0x51BB08 before promoting the slot state to 1; on failure it aborts with the status from 0x503EE0 and state 6/7.",
+  "confidence": 0.35,
+  "evidence": "string \"data:\" at 0x2CE2F8, four-slot loop stride 0xA8, states 1/2/3/4, markers 0x5E, calls 0x503E08/0x503EE0/0x51BB08/0x2CCC50."
+ },
+ {
+  "address": "0x002ce494",
+  "name": "maybe_Save_MigrateVerify",
+  "signature": "u32 maybe_Save_MigrateVerify(SaveWork* save)",
+  "params": {
+   "param_1": "save"
+  },
+  "summary": "Verification half of the save upgrade: reads the backup file (name at g_2CE598), rewrites the slot header with 0x2CD948 and compares the stored marker (0x5E) through 0x51BB08, setting the work state at +0xE3C0 to 1 (ok), 4 (already) or 3 (failed).",
+  "confidence": 0.35,
+  "evidence": "g_002CE598 file name, 0x2CD948 header write, 0x51BB08 marker read, states at +0xE3C0/+0xE3C4."
+ },
+ {
+  "address": "0x002cef08",
+  "name": "maybe_Ui_MessageWindow_UpdateFade",
+  "signature": "void maybe_Ui_MessageWindow_UpdateFade(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Message-window per-frame update: notifies the layout child (vtable+0x2C), updates the text (0x1C59B4, N_011), and when the pending text id f_131 is below 0x21 resolves and applies it (0x1EB8C8); then advances the fade state f_D3C/f_D3D and delegates to 0x2CEDDC when the fade endpoints differ.",
+  "confidence": 0.45,
+  "evidence": "text update 0x1C59B4, text resolve 0x1EB8C8, fade state f_D3C/f_D3D/f_D3F, 0x2CEDDC; caller maybe_Ui_KyoukaiWindow_Update."
+ },
+ {
+  "address": "0x002cf070",
+  "name": "maybe_Save_NotifyComplete",
+  "signature": "void maybe_Save_NotifyComplete(SaveWork* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Marks the save operation complete: sets f_12F = 1, copies the result byte f_138 into the game work at +0x2D545 and tail-calls the common notifier 0x29126C. Ghidra truncated the body at a bad instruction, so only the first and last actions are certain.",
+  "confidence": 0.3,
+  "evidence": "work+0x2D545 store, f_12F/f_138, tail call 0x29126C(self->f_B38, 1); Ghidra reports 'bad instruction'."
+ },
+ {
+  "address": "0x002d2930",
+  "name": "Gfx_Overlay_DrawSprite",
+  "signature": "void Gfx_Overlay_DrawSprite(OverlayCtx* self, u32 a2, u32 layer)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "layer"
+  },
+  "summary": "Draws one overlay sprite: lazily creates the 0x28-byte draw state, looks the sprite record up (0x1DB6BC with the layer byte) and submits it with 0x56AC80 followed by 0x55D868; used by both overlay draw passes.",
+  "confidence": 0.5,
+  "evidence": "0x1DB6BC record lookup, 0x56AC80/0x55D868 submit, 0x28-byte lazy singleton g_002D2A48; callers 0x2D36C8/0x2D3E1A."
+ },
+ {
+  "address": "0x002d2a54",
+  "name": "maybe_Gfx_Overlay_DrawScreenQuad",
+  "signature": "void maybe_Gfx_Overlay_DrawScreenQuad(OverlayCtx* self, GfxCmd* cmd, int screen)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "screen"
+  },
+  "summary": "Draws a full-screen textured quad for the top or bottom screen: picks 400x240 or 0x140x0xF0 from the screen argument, builds two 2D vertices (0x5633B4) with the current Gfx scene transform, submits the copy commands (0x57D7B0/0x57DE7C/0x57DFEC) and flushes (0x55E71C).",
+  "confidence": 0.45,
+  "evidence": "constants 0x1E0/0x140/400/0xF0 for the two screens, vertex builder 0x5633B4, 0x57D7B0..0x57DFEC Gfx scene draw helpers, 0x55E71C Gfx_FlushCommandBuffer (N_019)."
+ },
+ {
+  "address": "0x002d3078",
+  "name": "maybe_Gfx_Overlay_EndFrame",
+  "signature": "u32 maybe_Gfx_Overlay_EndFrame(OverlayCtx* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Ends the overlay frame: resets the Gfx scene draw state (0x57D080/0x57E390), flips the double-buffered overlay index f_18/f_19, clears the two new slots, releases the overlay resource (0x5796F8) and, on first use, creates the 0x28-byte draw state before flushing (0x55F5E8).",
+  "confidence": 0.45,
+  "evidence": "buffer index flip f_18/f_19 with 0xC stride, 0x57D080/0x57E390 scene calls, 0x5796F8, 0x55F5E8 flush; caller 0x2D2D9C (maybe_Gfx_Overlay_BeginDraw, N_014)."
+ },
+ {
+  "address": "0x002d31b0",
+  "name": "Gfx_Overlay_DrawSortedList",
+  "signature": "void Gfx_Overlay_DrawSortedList(OverlayCtx* self, u32 cmd, IntrusiveList* list)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cmd",
+   "param_3": "list"
+  },
+  "summary": "Draws an overlay list ordered by the per-entry priority byte at +0x6C: builds a temporary sorted copy of the list (0x1235A4/0x1235A4 splice helpers) and submits each entry through 0x577868.",
+  "confidence": 0.5,
+  "evidence": "sort key byte +0x6C, insertion into a stack list, 0x577868 submit; callers 0x2D36C8/0x2D3E1A."
+ },
+ {
+  "address": "0x002d3310",
+  "name": "maybe_Gfx_Overlay_DrawBackdrop",
+  "signature": "int* maybe_Gfx_Overlay_DrawBackdrop(OverlayCtx* self, u32 a2, u32 a3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3"
+  },
+  "summary": "Draws the 0x140x0xF0 backdrop layer: builds the two-vertex quad (0x563220/0x563430/0x563454), submits it, and when the scene flag at f_1346 bit 1 is clear runs the extra backdrop pass 0x2D4604.",
+  "confidence": 0.4,
+  "evidence": "area 0xF0x0x140 at offset 0, 0x563220/0x563430/0x563454 quad helpers, flag f_88->f_1346 bit 1, 0x2D4604."
+ },
+ {
+  "address": "0x002d36c8",
+  "name": "maybe_Gfx_Overlay_DrawMainScreen",
+  "signature": "int* maybe_Gfx_Overlay_DrawMainScreen(OverlayCtx* self, u32 a2, u32 a3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3"
+  },
+  "summary": "Main overlay draw pass: draws the 400x240 background quad, then the three sorted sub-lists (0x2D31B0 at f_FE8/f_FF4, 0x2D4484 at f_100C, 0x2D31B0 at f_1000), a sprite batch (0x2D2930) and the 0x100x0x200 scene rectangle when present.",
+  "confidence": 0.4,
+  "evidence": "list heads f_FE8/f_FF4/f_1000/f_100C, 0x2D4484, 0x2D2930, 0x569ABC/0x5642C8 rectangle calls, sizes 0x100/0x200."
+ },
+ {
+  "address": "0x002d3c1c",
+  "name": "maybe_Gfx_Overlay_DrawFourQuads",
+  "signature": "void maybe_Gfx_Overlay_DrawFourQuads(OverlayCtx* self, u32 a2, u32 a3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3"
+  },
+  "summary": "Overlay draw pass that emits four consecutive 0x408-byte quads (texture commands 0x1000, 0x1100, 0x1200, 0x1300) around one source rectangle, then walks two priority-sorted lists; Ghidra lost the middle of the body at a bad instruction, so the exact layer mapping is uncertain.",
+  "confidence": 0.35,
+  "evidence": "four 0x408-byte blocks copied with 0x116C10 and command ids 0x1000..0x1300, 0x55xxx sprite submit helpers, 'bad instruction' warning at 0x2D4238."
+ },
+ {
+  "address": "0x002d3e1a",
+  "name": "maybe_Gfx_Overlay_DrawMainScreenB",
+  "signature": "void maybe_Gfx_Overlay_DrawMainScreenB(OverlayCtx* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second variant of the main overlay pass: same 0x2D2930/0x2D31B0/0x2D4484 submission sequence plus 0x55DC6C, used when the overlay mode differs from the one at 0x2D36C8.",
+  "confidence": 0.35,
+  "evidence": "callee set identical to 0x2D36C8 except 0x55DC6C, no callers in readable C (vtable entry)."
+ },
+ {
+  "address": "0x002d5734",
+  "name": "maybe_Ui_Object_DtorStringDoubleListC",
+  "signature": "void maybe_Ui_Object_DtorStringDoubleListC(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a pooled UI object identical in shape to 0x2598B4: vtable store, string dispose and unlinking of two list-head pairs before the block is returned to the allocator.",
+  "confidence": 0.4,
+  "evidence": "same field layout as 0x2598B4 (list pairs at words 2/3 and 5/6, string flag +0xB), 0x10F6CC."
+ },
+ {
+  "address": "0x002e0288",
+  "name": "Ui_MessageWindow_SetCurrentText",
+  "signature": "void Ui_MessageWindow_SetCurrentText(UiMessageWindow* self, u32 textId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "textId"
+  },
+  "summary": "Sets the current message text: clears the pending element, applies the new string through Ui_TextElement_SetString (0x3A7A2C) and refreshes the related text resource (0x4C1158); used by the message-window command processor.",
+  "confidence": 0.55,
+  "evidence": "callers Ui_MessageWindow_ApplyCommand/SetChoiceCursor/ProcessCommands/ReleaseLayout (N_050), Ui_TextElement_SetString (0x3A7A2C, N_056), 0x4C1158."
+ },
+ {
+  "address": "0x002e4488",
+  "name": "maybe_Ui_Object_DtorStringListA",
+  "signature": "void maybe_Ui_Object_DtorStringListA(UiObject* self, u32 vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Pooled-object destructor: installs the vtable, unlinks the list at words 0x12/0x13, disposes the inline string and frees the block.",
+  "confidence": 0.45,
+  "evidence": "list heads 0x12/0x13, string flag at byte +0x14, 0x10F6CC."
+ },
+ {
+  "address": "0x002e4bd4",
+  "name": "maybe_Ui_Object_DtorStringListB",
+  "signature": "void maybe_Ui_Object_DtorStringListB(UiObject* self, u32 vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Byte-identical twin of 0x2E4488 for a second class with the same layout; the only difference is which vtable the caller passes in.",
+  "confidence": 0.45,
+  "evidence": "identical body to 0x2E4488."
+ },
+ {
+  "address": "0x002e4c20",
+  "name": "maybe_Ui_Object_DtorStringListC",
+  "signature": "UiObject* maybe_Ui_Object_DtorStringListC(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Same destructor shape as 0x2E4488 but with a hard-coded vtable; called from 0x4FA004.",
+  "confidence": 0.4,
+  "evidence": "vtable g_002E4C6C, list heads 0x12/0x13, string dispose; caller 0x4FA004."
+ },
+ {
+  "address": "0x002e5f50",
+  "name": "Field_HandleSet_ClearBits",
+  "signature": "void Field_HandleSet_ClearBits(HandleSetOwner* self, u32 handle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handle"
+  },
+  "summary": "Releases a packed object handle: looks it up in one of two handle tables (0x7141A8 for bit 0x1000000, 0x714160 otherwise), clears the occupancy bit for the record and for every entry in its child list, and decrements the live counter. Used when a field 2D object or scene entry is destroyed.",
+  "confidence": 0.5,
+  "evidence": "two handle tables f_50/f_58, bitmaps f_C/f_10, bit index from the pointer delta scaled by g_002E614C/g_002E6150, callers Field_Object2D_ReleaseSceneEntry/ResetAttachedNodes (N_060) and the sprite destructors."
+ },
+ {
+  "address": "0x002e6828",
+  "name": "maybe_Sound_Channel_PauseIfPlaying",
+  "signature": "void maybe_Sound_Channel_PauseIfPlaying(SoundObject* self, int pause)",
+  "params": {
+   "param_1": "self",
+   "param_2": "pause"
+  },
+  "summary": "If the object owns a sound channel (f_5C) and `pause` is non-zero, asks 0x5F1BFC whether the channel is still running and pauses it with 0x5F1AF8; otherwise it does nothing.",
+  "confidence": 0.35,
+  "evidence": "guard f_5C and arg2, 0x5F1BFC predicate, 0x5F1AF8 action; caller 0x4C625C (Gfx_SpriteObject_UpdateFrame)."
+ },
+ {
+  "address": "0x002e7798",
+  "name": "maybe_Gfx_SceneNode_SetUV",
+  "signature": "void maybe_Gfx_SceneNode_SetUV(GfxNode* self, u32* uv)",
+  "params": {
+   "param_1": "self",
+   "param_2": "uv"
+  },
+  "summary": "Writes a UV pair onto the Gfx scene node at f_14: 0x58EFAC takes uv[1] and 0x588D08 takes uv[0]; used by the sprite-update paths.",
+  "confidence": 0.4,
+  "evidence": "calls 0x58EFAC and 0x588D08 (Gfx scene sprite pool, 0x58xxxx), callers Gfx_SpriteObject_UpdateNodeParams and Gfx_Sprite_SubmitFromDescriptor."
+ },
+ {
+  "address": "0x002eb658",
+  "name": "Fs_FileJob_Update",
+  "signature": "u32 Fs_FileJob_Update(FsFileJob* job)",
+  "params": {
+   "param_1": "job"
+  },
+  "summary": "State machine of an asynchronous file read job: state 0 opens/queries the file (0x1CFFCC, 0x503264), state 1 acquires the read buffer (0x1D0378), state 2 polls and then closes the pending resource (svc 0x24 wait, svc 0x23 close), state 3 queues the read (0x503A7C, 0x655398), states 4/5 handle retries and the error results (0x6552AC/0x6552BC/0x655304) before signalling completion; returns 1 while the job still runs.",
+  "confidence": 0.55,
+  "evidence": "switch on job+8 with 6 states, 0x1CFFCC/0x503264/0x1D0218/0x1D033C/0x1D0378 (open/read), 0x655xxx async-IO helpers, error codes 9/8/3/4/2 in job+0xC, caller Gfx resource loading."
+ },
+ {
+  "address": "0x002f09a8",
+  "name": "maybe_Model_PlaySeOnFlag",
+  "signature": "void maybe_Model_PlaySeOnFlag(ModelActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "When the attached model (f_28) has a live node and its flag f_6FD is set, lazily creates the sound work and plays the SE id stored in g_2F0ABC.",
+  "confidence": 0.4,
+  "evidence": "model f_28, flag f_6FD, 0x5E7848/0x225BF4 model calls, Sound_PlaySeById with g_002F0ABC."
+ },
+ {
+  "address": "0x002f09cc",
+  "name": "maybe_Model_PlaySeOnFlagB",
+  "signature": "void maybe_Model_PlaySeOnFlagB(ModelActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Same SE-on-flag helper as 0x2F09A8 without the model-release call; used from the shop/preview path 0x322A08.",
+  "confidence": 0.4,
+  "evidence": "same guard f_160/f_6FD and Sound_PlaySeById(g_002F0ABC); caller 0x322A08."
+ },
+ {
+  "address": "0x002f767c",
+  "name": "Ui_ModeWindow_Setup",
+  "signature": "void Ui_ModeWindow_Setup(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds the mode window's layout by name (\"win_mode\"), plays its open SE (through 0x18FD04 with argument 1), re-sorts the cursor list and copies the mode byte f_14C to f_1A1.",
+  "confidence": 0.55,
+  "evidence": "inline string \"win_mode\" at 0x2F76C8, 0x1D85EC (Ui_Widget_FindPaneAndNotify, N_042), 0x18FD04, list helpers 0x1235A4/0x123594."
+ },
+ {
+  "address": "0x002ff71c",
+  "name": "std_Format_PadZero",
+  "signature": "void std_Format_PadZero(FormatSink* sink)",
+  "params": {
+   "param_1": "sink"
+  },
+  "summary": "Format-output padding helper: emits sink->count copies of the pad character ('0' when the zero-pad flag is set, ' ' otherwise) through the sink callback and advances the written-character counter; does nothing once the 'done' flag is set.",
+  "confidence": 0.65,
+  "evidence": "Thumb code; character constants 0x30 and 0x20, flag tests on *sink (bits 0x20/0x10), callback sink+4 with context sink+8; callers std_PrintfFormatFloat/Int (N_001)."
+ },
+ {
+  "address": "0x002ff748",
+  "name": "std_Format_PadSpace",
+  "signature": "void std_Format_PadSpace(FormatSink* sink)",
+  "params": {
+   "param_1": "sink"
+  },
+  "summary": "Second padding helper used when the pad direction differs: emits the remaining count of spaces (0x20) through the callback and advances the written counter; returns immediately unless the sink is in the 'active' state.",
+  "confidence": 0.6,
+  "evidence": "Thumb code; constant 0x20, byte flag bit 0 in *sink, callback at sink+4; same caller set as 0x2FF71C."
+ },
+ {
+  "address": "0x002ff7c4",
+  "name": "std_Format_WriteInteger",
+  "signature": "u32 std_Format_WriteInteger(FormatSink* sink, int width, const char* digits, int count)",
+  "params": {
+   "param_1": "sink",
+   "param_2": "width",
+   "param_3": "digits",
+   "param_4": "count"
+  },
+  "summary": "Core integer conversion for the printf engine: adjusts the field width (pad-before/pad-after), emits the leading zeros, then copies `count` digits through the sink callback, emits the trailing spaces and finally the right-aligned padding; returns 1 or 2 depending on the final sink state.",
+  "confidence": 0.7,
+  "evidence": "Thumb code; calls 0x2FF71C and 0x2FF748 for padding, writes digit bytes from `digits` plus the inline buffer at sink+0x23, returns 1/2; callers std_PrintfFormatInt (N_001) and 0x100354/0x1003F8/0x1004E0."
+ },
+ {
+  "address": "0x002ff9d0",
+  "name": "std_Format_Dispatch",
+  "signature": "u32 std_Format_Dispatch(u16* out, int code, u32 arg)",
+  "params": {
+   "param_1": "out",
+   "param_2": "code",
+   "param_3": "arg"
+  },
+  "summary": "Wide-character printf dispatcher: fetches the active format state (0x2FF68C), and if the engine is in 'wide' mode calls the installed converter through the jump offset at state+0x103, otherwise stores the character code into *out and returns 1. Returns -1 when the code is not mapped.",
+  "confidence": 0.6,
+  "evidence": "Thumb code; state->f_101 mode byte, indirect call *(...state + state->f_103 + 0x103), table byte lookup at state+code; callers 0x1005F6/0x10067C/0x100D28."
+ },
+ {
+  "address": "0x003007bc",
+  "name": "maybe_Actor_MoveToPointAndPlaySe",
+  "signature": "void maybe_Actor_MoveToPointAndPlaySe(ActorMover* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Moves a field actor toward a target point and finishes when close enough: interpolates f_38/f_3C toward the target (0x31979C) with the 0.5 factor, and on arrival applies the position (0x5F34F0), plays SE 0xFD once (f_40 latch) and starts the animation (0x5E7848).",
+  "confidence": 0.4,
+  "evidence": "SE 0xFD, 0.5f constant g_0030093C, distance test 0x3F800000 (1.0), calls 0x31979C/0x5F34F0/0x5E7848."
+ },
+ {
+  "address": "0x0030b5f4",
+  "name": "maybe_Ui_List_BuildRows",
+  "signature": "u32 maybe_Ui_List_BuildRows(UiListRows* self, u32 a2, int index, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "index",
+   "param_4": "a4"
+  },
+  "summary": "Builds up to four list rows: allocates a 0x21C-byte row block, formats the row labels through 0x63638C/0x6364F4, copies the twelve row fields, marks the selected row from the table entry flags and plays the row SE (0x1EC504) when the id changed.",
+  "confidence": 0.4,
+  "evidence": "0x21C-byte allocation, four iterations, 0x63638C/0x6364F4 row layout, flag bit 0x10 at entry+10, SE through 0x1EC504; called from ~24 UI list/table sites."
+ },
+ {
+  "address": "0x0030b628",
+  "name": "maybe_Ui_List_BuildRowsB",
+  "signature": "u32 maybe_Ui_List_BuildRowsB(u32 self, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Ghidra read this as Thumb, but the body is the ARM row-builder 0x30B5F4 again with the same 0x21C row block, 0x63638C/0x6364F4 layout and SE handling; it is the second instantiation of the row builder, not a separate algorithm.",
+  "confidence": 0.3,
+  "evidence": "same constants and callees as 0x30B5F4 (0x21C, 0x63638C, 0x6364F4, 0x1EC504), Ghidra marks it '(thumb)' and reports overlapping/bad instructions."
+ },
+ {
+  "address": "0x00333a60",
+  "name": "maybe_Equip_PlaySeForSlot",
+  "signature": "void maybe_Equip_PlaySeForSlot(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Equipment-window helper: lazily creates the sound work, resolves the selected slot's SE through 0x64C468 and 0x61BCC8 and plays it; called by the confirm/cancel handlers.",
+  "confidence": 0.4,
+  "evidence": "calls 0x64C468(self+0x198) and 0x61BCC8, Sound_PlaySeById; callers Ui_EquipWindow_TryEquipSelected and 0x333B2C/0x333B90/0x3350AC."
+ },
+ {
+  "address": "0x00333b2c",
+  "name": "maybe_Ui_EquipWindow_OnDecideA",
+  "signature": "bool maybe_Ui_EquipWindow_OnDecideA(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Equipment confirm handler variant A: when the selected entry's flag byte at +5 is set it applies the selection (0x333760 with the cursor index f_12), plays the slot SE and pops the pane (0x6D8410), returning true.",
+  "confidence": 0.4,
+  "evidence": "0x64EE60 selection, 0x333760 apply, 0x333A60 SE, 0x6D8410 pop; entry flag byte at +5."
+ },
+ {
+  "address": "0x00333b90",
+  "name": "maybe_Ui_EquipWindow_OnDecideB",
+  "signature": "bool maybe_Ui_EquipWindow_OnDecideB(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Equipment confirm handler variant B: acts only when the cursor index f_12 equals the entry's byte at +4, then applies, plays the SE and pops the pane.",
+  "confidence": 0.4,
+  "evidence": "compares self->f_11C->f_12 with entry byte +4, then 0x333760/0x333A60/0x6D8410."
+ },
+ {
+  "address": "0x003350ac",
+  "name": "maybe_Ui_EquipWindow_OnDecideC",
+  "signature": "u32 maybe_Ui_EquipWindow_OnDecideC(EquipWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Unconditional equipment decision: applies the current selection (0x333760), plays the SE and pops the pane with the raw variant 0x6D81BC.",
+  "confidence": 0.4,
+  "evidence": "no predicate, 0x333760/0x333A60/0x6D81BC (Ui_Window_PopPaneRawB, N_031)."
+ },
+ {
+  "address": "0x00340c60",
+  "name": "maybe_Container_Tree_InsertByKey",
+  "signature": "void maybe_Container_Tree_InsertByKey(TreeMap* self, TreeNode* node, u32 key, u32 a4, u32 a5, u32 a6, int count, u8 sel, int a9, u8 a10)",
+  "params": {
+   "param_1": "self",
+   "param_2": "node",
+   "param_3": "key",
+   "param_4": "a4",
+   "param_5": "a5",
+   "param_6": "a6",
+   "param_7": "count",
+   "param_8": "sel",
+   "param_9": "a9",
+   "param_10": "a10"
+  },
+  "summary": "Red-black-tree insert/find used by the time-keyed containers: descends from the root at self->f_94 comparing the 32-bit key against the node's f_14, then links the entry at the leaf with 0x10EE9C; Ghidra read the ARM body as Thumb, so the parameter roles are approximate.",
+  "confidence": 0.4,
+  "evidence": "tree walk on +8/+0xC children with the latched byte flag f_10, key compare on f_14, insert 0x10EE9C, loop bounded by a count; no callers in readable C."
+ },
+ {
+  "address": "0x003603fc",
+  "name": "maybe_Ui_EffectSlot_Release",
+  "signature": "u32 maybe_Ui_EffectSlot_Release(UiEffectHost* self, int slot, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Releases an effect slot when its countdown reaches zero: clears the effect (0x55DBB0), removes every entry whose key f_14/f_8C equals the slot from the two lists at f_254 and f_2C, destroys the matching node at f_18 and frees the per-slot draw block (0x5634E0). Returns 1 when the release actually happened.",
+  "confidence": 0.4,
+  "evidence": "per-slot counters f_A8/f_AC and flags f_B4, three list removals keyed by arg2, 0x55DBB0/0x5634E0, 0x10F6CC frees."
+ },
+ {
+  "address": "0x0036a07c",
+  "name": "maybe_Ui_SetValueAndPlaySe11",
+  "signature": "void maybe_Ui_SetValueAndPlaySe11(UiValueSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays SE 0x0B (0x1EB8C8), then copies the two dwords of the global result block at 0x36A144 (f_10/f_14) into self+8 and self+0xC.",
+  "confidence": 0.4,
+  "evidence": "SE id 0xB, global g_0036A144 fields f_10/f_14 copied to self+8/self+0xC."
+ },
+ {
+  "address": "0x0036f190",
+  "name": "Ui_Cursor_HandleAnalogInput",
+  "signature": "void Ui_Cursor_HandleAnalogInput(UiCursorHost* self, UiCursor* cursor, InputState* input)",
+  "params": {
+   "param_1": "self",
+   "param_2": "cursor",
+   "param_3": "input"
+  },
+  "summary": "Cursor update from the analog stick: when the input is a press it feeds the three analog axes to 0x1A60A0 and stores the resulting direction into cursor->f_11 (setting the changed flag f_10); a cancel press sets f_30 = 1 and f_31 = 0x17, and a confirm press plays SE 0 and copies the target coordinates f_98/f_9C.",
+  "confidence": 0.55,
+  "evidence": "axes input->f_16/f_17/f_18, 0x1A60A0, 0x643A64 direction helper, SE 0, results f_98/f_9C, flags f_10/f_11/f_30/f_31."
+ },
+ {
+  "address": "0x00370e78",
+  "name": "maybe_Field_TimerPlaySe254",
+  "signature": "int* maybe_Field_TimerPlaySe254(int* timer)",
+  "params": {
+   "param_1": "timer"
+  },
+  "summary": "Counts frames in timer[0xD] and, when it reaches timer[0xC], plays SE 0xFE, resets the counter to 0 and the limit to 4; returns the timer pointer unchanged (typical of an in-place update operator).",
+  "confidence": 0.4,
+  "evidence": "SE 0xFE, counter/limit words at +0x34/+0x30, reset to 4/0, caller 0x371140 (maybe_Field_Actor_CheckCellTransition, N_054)."
+ },
+ {
+  "address": "0x0037b224",
+  "name": "maybe_Ui_ShopWindow_HandleInput",
+  "signature": "u32 maybe_Ui_ShopWindow_HandleInput(UiShopWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Input-driven window state update: when no child window owns the input it checks the pending command word f_20D8 (bit 1 with a pointer at f_20DC, bits 0x14E), otherwise it dispatches through the three vtable slots at f_11C (+0x10/+0x14), using 0x632E58 to map the selection and setting the state words f_3DE8/f_20E0; always returns 1.",
+  "confidence": 0.35,
+  "evidence": "command word f_20D8 bits 1/0x142/4/0x14E, pointer f_20DC, 0x632E58, vtable f_11C +0x10/+0x14, 0x2A4620/0x2A4694 queue helpers."
+ },
+ {
+  "address": "0x00381970",
+  "name": "maybe_Sound_PlaySeIfBelow",
+  "signature": "void maybe_Sound_PlaySeIfBelow(u32 limit, u32 seId)",
+  "params": {
+   "param_1": "limit",
+   "param_2": "seId"
+  },
+  "summary": "Plays SE `seId` only when limit > seId (used as a 'first N ids only' guard); lazily creates the sound work directly in the call.",
+  "confidence": 0.45,
+  "evidence": "early return when arg1 <= arg2, then lazy sound work + Sound_PlaySeById(arg2)."
+ },
+ {
+  "address": "0x00383ec8",
+  "name": "maybe_Sound_StreamThreads_Shutdown",
+  "signature": "void maybe_Sound_StreamThreads_Shutdown(SoundStreamHost* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Shuts down the sound/stream worker threads when bit 1 of self->f_68 is set: signals and destroys the three global thread objects at 0x384040/44/48 (svc 0x18/0x24/0x23 plus 0x10EA00/0x111D50), resets four Gfx layer states, clears the slot at 0x38404C and releases the owned object at f_78 (0x50A09C).",
+  "confidence": 0.45,
+  "evidence": "thread teardown sequence with svc #0x18/#0x24/#0x23, 0x10EA00, 0x111D50, 0x1F336C..0x1F34C8 layer resets, 0x50A09C; called from the UI teardown 0x1C5C14."
+ },
+ {
+  "address": "0x0039f388",
+  "name": "Gfx_Sprite_Dtor",
+  "signature": "GfxSprite* Gfx_Sprite_Dtor(GfxSprite* self, u32 a2, u32 a3, u32 slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "slot"
+  },
+  "summary": "Sprite-object destructor: installs the vtable, releases the object's scene handle through the handle set (0x2E5F50 with word 0xD) and disposes the inline string.",
+  "confidence": 0.55,
+  "evidence": "vtable g_0039F3D8, handle clear 0x2E5F50(self->f_34), 0x6F202C singleton accessor, string dispose; callers Field_SceneObject_DtorSprite (N_061) and 0x46EDE0."
+ },
+ {
+  "address": "0x0039fccc",
+  "name": "Gfx_Sprite_DtorAlt",
+  "signature": "GfxSprite* Gfx_Sprite_DtorAlt(GfxSprite* self, u32 a2, u32 a3, u32 slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "slot"
+  },
+  "summary": "Second sprite-object destructor, identical to 0x39F388 but with the vtable of the 2D sprite class; releases the scene handle (0x2E5F50) and disposes the string. Called from every field object/sprite destructor.",
+  "confidence": 0.55,
+  "evidence": "vtable g_0039FD1C, same 0x2E5F50(self->f_34); callers Field_SpriteObject_DtorBody, Field_ObjectSprite_Delete, Field_MapObject2D_Dtor, Ui3D_DestructPanel and others (9 sites)."
+ },
+ {
+  "address": "0x003a9960",
+  "name": "Ui_Tab_PlayChangeSe",
+  "signature": "void Ui_Tab_PlayChangeSe(UiTab* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Tab/state change handler: when the requested state f_D differs from the current f_C it resets the animation refs of both sub-objects (0x3DFF34 for state 1, 0x649BD4/0x3E0088 otherwise) and plays SE 0x36 (state 1) or 0x35; finally latches f_C = f_D.",
+  "confidence": 0.5,
+  "evidence": "SE ids 0x35/0x36, animation helpers 0x3DFF34 (Ui_AnimRef_ResetPanes, N_058) and 0x3E0088 (Ui_AnimRef_SetFrame, N_058), state bytes f_C/f_D."
+ },
+ {
+  "address": "0x003b013c",
+  "name": "Ui_TalkMenuWindow_Build",
+  "signature": "void Ui_TalkMenuWindow_Build(UiTalkMenu* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the talk/menu window: binds the layout names \"menu_present_list\", \"win_talk\" and \"win_yesno\", sets the list page size from the item count (clamped to 5), selects the entry, pairs the talk window with the yes/no window, plays the open SE (0x18FD04) and stores the \"null_menu_present\" element pointer in the game work.",
+  "confidence": 0.7,
+  "evidence": "inline strings \"menu_present_list\" (0x3B02A4), \"win_talk\" (0x3B02B8), \"win_yesno\" (0x3B02C4), \"null_menu_present\" (0x3B02D0); 0x1D85EC, 0x1D809C, 0x1A61FC, 0x1DACFC, page size 5."
+ },
+ {
+  "address": "0x003b4030",
+  "name": "maybe_Event_ScriptCommandSaveA",
+  "signature": "u32 maybe_Event_ScriptCommandSaveA(EventActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Event-script handler variant A: resolves the scripted actor by its id f_134 (0x63071C) and, if a save/load event is pending (0x249074), marks f_D65, notifies the save layer (0x2CF070), builds the animation refs (0x3D2CD0/0x6496A0) and triggers the vtable command at f_D8C with id 5 or 6.",
+  "confidence": 0.35,
+  "evidence": "f_134 id, 0x63071C, 0x249074, 0x2CF070, 0x3D2CD0/0x6496A0, vtable +0x14 with 5/6; recovered entry with no readable callers."
+ },
+ {
+  "address": "0x003b4b44",
+  "name": "maybe_Event_ScriptCommandSaveB",
+  "signature": "u32 maybe_Event_ScriptCommandSaveB(EventActor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Same event handler as 0x3B4030 but the vtable command id is 7 instead of 6 in the pending branch, i.e. the second of two script commands sharing the save/load completion path.",
+  "confidence": 0.35,
+  "evidence": "identical body to 0x3B4030 with the constant 7 instead of 6."
+ },
+ {
+  "address": "0x003be9c0",
+  "name": "maybe_Ui_Timer_CountdownSe221",
+  "signature": "void maybe_Ui_Timer_CountdownSe221(UiTimer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Timed UI part: forwards to the child object, and while the timer f_140 is positive decrements it and plays SE 0xDD when it hits zero; when bit 0x10 of f_138 is set it resets the part (f_13D = 0, f_94 = 0, f_140 = -1).",
+  "confidence": 0.4,
+  "evidence": "SE 0xDD, f_140 countdown, flag bit 0x10 in f_138, reset values."
+ },
+ {
+  "address": "0x003db2c4",
+  "name": "maybe_Ui_ListState_RemoveEntry",
+  "signature": "void maybe_Ui_ListState_RemoveEntry(u32 tag, u32 key, int keep, ListState* state)",
+  "params": {
+   "param_1": "tag",
+   "param_2": "key",
+   "param_3": "keep",
+   "param_4": "state"
+  },
+  "summary": "Removes one entry from a UI list state: resolves the packed key through the hash table at 0x3DB428, then either walks the node list at f_14/f_10 (unlinking and freeing the node whose f_C matches) or, when the entry has the sorted-list flag f_30, finds its position in the tree at f_20/f_24 and frees it, optionally marking the owner f_31 instead when keep is set.",
+  "confidence": 0.4,
+  "evidence": "hash-table constants g_003DB428, two removal paths (linked list f_10/f_14 vs tree f_20/f_24 with a +0x64 key), flag bytes +0x30/+0x31, 0x10EBE4/0x10F6CC."
+ },
+ {
+  "address": "0x003e2c5c",
+  "name": "maybe_Ui_Fade_UpdateWithSe",
+  "signature": "u32 maybe_Ui_Fade_UpdateWithSe(UiFader* self, FadeTarget* target)",
+  "params": {
+   "param_1": "self",
+   "param_2": "target"
+  },
+  "summary": "Frame-based fade-in/out with cubic easing: advances the frame counter at self+4, computes the interpolated offset into target->f_1C (0x10..0x14 frames with different curves), plays SE 0x2E at frame 0x14, resets the attached animation refs at frames 0x14 and 0x1B and reports completion after frame 0x38.",
+  "confidence": 0.45,
+  "evidence": "frame checkpoints 0x10/0x14/0x1B/0x38, SE 0x2E, cubic constants g_003E2EFC/g_003E2F00/g_003E2F04, 0x1B9EF0/0x1B9ABC anim helpers."
+ },
+ {
+  "address": "0x003e4274",
+  "name": "maybe_Actor_MoveToLocatorAndPlaySe",
+  "signature": "void maybe_Actor_MoveToLocatorAndPlaySe(ActorMover* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Two-phase actor movement: phase 0 moves the actor toward the locator at f_30 (0x3197E8/0x31979C), builds a rotation quaternion from the movement vector (0x17C3C0) and plays SE 0xF7; phase 1 checks the locator (0x17C39C) and, when reached, applies the final transform (0x5F3ADC) and starts the idle animation (0x22CECC).",
+  "confidence": 0.4,
+  "evidence": "state f_2C 0/1/2, quaternion builder 0x17C3C0, locator test 0x17C39C, SE 0xF7, Actor_TrySelectIdleAnimation (0x22CECC, N_044), Math_Curve_EvaluatePoint (0x6281E4, N_074)."
+ },
+ {
+  "address": "0x003f30ec",
+  "name": "maybe_Save_LoadTask_Finish",
+  "signature": "void maybe_Save_LoadTask_Finish(SaveTaskUi* self, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Finishes a load task: drains the remaining queue entries, ticks the list (0x6722D8), starts the load (0x2CDB5C) and sets the task state f_820 = 1 / f_824 = 0.",
+  "confidence": 0.35,
+  "evidence": "same drain loop 0x62F070/0x10EBD8 as 0x25C978, 0x2CDB5C, fields f_820/f_824."
+ },
+ {
+  "address": "0x003f3134",
+  "name": "maybe_Save_LoadTask_Start",
+  "signature": "void maybe_Save_LoadTask_Start(SaveTask* task, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "task",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Minimal task start: clears the status word, calls 0x2CDB5C to begin the load and sets state 1. This is the entry used by the simplest load-task scheduler.",
+  "confidence": 0.4,
+  "evidence": "clears task+4, calls 0x2CDB5C, sets *task = 1."
+ },
+ {
+  "address": "0x003f3160",
+  "name": "maybe_Save_LoadTask_StepB",
+  "signature": "void maybe_Save_LoadTask_StepB(SaveTaskUi* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Step of the second load task: when the global save state at +0xE3C0 equals 3 it aborts (0x2CDB5C) with error 0x10000 and state 1, otherwise advances with 0x2CE318 and sets state 2 (the same logic as 0x25D9B4 on a different task object).",
+  "confidence": 0.35,
+  "evidence": "work+0xE3C0 == 3 test, 0x2CDB5C/0x2CE318, f_820/f_824."
+ },
+ {
+  "address": "0x003f3200",
+  "name": "Save_LoadTask_UpdateAlt",
+  "signature": "void Save_LoadTask_UpdateAlt(SaveTaskUi* task)",
+  "params": {
+   "param_1": "task"
+  },
+  "summary": "Second save/load task state machine (UI dialog variant): dispatches on work+0xE3C4 while the load flag +0xE3C5 is 1; mode 0 checks work+0xE3C0 (state 1 -> done, 4 -> error bit), mode 3 sets the error bit 2, mode 4 finishes the write (0x2CD6D0) and state 4, mode 6 starts the read (0x2CDB5C) and state 1, mode 7 sets error 0x40.",
+  "confidence": 0.5,
+  "evidence": "same work bytes 0xE3C0..0xE3C5 as 0x24870C, helper calls 0x2CD6D0/0x2CDB5C, error bits 1/2/0x40/0x10000; caller maybe_Ui_Menu_UpdateModeTransition (0x3F333C, N_027)."
+ },
+ {
+  "address": "0x00408d38",
+  "name": "Fs_FileJob_UpdateAlt",
+  "signature": "u32 Fs_FileJob_UpdateAlt(FsFileJob* job, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "job",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Second instantiation of the asynchronous file-read state machine (same six states, same 0x1CFFCC/0x503264/0x1D0218/0x1D033C/0x1D0378/0x655xxx sequence as 0x2EB658) but with an extra request parameter word; returns 1 while the job is still running.",
+  "confidence": 0.5,
+  "evidence": "byte-identical control flow to 0x2EB658 apart from the extra argument and the 0x503888 request builder; same error codes 9/8/3/4/2."
+ },
+ {
+  "address": "0x00411fc0",
+  "name": "maybe_Str_DisposeInline",
+  "signature": "int maybe_Str_DisposeInline(u8* str)",
+  "params": {
+   "param_1": "str"
+  },
+  "summary": "Disposes an inline std::string-like buffer when its 'allocated' flag at str+0x10 is set (0x10EC00/0x10EC14) and returns the same pointer, so it can be used as an in-place destructor expression.",
+  "confidence": 0.45,
+  "evidence": "guard byte str+0x10, string dispose pair 0x10EC00/0x10EC14, returns arg1 unchanged."
+ },
+ {
+  "address": "0x004217d0",
+  "name": "maybe_Battle_Unit_UpdateActionState",
+  "signature": "u32 maybe_Battle_Unit_UpdateActionState(BattleUnitView* view, BattleUnit* unit, int* faceData, u32 flags)",
+  "params": {
+   "param_1": "view",
+   "param_2": "unit",
+   "param_3": "faceData",
+   "param_4": "flags"
+  },
+  "summary": "Per-frame battle-unit view update: advances the unit's animation state (vtable +0x14/+0x58/+0x5C/+0x80 of unit->f_274), ticks the model/animation (0x577404, 0x5769BC Model_UpdateMotionState, 0x577404 Anim_UpdateChannels), looks the expression/part id up in the 0x6400B4 table and plays the matching SE from the table; special id 0x1EA triggers the extra call 0x421C80.",
+  "confidence": 0.4,
+  "evidence": "unit id at +0x768, expression table 0x6400B4, SE via 0x1EBC68, id 0x1EA special case, model vtable slots, callers none in readable C."
+ },
+ {
+  "address": "0x00450e54",
+  "name": "maybe_Ui_Anim_UpdateFramesOnState",
+  "signature": "void maybe_Ui_Anim_UpdateFramesOnState(UiAnimHost* self, int* range)",
+  "params": {
+   "param_1": "self",
+   "param_2": "range"
+  },
+  "summary": "When the requested animation range (range[0]/range[1]) differs from the current one, plays the range-change SE, sets the frame of three animation refs (0x3E0088 at self+0x58C and self+0x50, shake update 0x3E021C) and re-syncs the attached part (0x2BB908).",
+  "confidence": 0.45,
+  "evidence": "0x3E0088 (Ui_AnimRef_SetFrame, N_058), 0x3E021C (maybe_Ui_AnimShake_Update, N_017), 0x3E043C, 0x2BB908, SE from g_00450FC4."
+ },
+ {
+  "address": "0x0045d980",
+  "name": "Save_SlotUi_BuildThree",
+  "signature": "void Save_SlotUi_BuildThree(SaveSlotPanel* self, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Builds the three save-slot rows of the save/load screen: calls the row builder 0x45DCF8 for slots 0, 1 and 2 with the corresponding slot records at work+0xE120, +0xE1C8 and +0xE270.",
+  "confidence": 0.55,
+  "evidence": "three calls to 0x45DCF8 with indices 0/1/2 and offsets self+0x50/0x380/0x6B0, slot records +0xE120/+0xE1C8/+0xE270 (stride 0xA8)."
+ },
+ {
+  "address": "0x0045dcf8",
+  "name": "Save_SlotUi_BuildEntry",
+  "signature": "void Save_SlotUi_BuildEntry(SaveSlotRow* row, u32* slotData, u8 index, u32 nameOverride)",
+  "params": {
+   "param_1": "row",
+   "param_2": "slotData",
+   "param_3": "index",
+   "param_4": "nameOverride"
+  },
+  "summary": "Fills one save-slot row from the slot record: resets the row, copies the timestamp/counters, formats the slot name (0x6F0E1C) and the ten text lines (0x1A6680) including the level, play time and location fields, and asks 0x45E64C for each line value according to the slot kind f_328.",
+  "confidence": 0.55,
+  "evidence": "10-line loop, formatter 0x6F0E1C, text setter 0x1A6680, 0x45E64C field extractor, slot kind f_328 (2/3), callers 0x45D980 and 0x4FC124."
+ },
+ {
+  "address": "0x0045e6a0",
+  "name": "maybe_Save_SlotUi_Ctor",
+  "signature": "u32* maybe_Save_SlotUi_Ctor(u32* self, u32 vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Constructor of the save-slot panel object: stores the vtable, initialises the three list sentinels (words 5, 0x46 and 0x87) and the row counters, then calls the shared initialiser 0x2A5458 and installs the final vtable.",
+  "confidence": 0.49,
+  "evidence": "three self-referencing sentinel pairs at words 5/0x46/0x87, call 0x2A5458 (non-returning initialiser), vtable g_0045E6FC."
+ }
+]

@@ -1,0 +1,1823 @@
+[
+ {
+  "address": "0x0062F694",
+  "name": "maybe_Ui_ObjectRef_IsFirstVariant",
+  "signature": "u32 maybe_Ui_ObjectRef_IsFirstVariant(int self)",
+  "params": {
+   "param_1": "wrapper object (byte flag at +0x44, target link at +0x24)"
+  },
+  "summary": "Returns 1 when the wrapper has its link flag set (+0x44), the link at +0x24 is non-null, and the record reached through that link (obj+0x38, halfword at +0xc, sign-extended low byte) has variant value 0; otherwise 0. Callers use the 0/1 result to choose between two sounds/states, so it acts as a two-way 'is default variant' selector for shop/equipment UI objects.",
+  "confidence": 0.35,
+  "evidence": "Body: ldrb [r0+0x44]; if set r0 = [r0+0x24]; calls the multi-entry helper at 0x00629128 (asm 0x629128: if [r0+0x4c] >= 0 return -1, else r0 = [r0+0x38], return (s8)(u16)[r0+0xc]) and returns r0 == 0. 87 callers: Ui_UpdateWindowClose/Open/Confirm (0x176A3C/0x176AD8/0x177000, which map result 1 -> SE 0xc and 0 -> SE 0xb), Shop_CanAfford (0x195274, result 1 -> SE 2/3 else SE 0), Ui_Window_ClosePaneById, Ui_EquipmentWindow_* ."
+ },
+ {
+  "address": "0x0062F7E4",
+  "name": "maybe_Ui_ActorEntry_CanInteract",
+  "signature": "u32 maybe_Ui_ActorEntry_CanInteract(int self, u32 unused2, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "UI entry / actor work object (owner pointer at +0x20)",
+   "param_2": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns 0 when the global UI/message context is in mode 1 (byte +0x281) or when the entry's owner object has no flag byte at +0x43; otherwise 1. Effectively a vtable-slot predicate 'may this entry be interacted with / shown'.",
+  "confidence": 0.45,
+  "evidence": "func_006F1EEC(&x) then *(char*)(*(int*)(*(int*)(*ctx+8)+0x48)+0x281) == 1 -> 0; func_0063A8B8(arg1) == 0 -> 0. Asm 0x63A8B8: r0 = [r0+0x20]; return (r0 == 0 || [r0+0x43] == 0). Only referenced from its own address (vtable slot), no direct callers in the call graph."
+ },
+ {
+  "address": "0x0062F840",
+  "name": "Field_Actor_GetRotationQuat",
+  "signature": "void Field_Actor_GetRotationQuat(float* out_quat, int actor, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "output vec4 used as a quaternion (x,y,z,w)",
+   "param_2": "actor / action object (flag byte +0x70, own quaternion at +0x60..+0x6c)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Fills a quaternion: the actor's own orientation at +0x60..+0x6c when its byte flag +0x70 is set, otherwise the global view transform at ctx+0x74 (floats +0x140..+0x14c). The caller rotates a direction vector with the result, so it is \"the rotation this actor should be facing by\".",
+  "confidence": 0.6,
+  "evidence": "Body branches on arg2->f_70: copies arg2->f_60/f_64/f_68/f_6c, else func_006F1EEC(&x) -> *(ctx+8)+0x74 -> fields 0x140/0x144/0x148/0x14c (the camera-ish transform object described in the brief). Caller 0x413C50 (maybe_Field_ActorAction_ClampDirection) feeds the 4 floats into explicit quaternion rotation math (w/x/y/z products with the direction vector). ctx+0x74 is the camera/view object (confirmed by 0x00641150 rotating stick input with it)."
+ },
+ {
+  "address": "0x0062FA90",
+  "name": "maybe_Ui_EntryTable_LookupValue",
+  "signature": "int maybe_Ui_EntryTable_LookupValue(int self, u8* desc)",
+  "params": {
+   "param_1": "holder object; +8 points to an array of 3 entries of 0x10 bytes",
+   "param_2": "descriptor bytes: [0] = slot selector (0 or 1), [2] = flag mask"
+  },
+  "summary": "Scans up to three 0x10-byte sub-entries, tests entry->byte(+0xc) against desc[2], and returns that entry's pointer for slot desc[0] (+0x8 when selector is 1, +0x4 otherwise); returns 0 when no entry matches. Ghidra typed it void, but callers do read the returned r0.",
+  "confidence": 0.4,
+  "evidence": "Asm 0x62FA90..0x62FAE4: loop i<3, entry = [r0+8] + i*0x10, tst byte[entry+0xc], byte[desc+2]; bl 0x62AA7C (asm: r0 = (r1==1) ? [r0+8] : [r0+4]); bne -> epilogue. Nearby layout-name strings 'main_3d_p_up.bflyt' at 0x62AA9C identify this region as bflyt UI-layout code. Callers pass &entry->f_100 / &self->f_573 config blocks (0x1D15AC, 0x1D1FC4, 0x1D462C, 0x62D49C, 0x62DA68)."
+ },
+ {
+  "address": "0x006307A4",
+  "name": "maybe_Svc_Handle_IsStale",
+  "signature": "u32 maybe_Svc_Handle_IsStale(int self, u32 handle)",
+  "params": {
+   "param_1": "manager object (bit0 of byte +4 enables the check, sparse table at +0x74)",
+   "param_2": "24-bit style handle, top nibble must be 0xE, low 12 bits = table index"
+  },
+  "summary": "Returns 1 (treated as invalid/stale) unless the manager's byte +4 has bit0 set, the handle's top nibble is 0xE, and the sparse table at +0x74 resolves the 12-bit index to an entry whose stored handle equals the argument and whose payload pointer is non-null. Used by sound/UI cue code to decide whether a handle still needs to be registered or can be resolved.",
+  "confidence": 0.4,
+  "evidence": "Body: (*(u8*)(arg1+4) & 1) == 0 -> 1; arg2>>0x1c != 0xe -> 1; func_00711090(arg1+0x74, arg2 & 0xfff) == 0 -> 1; piVar1[1] != arg2 || *piVar1 == 0 -> 1; else 0. Asm 0x711090 is a bitmap-gated sparse lookup (count at +0x10, mask table at +0xc, stride 0x14). Callers: Sound_GetOrAddSlot (0x254210), Sound_Emitter_UpdateVoices (0x367C6C), maybe_Ui_Cue_Finish (0x284AE4), maybe_Battle_ActionUi_Update (0x3F8C48), maybe_Menu_AdvanceWaitTimer (0x1FFF9C)."
+ },
+ {
+  "address": "0x00630A18",
+  "name": "Ui_SceneFlow_IsIdle",
+  "signature": "bool Ui_SceneFlow_IsIdle(void)",
+  "params": {},
+  "summary": "Returns true when the scene/flow manager's state byte (+0x1a50) is neither 2 nor 3, i.e. no scene transition is currently running. Used by the Ui_SceneFlow_OpenSceneN helpers as a guard before opening a new scene.",
+  "confidence": 0.6,
+  "evidence": "func_006F1DF8(&local) (scene/flow singleton, per brief); func_006305F0 returns ([mgr+0x1000+0xa50] == 2 || == 3) (asm 0x6305F0); this function negates it. Callers: Ui_SceneFlow_OpenScene2 (0x1A0AE4), OpenScene3 (0x1A20CC), OpenScene4 (0x1A1DBC), OpenScene5 (0x1A1218), OpenScene6 (0x1A0130), maybe_Ui_SceneFlow_OpenSceneField (0x1A0FC8)."
+ },
+ {
+  "address": "0x00630BD0",
+  "name": "maybe_Ui_Window_IsMenuActorVisible",
+  "signature": "u32 maybe_Ui_Window_IsMenuActorVisible(u32 unused1, int* node, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "unused party-work pointer (only param_2 is read)",
+   "param_2": "actor/work list node (vtable at +0, actor id at +0x768)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Filters a party-work list node for menu display: returns 0 when the node fails the visibility predicate (vtable +0x18) for a normal actor id, or when a 'special' id (0x1A7-style ids 0x351/0x409/0x40A/0x40B, plus ids 399 and 421 handled inline) also fails vtable +0x10; otherwise 1.",
+  "confidence": 0.35,
+  "evidence": "func_00632778(partyWork, id & 0xffff) = 'id in {0x351,0x409,0x40A,0x40B}' (asm 0x632778); then id = [node+0x768]; special cases 399 (0x18F) and 421 (0x1A5); calls vtable +0x10 then +0x18 on the node; returns 0 only when +0x18 yields 0. No direct callers (reached through a vtable), which supports the 'slot predicate' reading. Address 0x00630BD0 also appears as the same vtable slot in ~90 UI class tables (0x75B480 slot 2/11, 0x75CCB4..0x77F360 slot 5/14), so it is the inherited Ui_Window predicate, not a party-only helper."
+ },
+ {
+  "address": "0x00630E48",
+  "name": "Menu_CountSlotsByMode",
+  "signature": "int Menu_CountSlotsByMode(int self, int mode)",
+  "params": {
+   "param_1": "menu owner object; 64 object pointers start at +0x100",
+   "param_2": "0 = require vtable+0x18, 1 = require vtable+0x10, other = count every non-null slot"
+  },
+  "summary": "Counts non-null entries in the 64-slot object-pointer array at self+0x100, keeping only entries that satisfy the requested vtable predicate (mode 0 or 1). Used to build/count the selectable target-actor set for a menu.",
+  "confidence": 0.55,
+  "evidence": "Loop i = 0..0x3F over *(int**)(arg1 + i*4 + 0x100); mode 0 calls (*(*p+0x18))(), mode 1 calls (*(*p+0x10))(); result++ per accepted slot. Caller: maybe_Menu_BuildTargetActorSet (0x200A5C)."
+ },
+ {
+  "address": "0x00630EC4",
+  "name": "maybe_Menu_CheckActorPairCount",
+  "signature": "bool maybe_Menu_CheckActorPairCount(void)",
+  "params": {},
+  "summary": "Walks the +0x4298 lists of all four party-work slots and counts active nodes (vtable +0x1c true) whose actor id equals g_00630f68 or g_00630f68+0x16; returns true only when that count is exactly 2. Used by menu entry-condition evaluation, so it likely tests a two-member (pair/combo) prerequisite.",
+  "confidence": 0.4,
+  "evidence": "Party work at ctx+0x5c, slot stride 0x1c, list sentinel at +0x4298 / +0x429c (per brief); node ids compared with the global g_00630f68 and g_00630f68+0x16; predicate = vtable slot +0x1c; final 'return iVar6 == 2'. Callers: maybe_Menu_EvalEntryCondition (0x2049FC), maybe_Menu_EvalEntryRatioCondition (0x2053CC)."
+ },
+ {
+  "address": "0x0063107C",
+  "name": "Party_HasActiveActorInAnySlot",
+  "signature": "u32 Party_HasActiveActorInAnySlot(u32 unused1, int actorId, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "actor id (compared with node->id at +0x768)",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns 1 when any of the four party-work slots contains a node with actor id == param_2 that passes both the vtable +0x18 (visible) and vtable +0x1c (active) predicates; 0 otherwise.",
+  "confidence": 0.6,
+  "evidence": "Loops i = 0..3 over *(ctx+8)+0x5c + i*0x1c, list at +0x4298/+0x429c; checks (*(*p+0x18))() != 0, ((int*)*p)[0x1da] == arg2, (*(*p+0x1c))() != 0 -> return 1. Callers: maybe_Menu_EvalEntryCondition, maybe_Menu_EvalEntryRatioCondition."
+ },
+ {
+  "address": "0x00631138",
+  "name": "Menu_SelectWeightedEntry",
+  "signature": "int Menu_SelectWeightedEntry(int objArray, int entryDesc, int count, u32 weightMode, int pickMode, int useUpperHalf)",
+  "params": {
+   "param_1": "array of entry objects; element base is param_1 or param_1+0x100 depending on param_6",
+   "param_2": "entry descriptors, stride 0xc (index at +4, flag byte at +8)",
+   "param_3": "descriptor/entry count",
+   "param_4": "weight mode forwarded to func_0049AA74 (1..5 select different weight table bytes)",
+   "param_5": "pick mode: 0 weighted random, 1 random among equal-lowest, 2 97%/3% weighted, 3 first",
+   "param_6": "0 = objects at param_1, 1 = objects at param_1+0x100"
+  },
+  "summary": "Builds (weight, descriptor index) pairs with func_0049AA74, sorts them with qsort/g_006315B0 and then selects one entry according to pickMode (weighted random, uniform among the smallest weights, 3% fallback to weighted random, or just the first). Returns the chosen descriptor index or -1; used to pick which menu entry/actor variant to display.",
+  "confidence": 0.55,
+  "evidence": "func_00100906(local_250, arg3, 8, g_006315b0) = std_qsort with the g_006315B0 comparator; func_001CA474(partyWork+0x4218, lo, hi) supplies the random values; branches on arg5 == 0/1/2/3; arg6 selects *(arg1 + idx*4) vs *(arg1 + idx*4 + 0x100); each entry's byte at +0x11 is counted and func_0049AA74(obj, mode, count, idx) produces the weight (it reads the weight byte table obtained from 0x63D178(ctx)+0x18 and the actor level record at 0x35EB98(work, id)+0xaf0+0x90). No direct callers (vtable slot)."
+ },
+ {
+  "address": "0x00631698",
+  "name": "Menu_SelectEntryByScore",
+  "signature": "int Menu_SelectEntryByScore(int objArray, int entryDesc, int count, u32 unused4, int pickMode, int useUpperHalf)",
+  "params": {
+   "param_1": "array of entry objects (or param_1+0x100 when param_6 is set)",
+   "param_2": "entry descriptors, stride 0xc (index at +4)",
+   "param_3": "entry count",
+   "param_4": "unused (decompiler register noise)",
+   "param_5": "pick mode: 4 best score, 5 75% best else random, 6 sorted by g_00631930",
+   "param_6": "0 = objects at param_1, 1 = objects at param_1+0x100"
+  },
+  "summary": "Same shape as Menu_SelectWeightedEntry but the ranking value comes from vtable slot +0x90 converted to float; sorts with g_00631960 and returns the first entry, or with mode 5 picks the best 75% of the time and a random entry otherwise. Returns the selected descriptor index.",
+  "confidence": 0.5,
+  "evidence": "uVar3 = (*(*p+0x90))(p); VectorUnsignedToFloat -> local_228[i*2]; qsort with g_00631960 for mode 4/5, g_00631930 for mode 6; func_001CA474(partyWork+0x4218, 1, 100) compared with 0x3c (75%) in mode 5; returns local_228[1] (best index) or a random local_228[i*2+1]. No direct callers (vtable slot)."
+ },
+ {
+  "address": "0x00631A88",
+  "name": "Party_FindActiveActorById",
+  "signature": "int Party_FindActiveActorById(u32 unused1, int actorId, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "actor id to search for (node field at +0x768)",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns the first party-work node whose actor id equals param_2 and which passes the vtable +0x18 (visible) predicate, searching all four slots' +0x4298 lists; returns 0 when none matches. Used by menu code that needs the actor object for a given id.",
+  "confidence": 0.65,
+  "evidence": "Loops i = 0..3 over party work at ctx+0x5c (slot stride 0x1c, list +0x4298/+0x429c); (*(*p+0x18))() != 0 && *(int*)(*p + 0x768) == arg2 -> return *p. Caller 0x20605C (menu code)."
+ },
+ {
+  "address": "0x00631B24",
+  "name": "Party_FindMemberOrdinalInSlot",
+  "signature": "int Party_FindMemberOrdinalInSlot(u32 unused1, int node, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "actor/work object pointer to locate in a slot list",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns the zero-based position of a node inside the +0x4298 list of the party slot that contains it (the counter restarts for each of the four slots); returns -1 when the node is not in any slot list.",
+  "confidence": 0.5,
+  "evidence": "Same party-work traversal as 0x631A88 but the counter 'result' is reset per slot and incremented per list element; returns *piVar4 == arg2 position, else -1 after 4 slots. Callers: Ui_Balloon_UpdateForMember (0x1F4E90), Battle_ActionUi_RefreshMemberFlags (0x3F8A10), Battle_Ui_UpdatePartyStatus (0x481584), Ui_Message_Update (0x4E95E0)."
+ },
+ {
+  "address": "0x00631BE0",
+  "name": "maybe_Party_FindMemberOrdinal",
+  "signature": "u32 maybe_Party_FindMemberOrdinal(u32 unused1, int node, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "actor/work object pointer to locate",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Same search as Party_FindMemberOrdinalInSlot but the counter is shared between the slot loop and the element loop, so the result is the cumulative party-list ordinal (nodes seen in all earlier slots plus the position inside the current slot); returns 0xFFFFFFFF when not found.",
+  "confidence": 0.45,
+  "evidence": "Body identical to 0x631B24 except that 'result' is also used as the slot offset (*(ctx+8)+0x5c + result*0x1c) and is not reset per slot; returns 0xffffffff at the end. Same 11 callers as 0x631B24 (balloon/message/battle-status UI)."
+ },
+ {
+  "address": "0x00631C60",
+  "name": "Party_CountActorById",
+  "signature": "int Party_CountActorById(int partyWork, int actorId, int mode, u32 unused4)",
+  "params": {
+   "param_1": "field party work base (ctx+0x5c)",
+   "param_2": "actor id to count (node field at +0x768)",
+   "param_3": "0 = count in the +0x428c tables, non-zero = count in the +0x4298 lists filtered by the visible predicate",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Counts how many party-work nodes carry the given actor id: mode 0 sums func_0063B0D4 over the four +0x428c tables, otherwise it walks the four +0x4298 lists and counts nodes with id == param_2 that pass vtable +0x18. Used by item/recipe/battle UI to know how many party members an entry applies to.",
+  "confidence": 0.6,
+  "evidence": "Mode 0: for i<4 result += func_0063B0D4(partyWork + i*0x1c + 0x428c, arg2); asm 0x63B0D4 walks the list at +0xc/+0x10 and counts nodes whose [obj+0x768] == r1. Mode != 0: same +0x4298 traversal as 0x631C60's sibling functions with (*(*p+0x18))() filter. Callers: maybe_Menu_OpenItemEntryWindow, maybe_Menu_CreateEntryObjects, maybe_Menu_CheckSlotSelectable, Ui_RecipeBook_CheckRecipeIngredients, Battle_Ui_UpdateItemWindow."
+ },
+ {
+  "address": "0x00631D84",
+  "name": "Party_CountActiveInSlot",
+  "signature": "int Party_CountActiveInSlot(u32 unused1, int slot, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "party slot index (0..3)",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Counts the nodes of one party slot's +0x4298 list that pass the vtable +0x18 predicate, i.e. how many members are currently displayed/active in that slot.",
+  "confidence": 0.65,
+  "evidence": "Single slot: base = *(ctx+8)+0x5c + arg2*0x1c, list at +0x4298/+0x429c, counter increments when (*(*p+0x18))() != 0. Callers: Ui_MenuActor_UpdateEffects (0x2F0D0C), 0x637138."
+ },
+ {
+  "address": "0x00631DFC",
+  "name": "Party_CountActive",
+  "signature": "int Party_CountActive(void)",
+  "params": {},
+  "summary": "Counts all active party-work nodes across the four slots' +0x4298 lists (vtable +0x18 predicate), i.e. the number of currently displayed party members.",
+  "confidence": 0.7,
+  "evidence": "Loops i = 0..3 over *(ctx+8)+0x5c + i*0x1c with list +0x4298/+0x429c, result++ for each node where (*(*p+0x18))() != 0. Callers: maybe_Menu_UpdateSelectionPage (0x2031A4), maybe_Menu_AttachActorToWindow (0x20A63C), maybe_Menu_CheckSlotSelectable (0x20B10C), maybe_Menu_EvalEntryCondition."
+ },
+ {
+  "address": "0x00631E9C",
+  "name": "Party_GetActiveNodeByIndexInSlot",
+  "signature": "int Party_GetActiveNodeByIndexInSlot(u32 unused1, int slot, int index, u32 unused4)",
+  "params": {
+   "param_2": "party slot index (0..3)",
+   "param_3": "zero-based index among the active nodes of that slot",
+   "param_1": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns the param_3-th active node (vtable +0x18 true) of the given party slot's +0x4298 list, or 0 when the index is out of range.",
+  "confidence": 0.6,
+  "evidence": "Single slot (base + arg2*0x1c), list +0x4298/+0x429c; increments iVar4 only for nodes where (*(*p+0x18))() != 0 and returns *p when iVar4 == arg3. Caller: Ui_MenuActor_UpdateEffects (0x2F0D0C)."
+ },
+ {
+  "address": "0x00631F2C",
+  "name": "Party_GetActiveNodeByIndex",
+  "signature": "int Party_GetActiveNodeByIndex(u32 unused1, int index, u32 unused3, u32 unused4)",
+  "params": {
+   "param_2": "zero-based index across all four slots",
+   "param_1": "unused (decompiler register noise)",
+   "param_3": "unused (decompiler register noise)",
+   "param_4": "unused (decompiler register noise)"
+  },
+  "summary": "Returns the param_2-th active party-work node scanning the four slots in order (+0x4298 lists, vtable +0x18 predicate), or 0 when the index is out of range. Used by menu selection paging.",
+  "confidence": 0.65,
+  "evidence": "Loops i = 0..3 over the party-work slots, counter shared across slots, returns *p when the counter reaches arg2; returns 0 at the end. Caller: maybe_Menu_UpdateSelectionPage (0x2031A4)."
+ },
+ {
+  "address": "0x0063207C",
+  "name": "maybe_Menu_PickLayoutSectorForEntry",
+  "signature": "u64 maybe_Menu_PickLayoutSectorForEntry(u32 unused1, int* entry)",
+  "params": {
+   "param_1": "unused owner pointer (only param_2 is read)",
+   "param_2": "UI entry descriptor (type id at +0xc, flags at +0x1d)"
+  },
+  "summary": "For the menu entry types that can carry a party portrait (0xbf, 0x1a3, 0x1a4, 0x236, 0x2c3, 0x2c4, 0x2e4, 0x314) it computes the total row height, picks one of four vertical sectors with a weighted random table, then checks the candidate party members' vertical positions (via work data at +0x2857c and the per-slot records) to confirm a member actually occupies that sector, retrying a random member otherwise. Returns a packed value (low half = entry type id, high half = chosen sector 0..3) that the object factory stores at entry+0x10 before creating the actor model.",
+  "confidence": 0.3,
+  "evidence": "Type switch on entry->f_c against 0xbf/0x1a3/0x1a4/0x236/0x2c3/0x2c4/0x2e4/0x314; func_005797D8(&partyWork->f_4254,0) + func_005797D8(&f_4270,0) give the row totals compared against g_00632480; a 4-entry u16 weight table (puVar7+0/2/4/6 via 0x63D178) is picked with func_001CA474(partyWork+0x4218,1,100); member heights come from func_0035EB98(Game_GetWork(), id)->f_d8 and positions from func_0063DCA4(ctx, n)->f_c compared against [fVar21-fVar19, fVar21+fVar19]; func_0063E5C8(ctx,n)->f_107 must be non-zero. Returns CONCAT44(sector, entry->f_c). Caller 0x208960 (maybe_Model_CreateActorModel) stores the result at entry->f_10."
+ },
+ {
+  "address": "0x00632AF0",
+  "name": "maybe_Ui_Object_WarmUpKindEntryZero",
+  "signature": "void maybe_Ui_Object_WarmUpKindEntryZero(int self)",
+  "params": {
+   "param_1": "screen/fade object (container handle at +0xc, kind at +0x38, index at +0x3c)"
+  },
+  "summary": "When the object holds a container handle and its kind field equals one of three known constants (g_00632bb8, g_00632bbc, g_00632bc0) with index 0, it resolves entry 0 of that container through func_007133F0. Called from Ui_ScreenFade_Setup together with its sibling at 0x00632BC4, so it is a per-kind handle fix-up/warm-up during screen-fade setup.",
+  "confidence": 0.3,
+  "evidence": "if (self->f_c != 0): iVar1 = self->f_38; for each of g_00632bb8 / g_00632bbc / g_00632bc0, if iVar1 == kind && self->f_3c == 0 -> func_007133F0(&self->f_c, 0). Asm 0x7133F0 is a bounds-checked lookup (count at [c+0x60], base [c+0x58]+0x24, stride 0x20) returning the entry pointer. Callers: Ui_ScreenFade_Setup (0x368194) and itself (vtable/data reference)."
+ },
+ {
+  "address": "0x00632BC4",
+  "name": "maybe_Ui_Object_WarmUpKindEntryZeroB",
+  "signature": "void maybe_Ui_Object_WarmUpKindEntryZeroB(int self)",
+  "params": {
+   "param_1": "screen/fade object (container handle at +0xc, kind at +0x38, index at +0x3c)"
+  },
+  "summary": "Second instance of the same per-kind handle fix-up as 0x00632AF0, but comparing against the constants g_00632c8c, g_00632c90 and g_00632c94. Both are invoked back-to-back from Ui_ScreenFade_Setup, so they handle two different kind families (e.g. fade-in and fade-out resources).",
+  "confidence": 0.3,
+  "evidence": "Byte-for-byte the same structure as 0x00632AF0 with g_00632c8c / g_00632c90 / g_00632c94 instead of g_00632bb8 / g_00632bbc / g_00632bc0; calls func_007133F0(&self->f_c, 0) when kind matches and the index at +0x3c is 0. Callers: Ui_ScreenFade_Setup (0x368194) and itself."
+ },
+ {
+  "address": "0x00632FC4",
+  "name": "maybe_Ui_Part_HasVisibleChild",
+  "signature": "u32 maybe_Ui_Part_HasVisibleChild(int self)",
+  "params": {
+   "param_1": "UI part/screen object (child pointers at +0xdc, +0xe0, +0xe4, +0xf8, +0x10c, +0x110, +0x114)"
+  },
+  "summary": "Returns 1 as soon as one of the object's sub-parts (+0xe0, +0xe4, +0x110, +0xf8, +0x10c, +0x114) has its state byte at +0x94 non-zero, and also when the +0xdc pointer is null or its vtable +0xc reports non-zero; otherwise 0. Used by battle/field text windows to decide whether anything still needs to be drawn/updated.",
+  "confidence": 0.45,
+  "evidence": "Chain of nested checks: self->f_dc == 0 || (*(*self->f_dc+0xc))() != 0, then for each of f_e0/f_e4/f_110/f_f8/f_10c the test p != 0 && p->f_94 != 0 -> return 1; f_114 is returned as the fallback result. Callers: maybe_Ui_SharedObject_Get (0x197E98), Battle_TextWindow_UpdateVisibility (0x213E94/0x214038), maybe_Menu_UpdateResultWindow (0x2141E8), maybe_Field2D_Sprite_UpdateState (0x5C35C8), maybe_Field2D_Scene_RenderObjects (0x5C5F24)."
+ },
+ {
+  "address": "0x006334A8",
+  "name": "maybe_Ui_Part_NeedsLayoutUpdate",
+  "signature": "u32 maybe_Ui_Part_NeedsLayoutUpdate(int self)",
+  "params": {
+   "param_1": "UI part object (active flag at +0x94, size/position deltas at +0x98..+0xa4)"
+  },
+  "summary": "Returns 1 when the part is marked active (+0x94 non-zero) and func_006287EC reports that its current extents still differ from the target extents by more than the engine thresholds, i.e. an interpolation/layout update is still required.",
+  "confidence": 0.35,
+  "evidence": "if (arg1->f_94 == 0) return 0; func_006287EC(arg1) - asm/readable shows it gates on the global byte g_00628890 == 0, the referenced record's halfword +0x12 == 0 and (g_00628894 < f_a0 - f_98 || g_00628894 - 0x300000 < f_a4 - f_9c); returns 1 then. Same field block (+0x94/+0x98/+0x9c/+0xa0/+0xa4) is used by the transform accessors at 0x6338C4/0x633990."
+ },
+ {
+  "address": "0x006334D0",
+  "name": "maybe_Ui_Part_IsRenderable",
+  "signature": "u32 maybe_Ui_Part_IsRenderable(int self)",
+  "params": {
+   "param_1": "UI part object (flags at +0x94, child at +0xb8, typed handle at +0xe0)"
+  },
+  "summary": "ANDs three conditions: the part's own visibility/state (+0x94, via func_00628898), the flag byte at +0x3c of the +0xb8 sub-object, and a typed-handle lookup on +0xe0 whose resolved object must have kind byte +0x78 == 4. Returns 1 only when all apply, so it is the 'this part may be drawn' test.",
+  "confidence": 0.4,
+  "evidence": "result = 1; if (self->f_94 != 0) result = func_00628898(self); if (self->f_b8 != 0) result &= self->f_b8->f_3c; then the sparse table (g_00633558/g_0063355c) is probed with self->f_e0 (>>0xc tag, low bits index) and the entry payload must have f_78 == 4. Note func_00628898 (0x628898) is a Thumb entry inside the 0x6287EC family that the ARM listing decodes as garbage."
+ },
+ {
+  "address": "0x006337CC",
+  "name": "Menu_Cursor_Resolve",
+  "signature": "u32* Menu_Cursor_Resolve(int self)",
+  "params": {
+   "param_1": "object whose 24-bit handle field at +0xb0 references the cursor/transform object"
+  },
+  "summary": "Resolves the object referenced by the handle at +0xb0 through the handle table (tag compared with the mask global g_00633848, table at g_0063384c) and then walks the resolved object's +0xc chain, returning the first object whose id (vtable slot 0) equals the global type id g_00633850; returns 0 when the tag does not match or no object of that type is found.",
+  "confidence": 0.5,
+  "evidence": "fb0 = self->f_b0; if (g_00633848 != fb0>>0xb) entry = (g_0063384c + (fb0 & g_00633848>>10)*8) and entry[1] == fb0>>0xb; p = *entry; iVar3 = (*(*p))(p); loop { if (iVar3 == g_00633850) return p; iVar3 = iVar3->f_c; } while (iVar3). Callers: maybe_Ui_Part_UpdateSlotTransforms (0x21D09C) and the accessor cluster 0x633854/0x6338C4/0x633990/0x6339DC/0x633A28/0x633A44; that cluster reads the cursor index (+0x270, +0x2c9), rotation quaternion (+0x8c..+0x98) and position (+0x9c..+0xa4)."
+ },
+ {
+  "address": "0x00633854",
+  "name": "Menu_Cursor_HasTarget",
+  "signature": "u32 Menu_Cursor_HasTarget(void)",
+  "params": {},
+  "summary": "Resolves the cursor object (handle at +0xb0) and returns 1 when it exists and its index byte at +0x2c9 is not 0xFF, i.e. the cursor currently points at a valid slot; returns 0 otherwise.",
+  "confidence": 0.5,
+  "evidence": "Asm 0x633854: bl 0x6337CC; if r0 != 0 { r0 = ldrb [r0+0x2c9]; r4 = (r0 != 0xff) } ; return r4. Sibling 0x633A28 returns the same byte (default 0xff) and 0x6339DC compares [obj+0x270] with the menu slot count at ctx+0x80 -> +0x130 -> +0x64 minus 1. Callers: maybe_Ui_JockeyPanel_HandleInput (0x2F5FB8), Camera_Work_Snapshot (0x3DF0D0)."
+ },
+ {
+  "address": "0x006338C4",
+  "name": "Math_QuatToRotationRow2",
+  "signature": "void Math_QuatToRotationRow2(float* out_row, u32 object)",
+  "params": {
+   "param_1": "output 3 floats (third row of the rotation matrix)",
+   "param_2": "object pointer; the cursor object's quaternion is read at +0x8c..+0x98"
+  },
+  "summary": "Converts a quaternion (x,y,z,w at +0x8c, +0x90, +0x94, +0x98) into the third row of the corresponding rotation matrix: (2(xz+wy), 2(yz-wx), 1-2x^2-2y^2), written to out_row[0..2]. Falls back to the default global vector g_00633948 when the object cannot be resolved.",
+  "confidence": 0.7,
+  "evidence": "out[2] = (f94*f94 + f98*f98) - f90*f90 - f8c*f8c; out[0] = (f8c*f94 + f90*f98) * g_00633944; out[1] = (f90*f94 - f8c*f98) * g_00633944 (g_00633944 = 2.0); fallback copies 3 floats from g_00633948. Object obtained via func_006337CC(arg2). Caller 0x59A4B4."
+ },
+ {
+  "address": "0x00633990",
+  "name": "Menu_Cursor_GetPosition",
+  "signature": "void Menu_Cursor_GetPosition(u32* out_vec3, u32 object)",
+  "params": {
+   "param_1": "output 3 words (x, y, z)",
+   "param_2": "object pointer whose handle is resolved to the cursor object"
+  },
+  "summary": "Writes the resolved cursor object's position (+0x9c, +0xa0, +0xa4) into out_vec3, or the default position from g_006339d8 when the object cannot be resolved. Companion of the rotation accessor at 0x006338C4.",
+  "confidence": 0.5,
+  "evidence": "*arg1 = obj->f_9c; arg1[1] = obj->f_a0; arg1[2] = obj->f_a4 via func_006337CC(arg2); fallback copies g_006339d8[0..2]. Caller 0x59A4B4 (same caller as 0x6338C4, which consumes the rotation row)."
+ },
+ {
+  "address": "0x006339DC",
+  "name": "maybe_Ui_Slot_IsLast",
+  "signature": "u8 maybe_Ui_Slot_IsLast(UiSlotOwner* owner)",
+  "params": {
+   "param_1": "owner object whose +0xb0 holds the 24-bit handle of a slot/marker object"
+  },
+  "summary": "Resolves the object named by the owner's +0xb0 handle and reports whether its slot index (+0x270) equals the current slot count minus one, i.e. whether this is the last slot in the list.",
+  "confidence": 0.42,
+  "evidence": "Callee 0x006337CC is a handle->object lookup filtered by class (hash table g_00633848/g_0063384c, class id 0x007C4D38) using arg->f_b0. Result f_270 is compared with *(int*)(*(int*)(*(int*)(engine+8)+0x80)+0x130)+0x64 minus 1 (slot count per BRIEF). Caller 0x002F5FB8 (panel input handler) sets its f_142 flag and fires SE/event 0xec0 when this returns 1."
+ },
+ {
+  "address": "0x00633A28",
+  "name": "maybe_Ui_Slot_GetState",
+  "signature": "u8 maybe_Ui_Slot_GetState(UiSlotOwner* owner)",
+  "params": {
+   "param_1": "owner object whose +0xb0 holds the slot handle"
+  },
+  "summary": "Returns the state/type byte at +0x2c9 of the slot object resolved from the owner's +0xb0 handle, or 0xFF when no object is present.",
+  "confidence": 0.49,
+  "evidence": "asm 0x00633A28: r4=0xff default, 0x006337CC lookup, `ldrbne r4,[r0,#0x2c9]`. Sibling 0x00633854 tests the same byte against 0xff to mean 'slot present'. Callers 0x002F6128, 0x002F6450, 0x002F61EC store the value into their per-slot record before firing events."
+ },
+ {
+  "address": "0x00633A44",
+  "name": "maybe_Ui_Slot_GetScale",
+  "signature": "float maybe_Ui_Slot_GetScale(UiSlotOwner* owner)",
+  "params": {
+   "param_1": "owner object whose +0xb0 holds the slot handle"
+  },
+  "summary": "Returns the float at +0x2a4 of the slot object resolved from the owner's +0xb0 handle, or -1.0f when the object is absent; callers use it as a per-slot threshold/progress value that they also write into the work grid at +0x2a264.",
+  "confidence": 0.45,
+  "evidence": "asm 0x00633A44: default -1.0f from 0x00633A68 (0xbf800000), `vldrne s16,[r0,#0x2a4]`, returned in s0 (hence Ghidra's 'void'). Callers 0x002F61EC and 0x002F6450 compare it with g_002f6328 / g_002f6648 and store it at *(float*)(work+0x2a264 + x*0x10 + y*4)."
+ },
+ {
+  "address": "0x00633C38",
+  "name": "Model_GetNodeIdByName",
+  "signature": "u32 Model_GetNodeIdByName(Model* self, const char* name)",
+  "params": {
+   "param_1": "model instance (callers pass actor->f_160)",
+   "param_2": "NUL-terminated node / attach-point name, e.g. \"N_ALL\", \"FocusPoint\""
+  },
+  "summary": "Maps a named node of the model to its 16-bit node id, returning 0xFFFF when the model type is not 1/2, the name is null or the lookup fails. Callers use the id to address model nodes for balloons, focus points and markers.",
+  "confidence": 0.6,
+  "evidence": "asm 0x00633C38: only for model->f_5c in {1,2} and name!=0; walks model->f_11c->f_1c then calls 0x0065963C, which searches the resource trie at self->f_28->f_78 with bit-test hashing and returns a u16 with default g_00659734 (0xFFFF). 29 call sites pass actor->f_160 plus literals s_N_ALL/s_FocusPoint and compare to 0xffff; neighbour 0x00633CAC feeds the same id to 0x006658F0 (node matrix)."
+ },
+ {
+  "address": "0x00633D6C",
+  "name": "maybe_Model_HasActionAnim",
+  "signature": "u32 maybe_Model_HasActionAnim(Model* self, const char* name)",
+  "params": {
+   "param_1": "model instance",
+   "param_2": "action/animation name, e.g. \"Act_Def\", \"React\""
+  },
+  "summary": "Reports whether the model's action/animation table contains an entry with the given name; field actors use it before dispatching a default or reaction animation.",
+  "confidence": 0.49,
+  "evidence": "asm 0x00633D6C: requires model->f_5c==1 and model->f_11c!=0, then tail-calls 0x00641628(model->f_11c, name); 0x00641628 walks 8-byte entries at +0x64..+0x68 into 0x38-byte records with a name pointer at +0x30 compared via 0x0010540C (strcmp). Callers: Field_Npc_OnReact with \"React\", Field_ActorAction_PlayDefaultAnim and Field_SceneObject_UpdateAnimVisibility with \"Act_Def\"."
+ },
+ {
+  "address": "0x00633E24",
+  "name": "maybe_Model_CopyAnimParams",
+  "signature": "u32 maybe_Model_CopyAnimParams(Model* self, void* out, u32 animId)",
+  "params": {
+   "param_1": "model instance",
+   "param_2": "output record; three u32 values written at +0x20/+0x24/+0x28",
+   "param_3": "animation entry id / key"
+  },
+  "summary": "Looks up an animation entry for the given id on the model (falling back to the model's resource descriptor) and copies its three per-entry values into the caller's record, returning 1 on success.",
+  "confidence": 0.42,
+  "evidence": "First tries 0x00641738(self->f_11c, animId) (binary search over 0xc-byte records via 0x00630404) and copies f_20/f_24/f_28; otherwise requires self->f_558 and fills the same fields from Script_GetIntTable2, 0x0019434C and Gfx_ResDesc_GetValueB(self->f_558, animId). Callers: Actor_ApplyModelSetByName, Model_Attach_PlayAnimation, Model_Attach_PlayNamedAnimation, 0x00222858/0x00222A38/0x00223CF4."
+ },
+ {
+  "address": "0x00633F00",
+  "name": "maybe_Model_CopyRootMatrix",
+  "signature": "void maybe_Model_CopyRootMatrix(Model* self, float* outMatrix)",
+  "params": {
+   "param_1": "model instance",
+   "param_2": "destination 4x4 matrix"
+  },
+  "summary": "Copies the model's root-node 4x4 matrix into the destination, or composes one from the transform record at +0x5f0 when the node is missing; no-op for other model types.",
+  "confidence": 0.45,
+  "evidence": "asm 0x00633EFC..0x00633F64: for model->f_5c in {1,2}, if model->f_11c->f_1c != 0 copies 4x4 from that node+0x78 via 0x00574428; else if model->f_5f0 != 0 builds a matrix with 0x0066CF28(out, self->f_5f0) (TRS compose through 0x005742D8) and copies it. Ghidra's 3rd parameter is a phantom (r2 is set by the preceding `mov r2,r0`)."
+ },
+ {
+  "address": "0x00634028",
+  "name": "maybe_Field_Actor_IsMenuVisible",
+  "signature": "u32 maybe_Field_Actor_IsMenuVisible(Actor* self)",
+  "params": {
+   "param_1": "field actor (vtable object)"
+  },
+  "summary": "FieldActor vtable predicate: true only when the UI overlay is in its overlay mode (engine uiCtx+0x27c) and the actor passes the state test at 0x00669B38 (+0x1c4 set and +0x43 clear).",
+  "confidence": 0.38,
+  "evidence": "asm 0x00634028 reads *(u8*)(*(int*)(*(int*)(engine+8)+0x48)+0x27c) and then calls 0x00669B38(self), which is `ldrb r1,[r0,#0x1c4]; if r1==0 return 0; ldrb r0,[r0,#0x43]; return r0==0`. The address is stored in the FieldActor vtable at 0x0075C63C."
+ },
+ {
+  "address": "0x0063406C",
+  "name": "Field_Actor_GetScreenPosition",
+  "signature": "void Field_Actor_GetScreenPosition(float* out, Actor* actor)",
+  "params": {
+   "param_1": "destination for 2 floats (screen x, y)",
+   "param_2": "field actor; uses +0x2e8 flag, +0x60->+0x38 action kind, +0xb8 camera, +0x78/+0x7c world x/y, +0x98/+0x9c cached 2D position"
+  },
+  "summary": "Returns the actor's screen-space XY: the cached pair at +0x98/+0x9c, or a projection of the world pair +0x78/+0x7c through the camera at +0xb8 when the actor is in one of the action kinds 0x12/0x13/0x14/0x18 and not flagged at +0x2e8.",
+  "confidence": 0.5,
+  "evidence": "asm 0x0063406C: branches on actor->f_2e8 and actor->f_60->f_38 in {0x12,0x13,0x14,0x18} with actor->f_b8 != 0, then 0x0031979C(&tmp, actor->f_b8, &{f_78,f_7c}); 0x0031979C converts the int pair to floats and runs it through 0x0063C838/0x0063C860 (projection using the camera argument) before returning the pair. Called from 0x0017F1FC with the 'helping' actor ctx54->f_20."
+ },
+ {
+  "address": "0x00634114",
+  "name": "maybe_Field_Actor_CanPlaceAtCell",
+  "signature": "u32 maybe_Field_Actor_CanPlaceAtCell(Actor* self)",
+  "params": {
+   "param_1": "field actor; uses grid coords +0xb0/+0xb4, pixel pos +0x78/+0x7c, action object +0x60"
+  },
+  "summary": "Hit-tests the actor's own map cell/pixel position against the field grid and returns 0 when a type-9 occupant already sits there or when the actor is in action kinds 0x0d/0x0e; otherwise 1.",
+  "confidence": 0.42,
+  "evidence": "asm 0x00634114: takes grid (f_b4,f_b0) and pixel (f_78,f_7c); if 0x0062F17C(engine+0x88)==1 gets the grid object via 0x0062F0E0, resolves row 0x0062C388(obj,f_b4), cell 0x0062C3B0(obj,row,f_b0), point index 0x0062CB64(obj,cell,f_78,f_7c) and queries occupancy with 0x0062C23C(obj,cell,index,9). Fallback rejects actor->f_60->f_38 == 0x0d/0x0e. Caller 0x0022C3F4 chooses vtable slots +0x3c/+0x40 with argument 4 based on the result."
+ },
+ {
+  "address": "0x00634244",
+  "name": "maybe_Field_Actor_GetSlotScaleX",
+  "signature": "float maybe_Field_Actor_GetSlotScaleX(Actor* self)",
+  "params": {
+   "param_1": "field actor (ignored; value comes from the shared UI slot table)"
+  },
+  "summary": "FieldActor vtable trampoline that returns the current UI slot's horizontal extent: the +4 field of the slot layout record for slot index uiCtx+0x281 (default 1.75), scaled by the runtime global float g_007a724c.",
+  "confidence": 0.4,
+  "evidence": "asm 0x00634244 just loads engine uiCtx+0x48 and tail-calls 0x00634D74; that function picks record 0x0063D6B8(*scratch(0x0011CB38), uiCtx->f_281), loads `s16 = [r0,#4]` (or 1.75f from the literal at 0x634DD4 when index==0) and returns it multiplied by the float pointed to by 0x007A724C. Vtable slot at 0x0075C6CC."
+ },
+ {
+  "address": "0x00634264",
+  "name": "maybe_Field_Actor_GetSlotPosition",
+  "signature": "void maybe_Field_Actor_GetSlotPosition(float* out, Actor* actor)",
+  "params": {
+   "param_1": "destination for 3 floats",
+   "param_2": "field actor; +0x160 model (model+0x4e0 fallback vec3)"
+  },
+  "summary": "Fills a 3-float position: when the UI slot index (uiCtx+0x281) is 0 it takes the model's anchor vector at model+0x4e0, otherwise the +0xc/+0x10/+0x14 position of the slot layout record for that index.",
+  "confidence": 0.42,
+  "evidence": "asm 0x00634264: if uiCtx->f_281 != 0, record = 0x0063D6B8(*scratch(0x0011CB38), index) and copies +0xc/+0x10/+0x14; else if actor->f_160 != 0 uses &actor->f_160->f_4e0 (or the global g_006342f0 when no model). Vtable slot 0x0075C6EC."
+ },
+ {
+  "address": "0x006342F4",
+  "name": "maybe_Field_Actor_CanUpdateWeapon",
+  "signature": "u32 maybe_Field_Actor_CanUpdateWeapon(Actor* self)",
+  "params": {
+   "param_1": "field actor; flags +0x310 and +0x43"
+  },
+  "summary": "Gate used by the weapon/attack animation update: false when the actor's +0x310 flag is clear, or when +0x43 is set while the UI overlay state byte (+0x284) is clear; otherwise true.",
+  "confidence": 0.42,
+  "evidence": "Body: `if (self->f_310 == 0) return 0; if (self->f_43 != 0 && *(u8*)(engineUiCtx+0x284) == 0) return 0; return 1;`. Called from 0x00634E2C with ctx54->f_1c (the 'helping' actor) before 0x003E8F84 decides to skip the weapon animation update."
+ },
+ {
+  "address": "0x00634568",
+  "name": "maybe_Ui_Overlay_CanShowMarkersForSlot",
+  "signature": "u32 maybe_Ui_Overlay_CanShowMarkersForSlot(UiOverlay* self)",
+  "params": {
+   "param_1": "UI overlay context (engine+0x48); flags +0x283/+0x27c/+0x281, handle owner +0xc with bytes +0x44/+0x45"
+  },
+  "summary": "Decides whether the overlay may show its slot markers: checks the +0x283 flag, the referenced object's +0x44/+0x45 state, the current target actor's kind (0x00669250 in {1,2,9} or {1,2,4,5}), plus slot 3 / kind-6 and work+0x27721 special cases.",
+  "confidence": 0.45,
+  "evidence": "Nearly identical to 0x0023C398 (already named Ui_Overlay_CanShowMarkers) but with extra conditions: self->f_281==3 requires 0x00319848(actor->f_b4, actor->f_b0)->f_38==6, and the actor branch also requires actor->f_312. Uses ctx54->f_20 / ctx54->f_1c from engine+0x54. Final override: if GameWork+0x27721 != 0 result is forced to 0."
+ },
+ {
+  "address": "0x00634774",
+  "name": "Field_Marker_AreAllSlotsFree",
+  "signature": "u32 Field_Marker_AreAllSlotsFree(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context (engine+0x48) holding 12 slot handles at +0x1c"
+  },
+  "summary": "Scans the 12 slot handles at ctx+0x1c (stride 4), resolves each through the handle table and returns 1 only when no slot holds a live object whose vtable predicate (+0x34) is true; callers use this to decide that markers may be released.",
+  "confidence": 0.52,
+  "evidence": "Loop 0..0xb over *(u32*)(arg1 + i*4 + 0x1c); class-id compare against g_006347e4 with slot table g_006347e8, then `(**(*node + 0x34))()`. Callers 0x004C7958 (Field_Marker_ReleaseOnEventEnd: releases when result==1) and 0x004C7C94 (Field_Marker_ReleaseIfUnused)."
+ },
+ {
+  "address": "0x00634A58",
+  "name": "maybe_Ui_Overlay_GetCursorRowState",
+  "signature": "u32 maybe_Ui_Overlay_GetCursorRowState(UiOverlay* self)",
+  "params": {
+   "param_1": "UI overlay context; candidate id list at +0x288, count at +0x308, mode byte at +0x281"
+  },
+  "summary": "Finds the list row under the cursor (hit test with the id list at +0x288 and mask 0x40) and returns that row's state 0..3, dispatching on whether the picked component is a bag row (0x0064C7E0/0x0064C828) or an equipment row (0x00640CA0/0x00640D40).",
+  "confidence": 0.45,
+  "evidence": "Branches on 0x0062AB3C(self->f_c) (handle alive) selecting 0x0063544C or 0x00635948; the returned pick record is {mask@+8, ptr@+4}, and class ids g_00634c2c/g_00634c30 (or g_00634c34/g_00634c38) select 0x00640CA0/0x0064C7E0 (or 0x00640D40/0x0064C828). Caller 0x002D04EC (Menu_ApplyRowColorState) maps state 1/2/3 to commands 0x2a/0x32..0x34 and 0 to 0x37/0xff."
+ },
+ {
+  "address": "0x00634C3C",
+  "name": "maybe_Ui_Overlay_GetSlotScaleY",
+  "signature": "float maybe_Ui_Overlay_GetSlotScaleY(void)",
+  "params": {},
+  "summary": "Returns the current UI slot's vertical extent: the +8 field of the slot layout record selected by uiCtx+0x281 (default 7.0 when the index is 0), scaled by the runtime global float g_007a724c.",
+  "confidence": 0.4,
+  "evidence": "asm 0x00634C3C: index = *(u8*)(engineUiCtx+0x281); if != 0 record = 0x0063D6B8(*scratch(0x0011CB38), index) and `vldr s16,[r0,#8]`, otherwise s16 = 7.0f (0x40e00000 literal at 0x634C9C); result = *(float*)0x007A724C * s16 (vmul.f32). Counterpart 0x00634D74 uses +4 with default 1.75f."
+ },
+ {
+  "address": "0x00634CB0",
+  "name": "maybe_Ui_Overlay_GetTargetDrawPos2D",
+  "signature": "void maybe_Ui_Overlay_GetTargetDrawPos2D(u32* out, UiOverlay* ctx)",
+  "params": {
+   "param_1": "destination for 2 floats",
+   "param_2": "UI overlay context; handle at +0x18"
+  },
+  "summary": "Resolves the object referenced by ctx+0x18 and returns its +0x88/+0x8c pair (the smoothed 2D draw position), or zeros when the handle does not resolve.",
+  "confidence": 0.45,
+  "evidence": "Body: 0x005F2EC8(ctx->f_18) then `*out = obj->f_88; out[1] = obj->f_8c;`. Sibling 0x006344E0 reads the same object's +0x78/+0x7c (current position) and 0x0063451C/0x00634CEC read 3D positions, so this pair is the separate smoothed/draw position. Caller 0x003DACB0 compares it with 0x006344E0's output to detect movement."
+ },
+ {
+  "address": "0x00634CEC",
+  "name": "maybe_Ui_Overlay_GetTargetDrawPos3D",
+  "signature": "void maybe_Ui_Overlay_GetTargetDrawPos3D(u32* out, UiOverlay* ctx)",
+  "params": {
+   "param_1": "destination for 3 floats",
+   "param_2": "UI overlay context; handle at +0x14"
+  },
+  "summary": "Resolves the object referenced by ctx+0x14 and returns its +0xc0/+0xc4/+0xc8 3D position (default vector g_00634d34 when unresolved).",
+  "confidence": 0.45,
+  "evidence": "Body: 0x005F5818(ctx->f_14) then `*out = obj->f_c0; out[1] = obj->f_c4; out[2] = *(u32*)(obj+200)`. Sibling 0x0063451C reads +0x9c/+0xa0/+0xa4 of the same object, so the +0xc0 triple is the second (animated/draw) position. Called from 0x003DACB0 and Field_Actor setup code."
+ },
+ {
+  "address": "0x00634D38",
+  "name": "Ui_Overlay_GetAnchorIdByName",
+  "signature": "u32 Ui_Overlay_GetAnchorIdByName(UiOverlay* ctx, const char* nodeName)",
+  "params": {
+   "param_1": "UI overlay context; handle at +0x14",
+   "param_2": "model node name (callers pass \"N_ALL\")"
+  },
+  "summary": "Resolves the overlay's subject actor through handle +0x14, takes its model (+0x160) and returns the node id for the given name, else the default g_00634d70.",
+  "confidence": 0.55,
+  "evidence": "Body: 0x005F5818(ctx->f_14) -> model = obj->f_160; if model != 0 calls 0x00633C38(model, nodeName) (Model_GetNodeIdByName, default 0xFFFF); otherwise returns g_00634d70. Caller 0x004E2E28 passes s_N_ALL and feeds the id straight into 0x00635090."
+ },
+ {
+  "address": "0x00634D74",
+  "name": "maybe_Ui_Overlay_GetSlotScaleX",
+  "signature": "float maybe_Ui_Overlay_GetSlotScaleX(void)",
+  "params": {},
+  "summary": "Returns the current UI slot's horizontal extent: the +4 field of the slot layout record selected by uiCtx+0x281 (default 1.75 when the index is 0), scaled by the runtime global float g_007a724c; sibling of 0x00634C3C which uses +8 with default 7.0.",
+  "confidence": 0.4,
+  "evidence": "asm 0x00634D74: index = *(u8*)(engineUiCtx+0x281); if != 0 record = 0x0063D6B8(*scratch(0x0011CB38), index) and `vldr s16,[r0,#4]`, otherwise s16 = 1.75f (0x3fe00000 literal at 0x634DD4); result = *(float*)0x007A724C * s16. Reached only through the FieldActor vtable trampoline 0x00634244."
+ },
+ {
+  "address": "0x00634DDC",
+  "name": "maybe_Field_Actor_CanUpdateMotionSet",
+  "signature": "u32 maybe_Field_Actor_CanUpdateMotionSet(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context (ignored; the test uses engine+0x54)"
+  },
+  "summary": "Gate for loading/updating a field actor's motion set: true when there is no 'helping' actor (ctx54+0x20) or that actor has bit 0 of +0x200 set, and the global switch at g_00634e28 is enabled.",
+  "confidence": 0.42,
+  "evidence": "Body: iVar2 = *(int*)(*(int*)(*(int*)(ctx54)+0x20)); `if ((iVar2 == 0 || (iVar2->f_200 & 1)) && *g_00634e28 != 0) return 1; return 0;`. Caller 0x003E7770 (Field_Actor_LoadMotionSet) returns immediately when this is 0 or when uiCtx+0x285 is set."
+ },
+ {
+  "address": "0x00634E2C",
+  "name": "maybe_Field_Actor_CanUpdateWeaponAnim",
+  "signature": "u32 maybe_Field_Actor_CanUpdateWeaponAnim(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context (ignored; the test uses engine+0x54)"
+  },
+  "summary": "Gate for the field actor weapon animation update: true when the 'helping' actor (ctx54+0x1c) is absent or 0x006342F4 accepts it, and the global switch at g_00634e78 is enabled.",
+  "confidence": 0.42,
+  "evidence": "asm 0x00634E2C: loads *(int*)(*(int*)(*(int*)(*(int*)(engine+8)+0x54))+0x1c) into r0, calls 0x006342F4 (CanUpdateWeapon) when non-null, then `ldr r0,[pc]` / `ldrb` of g_00634e78. Caller 0x003E8F84 (Field_Actor_UpdateWeaponAnim) skips its update when this returns 0."
+ },
+ {
+  "address": "0x00634E7C",
+  "name": "Ui_Overlay_ResolveSlotPlacement",
+  "signature": "void Ui_Overlay_ResolveSlotPlacement(UiOverlay* self, float* outPos, float* outRot, const u8* setup)",
+  "params": {
+   "param_1": "UI overlay context (engine+0x48); +0x281 slot/model index",
+   "param_2": "output position (3 floats)",
+   "param_3": "output rotation (3 floats)",
+   "param_4": "slot setup record: u16 kind at +2, id byte at +4, defaults at +0xc/+0x10/+0x14 and +0x18/+0x1c/+0x20"
+  },
+  "summary": "Fills a slot's world position and rotation for a UI overlay setup: copies the record defaults, then special-cases kinds 0x403/0x404/0x405 (work-grid placement via 0x0066B5D8/0x0066B5C8 keyed by self+0x281), ids 0x86..0x90 (placement registry 0x0062F190 with a quaternion from +0x14) and remaining ids (registry 0x0062F468).",
+  "confidence": 0.55,
+  "evidence": "Body copies setup->f_c/f_10/f_14 to outPos and f_18/f_1c/f_20 to outRot; kind = *(u16*)(setup+2), and when it is 0x403..0x405 (and setup[4]==0xff) reads GameWork+0x24a98 through 0x0066B5D8/0x0066B5C8; otherwise ids 0x86..0x90 use 0x0062F190 (record +8/+0xc/+0x10 pos, +0x14 quat through 0x00572D94 and 0x00574548) and other ids use 0x0062F468. Sole caller 0x00235E0C (Ui_Overlay_ApplySlotSetup)."
+ },
+ {
+  "address": "0x00635090",
+  "name": "maybe_Ui_Overlay_CalcSlotMatrix",
+  "signature": "void maybe_Ui_Overlay_CalcSlotMatrix(u32* out, UiOverlay* ctx, u32 nodeId)",
+  "params": {
+   "param_1": "output block: 9 words (flag, a 4-float vector at +8..+0x14, world position at +0x18..+0x20)",
+   "param_2": "UI overlay context; handle at +0x14",
+   "param_3": "model node id from Ui_Overlay_GetAnchorIdByName (0xffff = use the model default frame)"
+  },
+  "summary": "Builds the world transform/position of the overlay subject's anchor node: seeds the output with the identity constants g_00635434/g_00635438, overwrites the basis with the node matrix (0x00633DCC), composes the model frame fields +0x5f4..+0x620 and the skeleton scale +0x8c..+0xa4 via quaternion helpers, and writes the resulting position.",
+  "confidence": 0.42,
+  "evidence": "0x00635090: 0x005F5818(ctx->f_14) -> model = obj->f_160; if nodeId != 0xffff calls 0x00633DCC(model, nodeId, &local_d0) which tail-calls 0x006658F0 (node matrix); then uses model f_5f4/f_5f8/f_5fc, f_600/f_604, f_608/f_60c, f_610..f_620, f_8c..f_98 and f_9c..f_a4 with 0x00573144/0x00574548; stores arg1[2..5] and arg1[6..8]. Callers 0x004E2E28 (Battle_Ui_PlaceMarkerOnModel), 0x00440C64, 0x00442D5C."
+ },
+ {
+  "address": "0x0063544C",
+  "name": "maybe_Ui_Overlay_FindTargetUnderCursor",
+  "signature": "int maybe_Ui_Overlay_FindTargetUnderCursor(UiOverlay* self, u32* ids, int count, u32 mask)",
+  "params": {
+   "param_1": "UI overlay context; +0x27f row layout mode, +0x18 handle for the base position",
+   "param_2": "array of candidate 24-bit ids",
+   "param_3": "number of candidates",
+   "param_4": "required mask/type bits for a candidate to be accepted"
+  },
+  "summary": "Picks the candidate whose 2D row/cell extent contains the cursor: resolves each id to a {mask@+8, object@+4} record, rejects entries whose mask does not match, then hit-tests the row tables with 0x0064C5A4 / 0x00645CFC at the overlay's base position and returns the matching record (0 when none).",
+  "confidence": 0.45,
+  "evidence": "0x0063544C resolves each id with 0x002E5A34(*g_00635934, ids[k]) and tests (record[8] & mask) != 0 and record[4] != 0; positions come from tables g_00635940 (x) and g_00635944 (y) plus obj->f_78/f_7c; two row-layout paths for self->f_27f in {1..4} and otherwise. Callers 0x00634A58 (mask 0x40), 0x00636038 (mask 8, actor id match via +0xa5/+0xb1), 0x0023B148 (Field_ApplyShapeToTarget)."
+ },
+ {
+  "address": "0x00635E1C",
+  "name": "maybe_Ui_Overlay_IsSlotSuppressed",
+  "signature": "u32 maybe_Ui_Overlay_IsSlotSuppressed(u32 slotType)",
+  "params": {
+   "param_1": "slot type; only 1 is tested"
+  },
+  "summary": "Returns 1 for every slot type except 1; for type 1 it returns 1 only when the engine busy flag (engine+0x3c) is clear and one of the work flags at +0x2d549/+0x2d54a is set, mirroring the mode gate used by 0x0023CAA8.",
+  "confidence": 0.32,
+  "evidence": "asm 0x00635E18/0x00635E1C: `cmp r1,#1; movne r0,#1; bne ret`, else requires *(u8*)(engine+0x3c)==0 and (ldrsb work+0x2d549 | ldrsb work+0x2d54a) != 0. Identical condition shape to 0x0023CAA8 (arg2==1 plus the same two flags); work+0x2d547 is written by SetEnableGameSuspend, so these are system 'busy' flags. No static callers (reachable only indirectly)."
+ },
+ {
+  "address": "0x00635E88",
+  "name": "maybe_Field_Actor_GetGridRow",
+  "signature": "u32 maybe_Field_Actor_GetGridRow(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context; handle at +0x18"
+  },
+  "summary": "Resolves the object at ctx+0x18 (0x0022C148) and returns its first grid coordinate at +0xb4, or 0 when the object does not exist.",
+  "confidence": 0.42,
+  "evidence": "Body: 0x0022C148(arg1->f_18); if != 0 result = obj->f_b4 else 0. In 0x00235E0C the same field is assigned from the setup record's +0x34 and used as the first coordinate passed to 0x0062C388 (row lookup) in 0x00634114, so +0xb4 is the row index. Callers 0x0035EE14 (Ui_DataPanel_CaptureSceneState) and 0x0062AB4C snapshot it."
+ },
+ {
+  "address": "0x00635EA0",
+  "name": "maybe_Field_Actor_GetGridColumn",
+  "signature": "u32 maybe_Field_Actor_GetGridColumn(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context; handle at +0x18"
+  },
+  "summary": "Resolves the object at ctx+0x18 and returns its second grid coordinate at +0xb0, or 0xFFFFFFFF when the object does not exist.",
+  "confidence": 0.42,
+  "evidence": "Body: 0x0022C148(arg1->f_18); result = 0xffffffff if null else obj->f_b0. 0x00235E0C assigns this field from the setup record's +0x3c, and 0x00634114 passes it to 0x0062C3B0 after the row from +0xb4, so +0xb0 is the column index. Callers 0x0035EE14 and 0x0062AB4C."
+ },
+ {
+  "address": "0x00635EBC",
+  "name": "maybe_Field_Actor_GetDirection",
+  "signature": "u32 maybe_Field_Actor_GetDirection(UiOverlay* ctx)",
+  "params": {
+   "param_1": "UI overlay context; handle at +0x18"
+  },
+  "summary": "Resolves the object at ctx+0x18 and returns the third placement value at +0xac (direction/rotation written from the setup record's +0x38), or 0 when the object does not exist.",
+  "confidence": 0.38,
+  "evidence": "Body: 0x0022C148(arg1->f_18); result = obj->f_ac or 0. 0x00235E0C sets `iVar7->f_ac = arg3->f_38` next to f_b0/f_b4 (grid coords), and 0x0035EE14 snapshots all three together with the camera state, so this is the remaining per-placement scalar (direction)."
+ },
+ {
+  "address": "0x00635ED4",
+  "name": "maybe_Ui_SakusenWindow_CheckCursorAreaFree",
+  "signature": "u32 maybe_Ui_SakusenWindow_CheckCursorAreaFree(CommandEntry* entry)",
+  "params": {
+   "param_1": "command entry; its actor handle at +0x14 identifies the actor whose cursor area is tested"
+  },
+  "summary": "Returns 1 when the screen area reserved for this command entry's cursor does not overlap any already-registered UI marker. In 3D display mode the actor's world position is tested against the registered 3-D markers; in 2D mode the current target actor's rect (f_78/f_7c with the two ids f_b0/f_b4) is tested against registered screen rects; mode 2 runs both tests.",
+  "confidence": 0.45,
+  "evidence": "Uses Gfx_GetDisplayMode (0x62AB3C) on the root context to branch 2D/3D/both; 0x63451C builds the world position from entry->f_14 via 0x5F5818; target actor taken from context +0x54 -> +0x20; callees 0x62EC70 (world-point test) and 0x62EE68 (rect test) both iterate the +0x88 registry (head via 0x66AA9C, entries at +0x5F8/+0x5FC..+0x608, types at +0x8/+0xA) and return 1 only when nothing overlaps. Sole caller: Ui_SakusenWindow_PushCommandForCursor."
+ },
+ {
+  "address": "0x00635FC8",
+  "name": "maybe_Ui_EquipRow_CanRefresh",
+  "signature": "bool maybe_Ui_EquipRow_CanRefresh(UiContext* self)",
+  "params": {
+   "param_1": "UI context / equip row owner; state byte at +0x281, actor handle at +0x14"
+  },
+  "summary": "Gate used while refreshing an equipment row: returns false only in the compound case UI state byte +0x281 == 8, the row's actor handle (f_14) still resolves through 0x5F5818, and the global object-state query 0x669250 reports exactly 1; in every other case it returns true.",
+  "confidence": 0.4,
+  "evidence": "`self->f_281 == 8', `func_005F5818(self->f_14) != 0', `func_00669250() == 1'; sole caller Ui_EquipRow_Refresh (0x3D628C, whose vtable slot 1 also uses 0x63469C item lookup and maybe_Battle_CanUseItemOnSelf in N_057 evidence)."
+ },
+ {
+  "address": "0x00636038",
+  "name": "maybe_Battle_FindModelEffectEntry",
+  "signature": "int maybe_Battle_FindModelEffectEntry(BattleUnit* self, u32 effectId)",
+  "params": {
+   "param_1": "battle unit / model owner; mask array at +0x288, entry count at +0x308, context at +0xc",
+   "param_2": "effect or part id (u16, 0xFFFF = none)"
+  },
+  "summary": "Looks up a unit model's effect/part table (3D builder 0x63544C or 2D builder 0x635948, chosen by the display mode) and then walks the entry's sub-object part list (+4 -> +0x30, class id from the part vtable) to return the table entry whose part carries the requested id at +0xa5 (3D) or +0xb1 (2D). Returns 0 when the mask check fails, the entry has no sub-object, or no part matches.",
+  "confidence": 0.45,
+  "evidence": "Mask test `(g_00636190 & ~*(u32*)(result+8)) == 0', part class ids g_00636194/g_00636198, u16 compares at +0xa5/+0xb1 with arg2, arg2==0xFFFF early-out. Called from 0x2399D4 (maybe_Battle_SetUnitPartState), 0x239D58 (maybe_Battle_UpdateUnitPartMaskFromAction) and 0x63469C, which pass monster/effect ids 0x9E0/0x9D6/0x600/0x6FE/0x700; N_001 notes 0x635948 resolves hit/effect tables from model+0x3C."
+ },
+ {
+  "address": "0x0063619C",
+  "name": "maybe_Model_GetNodeRotatedOffset",
+  "signature": "void maybe_Model_GetNodeRotatedOffset(float* out, NodeRef* node)",
+  "params": {
+   "param_1": "output vec3 (three floats written)",
+   "param_2": "object/node reference; handle at +0x14, float4 source at +0x8c, quaternion at +0x228"
+  },
+  "summary": "Writes a world-space offset vector for a node: rotates the node's local float4 (+0x8c..+0x98) by its orientation quaternion (+0x228) and stores the xyz result. When the handle does not resolve it copies the default vector at g_00636214 instead.",
+  "confidence": 0.42,
+  "evidence": "func_0022F59C resolves node->f_14; func_00574548 rotates vector by quaternion; default from g_00636214; callers Camera_Update and Camera_ResolveCollision (0x442D5C/0x440C64, N_061) plus 0x665EBC, i.e. camera/node transform code."
+ },
+ {
+  "address": "0x006368EC",
+  "name": "Field_FindNpcBalloonEntry",
+  "signature": "BalloonEntry* Field_FindNpcBalloonEntry(u32 unused, u32 objectId)",
+  "params": {
+   "param_1": "unused (the placement-record table comes from the global context, +0xb4)",
+   "param_2": "field object / NPC record id"
+  },
+  "summary": "Resolves the placement record for objectId and returns the balloon entry (0xC bytes: type byte at +1, party mask at +2) that matches the character's balloon category and the current party slot. When the character has no category override (0xFF) it returns the first entry of the record's array.",
+  "confidence": 0.55,
+  "evidence": "Record via 0x66A74C(ctx+0xb4) + 0x628F34 (entry count at +0x10, array at +0x14); category from 0x66AF08 on work+0x24A98 (byte array at +0x30165) mapped 1->3, 2->6, 3->7, 4->8, 5->9, 6->0xA, 7/8->0xB, 9->0xE; party-slot bit from 0x640C64(ctx+0x50+0x5c) tested as `1 << slot` on entry byte +2; returns first entry when the id byte is 0xFF. Callers: Field_Npc_InitTalkBalloons/InitEmoteBalloon/InitFullBalloons, Field_SpawnObjectRecordA/C, Field_ActorBehavior_PlayReact."
+ },
+ {
+  "address": "0x00636AC0",
+  "name": "Field_Npc_HasBalloonEntry",
+  "signature": "int Field_Npc_HasBalloonEntry(u32 unused, u32 objectId, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "field object / NPC record id",
+   "param_3": "unused",
+   "param_4": "unused"
+  },
+  "summary": "Boolean companion of 0x6368EC: resolves the object's placement record and returns 1 only when the record exists and its balloon entry count (+0x10) is non-zero. The NPC spawn paths use it to decide whether balloon behaviour should be attached.",
+  "confidence": 0.55,
+  "evidence": "Same lookup (0x66A74C(ctx+0xb4) then 0x628F34(table,arg2)); returns `record != 0 && record->f_10 != 0'. Callers: Field_SpawnObjectRecordA/C, Field_ActorGimmick_InitFromRecord, Field_Npc_InitTalkBalloons/InitEmoteBalloon/InitFullBalloons."
+ },
+ {
+  "address": "0x00636DB8",
+  "name": "maybe_Field_FindNpcBalloonEntryAlt",
+  "signature": "BalloonEntry* maybe_Field_FindNpcBalloonEntryAlt(u32 arg1, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "table/context base (passed in a register the decompiler lost)",
+   "param_2": "field object / NPC record id",
+   "param_3": "unused",
+   "param_4": "scratch slot used by the decompiler for the out pointer"
+  },
+  "summary": "Second instantiation of the NPC balloon-entry search: identical type/mask logic to 0x6368EC but built with the record table passed in registers (two arguments are missing in the pseudo-C). Nothing in the binary calls it directly.",
+  "confidence": 0.35,
+  "evidence": "Byte-for-byte same switch (1->3, 2->6 ... 9->0xE), same mask test `entry[2] & 1 << (0x640C64(...) & 0xff)', same 0x24A98/0x24A98+0x30165 lookups as 0x6368EC; the `calledby' list contains only itself, so this is the unreferenced copy."
+ },
+ {
+  "address": "0x00636F6C",
+  "name": "maybe_Ui_RecipeBook_FilterNumericRange",
+  "signature": "u32 maybe_Ui_RecipeBook_FilterNumericRange(int self, int* pool, int mode, u32 clauseValue, int excludeValue, int ignoreFlag)",
+  "params": {
+   "param_1": "recipe-book list widget (owns the filtered set at +0x20)",
+   "param_2": "pool of 64 candidate entry pointers",
+   "param_3": "clause mode: 1 = scan all candidates, 0 = also require a non-empty party list",
+   "param_4": "clause value handed to the mode test",
+   "param_5": "entry state that must NOT match (0x49ABCC result)",
+   "param_6": "non-zero = ignore the entry's +0x11 flag"
+  },
+  "summary": "Numeric-clause helper for the recipe-book filter (modes 1/4/8/9): counts the candidates of the 64-entry pool that are in the compared set and not in the excluded state, checks that the party/source list is non-empty in mode 0, and returns the result of the per-value mode test 0x636EE4(self, clauseValue).",
+  "confidence": 0.45,
+  "evidence": "0x49ABCC(self->f_20, entry, 1) compared against excludeValue; entry byte +0x11 tested when ignoreFlag is 0; mode 0 reads 0x631DFC(field-party work) or Ui_Widget_CountChildren(work+0x4254,1); 0x636EE4 is the inlined mode test (modes 0/1..3/8 membership, 4/5/6/9 non-membership). Called from Ui_RecipeBook_ApplyFilterClause, which N_046 documents as dispatching modes 1/2/4/5/8/9 to 0x636F6C/0x637138."
+ },
+ {
+  "address": "0x00637138",
+  "name": "maybe_Ui_RecipeBook_FilterNumericRangeAlt",
+  "signature": "u32 maybe_Ui_RecipeBook_FilterNumericRangeAlt(int self, int pool, int mode, u32 clauseValue, int ignoreFlag)",
+  "params": {
+   "param_1": "recipe-book list widget (filtered set at +0x20, 64-entry pool)",
+   "param_2": "pool of 64 candidate entry pointers (rewritten in place)",
+   "param_3": "clause mode: 1 = all candidates, 0 = require a non-empty party list",
+   "param_4": "clause value used by the final 0x636EE4 test",
+   "param_5": "non-zero = ignore the entry's +0x11 flag"
+  },
+  "summary": "Variant used by filter modes 2/5: partitions the 64 candidates into four passes by the entry group returned from vtable+0xd4, copies the survivors of the first non-empty group into a scratch array and writes it back over the pool (0x116C10, 0x100 bytes); returns 1 when a group matched.",
+  "confidence": 0.42,
+  "evidence": "Four iterations j=0..3, membership via 0x49ABCC(self->f_20, entry, 1) != (j != 0), group id from `(**(*entry+0xd4))() == j', final array copy func_00116C10(param_2, local_148, 0x100) (0x40 u32 slots); mode 0 uses Ui_Widget_CountChildren / 0x631D84 for the party count. Called from Ui_RecipeBook_ApplyFilterClause."
+ },
+ {
+  "address": "0x00637568",
+  "name": "maybe_Field_HasDuplicateSpecialActor",
+  "signature": "u32 maybe_Field_HasDuplicateSpecialActor(void)",
+  "params": {},
+  "summary": "Scans the four field-party work slots (context +0x5c, stride 0x1c, list at +0x4298/+0x429c) and returns 1 as soon as two active actors carrying actor id 0x178 or the id in g_00637618 are present, i.e. a duplicate-special-actor check.",
+  "confidence": 0.45,
+  "evidence": "Actor id read at node+0x768 compared against 0x178 and g_00637618; active test is vtable+0x18; counter must exceed 1; loop bound `3 < uVar5' over the four 0x1c-stride party slots."
+ },
+ {
+  "address": "0x0063761C",
+  "name": "maybe_Party_GetMaxMemberTimer",
+  "signature": "u8 maybe_Party_GetMaxMemberTimer(void)",
+  "params": {},
+  "summary": "Walks the active field-party actors (Menu_CountPartyActors/Menu_GetActorByIndex on the +0x5c work) and returns the largest per-character u32 at +0xd8 of the party-member object found through 0x35EB98(work,actorId), or 0 when no member qualifies. The sole caller compares it with an action start time.",
+  "confidence": 0.4,
+  "evidence": "Predicates vtable+0x24 and byte +0x11 == 0; actor id at node+0x768; 0x35EB98 = work+0x24A98 + id*0x12AC + 4 (stride constant 0x4BB<<2); record field f_d8 kept as running max. Caller 0x6374F4 (maybe_Battle_IsActorIdleLongEnough) subtracts 0x63DCA4(ctx,actorId)->f_c and tests > 2."
+ },
+ {
+  "address": "0x0063791C",
+  "name": "maybe_Field_FindReservedActor",
+  "signature": "u32 maybe_Field_FindReservedActor(u32 unused, u32 unused2, ActorOut* out)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "unused",
+   "param_3": "output object; receives the found actor in +0x20"
+  },
+  "summary": "Scans the four field-party lists for an active actor whose id belongs to the reserved set (g_00637a10, +1, g_00637a10 | g_00637a10>>3, +0x14c and its neighbours, 0x358, 0x3a5, 0x3b9) and, on a hit, stores the actor pointer into out+0x20 and returns 1.",
+  "confidence": 0.4,
+  "evidence": "Constant set built from g_00637a10 (base, base+1, base|base>>3, base+0x14c, +0x14c+base>>8) plus 0x358/0x3a5/0x3b9; vtable+0x18 active test; writes `local_28->f_20 = *piVar3'; no external callers recorded."
+ },
+ {
+  "address": "0x00637A14",
+  "name": "maybe_Field_CollectSpecialActors",
+  "signature": "bool maybe_Field_CollectSpecialActors(u32 unused, u32 unused2, ActorListOut* out, u32 unused4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "unused",
+   "param_3": "output object; up to 16 actor pointers are written starting at +0x20",
+   "param_4": "unused scratch slot"
+  },
+  "summary": "Collects up to 16 active actors whose id is 0x178 or g_00637af0 (checked with vtable+0x10) from the four field-party lists into the caller's array at +0x20 and reports whether at least one was found.",
+  "confidence": 0.42,
+  "evidence": "Ids 0x178 and g_00637af0 read at node+0x768; predicates vtable+0x10; `if (0xf < iVar6) break' caps the output at 16 entries; `return 0 < iVar6'."
+ },
+ {
+  "address": "0x00637AF4",
+  "name": "Ui_RecipeBook_MatchClauseMode",
+  "signature": "u32 Ui_RecipeBook_MatchClauseMode(int self, char* clause, int candidateId)",
+  "params": {
+   "param_1": "recipe-book list widget (owned/selected set at +0x20)",
+   "param_2": "clause block; first byte is the comparison mode 0..9",
+   "param_3": "candidate entry id"
+  },
+  "summary": "Single-candidate predicate for the recipe-book query: the clause mode byte 0 means 'is the current selection', 1/2/3/8 mean 'must be in the set at self+0x20', 4/5/6/9 mean 'must not be in it', and 7 always matches. Used as the per-candidate test of every filter clause.",
+  "confidence": 0.6,
+  "evidence": "Mode switch exactly over the 0..9 values used by Ui_RecipeBook_ApplyFilterClause; membership via 0x49ABCC(self->f_20, id, 1); callers are Ui_RecipeBook_EvaluateRecipeQuery, maybe_Ui_RecipeBook_FilterByIdList, FilterByValueRangeA/B, FilterByRelativeValue and 0x2676B8/0x267810 (N_046)."
+ },
+ {
+  "address": "0x00637DDC",
+  "name": "Party_FindActorByRecordField",
+  "signature": "int Party_FindActorByRecordField(u32 unused, u32 fieldValue, int index)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "value compared against the character record's +0xe4 field",
+   "param_3": "0-based index among the matching actors"
+  },
+  "summary": "Walks the actor list at field-party work +0x4260/+0x4264 and returns the index-th active actor (vtable+0x18 and +0x24 both true) whose character record (0x35EB98 on work+0x24A98, actor id from +0x768) has +0xe4 equal to fieldValue. Returns 0 when there is no such actor.",
+  "confidence": 0.5,
+  "evidence": "Double predicate (`vtable+0x18' then `vtable+0x24'), `uVar1 = *(u8*)(*piVar2 + 0x768)', `0x35EB98(Game_GetWork(), id)->f_e4 == arg2', counter compared with arg3. Callers: Ui_TextLayout_LayoutMode1/LayoutMode2."
+ },
+ {
+  "address": "0x00637EBC",
+  "name": "maybe_Ui_TextLayout_FindMaxExtentSlot",
+  "signature": "int* maybe_Ui_TextLayout_FindMaxExtentSlot(UiTextLayout* self)",
+  "params": {
+   "param_1": "text-layout context; 16 slot pointers at +0x9bd0"
+  },
+  "summary": "Returns the usable slot among the 16 slot pointers (+0x9bd0) with the largest vtable+0x94 value (slot height/extent), requiring vtable+0x24 and vtable+0x10 to be true. Returns 0 when every slot is empty or unusable.",
+  "confidence": 0.45,
+  "evidence": "Loop `0xf < iVar6' over `arg1 + i*4 + 0x9bd0'; predicates vtable+0x24/+0x10; comparison `uVar5 = (**(*piVar2+0x94))(); if (uVar5 <= uVar4) skip'. Callers: Ui_TextLayout_LayoutMode1/LayoutMode2/AppendCandidatesFiltered/LayoutMode7/LayoutMode3 and 0x637BDC."
+ },
+ {
+  "address": "0x00637F5C",
+  "name": "Party_CountActorsByRecordField",
+  "signature": "int Party_CountActorsByRecordField(u32 unused, u32 fieldValue)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "value compared against the character record's +0xe4 field"
+  },
+  "summary": "Counts the active actors in the field-party list at +0x4260 whose character record (0x35EB98 on work+0x24A98) has +0xe4 equal to fieldValue; same walk as 0x637DDC without the index argument.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x637DDC with the found-pointer return replaced by an increment of the counter; predicates vtable+0x18/+0x24; record field f_e4. Callers: Ui_TextLayout_LayoutMode1/LayoutMode2."
+ },
+ {
+  "address": "0x00638020",
+  "name": "Ui_TextLayout_CheckCandidateMode",
+  "signature": "u32 Ui_TextLayout_CheckCandidateMode(u32 unused, TextCandidate* cand, int mode)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "candidate row/element object (vtable at +0)",
+   "param_3": "mode: 0 = active only, 1 = active + visible, other = visible check only"
+  },
+  "summary": "Mode predicate for one layout candidate: mode 0 tests vtable+0x18, mode 1 requires vtable+0x14 and then vtable+0x10, every other mode tests vtable+0x14. Returns 1 when the candidate passes, 0 otherwise.",
+  "confidence": 0.5,
+  "evidence": "Vtable slots +0x14/+0x10/+0x18 selected by the three-way branch on arg3; used by Ui_TextLayout_GetSlotByMode (0x6381B8) / GetAltSlotByMode (0x638470) to select the n-th candidate; callers Ui_TextLayout_FillSlots, FillSlotsRandomized, ExecuteRequest, 0x6381B8, 0x638470."
+ },
+ {
+  "address": "0x006381B8",
+  "name": "Ui_TextLayout_GetSlotByMode",
+  "signature": "u32 Ui_TextLayout_GetSlotByMode(UiTextLayout* self, int index, u32 mode)",
+  "params": {
+   "param_1": "text-layout context; 16 slot pointers at +0x9bd0",
+   "param_2": "0-based index among the candidates that pass the mode test",
+   "param_3": "mode forwarded to 0x638020"
+  },
+  "summary": "Returns the index-th slot of the 16-entry slot table (+0x9bd0) that passes 0x638020(self, slot, mode), or 0 when the index is past the last candidate.",
+  "confidence": 0.5,
+  "evidence": "Loop over `arg1 + i*4 + 0x9bd0' with `0x638020(arg1, entry, arg3)'; counter compared with arg2 before returning the entry. Callers: Ui_TextLayout_FillSlots."
+ },
+ {
+  "address": "0x0063822C",
+  "name": "maybe_Party_GetMaxSelectedMetric",
+  "signature": "float maybe_Party_GetMaxSelectedMetric(u32 unused, int metricKind, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "metric selector: 3 = 0x48F154 metric, 5 = 0x48E2C0 metric, any other value = 0x48F08C metric",
+   "param_3": "unused",
+   "param_4": "unused scratch slot"
+  },
+  "summary": "Aggregates three numeric metrics over all active actors of the four field-party lists (0x48F08C, 0x48F154, 0x48E2C0) and returns the maximum of the metric selected by metricKind. Used by the text-layout code to size or rank rows from party statistics.",
+  "confidence": 0.4,
+  "evidence": "Four 0x1c-stride party works from context +0x5c, list +0x4298/+0x429c, vtable+0x18 predicate; maxima of 0x48F154(entry) and 0x48E2C0(entry,0) kept in result/fVar9 and the 0x48F08C-sourced value in fVar7; final `if (arg2 != 3) { result = fVar9; if (arg2 != 5) result = fVar7; }'. Callers: 0x637BDC, maybe_Ui_TextLayout_AppendCandidatesFiltered, 0x63880C."
+ },
+ {
+  "address": "0x006383F0",
+  "name": "maybe_Ui_TextLayout_CheckSlotCount",
+  "signature": "u32 maybe_Ui_TextLayout_CheckSlotCount(UiTextLayout* self, int required, int mode)",
+  "params": {
+   "param_1": "text-layout context; style object at +0xa5c4",
+   "param_2": "required count / index",
+   "param_3": "0 = exact-zero requirement, non-zero = minimum count requirement"
+  },
+  "summary": "Gate applied before filling slots: when the style object (+0xa5c4) reports neither of the special ids 0x73 and 0xcb, mode 0 requires required == 0 and other modes require the style object's count (vtable+0x98) to be at least required. Returns 0 when the requirement fails.",
+  "confidence": 0.45,
+  "evidence": "`(**(*self->f_a5c4 + 0xe8))(obj, 0x73)' and `(obj, 0xcb)' both zero; `(**(*obj + 0x98))()' compared with arg2. Callers: FillSlotsByMode, BuildRows, AppendNextCandidateFiltered, LayoutRowsForMode, 0x2710A8, AppendCandidatesFiltered, LayoutMode6."
+ },
+ {
+  "address": "0x00638470",
+  "name": "Ui_TextLayout_GetAltSlotByMode",
+  "signature": "u32 Ui_TextLayout_GetAltSlotByMode(UiTextLayout* self, int index, u32 mode)",
+  "params": {
+   "param_1": "text-layout context; second slot table at +0x10 with stride g_006384ec*4",
+   "param_2": "0-based index among the candidates that pass the mode test",
+   "param_3": "mode forwarded to 0x638020"
+  },
+  "summary": "Same selection as 0x6381B8 but over the second slot array (base +0x10, stride given by the global g_006384ec), returning the index-th slot that passes 0x638020.",
+  "confidence": 0.5,
+  "evidence": "`*(int*)(arg1 + i * g_006384ec * 4 + 0x10)' with `func_00638020(arg1, entry, arg3)' and index compare against arg2; sibling of 0x6381B8 (+0x9bd0 table). Callers: Ui_TextLayout_FillSlots."
+ },
+ {
+  "address": "0x006384F0",
+  "name": "maybe_Ui_TextLayout_FindSlotFittingAspect",
+  "signature": "int* maybe_Ui_TextLayout_FindSlotFittingAspect(UiTextLayout* self, u32 request, int mode)",
+  "params": {
+   "param_1": "text-layout context; 16 slot pointers at +0x9bd0, party work at +0x5c",
+   "param_2": "layout request id used for the 0x63D9FC metric lookup",
+   "param_3": "0 = use metric +0xc (or +0x10 when party flag +0x4247 is set), non-zero = use metric +8"
+  },
+  "summary": "Computes a target width/height ratio from the request's metric record and returns the usable slot whose vtable+0x90/+0x94 ratio is closest above that target (also bounded by a second, tighter threshold from g_00638660). Returns 0 when no slot fits.",
+  "confidence": 0.42,
+  "evidence": "Metric via 0x11CB38 + 0x63D9FC(ctx, arg2) fields +8/+0xc/+0x10; flag at context +0x5c +0x4247; slot ratio `(float)vtable_0x90 / (float)vtable_0x94 - g_00638660', thresholds g_0063865c/0x664; vtable+0x18 predicate; 16-slot loop. Caller: Ui_TextLayout_LayoutRowsForMode."
+ },
+ {
+  "address": "0x00638A28",
+  "name": "Ui_TextLayout_PickRandomCandidate",
+  "signature": "int* Ui_TextLayout_PickRandomCandidate(UiTextLayout* self, u32 key, int* current, char* style)",
+  "params": {
+   "param_1": "text-layout context; style object at +0xa5c4, 16 slots at +0x9bd0",
+   "param_2": "key/id passed to the candidate's vtable+0xfc test",
+   "param_3": "when non-null, only this candidate is tested",
+   "param_4": "style block; byte 4 means 'use the current style object as candidate'"
+  },
+  "summary": "Collects the candidates that are active (vtable+0x18), accept the key (vtable+0xfc) and pass 0x63880C, then returns one of them chosen at random with 0x1CA474; when a current candidate is supplied only that one is validated.",
+  "confidence": 0.5,
+  "evidence": "Random pick `0x1CA474(context+0x5c + 0x4218, 0, count-1)' into a 16-entry local array; special path `*arg4 == 4' requires `self->f_a5c4 == result'; validation chain vtable+0x18 -> vtable+0xfc -> 0x63880C. Callers: 0x637BDC, maybe_Ui_TextLayout_AppendCandidatesFiltered."
+ },
+ {
+  "address": "0x00638E0C",
+  "name": "Ui_TextLayout_IsRowTypeEnabled",
+  "signature": "u8 Ui_TextLayout_IsRowTypeEnabled(UiTextLayout* self, TextRow* row, int mode)",
+  "params": {
+   "param_1": "text-layout context; style object at +0xa5c4",
+   "param_2": "text-row descriptor (visibility via 0x48E594, flags byte at +5, byte +0xf2 suppresses)",
+   "param_3": "mode selecting the flag bit: 0..4 -> bits 1,2,4,8,0x10; 7 -> 0x40; 8 -> 0x80"
+  },
+  "summary": "Row-type gate: fails when the style object accepts type 0x10 (0x639954) or when the row is not visible (0x48E594) and its +0xf2 marker is clear; otherwise it returns whether the mode's bit is set in the row's flag byte +5.",
+  "confidence": 0.5,
+  "evidence": "`func_00639954(self->f_a5c4, 0x10) != 0 -> 0'; `func_0048E594(self->f_a5c4) == 0 || row->f_f2 != 0'; bit masks 1/2/4/8/0x10/0x40/0x80 for modes 0/1/2/3/4/7/8. Callers: FillSlotsByMode, BuildRows, AppendNextCandidateFiltered, LayoutRowsForMode, AppendCandidatesFiltered, LayoutMode6."
+ },
+ {
+  "address": "0x00638FAC",
+  "name": "maybe_Ui_TextLayout_PickRandomRowByWidth",
+  "signature": "int* maybe_Ui_TextLayout_PickRandomRowByWidth(UiTextLayout* self, u32 request, int* current)",
+  "params": {
+   "param_1": "text-layout context; second slot table at +0x10, screen/measure base at +0xa000",
+   "param_2": "layout request (six {enabled,textId} pairs at +0)",
+   "param_3": "when non-null only this candidate is measured"
+  },
+  "summary": "Measures candidate rows against the request's six text ids: a slot is accepted only when it accepts the id (vtable+0xf8 and +0xfc) and the row built by 0x4964C4 has a measured length greater than the limit from 0x63D178()->+0x147; returns one of the accepted candidates at random.",
+  "confidence": 0.42,
+  "evidence": "Request entries 8 bytes apart with `byte0 != 0' and u16 id at +2 compared with g_00639304; slot stride g_00639308 at +0x10; measure `0x4964C4(&row, request, i, self->f_5c4)' and compare `(int)limit < (int)row.length'; random pick 0x1CA474 on the party list head +0x4218. Caller: maybe_Ui_TextLayout_AppendCandidatesFiltered."
+ },
+ {
+  "address": "0x0063930C",
+  "name": "maybe_Ui_TextLayout_PickRandomRowByTextWidth",
+  "signature": "int* maybe_Ui_TextLayout_PickRandomRowByTextWidth(UiTextLayout* self, u32 request, int* current)",
+  "params": {
+   "param_1": "text-layout context; slot table at +0x10 with stride g_00639564",
+   "param_2": "layout request; the text id is read at +0xe2",
+   "param_3": "when non-null only this candidate is measured"
+  },
+  "summary": "Single-id variant of the width-based random candidate pick: requires vtable+0xf8/+0xfc on the request's id (+0xe2), measures the row through Text_Row_Init + Text_ApplyRowWidth (0x49AA0C / 0x48B3B4) and keeps it when the width exceeds the 0x63D178 limit, then returns a random match.",
+  "confidence": 0.42,
+  "evidence": "`(**(*slot + 0xf8))(slot, req->f_e2)' then +0xfc; `func_0049AA0C(&row)' + `func_0048B3B4(request, &row, self->f_a5c4, slot)' and `(short)(u16)limit < row.width'; random pick 0x1CA474. Callers: 0x637BDC, maybe_Ui_TextLayout_AppendCandidatesFiltered."
+ },
+ {
+  "address": "0x00639568",
+  "name": "maybe_Ui_TextLayout_PickRandomRowByTag",
+  "signature": "int* maybe_Ui_TextLayout_PickRandomRowByTag(UiTextLayout* self, int table, int* current, char* style)",
+  "params": {
+   "param_1": "text-layout context; style object at +0xa5c4, 16 slots at +0x9bd0",
+   "param_2": "control table of 8 entries, stride 0x2c, tag character at +0x58",
+   "param_3": "when non-null only this candidate is tested",
+   "param_4": "style block; byte 4 means 'use the current style object as candidate'"
+  },
+  "summary": "Candidate pick for rows whose control table carries a ':' tag: when the table's tag byte is present the candidate's tag match (vtable+0x1c) decides, otherwise its id match (vtable+0xfc on the request id at +2) is used; returns one accepted candidate at random.",
+  "confidence": 0.4,
+  "evidence": "`*(char*)(arg2 + i*0x2c + 0x58) == ':' (0x3A)' for i<8; `vtable+0x1c' tag test and `vtable+0xfc' id test; random pick 0x1CA474 on context +0x5c + 0x4218; `*arg4 == 4' style special case as in 0x638A28. Caller: maybe_Ui_TextLayout_AppendCandidatesFiltered."
+ },
+ {
+  "address": "0x00639954",
+  "name": "Ui_TextLayout_IsTypeAccepted",
+  "signature": "u32 Ui_TextLayout_IsTypeAccepted(int* obj, int typeId)",
+  "params": {
+   "param_1": "row/style object (vtable at +0, slot +0xe8 is the type-accept query)",
+   "param_2": "type id to test"
+  },
+  "summary": "Expands a row/type id into the set it stands for and reports whether the object's vtable+0xe8 accepts any member: 6 -> {6,7}, 2 -> {2,3,0x90}, 4 -> {0xe0,0xe1,4}, 8 -> {8,9}, 10 -> {10,0xB,0xC}, 0x13 -> {0x13,0x110}; every other id is passed straight through.",
+  "confidence": 0.5,
+  "evidence": "Six special cases each call the vtable+0xe8 query with one id and return 1 on the first hit; the default path returns the same query for the id itself. 122 call sites, all in the text-layout row builders and battle row/slot code (via 0x638E0C, 0x638FAC, 0x63930C, maybe_Ui_CmdQueue_ProcessSlots2, Battle_SelectAiActions, maybe_Battle_ProcessUnitActions)."
+ },
+ {
+  "address": "0x00639B90",
+  "name": "maybe_Field_GetActorAttachment",
+  "signature": "int maybe_Field_GetActorAttachment(FieldActor* self)",
+  "params": {
+   "param_1": "field actor; two candidate attachment pointers at +0x8dc and +0x8e0"
+  },
+  "summary": "Returns the actor's attachment sub-object: +0x8dc when the actor accepts the type stored in g_00639bc4 (via 0x639954) and that pointer is non-zero, otherwise +0x8e0; 0 when both are empty.",
+  "confidence": 0.45,
+  "evidence": "`func_00639954(self, g_00639bc4)' then `self->f_8dc' with fallback `self->f_8e0'; callers maybe_Actor_HandleSpecialEvent, maybe_FieldParty_UpdateTalkMemberState, 0x1FC378, maybe_FieldParty_UpdateActorAttachments."
+ },
+ {
+  "address": "0x00639DD4",
+  "name": "Ui_List_CountMatchingEntries",
+  "signature": "int Ui_List_CountMatchingEntries(UiListOwner* owner)",
+  "params": {
+   "param_1": "list owner (head at +0x708, end sentinel pointer at +0x704)"
+  },
+  "summary": "Walks the intrusive list starting at owner+0x708 until the next pointer equals the sentinel address stored at owner+0x704, invokes vtable slot +0x14 on the object referenced by node+0xc for every node, and returns how many of those predicates returned non-zero.",
+  "confidence": 0.55,
+  "evidence": "Loop `while (*it != self->f_704) { (**(*it+0xc)+0x14)(); it = it[1]; }` is a count over a linked list of nodes each holding an object pointer at +0xc. Caller 0x00265924 (recipe-book query) tests the result against zero (inverted by its byte at arg2+0x22) to decide whether a recipe row is kept."
+ },
+ {
+  "address": "0x0063A5CC",
+  "name": "Ui_Overlay_TestActorRectOverlap",
+  "signature": "u32 Ui_Overlay_TestActorRectOverlap(UiWidget* widget)",
+  "params": {
+   "param_1": "UI widget/overlay object (screen rect pointer at +0x298)"
+  },
+  "summary": "Returns 1 when the widget's screen rectangle overlaps the current actor's projected screen rectangle. The actor (ctx+0x54 -> +0x20) is first rejected unless its actor id (+0xac) matches the widget's +0xac; the UI-mode rect is fetched with func_00386D30, converted with func_0031A658, offset by the actor's screen offsets +0x78/+0x7c, and then tested against widget->f_298 (x at +0xe, width s16 at +0xa, y at +0xc, height at +0x10).",
+  "confidence": 0.6,
+  "evidence": "Compares f_298 fields with local_20/local_1c plus f_78/f_7c; caller FUN_0028F5A0 case 3 clears its state byte f_2dc when this returns 0, i.e. it is an 'actor is under the popup panel' test."
+ },
+ {
+  "address": "0x0063B018",
+  "name": "maybe_Ui_Message_FindTextForCurrentMode",
+  "signature": "short maybe_Ui_Message_FindTextForCurrentMode(UiTextList* list)",
+  "params": {
+   "param_1": "object with a u16 id array at +0x3c (count at +0x4c)"
+  },
+  "summary": "Scans the u16 id array and, for every id, looks the entry up in two per-thread UI tables (func_0063DCA4 and func_0063E5C8). It returns a packed u16 (high byte = table-A field +0x14, low byte = table-B byte +0xd4): ids whose mode byte is 0xff or equals the current UI mode (UI ctx +0x281) are accepted, and scanning stops early at the first id that targets a different mode.",
+  "confidence": 0.45,
+  "evidence": "Two table getters keyed by the same u16; the packed word is built at sp[0]=+0xd4 and sp[1]=+0x14 (see asm 0x63B088-0x63B09C); comparisons against *(u8*)(*uiCtx+0x281) at 0x63B0A8. Callers 0x0064FE10 and 0x00651A24 use the low byte as 'a mode-specific text exists' and the high byte as a text index."
+ },
+ {
+  "address": "0x0063B2A0",
+  "name": "maybe_Camera_IsModeSlotBusy",
+  "signature": "u32 maybe_Camera_IsModeSlotBusy(CameraWork* cam)",
+  "params": {
+   "param_1": "camera/view work object (mode byte +0x6c, five slot pointers at +0x14..+0x24)"
+  },
+  "summary": "For modes 2 through 6 it takes the mode's slot object (self+mode*4+0xc), evaluates its vtable slot +0x24, checks whether that object's id array (count at +0x1c) contains id 5 (func_00633748) and, when the object type field +0x4 is also 5, reports whether the mode record (+0x14..+0x24) has a model (+0x3fc) whose two pointers +0x408 and +0x40c differ.",
+  "confidence": 0.4,
+  "evidence": "Mode switch over self->f_6c cases 2..6 mapping to +0x14/+0x18/+0x1c/+0x20/+0x24; func_00633748 (0x633748) is an id-membership scan over the +0x14 array with count at +0x1c. Caller FUN_0066A720 passes ctx+0x74, the same object 0x641150 reads for its +0x140 quaternion, i.e. the camera/view object."
+ },
+ {
+  "address": "0x0063B368",
+  "name": "Camera_GetHeadingAngle",
+  "signature": "float Camera_GetHeadingAngle(CameraWork* cam)",
+  "params": {
+   "param_1": "camera/view work object (mode byte +0x6c, target +0x40, quaternion at +0x140)"
+  },
+  "summary": "Returns the view heading angle in degrees. In camera mode 13 with a target it simply returns the cached angle at target+0x118; otherwise it rotates a constant reference vector by the camera quaternion at +0x140..+0x14c, clamps the resulting dot product into [-1,1], calls acosf (0x672A14), converts radians to degrees with 57.29578 and applies a sign/fraction correction computed through 0x6731EC.",
+  "confidence": 0.6,
+  "evidence": "The whole body is VFP math on f_140..f_14c; literal pool holds -1.0, 1.0, 57.29578 (0x42652ee0) and 1/360; calls std_Acosf 0x672A14 then 0x6731EC; mode-13 fast path reads `[f_40 + 0x118]`; called (indirectly) with ctx+0x74 as self."
+ },
+ {
+  "address": "0x0063BB48",
+  "name": "maybe_Ui_Window_TestActorOverlapAtSlot",
+  "signature": "u32 maybe_Ui_Window_TestActorOverlapAtSlot(UiWindowOwner* owner, u32 slotIndex)",
+  "params": {
+   "param_1": "window owner object holding a pointer array at +0x204",
+   "param_2": "slot index into that array"
+  },
+  "summary": "Takes the window at owner[slotIndex+0x204], rejects it when the current UI mode is not enabled in its mode mask (func_00649B48 with the mode byte at UI ctx+0x281, mask u16 at window+0x12c), then computes the current actor's screen rect from the UI-mode rect (func_00386D30 + func_0031A658) plus the actor offsets +0x78/+0x7c and asks func_0064C4B0 whether the window overlaps it.",
+  "confidence": 0.49,
+  "evidence": "Pointer array at arg1+arg2*4+0x204; mode gate func_00649B48(obj+0x3c, uiMode) where 0x649B48 tests bit (1<<mode) of the u16 at obj+0x12c; final call func_0064C4B0(window, actor->f_ac, rect) is a rect hit-test that also checks window +0x10/+0x42/+0x5c."
+ },
+ {
+  "address": "0x0063C4E4",
+  "name": "Effect_FindDefinitionByName",
+  "signature": "EffectDef* Effect_FindDefinitionByName(void* unused, char* name, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "unused by this entry (callers pass manager+0x38)",
+   "param_2": "effect definition name string",
+   "param_3": "unused / decompiler artifact",
+   "param_4": "unused / decompiler artifact"
+  },
+  "summary": "Hashes the name with Str_HashName(kind 1) and linearly scans the global data array at db+0x4c68 (count db+0x4c6c, db from ctx+0xb4 via func_0066AA7C) for the entry whose +0x10 equals the hash; returns that entry or NULL.",
+  "confidence": 0.6,
+  "evidence": "CreateEffect2D (0x0014D7C4) calls it with the effect name and aborts with 0xffffffff when the result is NULL; STR_HASH_NAME 0x001577FC(1, name); comparison `result->f_10 == hash`."
+ },
+ {
+  "address": "0x0063C568",
+  "name": "Camera_FindMotionByName",
+  "signature": "CameraMotion* Camera_FindMotionByName(void* unused, char* name, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "unused by this entry (callers pass manager+0x38)",
+   "param_2": "camera motion name string",
+   "param_3": "unused / decompiler artifact",
+   "param_4": "unused / decompiler artifact"
+  },
+  "summary": "Hashes the name with Str_HashName(kind 0) and scans the global data array at db+0x3884 (count db+0x3888, db from ctx+0xb4 via func_0066AA9C) for the entry whose +0x2c equals the hash; returns that camera motion record or NULL.",
+  "confidence": 0.6,
+  "evidence": "CameraChange (0x0014901C) uses the result as a camera motion: fields +0x10/+0x1c/+0x28 are fed to func_0044023C/func_00440284 and iVar3->f_bc = result->f_28; also called from IECamera_00165254 and FUN_00148BA8."
+ },
+ {
+  "address": "0x00640348",
+  "name": "Actor_IsIdleAndQueueEmpty",
+  "signature": "u32 Actor_IsIdleAndQueueEmpty(ActorWork* work)",
+  "params": {
+   "param_1": "actor work object (actor reference +0xac, embedded list head +0x1c4 end pointer +0x1c8)"
+  },
+  "summary": "Returns 1 when the work object has no actor reference, or the referenced actor's vtable slot +0x1c returns non-zero, AND the embedded intrusive list at +0x1c4 is empty (its next pointer still points at self+0x1c4). This is the 'unit has finished playing its action/animation' gate used all over battle and field-party code.",
+  "confidence": 0.6,
+  "evidence": "Two conditions: `f_ac == 0 || (**(*f_ac+0x1c))() != 0` and `f_1c8 == self+0x1c4`; 113 callers including maybe_Battle_UpdateActionScene, maybe_Battle_StartActionSequence, maybe_FieldParty_UpdateStateMachine, which read it as 'queue idle' before advancing their state machine."
+ },
+ {
+  "address": "0x0064055C",
+  "name": "maybe_Ui_ResultWindow_BuildEntryFlags",
+  "signature": "void maybe_Ui_ResultWindow_BuildEntryFlags(UiWindow* window, u8* flagsOut, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "source window (state byte +0x11c)",
+   "param_2": "output 2-byte flag pair",
+   "param_3": "unused / decompiler artifact",
+   "param_4": "unused / decompiler artifact"
+  },
+  "summary": "Fills a two-byte flag pair for a result-window row: byte 0 becomes 1 (visible) and byte 1 becomes 1 when window->f_11c == 2; byte 0 is then cleared when the message-window singleton (ctx+0x8c) exists and func_00667468 reports it busy.",
+  "confidence": 0.45,
+  "evidence": "Caller 0x002141E8 stores the pair straight into self->f_118 and then clears f_e0->f_94 and f_e0->f_4fd1; ctx+0x8c is the dialogue window object (see FUN_00197E5C, which feeds ctx+0x8c into func_005C2F9C)."
+ },
+ {
+  "address": "0x00640A14",
+  "name": "Actor_GetDefaultMotionId",
+  "signature": "int Actor_GetDefaultMotionId(ActorWork* actor)",
+  "params": {
+   "param_1": "actor work object (variant flag byte +0x6fc)"
+  },
+  "summary": "Lazily initialises the global motion table (func_0010009C on g_00640a90, guarded by the byte at g_00640a88+4) and returns the motion id stored at +4 of the first 0x24-byte record, or of the second record (+0x24) when the actor's +0x6fc flag is set.",
+  "confidence": 0.6,
+  "evidence": "`iVar1 = g_00640a8c; if (arg1->f_6fc) iVar1 = g_00640a8c + 0x24; return iVar1 + 4;` Callers 0x2DB01C/0x2DB044/0x2F0AC0 pass the value to the actor's vtable slot +0x84, the slot also used for explicit motion/animation playback."
+ },
+ {
+  "address": "0x00640AC0",
+  "name": "maybe_Field_Object_HasActiveGroupRef",
+  "signature": "u8 maybe_Field_Object_HasActiveGroupRef(FieldObject* obj, u32 groupMask)",
+  "params": {
+   "param_1": "object with 13 groups of 8 handle slots at +0x38 and per-group counts at +0x1d8",
+   "param_2": "bitmask selecting which groups to inspect"
+  },
+  "summary": "For each of the 13 reference groups whose bit is set in groupMask (masks come from func_003DF8BC), resolves every 24-bit handle (type = handle>>0xb, index = handle&0x7ff) through the global handle table g_00640b88, validating the stored type, and returns 1 as soon as a resolved object's vtable slot +0xc returns non-zero.",
+  "confidence": 0.45,
+  "evidence": "Handle slots at arg1 + group*0x20 + i*4 + 0x38, counts at arg1 + group*4 + 0x1d8; `piVar5[1] == handle>>0xb` type check; handlers validated by `(**(*obj+0xc))()`. Caller maybe_Field_FindOverlapIndex (0x23AE34) plus 0x0063544C/0x00635948."
+ },
+ {
+  "address": "0x00640BBC",
+  "name": "maybe_Field_Npc_CanUseDefaultFace",
+  "signature": "int maybe_Field_Npc_CanUseDefaultFace(NpcFace* npc, int requireUiCheck, u32 unused3, u32 unused4)",
+  "params": {
+   "param_1": "NPC face state (face id byte +6)",
+   "param_2": "when non-zero, also require the UI state at ctx+0x44 to be clear",
+   "param_3": "unused / decompiler artifact",
+   "param_4": "singleton-getter scratch argument"
+  },
+  "summary": "When the NPC's own face id (+6) is -1 it returns the global default face value (record from func_0066A7D8 on ctx+0xb4, field +0x14) provided the UI allows a swap (ctx+0x44 clear, or requireUiCheck == 0), the dialogue flag ctx+0x3c is clear and the master record's flag word at +0x74/+0x1a has bit 0x40 clear; otherwise 0.",
+  "confidence": 0.45,
+  "evidence": "Callers Field_Npc_UpdateFace (0x2F2448) and Field_Npc_AdvanceFacePattern (0x2F25C4) use non-zero as 'allowed to advance/keep default face'; same object layout as those callers (+4 enabled, +6 face id, +7 pattern, +8 timer, +0xc frame count)."
+ },
+ {
+  "address": "0x00641150",
+  "name": "Field_Action_GetCameraRelativeDirection",
+  "signature": "u32 Field_Action_GetCameraRelativeDirection(FieldAction* action, float* outVector, u8* outDirection)",
+  "params": {
+   "param_1": "field action state (actor pointer +0x28)",
+   "param_2": "output camera-relative direction vector (3 floats)",
+   "param_3": "output direction index 0..3"
+  },
+  "summary": "Reads the raw field input vector, selecting the source per input mode (func_0062AB3C -> func_0066A2D0 / func_0066A494 / func_0066A560) and mirroring the UI flag at ctx+0x46 through func_0023C998. If the vector is longer than the dead zone it rotates it by the camera quaternion (ctx+0x74, +0x140) and classifies the result into direction 0..3 written to *outDirection, also writing the camera-relative unit vector to outVector; returns 1, or 0 when inside the dead zone.",
+  "confidence": 0.75,
+  "evidence": "Thresholds/constants g_006414e0..g_00641500; angle math via func_00574548 (quat rotate), func_005736A0, 0x6731EC/0x672E44. Callers 0x00301AB4 Field_Action_SelectDirAnim and 0x00301B4C maybe_Field_Action_MoveDir index g_00301b48 / g_00301d84 by the direction byte to pick a walk animation and scale speed."
+ },
+ {
+  "address": "0x006417D4",
+  "name": "Model_FindChildOfClass",
+  "signature": "ModelChild* Model_FindChildOfClass(ModelObject* obj, int index)",
+  "params": {
+   "param_1": "object holding a 24-bit handle at +4",
+   "param_2": "zero-based index among children of the wanted class"
+  },
+  "summary": "Resolves the model object behind the handle at +4 through the global handle table (g_006418b0, type g_006418ac), then walks the child list at obj+0x7c and returns the index-th child whose vtable slot 0 returns the class tag g_006418b4, finally following the child's +0xc chain to the node carrying the same tag.",
+  "confidence": 0.55,
+  "evidence": "`piVar2[1] != uVar5>>0xc` type validation, list anchored at +0x7c/+0x80, `(**result)() == g_006418b4` class test, `i == arg2` counter. Callers Field_ModelObj_UpdateEffect (0x3A3688) and Field_MultiPart_CreateSpriteFromResource A/B (0x44E4D0/0x44E718) take the child's +0x74 as an effect resource."
+ },
+ {
+  "address": "0x006418B8",
+  "name": "Model_CountChildrenOfClass",
+  "signature": "int Model_CountChildrenOfClass(ModelObject* obj)",
+  "params": {
+   "param_1": "object holding a 24-bit handle at +4"
+  },
+  "summary": "Same handle resolution as Model_FindChildOfClass, but counts every child in the +0x7c list whose vtable slot 0 returns the class tag g_0064195c.",
+  "confidence": 0.55,
+  "evidence": "Identical prologue (handle >> 0xc against g_00641954, table g_00641958) and list walk with `result = result + 1` where `(**child)() == g_0064195c`; caller 0x44E4D0 calls it first to bail out when the count is < 1."
+ },
+ {
+  "address": "0x00641CE0",
+  "name": "maybe_Ui_Entry_ResolveAttributeValue",
+  "signature": "char maybe_Ui_Entry_ResolveAttributeValue(EntryQuery* query, u32 key)",
+  "params": {
+   "param_1": "query descriptor passed by callers (not read by this entry)",
+   "param_2": "u16 entry key to resolve"
+  },
+  "summary": "Looks the key up in the master data (ctx+0xb4 -> func_0066A74C -> func_00628EE0) and returns the record's first byte; when that byte is the -1 sentinel it takes the record's kind byte (+0xe), resolves the kind with func_0063E2BC, and returns the value byte (+4) of element (kind record +4) in the table hanging off ctx+0x3e4+0x10 (+0x58 base, +0x24 self-relative offset, count +0x60, stride 8). Twin of func_00641DAC, which does the same with the key read from a struct field.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical body to func_00641DAC except that arg2 is the key here and *(u16*)(arg1+4) there; sentinel compare against g_00641da8 / g_00641e74; caller 0x001612E0 stores the result (< 0x10) into f_94c of the ctx+0x6c object, else 0xff."
+ },
+ {
+  "address": "0x00642248",
+  "name": "maybe_Ui_List_CellMatchesAtPoint",
+  "signature": "u32 maybe_Ui_List_CellMatchesAtPoint(UiCellLayout* layout, u32* point)",
+  "params": {
+   "param_1": "cell layout {gridPtr at +0, cell desc at +4, expected byte at +8}",
+   "param_2": "point {x, y}"
+  },
+  "summary": "Hit-tests the point (point[0], point[1]) against the cell grid described by layout[1] (x/y/w/h as s16 at +0x30..+0x36) using func_0062CB64 and, when a cell index is found, asks func_0062C23C whether that cell's state byte equals layout's expected value (byte at +8); returns 1 only on a match.",
+  "confidence": 0.49,
+  "evidence": "func_0062CB64 returns `(x-orgX)*h + (y-orgY)` or -1 for out-of-grid; func_0062C23C reads the u8 pair array (self-relative at +4) indexed by the cell and compares its second byte. Callers Ui_List_CanMoveCursor (0x3BCC30), Ui_List_MoveCursorToFreeCell (0x3BCCA8) and maybe_Ui_Overlay_CheckEntryPlacement (0x23AA5C)."
+ },
+ {
+  "address": "0x00642344",
+  "name": "Casino_Slot_GetPayoutRank",
+  "signature": "u8 Casino_Slot_GetPayoutRank(CasinoSlot* slot)",
+  "params": {
+   "param_1": "slot state (pattern id at +4)"
+  },
+  "summary": "Lazily builds/keeps the per-pattern table (flag g_006423d0, cached pointer g_006423d4, header word g_006423e0) and returns byte 0 of the entry selected by slot->f_4 through func_0063E918 (index must be below 6). Callers translate 0/1/2 into payouts of x1/x10/x100.",
+  "confidence": 0.65,
+  "evidence": "Three call sites (0x326B8C Casino_Slot_CalcPatternPayout, 0x3275E4, 0x3283B4) and 0x3802FC all map the result 0->1, 1->10, 2->100, else 0; 0x63E918 bounds the index to 6 and returns a u16 slot in the table."
+ },
+ {
+  "address": "0x006423E4",
+  "name": "Casino_Slot_GetPatternRecordIndex",
+  "signature": "u8 Casino_Slot_GetPatternRecordIndex(CasinoSlot* slot)",
+  "params": {
+   "param_1": "slot state (pattern id at +4)"
+  },
+  "summary": "Same lazy per-pattern table as Casino_Slot_GetPayoutRank but returns byte 1 of the selected entry, which callers use as an index into a 0x18-byte-stride record table (bounds-checked against the table count at +0x60) before handing the record to func_0011CD80.",
+  "confidence": 0.5,
+  "evidence": "0x3283B4 uses the value as `table_base + value*0x18` after validating `value <= header->f_60`, exactly the shape of a record-index lookup; lazy-init prologue is a copy of 0x642344 with globals g_00642470/g_00642474."
+ },
+ {
+  "address": "0x006424A0",
+  "name": "Casino_Slot_CalcPayout",
+  "signature": "int Casino_Slot_CalcPayout(CasinoSlot* slot, int lineKind, int amount)",
+  "params": {
+   "param_1": "slot state (bet/parameter at +0x44)",
+   "param_2": "line kind; when 1 (with carry clear) the amount is forced to 2",
+   "param_3": "base amount"
+  },
+  "summary": "Scales (amount + slot->f_44) by the reciprocal constant g_006424f4 in 32.32 fixed point, takes the high half >> 1, then multiplies it by 1/10/100 chosen from Casino_Slot_GetPayoutRank (rank 3+ yields 0) and returns the resulting payout.",
+  "confidence": 0.65,
+  "evidence": "`lVar1 = (u64)(u32)(arg3 + arg1->f_44) * g_006424f4; uVar3 = lVar1 >> 32; iVar2 = Casino_Slot_GetPayoutRank(...); return (uVar3 >> 1) * iVar2;` with the same 0->1/1->10/2->100 mapping the inline casino code uses; caller 0x3283B4 Casino_Slot_BuildPayoutSequence."
+ },
+ {
+  "address": "0x00642984",
+  "name": "maybe_Field_Object_GetKind4Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind4Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Looks the key up in the database's kind-4 std::map (tree lookup in func_006428AC), and when the mapped index is valid returns the record from the master-data array at db2+0xecc (count +0xed0); releases the temporary lookup holder through func_0010EC00/func_0010EC14 when needed.",
+  "confidence": 0.48,
+  "evidence": "func_006428AC does a red-black tree search (left +8, right +0xc, colour +0x10, key +0x14, value +0x18) over db+0x8c+24*4; array pointer/count at +0xecc/+0xed0; callers Field_MapObject2D_SetupFromRecordA..D (0x4AEC24/0x4AED70/0x4AEEB0/0x4AEFF0) use the result as a rotation source (Euler at +0xc)."
+ },
+ {
+  "address": "0x00642A28",
+  "name": "maybe_Field_Object_GetKind0Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind0Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Same kind-0 variant of the lookup: tree search in func_006428AC with type 0, then index into the master-data array at db2+0xa9c (count +0xaa0); returns 0 when the key is absent or the index is out of range.",
+  "confidence": 0.48,
+  "evidence": "Only the type argument (0) and the table pair +0xa9c/+0xaa0 differ from the kind-4 entry; callers Field_Object_InitFromDescriptor (0x4D7154) and Ui_StatusWindow_Build (0x1D8E2C)."
+ },
+ {
+  "address": "0x00642ACC",
+  "name": "maybe_Field_Object_GetKind1Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind1Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-1 variant of the record lookup: tree search with type 1, then index into the master-data array at db2+0xbcc (count +0xbd0).",
+  "confidence": 0.48,
+  "evidence": "Type argument 1 and table pair +0xbcc/+0xbd0; callers Field_SceneObject_InitFromRecord (0x4FA8FC) and Ui_StatusWindow_Build."
+ },
+ {
+  "address": "0x00642B70",
+  "name": "maybe_Field_Object_GetKind10Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind10Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-10 variant of the record lookup: tree search with type 10, then index into the array at db2+0xfa0 (count +0xfa4); this variant goes through func_0066AA7C rather than func_0066AA9C.",
+  "confidence": 0.45,
+  "evidence": "Type argument 10, `iVar2 + 4000` = +0xfa0 pointer and +0xfa4 count; callers Field_ObjectSprite_InitFromDesc (0x39EF94) and 0x00448970."
+ },
+ {
+  "address": "0x00642C10",
+  "name": "maybe_Field_Object_GetKind9Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind9Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-9 variant of the record lookup: tree search with type 9, then index into the array at db2+0x87c (count +0x880). The records are read as integer geometry/margins by the talk-balloon caller.",
+  "confidence": 0.45,
+  "evidence": "Type argument 9, table pair +0x87c/+0x880; callers Field_ObjectSprite_InitComplex (0x39F3DC) and Field_TalkBalloon_Setup (0x3D91F0), which copies record words 0..7 into the balloon's +0x48..+0x5c layout fields."
+ },
+ {
+  "address": "0x00642CB4",
+  "name": "maybe_Field_Object_GetKind6Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind6Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-6 variant of the record lookup: tree search with type 6, then index into the array at db2+0x1264 (count +0x1268).",
+  "confidence": 0.45,
+  "evidence": "Type argument 6, table pair +0x1264/+0x1268; caller Field_ObjectSprite_CreateActor (0x3A01E0) passes the record to func_00612CA0 together with a quaternion built from the record's +0xc Euler angles."
+ },
+ {
+  "address": "0x00642D58",
+  "name": "maybe_Field_Object_GetKind2Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind2Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-2 variant of the record lookup: tree search with type 2, then index into the array at db2+0xf64 (count +0xf68).",
+  "confidence": 0.48,
+  "evidence": "Type argument 2, table pair +0xf64/+0xf68; callers Field2D_Sprite_SetFromRecord (0x5A1FC4), SetFromRecordEx (0x5A2098), Ui_StatusWindow_Build and 0x004429E8."
+ },
+ {
+  "address": "0x00642DFC",
+  "name": "maybe_Field_Object_GetKind7Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind7Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-7 variant of the record lookup: tree search with type 7, then index into the array at db2+0x13e0 (count +0x13e4); goes through func_0066AA7C.",
+  "confidence": 0.45,
+  "evidence": "Type argument 7, table pair +0x13e0/+0x13e4; caller Field_ObjectSprite_CreateChildActors (0x3A0328)."
+ },
+ {
+  "address": "0x00642E9C",
+  "name": "maybe_Field_Object_GetKind3Record",
+  "signature": "FieldPartRecord* maybe_Field_Object_GetKind3Record(FieldObjectDb* db, u32* key)",
+  "params": {
+   "param_1": "field-object database singleton (ctx+0x58), map roots at +0x8c+24*kind",
+   "param_2": "pointer to the u32 lookup key"
+  },
+  "summary": "Kind-3 variant of the record lookup: tree search with type 3, then index into the array at db2+0x1014 (count +0x1018).",
+  "confidence": 0.48,
+  "evidence": "Type argument 3, table pair +0x1014/+0x1018; callers Field2D_Sprite_SetFromMinimalRecord (0x5A6010) and Ui_StatusWindow_Build."
+ },
+ {
+  "address": "0x0064362C",
+  "name": "maybe_Field_Actor_IsHandleStale",
+  "signature": "u32 maybe_Field_Actor_IsHandleStale(int self)",
+  "params": {
+   "param_1": "field actor / scene-node object (handle at +0x2cc, byte state at +0x78 of the resolved object)"
+  },
+  "summary": "Virtual slot 11 of the field-actor node, sitting between OnModelReady and ForwardAnimEvent. Returns 0 when the node's handle at +0x2cc resolves in the global handle table to an object whose byte +0x78 is below 4, and 1 when the handle is missing/stale or the resolved object is in state >= 4; generic node code uses the answer to skip nodes whose actor reference is no longer usable.",
+  "confidence": 0.33,
+  "evidence": "asm 0x64362C: bl 0x6692A0 (x6_) first, then [r4+0x2cc], mask literal 0x000FFFFF + table literal 0x007BA2D0 (index = h & 0x7ff, tag = h>>12), ldrb [obj+0x78], cmp #4. Byte-identical twin at 0x64C754 (same mask, same table, same field). vtable 0x764F98: slot 10 = maybe_Field_Actor_OnModelReady (0x363434), slot 11 = this, slot 12 = Field_Actor_ForwardAnimEvent (0x3633E8); other classes leave slot 11 as 0x6692A0 (x6_, a list-membership predicate)."
+ },
+ {
+  "address": "0x00643CE4",
+  "name": "maybe_Field_Actor_ComputeCellTransitionOffset",
+  "signature": "void maybe_Field_Actor_ComputeCellTransitionOffset(int* out_offset, int actor, u32* subpixel_pos, u32 unused)",
+  "params": {
+   "param_1": "out: two ints (x,y offset)",
+   "param_2": "actor object (position work at +0x28, cell column/row at +0xb0/+0xb4)",
+   "param_3": "current sub-pixel position pair {x,y}",
+   "param_4": "unused"
+  },
+  "summary": "Resolves the actor's current map cell through the map-data registry at engine+0x88, maps the sub-pixel position to a sub-cell index and tests that sub-cell's edge markers 0xb..0xe; emits a small signed 2D offset (magnitude 1, or 2 when the UI mode byte +0x27f is 1..4), or the {-1,-1} sentinel when the position is outside the cell. Used by the field actor's cell-transition check when nudging an actor across a cell boundary.",
+  "confidence": 0.45,
+  "evidence": "Body: 0x6F1EEC()+0x88 registry -> 0x62F0E0; cell resolved with 0x62C388(reel/col) and 0x62C3B0(row); 0x62CB64(subcell, x, y) returns a linear sub-cell index or -1 (asm 0x62CB64 reads s16 rect 0x30/0x32/0x34/0x36 and returns y*w+x); 0x62C23C(cell,index,7? no 0xb..0xe) compares the u8 at entry+1 (asm 0x62C23C). UI ctx byte +0x27f: 1..4 => magnitude 2 else 1. Caller 0x371140 (maybe_Field_Actor_CheckCellTransition) adds the two results to actor work f_c4 and f_c8 and derives a direction with 0x319678."
+ },
+ {
+  "address": "0x00645BAC",
+  "name": "maybe_Ui_PopupEntry_HasDifferingValues",
+  "signature": "u32 maybe_Ui_PopupEntry_HasDifferingValues(int self)",
+  "params": {
+   "param_1": "popup entry: sub-entry count f_480, sub-entry objects at self+8+i*0xc"
+  },
+  "summary": "Walks the self->f_480 sub-entries, calls virtual slot 0xd4 on each and returns 1 as soon as two sub-entries report different values; a first value of -1 aborts the comparison for that entry. Ui_PopupEntry_SpawnNumberList stores the result in byte +0x219 of the spawned number-list object, i.e. it flags popups whose parts are not all identical.",
+  "confidence": 0.45,
+  "evidence": "asm 0x645BAC: ldr [r5+0x480] count; add r0,r4*3; ldr [r0,#8]; ldr [vtbl+0xd4]; blx; cmp r0,r6 (r6 = first non -1 value); mov r0,#1 on mismatch. Caller 0x3FC9F0 line `iVar3->f_219 = func_00645BAC(arg2)` alongside f_208 = actor id (+0x768), f_214 = f_480, f_218 = byte +0x10."
+ },
+ {
+  "address": "0x00645C54",
+  "name": "maybe_Field_Gimmick_GetRandomPartOffset",
+  "signature": "void maybe_Field_Gimmick_GetRandomPartOffset(float* out, int part, float spread)",
+  "params": {
+   "param_1": "out vec3",
+   "param_2": "part/gimmick record (signed index at +0x238)",
+   "param_3": "float spread factor passed in s0"
+  },
+  "summary": "Fills out[0..2] with a randomised part position: x = -4.0 + spread*(float)part->f_238, y = 0.0, z = -1.5 + rand01()*3.0 using the engine RNG at +0x98. Called while laying gimmick parts along an arc or an action path so each part gets a lateral and vertical jitter.",
+  "confidence": 0.49,
+  "evidence": "Constants at 0x645CC8..0x645CD8: 0xC0800000 (-4.0), 0x00000000, 0xBFC00000 (-1.5), 0x40400000 (3.0), 0x30000000 (2^-31); vmla/vmul sequence 0x645CB0-0x645CB8 = -1.5 + rand*3*2^-31; spread arrives in s0 (`vmla.f32 s1, s0, s2`). Random: 0x51B1FC(engine+0x98, 0x7fffffff). Callers 0x5D460C maybe_Field_Gimmick_PlacePartsAlongArc, 0x5D5D2C maybe_Field_Gimmick_LayoutPartsForAction."
+ },
+ {
+  "address": "0x00645EF4",
+  "name": "maybe_Ui_Window_HasActiveParts",
+  "signature": "u32 maybe_Ui_Window_HasActiveParts(int self)",
+  "params": {
+   "param_1": "window/panel: 3 part slots at +0x134 (stride 0x50), 6 child pointers at +0x11c"
+  },
+  "summary": "Returns 1 when any of the three part slots at self+0x134 (stride 0x50) has a non-zero float timer at +0x2c, or when any of the six pointers at self+0x11c is non-null and its object reports a running timer through 0x64E25C. Ui_GuideWindow_UpdateState uses it to keep the window open/animating while parts are still active.",
+  "confidence": 0.4,
+  "evidence": "asm 0x645EF4: loop i<3 with r0 = r5 + i*0x50 + 0x134 -> 0x649BFC (reads float +0x2c); then loop i<6 with r0 = [r5 + i*4 + 0x11c], skip if null, bl 0x64E25C. Caller 0x36A36C Ui_GuideWindow_UpdateState."
+ },
+ {
+  "address": "0x006483D4",
+  "name": "maybe_Ui_Window_FindPageByEntryId",
+  "signature": "void maybe_Ui_Window_FindPageByEntryId(int table, u32 entry_id, int* out_page, int* out_index)",
+  "params": {
+   "param_1": "page table base (page count at +0x1cfc, pages stride 0x8c, per-page slot count at +0x88)",
+   "param_2": "16-bit entry id to find (0xffff = none)",
+   "param_3": "out: page index (-1 when not found)",
+   "param_4": "out: slot index (-1 when not found)"
+  },
+  "summary": "Searches the window's page/slot table for a 16-bit entry id: for every page (stride 0x8c) and every slot pointer, it walks the variable-length u16 array (count at [0], own offset at [4]) and writes the page/slot pair of the first array containing the id. Ui_Window_SelectById uses it to open the page that holds a list model's current short id.",
+  "confidence": 0.49,
+  "evidence": "0x37A7B0: `func_006483D4(&self->f_20e4, *(short*)(iVar1+self), &local_10, &self->f_3de4)` followed by `func_004CE648(&self->f_1e4, local_10)`; loops arg1->f_1cfc pages, each +0x88 slot pointers, entry array = base + base[1] + 4 with u16 elements. Both outputs pre-set to -1."
+ },
+ {
+  "address": "0x00648C64",
+  "name": "maybe_Field_Actor_HasTileFlag7",
+  "signature": "u32 maybe_Field_Actor_HasTileFlag7(int self)",
+  "params": {
+   "param_1": "field actor (actor work at +0x28, position work at +0x2c)"
+  },
+  "summary": "Returns 1 when the actor's work type field f_170 falls in 0x18d..0x195 (nine consecutive ids); otherwise returns the map-cell attribute test for marker 7 at the actor's current sub-cell. One of the three predicates (flags 5/6/7) that Ui_Overlay_ApplyVisibility ORs together to decide whether an actor needs its overlay widgets.",
+  "confidence": 0.35,
+  "evidence": "Body: 0x22F59C(self->f_28) = actor work of the current party slot (context +0x281 / +0x244), range check f_170-0x18d < 9, then 0x22C148(self->f_2c) -> cell column/row f_b0/f_b4 and sub-pixel f_78/f_7c, registry engine+0x88 via 0x62F0E0, 0x62C388/0x62C3B0/0x62CB64, final flag test 0x62C23C(...,7). Siblings: 0x648E78 (flag 5, range 0x277..0x27f) and 0x648F64 (flag 6, range 0x14e..0x156)."
+ },
+ {
+  "address": "0x00648D9C",
+  "name": "maybe_Ui_Overlay_CheckRowMarker",
+  "signature": "int maybe_Ui_Overlay_CheckRowMarker(int self)",
+  "params": {
+   "param_1": "overlay row widget (actor work at +0x28, table id at +0x49)"
+  },
+  "summary": "Only acts for the first party slot (UI context byte +0x281 == 0): looks the row's overlay record up by self->f_49 through the scratch context (0x63D270) and returns its byte +0x17; when the actor's byte +0x312 is 0 it first requires the 3D marker placement (0x1D4828 -> 0x3B1698, position from the actor work +0x9c..+0xa4) to report success. A non-zero result makes the caller show the row's widgets.",
+  "confidence": 0.32,
+  "evidence": "0x3BB314 line 162: `iVar4 = func_00648D9C(self); if (iVar4 != 0) { set +4 = 1 on f_18/f_1c/f_20; return; }`; body: 0x22F59C(self->f_28), guard ctx+0x281==0, guard self->f_49 != -1, 0x11CB38 scratch ctx + 0x63D270 lookup, result = record->f_17, then 0x1D4828(engine+0x4c, colour 0xffffff, pos f_9c/f_a0/f_a4) must return non-1."
+ },
+ {
+  "address": "0x00648E78",
+  "name": "maybe_Field_Actor_HasTileFlag5",
+  "signature": "u32 maybe_Field_Actor_HasTileFlag5(int self)",
+  "params": {
+   "param_1": "field actor (actor work at +0x28, position work at +0x2c)"
+  },
+  "summary": "Returns 1 when the actor's work type f_170 falls in 0x277..0x27f; otherwise returns the map-cell attribute test for marker 5 at the actor's current sub-cell. Sibling of 0x648C64 (flag 7) and 0x648F64 (flag 6); all three feed the same overlay-visibility decision.",
+  "confidence": 0.35,
+  "evidence": "Same body as 0x648C64 except the range base 0x277 and the final 0x62C23C(...,5); callers 0x3BA310 maybe_Ui_TsuyosaWindow_UpdateRowText, 0x3BB314 maybe_Ui_Overlay_ApplyVisibility, 0x4A70F8 maybe_Anim_InstanceList_Update (all three functions called in a row and ORed)."
+ },
+ {
+  "address": "0x00648F64",
+  "name": "maybe_Field_Actor_HasTileFlag6",
+  "signature": "u32 maybe_Field_Actor_HasTileFlag6(int self)",
+  "params": {
+   "param_1": "field actor (actor work at +0x28, position work at +0x2c)"
+  },
+  "summary": "Returns 1 when the actor's work type f_170 falls in 0x14e..0x156; otherwise returns the map-cell attribute test for marker 6 at the actor's current sub-cell. Sibling of 0x648E78 (flag 5) and 0x648C64 (flag 7).",
+  "confidence": 0.35,
+  "evidence": "Same body as 0x648E78 except range base 0x14e and 0x62C23C(...,6); same three callers as the other two tile-flag predicates."
+ },
+ {
+  "address": "0x0064915C",
+  "name": "maybe_Ui_TestPlacementFree",
+  "signature": "u32 maybe_Ui_TestPlacementFree(u32* record, u32* point)",
+  "params": {
+   "param_1": "17-byte placement record: 4 payload words at +0, handler index byte at +0x10",
+   "param_2": "candidate point {x,y}"
+  },
+  "summary": "Resolves the test handler from the record's byte at +0x10 (0x386DA8 -> 0x423E94, with a default), calls it with (record[0], record[1], &record[2], point) and returns the inverted result, i.e. 1 when the handler reports the point is free/acceptable. Used by the placement loop that looks for a free grid cell for a widget.",
+  "confidence": 0.45,
+  "evidence": "Body: 0x386DA8(*(u8*)(arg1+0x10)) then `(*pcVar1)(*arg1, arg1[1], arg1+2, arg2) ^ 1`. Caller 0x4231B4 lines 104-124: record filled by 0x3BCBE0(...,k,&local_68,&local_90) (four words + byte) and the loop breaks when `func_0064915C(&local_50,&local_78) == 1`."
+ },
+ {
+  "address": "0x00649AAC",
+  "name": "maybe_Field_Condition_HasActiveRef",
+  "signature": "u32 maybe_Field_Condition_HasActiveRef(int self, u32 mask)",
+  "params": {
+   "param_1": "condition block: entry count +0x128, entries {id +0x28, mask +0x2c} stride 8",
+   "param_2": "mask of entry kinds to consider"
+  },
+  "summary": "Scans the condition block's entries and, for each entry whose mask intersects arg2, resolves the referenced object through the 11-bit handle table at 0x007B2D60 and asks it via virtual slot +0xc; returns 1 on the first truthy answer. Together with the bitmask test 0x649B48 (+0x12c) this gates the conditions of map objects/NPCs.",
+  "confidence": 0.4,
+  "evidence": "asm 0x649AAC: [r5+0x128] count; loop entry = r5 + i*8, `tst [entry+0x2c], r6`, id = [entry+0x28], mask literal 0x001FFFFF/table 0x007B2D60 (index 0x7ff, tag id>>11), ldr [obj], ldr [vt+0xc], blx, nonzero => return 1. Callers pass (struct+0x3c, 1) from 0x5BCAD4 and (struct+0x3c, arg7) from 0x23AE34 right before 0x649B48(struct, slot)."
+ },
+ {
+  "address": "0x0064A5C0",
+  "name": "maybe_Ui_Talk_CanDropPendingEntry",
+  "signature": "u32 maybe_Ui_Talk_CanDropPendingEntry(int self, u8 modeMask)",
+  "params": {
+   "param_1": "pending talk entry (intrusive list head at +8, first node at +0xc)",
+   "param_2": "display-mode bit mask to test (0x1f from the only caller)"
+  },
+  "summary": "Returns 1 when neither display-mode byte at engine+0x44/+0x45 intersects arg2, the UI core reports both talk sub-objects via vtable slot 0x3c (indices 0 and 1) and a live 3D/2D talk object (path +0x10 -> +0xa0, byte +0x20), and the entry's own list (self+8) is non-empty. The caller then unlinks and destroys one queued talk entry, so this is the 'can this pending talk entry be dropped' gate.",
+  "confidence": 0.38,
+  "evidence": "asm 0x64A5C0: ldrb [ctx+0x44] then tst with r4 (arg2); if equal to +0x45 or no overlap in +0x45, 0x6F229C (Ui_GetCore) -> [core+0x14] + 0xc -> vtable+0x3c(0) and (1); then [core+0x10] -> +0xa0 -> byte +0x20; finally [r5+0xc] != r5+8. Caller 0x3F2E98 with 0x1f then destroys the first list node. Nearby strings 'talk_3d_up.bfl'/'talk_2d_up.bfl' at 0x64A698."
+ },
+ {
+  "address": "0x0064A818",
+  "name": "maybe_Casino_Slot_PickLosingStop",
+  "signature": "int maybe_Casino_Slot_PickLosingStop(u32* reel_data, u32* chosen_stops, int reel)",
+  "params": {
+   "param_1": "reel data: first word = 24x5 symbol byte table",
+   "param_2": "array of 3-byte chosen stops of the earlier reels",
+   "param_3": "reel index whose stop is chosen (pattern read at entry reel-1)"
+  },
+  "summary": "Picks a stop for reel arg3 whose three visible symbols do not repeat the symbols already recorded for the previous reels (bytes arg2-6..arg2-1; the wildcard symbol 6 is handled by four separate comparison variants), then returns one candidate chosen uniformly with the engine RNG at +0x98. This is the 'break any horizontal symbol line' selection used when a losing spin is requested.",
+  "confidence": 0.49,
+  "evidence": "asm 0x64A818: ldr ip,[r0] base; symbol = base[reel + stop*5] via 0x64ACEC (table g_0072AB4C = {0,1,2,3,4} reel offsets, 24 stops, 5 bytes per stop, neighbours stop-1/stop+1); four compare blocks use [r4,-3]/[r4,-5]/[r4,-1] and [r4,-6]/[r4,-2]/[r4,-1]; final random pick via 0x51B1FC(engine+0x98,0x7fffffff) + 0x11CD80. Called from 0x64AD74 with reel 4."
+ },
+ {
+  "address": "0x0064AD74",
+  "name": "maybe_Casino_Slot_BuildLosingSpin",
+  "signature": "void maybe_Casino_Slot_BuildLosingSpin(u32* out_spin, u32* reel_data)",
+  "params": {
+   "param_1": "out: 9 bytes (per-reel 3-symbol stops plus a 0xff terminator)",
+   "param_2": "reel data / symbol table"
+  },
+  "summary": "Builds a complete losing spin: reel 0's stop comes from a first random roll, reels 1..3 use 0x64B358 (stop whose symbols differ from the previous reel) and reel 4 uses 0x64A818; the resulting three-symbol groups are packed as u16+u8 into arg1 and terminated with 0xff. Selected from the lose branch of Casino_Slot_BuildPayoutSequence's helper 0x64B448.",
+  "confidence": 0.49,
+  "evidence": "Body: 0x51B1FC(engine+0x98) + 0x11CD80(random, 0x18) at entry, then 0x64ACEC(reel 0), 0x64B358(...,1), 0x64B358(...,2), 0x64B358(...,3), 0x64A818(...,4); writes local_30/_local_2c/local_28 (9 bytes) to arg1. Called only from 0x64B448 (line `func_0064AD74(arg1,arg2)`), whose caller 0x3283B4 is Casino_Slot_BuildPayoutSequence."
+ },
+ {
+  "address": "0x0064B270",
+  "name": "maybe_Casino_Slot_PickMatchingStop",
+  "signature": "int maybe_Casino_Slot_PickMatchingStop(u32 reel_data, int stops_base, int reel, int row)",
+  "params": {
+   "param_1": "reel data (first word = symbol table)",
+   "param_2": "base of the 3-byte stop array of the earlier reels",
+   "param_3": "reel index",
+   "param_4": "row 0..2 selecting which symbol comparator to use"
+  },
+  "summary": "Picks a stop for reel arg3 whose symbol in row arg4 continues the line: the comparator returns true when the previous reel's symbol equals the candidate's or either is the wildcard 6. On success one of the candidate stops is returned through the engine RNG. This is the win-line counterpart of 0x64B358/0x64A818.",
+  "confidence": 0.49,
+  "evidence": "Comparator table g_0064B34C/B350/B354 = {0x5E6020, 0x5E5FF8, 0x5E5FD0} (asm: compare byte[0]/byte[1]/byte[2] of prev vs candidate, `cmpne r1,#6`, return 1 when either is 6 or values are equal), selected by arg4 in {0,1,2}; loop over 24 stops with 0x64ACEC + random pick via 0x51B1FC/0x11CD80. No callers found in the image (dead/table-dispatched)."
+ },
+ {
+  "address": "0x0064B358",
+  "name": "maybe_Casino_Slot_PickDifferingStop",
+  "signature": "int maybe_Casino_Slot_PickDifferingStop(u32 reel_data, int stops_base, int reel, u32 carry)",
+  "params": {
+   "param_1": "reel data (first word = symbol table)",
+   "param_2": "base of the 3-byte stop array of the earlier reels",
+   "param_3": "reel index",
+   "param_4": "carried previous symbol value used when the entry's first symbol is wildcard"
+  },
+  "summary": "Picks a stop for reel arg3 whose three symbols are all non-wildcard and all differ from the three symbols of the previous reel; returns 0 when every candidate is rejected. Breaks horizontal symbol lines while building a losing spin (reels 1..3 of 0x64AD74).",
+  "confidence": 0.49,
+  "evidence": "Body: for i<0x18 symbols = 0x64ACEC(reel,i); rejects when the previous entry's symbol (arg2-3/-2/-1) is 6, when any candidate symbol is 6, or when a candidate equals the corresponding previous symbol; candidate list in a 24-byte stack array; random pick via 0x51B1FC + 0x11CD80. Called by 0x64AD74 for reels 1,2,3."
+ },
+ {
+  "address": "0x0064B448",
+  "name": "maybe_Casino_Slot_BuildSpinResult",
+  "signature": "void maybe_Casino_Slot_BuildSpinResult(u32* out_spin, int* reel_data, u8* decision)",
+  "params": {
+   "param_1": "out: 12-byte spin result",
+   "param_2": "reel data: [0] = symbol table pointer, [1] = rule table (bytes +0x16/+0x17 = probabilities, +0xaf = lose threshold)",
+   "param_3": "5-byte decision block: +2 forced-win flag, +3 kind/symbol, +4 value (>6 enables the symbol path)"
+  },
+  "summary": "Produces the reel stops for one spin. If a forced win is requested (decision[2] != 0, decision[4] > 6 and 0x6013AC(decision[3]) holds) it rolls a shift and asks 0x64BFC8 for five stops containing symbol 5 with that shift; otherwise it rolls the 0..99 probability at reel_data[1]+0x16/0x17 and either builds the payout temporary tables or falls to a lose roll against reel_data[0]+0xaf, which selects the losing-spin builder 0x64AD74 (else the alternate chunk at 0x64AEE0). The 12-byte result is handed to 0x672318(&self->f_4c, ...) by Casino_Slot_BuildPayoutSequence.",
+  "confidence": 0.49,
+  "evidence": "0x3283B4 line 145: `func_0064B448(auStack_38, *(u32*)(self+8), &local_2c); func_00672318(&self->f_4c, auStack_38);` with local_2c/2b/2a/29/28 = five decision bytes. Body: 0x6013AC(decision[3]), random 0..(decision[4]-6), 5x 0x64BFC8(reel,5,shift,1) with stack arg local_58=1; else random(100) vs byte +0x16/+0x17; 0x64A710/0x64AEE0 static temp tables via 0x100050; 0x64AD74 in the final branch."
+ },
+ {
+  "address": "0x0064BDC4",
+  "name": "maybe_Casino_Slot_NudgeSymbolToAvoidWin",
+  "signature": "void maybe_Casino_Slot_NudgeSymbolToAvoidWin(u32* out_spin, u32 reel_data, u32* stops)",
+  "params": {
+   "param_1": "out: 9 bytes (mutated spin)",
+   "param_2": "reel data / symbol table",
+   "param_3": "current five 3-byte stop groups"
+  },
+  "summary": "For every reel whose three symbols are all non-wildcard it tries all 24 symbols, rebuilds that reel's stop group and records the (reel, symbol) pairs for which the win evaluator 0x64AA5C no longer reports a win (at most 32 pairs); it then substitutes one randomly chosen symbol into the spin and returns it. Effectively a de-win nudge; no caller was located, so it is probably only reachable through a table.",
+  "confidence": 0.45,
+  "evidence": "Body: 0x64ACEC for the initial 5 groups, then per reel loop i<0x18 with 0x64AA5C(reel_data, groups) == 0 collecting (reel&7 | symbol<<3) bytes; random pick via 0x51B1FC + 0x11CD80; patch `pbVar7 = &local_80 + idx; *pbVar7 = symbol`. Only self-reference in the caller map (dead code)."
+ },
+ {
+  "address": "0x0064BFC8",
+  "name": "maybe_Casino_Slot_PickStopBySymbol",
+  "signature": "u32 maybe_Casino_Slot_PickStopBySymbol(int* reel_data, int reel, u32 symbol, int shift_mode, int match_equal)",
+  "params": {
+   "param_1": "reel data (first word = symbol table)",
+   "param_2": "reel index",
+   "param_3": "symbol id to match",
+   "param_4": "shift mode: 0 = none, 1 = +1 stop, 2 = -1 stop, other = 0",
+   "param_5": "non-zero: keep stops whose symbol equals arg3; zero: keep the others and drop wildcards"
+  },
+  "summary": "Collects the stops of reel arg2 whose symbol equals (or differs from) arg3 depending on arg5, shuffles that candidate list with the engine RNG and returns the chosen stop index, optionally shifted by one position when arg4 is 1 or 2. Used by the forced-win path of 0x64B448 to place symbol 5 on all five reels at a random vertical shift.",
+  "confidence": 0.49,
+  "evidence": "asm 0x64BFC8: arg5 read from [sp,#0x78] (`cmp r3,#0` selects equal/not-equal scan; not-equal also rejects symbol 6); symbol = base[reel + stop*5] with reel offsets g_0072AB4C; shuffle through the LCG fields g_007C22FC/0x007C22F8 with 0x0010009C/0x0011CFAC; tail switch on arg4 returns idx, (idx+1)%24, (idx+23)%24 or 0 (g_0064C2E0 = 0xAAAAAAAB reciprocal). Called from 0x64B448 only."
+ },
+ {
+  "address": "0x0064C32C",
+  "name": "maybe_Menu_Slot_GetOccupancyState",
+  "signature": "u32 maybe_Menu_Slot_GetOccupancyState(int self)",
+  "params": {
+   "param_1": "menu slot (enabled byte +0x68, item record pointer +0x38)"
+  },
+  "summary": "Three-way state query for a menu slot: 0 when the slot is disabled (byte +0x68 non-zero), 1 when there is no item (record pointer +0x38 null or its 16-bit id at +0xc zero), 2 when the slot holds an item. Menu_Slot_HandleSelectionInput forwards `state == 1` to its selection handler.",
+  "confidence": 0.42,
+  "evidence": "asm 0x64C32C: `add r0,r0,#0x4c; ldrsb r0,[r0,#0x1c]` = byte +0x68, non-zero -> 0; ldr [r4+0x38]; ldrhne [r0+0xc]; return 1 when null/zero else 2. Caller 0x4A1420: `iVar2 = func_0064C32C(&self->f_24c); func_004A0FF4(self, iVar2 == 1);`."
+ },
+ {
+  "address": "0x0064C4B0",
+  "name": "maybe_Field_Actor_CheckRecordRectOverlap",
+  "signature": "u32 maybe_Field_Actor_CheckRecordRectOverlap(int self, int id, u32* rect)",
+  "params": {
+   "param_1": "helper object (enabled byte +0x10, flag +0x42, record id +0x5c)",
+   "param_2": "expected actor/record id",
+   "param_3": "rect {x, y, w, h} as four ints"
+  },
+  "summary": "Resolves the record for self->f_5c through the singleton returned by 0x6F202C (0x2E6154 -> hash at +0x58, record at +0x18), verifies the record's first word equals arg2 and tests the record's four u16 rect fields (+4..+0xa) against arg3, returning 1 on overlap. The field overlay uses it to test whether the current actor's rect intersects an interactive object's rect.",
+  "confidence": 0.45,
+  "evidence": "Body guards on bytes +0x10/+0x42/+0x5c; 0x6F202C singleton + 0x2E6154(id at +0x5c) = table getter (uxth id, 0x714160 hash lookup, record+0x18); compares record[0] with arg2 and does the usual min/max rect comparison on u16 fields at +4/+6/+8/+0xa against arg3[0..3]. Caller 0x63BB48 passes `iVar3->f_ac` (current target actor handle, engine+0x54 -> +0x20) and the actor's screen rect."
+ },
+ {
+  "address": "0x0064C5D8",
+  "name": "maybe_Field_Object2D_AdjustRectForScreen",
+  "signature": "void maybe_Field_Object2D_AdjustRectForScreen(int* out, int obj, u16* src_rect)",
+  "params": {
+   "param_1": "out: two screen coordinates",
+   "param_2": "2D object (screen size at +0x218/+0x21c, orientation source at +0x1f0 or +0x38+0x74)",
+   "param_3": "source rect as 4 u16 (w, h, x, y)"
+  },
+  "summary": "Converts a 2D object's source rectangle into screen coordinates for the active screen orientation: 0x2D1814 maps the orientation id (from obj+0x1f0, or obj+0x38+0x74 -> +0xc) to 0/2/6 and the routine mirrors x/y about obj+0x218-1 / obj+0x21c-1 accordingly. Called from the 2D object's scene-node update.",
+  "confidence": 0.45,
+  "evidence": "asm 0x64C5D8 reads u16 [arg3], [arg3+2], [arg3+4], [arg3+6]; iVar5 = [arg2+0x218]-1, iVar4 = [arg2+0x21c]-1; iVar3 = [arg2+0x1f0] or [arg2+0x38]+0x74; 0x2D1814(x): (x==7||x==5)->6, (x==3||x==1)->2; branches 0, 2 and 6 flip the axes. Caller 0x40BBB8 maybe_Field_Object2D_UpdateSceneNodes."
+ },
+ {
+  "address": "0x0064C6C0",
+  "name": "maybe_Field_Object2D_IsHandleStale",
+  "signature": "u32 maybe_Field_Object2D_IsHandleStale(int self)",
+  "params": {
+   "param_1": "2D field object (handle at +0x2e0)"
+  },
+  "summary": "Virtual slot 11 of the 2D field-object class. Returns 0 when the object's handle at +0x2e0 resolves in the global handle table (0x007BA2D0) to an object whose byte +0x78 is below 4, and 1 when the handle is absent/stale or the target is in state >= 4. Sibling of the effect-slot hooks at slot 10 (0x40D484) and slot 12 (0x40D748).",
+  "confidence": 0.3,
+  "evidence": "Same instruction sequence as 0x64362C but field +0x2e0: bl 0x6692A0, ldr [r4+0x2e0], mask 0x000FFFFF/table 0x007BA2D0, ldrb [obj+0x78], cmp #4, returns 1 unless the handle maps to a live object. vtable 0x76D844 slot 10 = maybe_Field_Object2D_UpdateEffectSlot, slot 11 = this, slot 12 = maybe_Field_Object2D_PlayStateEffect."
+ },
+ {
+  "address": "0x0064C754",
+  "name": "maybe_Field_AnimObject_IsHandleStale",
+  "signature": "u32 maybe_Field_AnimObject_IsHandleStale(int self)",
+  "params": {
+   "param_1": "animatable field object (handle at +0x2cc)"
+  },
+  "summary": "Virtual slot 11 of the anim-object class. Returns 0 when the handle at +0x2cc still resolves in the global handle table to an object with byte +0x78 < 4, otherwise 1. Its vtable neighbours are 0x30C010 (acquires/attaches the same +0x2cc handle into byte +0x2d0) at slot 10 and AnimObject_ForwardEvent at slot 12.",
+  "confidence": 0.3,
+  "evidence": "Byte-identical to 0x64362C (same field +0x2cc, mask 0x000FFFFF, table 0x007BA2D0); vtable 0x76D93C slot 10 = maybe_Field_HandleAcquire (0x30C010, which stores the resolved slot index into +0x2d0), slot 11 = this, slot 12 = maybe_AnimObject_ForwardEvent (0x28E904)."
+ },
+ {
+  "address": "0x0064D2DC",
+  "name": "maybe_Field_ActorAction_CheckCameraAlignment",
+  "signature": "u32 maybe_Field_ActorAction_CheckCameraAlignment(int self)",
+  "params": {
+   "param_1": "actor action (actor work at +0x28, action vector at +0x350..+0x358)"
+  },
+  "summary": "Actor-action virtual (slot 7). Only in 3D mode (0x62AB3C == 2) it reads the camera direction via 0x66A494, normalises it and returns 0 when the absolute dot product with the action vector (+0x350..+0x358) is below 0.2 (g_0064D3CC); returns 1 otherwise. It is therefore the 'camera is roughly aligned with the action direction' test.",
+  "confidence": 0.35,
+  "evidence": "Body: 0x62AB3C(engine+8) == 2; vec = g_0064D3C4 (0x007E7000); 0x66A494(engine+0xc,&vec) returns whether |vec| exceeds a threshold; scale = 1.0/|vec| (g_0064D3C8 = 0x3F800000), then |dot(vec_norm, [arg1->f_28 + 0x350..0x358])| < 0.2 (g_0064D3CC = 0x3E4CCCCD) => 0. vtable 0x76E008 slot 7, neighbours Field_ActorAction_BeginStep/EndBehaviour/UpdateBehaviour/ClampDirection."
+ },
+ {
+  "address": "0x0064D3D0",
+  "name": "maybe_Casino_Poker_RollHandRankChance",
+  "signature": "u32 maybe_Casino_Poker_RollHandRankChance(int self, u32 rank, u32 unused1, u32 unused2)",
+  "params": {
+   "param_1": "poker state (probability table pointer at +4)",
+   "param_2": "hand rank 1..9",
+   "param_3": "unused",
+   "param_4": "unused (register/stack cookie)"
+  },
+  "summary": "Probability gate for dealing a hand of a given rank: requires rank in 1..9 and a non-null probability table, rolls 0..99 with the engine RNG at +0x98 and returns 1 when roll+1 is at most the u16 percentage stored at table + rank*0xc + 8. Called by the Casino_Poker_DealHandB..H variants and Casino_Poker_DealHandWithJokers to decide whether the dealt hand reaches the requested rank.",
+  "confidence": 0.49,
+  "evidence": "Body: arg2 &= 0xff; if (arg2 < 10 && arg2 != 0) { if ([arg1+4] == 0) return 0; 0x51B1FC(engine+0x98, 0x7fffffff) then 0x11CD80(ctx,100); return (extraout_r1+1 <= *(u16*)(table + arg2*0xc + 8)); }. Nine ranks of 0xc bytes match the poker hand categories; callers 0x414834/0x414A94/0x414E58/0x415260/0x415B98/0x415EE0/0x4161A8 (Casino_Poker_DealHandB..H) and 0x416714 Casino_Poker_DealHandWithJokers."
+ },
+ {
+  "address": "0x0064DCE0",
+  "name": "maybe_Field_SceneNode_IsRefRegistered",
+  "signature": "u32 maybe_Field_SceneNode_IsRefRegistered(int self)",
+  "params": {
+   "param_1": "field scene node (field-subsystem id at +0x297)"
+  },
+  "summary": "Scene-node virtual (slot 11 of the 31-slot vtable 0x76FD5C). Returns 1 when 0x649994 can resolve the node's field-subsystem id (self+0x297) through the table hangig off subsystem +0x64; its slot-10 neighbour 0x43FDF0 unregisters that same id (0x3DBFC8), so this is the 'is my map/model reference still registered' predicate.",
+  "confidence": 0.42,
+  "evidence": "asm 0x64DCE0: bl 0x6692A0, 0x6F1EEC, then 0x649994(*(u32*)(ctx+0x64), [arg1+0x297]); 0x649994 (asm) walks reg->f_2fc (count +0x60, array +0x58, entries stride 8), requires entry+4 != 0, then reg+id+0x244 < 0xff and a 12-bit handle table lookup. vtable 0x76FD5C: slot 7 = Field_SceneNode_UpdateMapRecord, slot 10 = 0x43FDF0, slot 11 = this."
+ },
+ {
+  "address": "0x0064E25C",
+  "name": "maybe_Ui_Window_IsTimerRunning",
+  "signature": "u32 maybe_Ui_Window_IsTimerRunning(int self)",
+  "params": {
+   "param_1": "window/part object (timers at +0x1680 and +0x1684)"
+  },
+  "summary": "Returns 1 when the pointer at self+0x1680 is non-null and the float at +0x78 of the pointed object is non-zero (via 0x649BF4), or when the float at +0x78 of self+0x1684 is non-zero (0x65100C thunk adds 0x4c, then 0x649BFC tests +0x2c). Both fields are countdown timers, so this is the 'part is still animating' test used by the window's update.",
+  "confidence": 0.42,
+  "evidence": "asm 0x64E25C: [r0+0x1680] != 0 && 0x649BF4(ptr) != 0 -> 1; else 0x65100C(self+0x1684) != 0 -> 1. 0x649BF4 = `add r0,r0,#0x4c` + fallthrough to 0x649BFC = `vldr s0,[r0,#0x2c]; vcmp with 0.0; movne r0,#1`; 0x65100C is a thunk `add r0,r0,#0x4c; b 0x649BF8`. Caller 0x645EF4 (three timers at +0x134 and six children at +0x11c)."
+ },
+ {
+  "address": "0x0064E4C4",
+  "name": "maybe_Actor_SkullRun_ComputeScreenVector",
+  "signature": "u32 maybe_Actor_SkullRun_ComputeScreenVector(int self, float* out)",
+  "params": {
+   "param_1": "actor (actor work at +0x28, camera-relative basis at +0x324..+0x32c)",
+   "param_2": "out vec3 direction"
+  },
+  "summary": "Camera-relative vector helper for the SkullRun actor action. It picks the camera forward vector by display mode (mode 1: 0x66A2D0; mode 2: 0x66A494, falling back to 0x66A560 and then switching the UI/mode byte at engine+0x46 and notifying 0x23C998 on the +0x48 context), rotates it by the camera quaternion at engine+0x74 (0x574548), derives an angle via 0x6731EC/0x672E44, transforms it with 0x5736A0 and writes a normalised 3-float direction to arg2. Returns 1 when the input vector is non-degenerate, 0 otherwise.",
+  "confidence": 0.4,
+  "evidence": "Body: 0x62AB3C(engine+8) -> 1/2 selection of 0x66A2D0(engine+0xc) / 0x66A494 / 0x66A560; sets *(u8*)(ctx+0x46) = 0/1 and calls 0x23C998(ctx+0x48, 0/1); |v|^2 <= 0.0 (g_0064E818) -> 0; else 0x574548(rot, quat@engine+0x74 +0x140..0x14c, v), 0x6731EC/0x672E44 (sin/cos with 2*pi, 0.5, pi constants at 0x0064E824/E828/E82C), 0x5736A0(...,g_0064E814), out = basis*g_0064E830. Callers 0x45671C maybe_Actor_Action_SkullRun_Start, 0x456A24 maybe_Actor_Action_SkullRun_Update."
+ }
+]

@@ -181,9 +181,16 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let list = app.panels.code.list[start..(start + PAGE).min(total)].to_vec();
             let selected = app.panels.code.selected;
             let mut clicked = None;
+            let nav = crate::ui::list_nav(ui.ctx(), &list, selected.as_ref());
+            if let Some((item, _)) = &nav {
+                clicked = Some(item.clone());
+            }
+            let nav_row = nav.map(|(_, r)| r);
             use egui_extras::{Column, TableBuilder};
+            use crate::ui::TableNav;
             TableBuilder::new(ui)
                 .id_salt("code_scroll")
+                .nav_scroll(nav_row)
                 .striped(true)
                 .resizable(true)
                 .sense(egui::Sense::click())

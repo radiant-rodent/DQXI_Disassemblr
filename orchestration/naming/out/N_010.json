@@ -1,0 +1,1689 @@
+[
+ {
+  "address": "0x0010F6BC",
+  "name": "maybe_Ui_DestroyRootSingleton",
+  "signature": "void maybe_Ui_DestroyRootSingleton(void)",
+  "params": {},
+  "summary": "Atexit/destructor path: fetches the lazily built UI root singleton (0x168058) and, if present, invokes its virtual destructor slot (+4) with the (vtable, flags) pair stored just before the object. Keeps the engine-wide UI root from leaking at shutdown.",
+  "confidence": 0.4,
+  "evidence": "only caller: none (registered as shutdown hook); calls 0x168058 (UI root constructor) then (**(obj-8+4))(obj-8, obj-4); g_00168150/54/58 are the vtables written by 0x168058"
+ },
+ {
+  "address": "0x001160AC",
+  "name": "maybe_Mem_CommitAllocation",
+  "signature": "void maybe_Mem_CommitAllocation(MemHeap* heap, MemBlock* block)",
+  "params": {
+   "param_1": "heap",
+   "param_2": "block"
+  },
+  "summary": "Allocator slow path after a free block was split for an allocation: stores the remainder size (in 8-byte units) in the block trailer, hands the unused tail back through 0x1193AC, marks the block allocated (flag 4) and clears the heap's scratch begin/end words.",
+  "confidence": 0.45,
+  "evidence": "callers 0x110A28 and 0x6BA234 are the two identical heap allocator instances (bin search + split); writes block+8/-0x18 sizes, sets block->flags |= 4, calls 0x1193AC(begin,size)"
+ },
+ {
+  "address": "0x001193AC",
+  "name": "maybe_Os_StoreThreadLocalValue",
+  "signature": "void maybe_Os_StoreThreadLocalValue(uint32_t value, uint32_t arg2)",
+  "params": {
+   "param_1": "value",
+   "param_2": "arg2"
+  },
+  "summary": "Passes a per-thread slot value plus the global at 0x74D018 and this thread's TLS block to the SVC wrapper 0x11F65C (tail call). Thin shim around the thread-local store used by the allocator.",
+  "confidence": 0.35,
+  "evidence": "tail b 0x11F65C with r0=&g_007AF18C (from 0x11F730), r1=*g_001193D8, r2/r3=arguments; only caller 0x1160AC"
+ },
+ {
+  "address": "0x0011F65C",
+  "name": "maybe_Os_SetThreadLocalAndSyscall",
+  "signature": "uint32_t maybe_Os_SetThreadLocalAndSyscall(uint32_t* inout, uint32_t a, uint32_t b, uint32_t c)",
+  "params": {
+   "param_1": "inout",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Reads the thread pointer (CP15 c13 c0 3), stamps the TLS block at +0x80 with 0x00080082 and stores three arguments at +0x84/+0x88/+0x90, then issues SVC #0x32 with *inout; returns the third argument when the call reported success.",
+  "confidence": 0.3,
+  "evidence": "mrc p15,0,r4,c13,c0,3 in legacy decomp/functions/func_0011F65C.c; literal 0x00080082; svc #0x32; result bit 31 test then 'ldrge r0,[r4,#4]'"
+ },
+ {
+  "address": "0x00120408",
+  "name": "maybe_Pack_ReleaseHandleChain4",
+  "signature": "void* maybe_Pack_ReleaseHandleChain4(void)",
+  "params": {},
+  "summary": "Destructor helper for a composite object that owns four nested reference-counted handles: walks four -8-byte sub-objects from a base pointer, releasing each through 0x12416C, then returns base-4.",
+  "confidence": 0.35,
+  "evidence": "chain of 4x bl 0x12416C with 'sub r0,#8', final 'sub r0,#4'; 0x120454 is the single-handle variant"
+ },
+ {
+  "address": "0x00120454",
+  "name": "maybe_Pack_ReleaseHandleChain1",
+  "signature": "void* maybe_Pack_ReleaseHandleChain1(void)",
+  "params": {},
+  "summary": "Single-handle variant of 0x120408: releases one nested resource handle through 0x12416C and returns the adjusted owner pointer.",
+  "confidence": 0.35,
+  "evidence": "bl 0x12416C then 'sub r0,#4' and pop {r4,pc}; structural clone of 0x120408"
+ },
+ {
+  "address": "0x00120464",
+  "name": "Pack_LoadMasterTables",
+  "signature": "void Pack_LoadMasterTables(void)",
+  "params": {},
+  "summary": "Boot-time master-data loader. Resolves every core BXON table from the pack manager by literal name (item, player params for all party members, scenario params, level map/area, region, global flags, save points, sound arcs/groups/BGM/ME/SE, movie list, NG words, panel/panel_line, program_param) and stores the object/handle pairs in the data singleton; the player_param_* group goes through 0x124904 and the scenario_param_* group through 0x1249E0.",
+  "confidence": 0.8,
+  "evidence": "~0x1CC0 bytes; 80+ s_*_bxon literals (s_item_bxon_0012076c, s_player_param_hero_bxon_00121ce4, s_scenario_param_hero_bxon_00121fe8, s_sound_se_bxon_00121560 ...); calls Pack_GetManager 0x124FA0, 0x124B24 (open by name), 0x124904/0x1249E0 per-table loaders; only caller 0x11CFE0 = startup init"
+ },
+ {
+  "address": "0x0012416C",
+  "name": "Pack_ReleaseHandle",
+  "signature": "uint32_t* Pack_ReleaseHandle(uint32_t* handle)",
+  "params": {
+   "param_1": "handle"
+  },
+  "summary": "Releases a pack/resource handle: looks the generation-tagged handle up in the global handle table, destroys the entry when the generation matches, then overwrites the caller's word with the 'null' encoding (all low bits set) and returns the slot.",
+  "confidence": 0.5,
+  "evidence": "body masks *handle by g_001241C4>>8 and compares *piVar1[1] with value>>12 (generation check) before calling 0x1241D0; then '*arg1 = *arg1 & g_001241CC | g_001241CC'. 269 callers, always immediately before overwriting a stored handle (e.g. 0x17DAD8 self->f_70/f_68/f_7c)"
+ },
+ {
+  "address": "0x001241D0",
+  "name": "Pack_FreeHandleEntry",
+  "signature": "void Pack_FreeHandleEntry(PackHandleEntry* entry)",
+  "params": {
+   "param_1": "entry"
+  },
+  "summary": "Slow path of the handle release: decrements the entry reference count, and when it reaches zero either recycles the entry through the free list at g_0012419C or returns it to the pool allocator (0x11CFAC/0x116AE0) before unlinking it from the live list.",
+  "confidence": 0.5,
+  "evidence": "decrements self->f_74, branches on *g_00124298 (pool-empty flag), allocates 0x10-byte node with func_0011CFAC/0x116AE0, sets vtable LAB_001242a8, calls list link 0x1235A4; 156 callers all from handle-release paths"
+ },
+ {
+  "address": "0x00124904",
+  "name": "Pack_LoadTableObject",
+  "signature": "void Pack_LoadTableObject(uint32_t* scratch, PackTableRef* out, const char* name)",
+  "params": {
+   "param_1": "scratch",
+   "param_2": "out",
+   "param_3": "name"
+  },
+  "summary": "Loads one logical table (e.g. player_param_hero.bxon) from the pack by name, validates that it is an object node (0x124E04) and stores the owned object pointer + a reference-counted handle in the 8-byte destination pair.",
+  "confidence": 0.55,
+  "evidence": "calls 0x124FA0 (pack manager), 0x124B24(manager, key, name), walks node children to the object node, checks 0x124E04, fills arg2[0]=object and arg2[1]=handle via 0x124F60/0x124D48; called ~60x from 0x120464 with s_player_param_*_bxon"
+ },
+ {
+  "address": "0x001249E0",
+  "name": "Pack_LoadTableTyped",
+  "signature": "void Pack_LoadTableTyped(uint32_t* scratch, PackTableRef* out, const char* name)",
+  "params": {
+   "param_1": "scratch",
+   "param_2": "out",
+   "param_3": "name"
+  },
+  "summary": "Same as 0x124904 but for tables whose root node must validate against type id 0xA2 (0x124E30 + node->f_20 == 0xA2); used for the scenario_param_* family.",
+  "confidence": 0.55,
+  "evidence": "in 0x120464 every call passes s_scenario_param_*_bxon and the code enforces 'iVar3 == 0xa2' before storing the pair; 10 call sites, all inside 0x1249E0 and 0x120464"
+ },
+ {
+  "address": "0x00147D70",
+  "name": "Ui_ChangeUIMap",
+  "signature": "void Ui_ChangeUIMap(int mapId)",
+  "params": {
+   "param_1": "mapId"
+  },
+  "summary": "Implementation behind the script native 'ChangeUIMap' (12-byte validator at 0x147D68 falls through into this body): forwards the map id to the UI/screen manager object (0x216608) obtained from the game singleton.",
+  "confidence": 0.75,
+  "evidence": "registered native table entry name 'ChangeUIMap' -> func 0x147D68; 0x147D68 is 'cmp r0,#0xa; bxhs lr; ...' and falls through to 0x147D70; body calls 0x216608(*(manager+0x10), arg1)"
+ },
+ {
+  "address": "0x00148698",
+  "name": "Ui_StartFadeIn",
+  "signature": "void Ui_StartFadeIn(int which, float duration, int color)",
+  "params": {
+   "param_1": "which",
+   "param_2": "duration",
+   "param_3": "color"
+  },
+  "summary": "Implements the script native 'StartFadeIn' (validator at 0x14868C checks color < 8, loads the float duration, then falls through here). Selects the main or sub screen fade object from the game manager and starts the fade-in with the given duration/colour.",
+  "confidence": 0.8,
+  "evidence": "native table: 'StartFadeIn' = 0x14868C; bytes at 0x14868C are 'cmp r2,#7 / bxhs lr / vmov s0,r1' followed immediately by this function's push {r4,lr}; body dispatches vtable slot +0x1c of manager+0x14+0x10/0x1c"
+ },
+ {
+  "address": "0x00149204",
+  "name": "Text_CompareWordEntry",
+  "signature": "bool Text_CompareWordEntry(TextWordEntry* a, TextWordEntry* b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Strict ordering predicate for message word/dictionary records: compares the record's group byte (via 0x149814), then the sub-index (with 0xFF treated as 'last'), then the character code at +4. Used to sort/insert words for the text substitution table.",
+  "confidence": 0.5,
+  "evidence": "reads a->f_5 and b->f_5, resolves both with 0x149814, compares bytes 0/1 of the resolved record and the u8 at +4; returns bool used as a comparator style result"
+ },
+ {
+  "address": "0x0014A9B8",
+  "name": "Ui_StartFadeOut",
+  "signature": "void Ui_StartFadeOut(int which, float duration, int color)",
+  "params": {
+   "param_1": "which",
+   "param_2": "duration",
+   "param_3": "color"
+  },
+  "summary": "Implements the script native 'StartFadeOut' (validator at 0x14A9AC falls through). Same dispatch as Ui_StartFadeIn but drives the fade-out path of the main/sub screen fade object.",
+  "confidence": 0.8,
+  "evidence": "native table: 'StartFadeOut' = 0x14A9AC; 0x14A9AC = 'cmp r2,#7 / bxhs lr / vmov s0,r1' then falls into 0x14A9B8; identical vtable dispatch to 0x148698"
+ },
+ {
+  "address": "0x0014C2B8",
+  "name": "Movie_GetFrame",
+  "signature": "MovieFrame* Movie_GetFrame(void)",
+  "params": {},
+  "summary": "Implementation of the script native 'GetMovieFrame': allocates a 0x28-byte movie/frame descriptor from the game heap, installs vtable g_0014C350 and registers it with the movie subsystem (0x1DB73C).",
+  "confidence": 0.5,
+  "evidence": "native table 'GetMovieFrame' -> 0x14C2B4, whose only instruction is 'ldr r0,=0x14C344' before falling through here; body allocates 0x28 bytes, zeroes it, stores g_0014C350, calls 0x1DB73C"
+ },
+ {
+  "address": "0x0014C3EC",
+  "name": "maybe_Gfx_Sprite_SetupPattern",
+  "signature": "uint32_t maybe_Gfx_Sprite_SetupPattern(Sprite* sprite, const uint8_t* patternTable)",
+  "params": {
+   "param_1": "sprite",
+   "param_2": "patternTable"
+  },
+  "summary": "Parses a compact 2D pattern/frame table (node tags 0x82/0x85/0x8E carry a 16-bit size pair, a flip/mirror bit and a pattern id) and applies the resulting frame descriptor to a sprite through the renderer (0x65D448 -> 0x53E220). The 14-entry switch is the texture/flip permutation table.",
+  "confidence": 0.4,
+  "evidence": "tag tests 0x82/0x85/0x8e on u16 node headers; switch 0..0xd mapping to permutations 9,6,7,5,8,3,4,0,1,2,0xc,0xd,0xa,0xb,0xe; clears bit 3 of renderer f_7c; callers are effect/sprite users 0x1F2450, 0x299EF0, 0x2C4DA8, 0x329FE8, 0x3A6BD4"
+ },
+ {
+  "address": "0x0014C728",
+  "name": "Gfx_Sprite_SetFrameUV",
+  "signature": "bool Gfx_Sprite_SetFrameUV(Sprite* sprite, uint32_t unused, const float* pos, const float* size)",
+  "params": {
+   "param_1": "sprite",
+   "param_2": "unused",
+   "param_3": "pos",
+   "param_4": "size"
+  },
+  "summary": "Builds the eight UV corner values for a sprite frame (position/size normalised by the frame's pixel width/height) and uploads them with 0x53E9A4. Used by the sprite/BFLAN frame animation path.",
+  "confidence": 0.55,
+  "evidence": "computes 4 UV pairs by dividing arg3/arg4 by the 16-bit frame dimensions read from 0x65DBC8; stores pos into self->f_3c/f_40 and sets f_44 bit 0x10; calls 0x53E9A4(self,0,uvArray); only callers 0x6464D4/0x646588/0x6470CC/0x647238 (sprite frame setters)"
+ },
+ {
+  "address": "0x0014DBAC",
+  "name": "maybe_Thunk_Call63B368",
+  "signature": "void maybe_Thunk_Call63B368(void)",
+  "params": {},
+  "summary": "Two-instruction export/tail-call thunk: 'bl 0x63B368; pop {r3,pc}'. Sits next to IECameraGetYaw (0x14DB94), which calls the same 0x63B368 with the movie/camera manager, so this is a no-argument variant of that accessor; the owning script name is not recoverable.",
+  "confidence": 0.3,
+  "evidence": "raw bytes ed b5 13 eb / 08 80 bd e8 at 0x14DBAC (bl #0x63B368; pop {r3,pc}); no literal or table entry references it"
+ },
+ {
+  "address": "0x00152E14",
+  "name": "Ui_StartDelayFadeIn",
+  "signature": "void Ui_StartDelayFadeIn(int which, float duration, float delay, int color)",
+  "params": {
+   "param_1": "which",
+   "param_2": "duration",
+   "param_3": "delay",
+   "param_4": "color"
+  },
+  "summary": "Implementation of the script native 'StartDelayFadeIn' (validator at 0x152E04 checks the colour index and loads two float arguments, then falls through): starts a delayed fade-in on the main or sub screen fade object.",
+  "confidence": 0.8,
+  "evidence": "native table 'StartDelayFadeIn' = 0x152E04; bytes cmp r3,#7 / bxhs lr / vmov s0,r1 / vmov s1,r2 then fallthrough into 0x152E14; same manager+vtable slot +0x1c dispatch as StartFadeIn"
+ },
+ {
+  "address": "0x00153328",
+  "name": "maybe_Ui_FadeController_Update",
+  "signature": "void maybe_Ui_FadeController_Update(uint32_t a, uint32_t b, uint32_t c)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "c"
+  },
+  "summary": "Large (0x85C) state machine in the fade/screen-effect block: tests a 32-bit pending-work mask on the stack (bit 0x02000000 etc.), drives the screen manager through 0x600768 and several helpers (0x1BF7D8, 0x5B5660, 0x5F9D8C, 0x6111A4) to advance the active transition. Exact native name is not in the registration table.",
+  "confidence": 0.3,
+  "evidence": "size 0x85C, entry 'bl 0x600768' then 'ldr r0,[sp,#0x18]; tst r0,#0x2000000'; no callers (invoked from a vtable/function-pointer slot); neighbours are all Start/IsEndFade natives"
+ },
+ {
+  "address": "0x001551C4",
+  "name": "maybe_Ui_GetSelectHopeBoss",
+  "signature": "uint32_t maybe_Ui_GetSelectHopeBoss(void)",
+  "params": {},
+  "summary": "Reads the boss-selection result from the UI state object (field +0x4C) reached through the game manager, falling back to a constant when no selection exists. Sits directly after the registered native 'GetSelectHopeBoss' (0x15519C) and looks like its implementation.",
+  "confidence": 0.4,
+  "evidence": "previous registered native 'GetSelectHopeBoss' = 0x15519C; body: manager -> *(*(mgr+0x10)+0x98), result = that ? f_4c : g_001551EC"
+ },
+ {
+  "address": "0x00155574",
+  "name": "Ui_StartDelayFadeOut",
+  "signature": "void Ui_StartDelayFadeOut(int which, float duration, float delay, int color)",
+  "params": {
+   "param_1": "which",
+   "param_2": "duration",
+   "param_3": "delay",
+   "param_4": "color"
+  },
+  "summary": "Implementation of the script native 'StartDelayFadeOut' (validator at 0x155564 checks the colour index, loads two floats and falls through): starts a delayed fade-out on the main or sub screen fade object.",
+  "confidence": 0.8,
+  "evidence": "native table 'StartDelayFadeOut' = 0x155564; bytes cmp r3,#7 / bxhs lr / vmov s0,r1 / vmov s1,r2 then fallthrough into 0x155574; vtable slot +0x28 dispatch"
+ },
+ {
+  "address": "0x0015698C",
+  "name": "Text_ResolveMessageEntry",
+  "signature": "uint32_t Text_ResolveMessageEntry(MessageTable* table, uint32_t flags, int page, int group, int index, int mode)",
+  "params": {
+   "param_1": "table",
+   "param_2": "flags",
+   "param_3": "page",
+   "param_4": "group",
+   "param_5": "index",
+   "param_6": "mode"
+  },
+  "summary": "Core message-record resolver shared by every *MessageSetup native. Walks the table's 0x10-byte records (fields: group +8, from/to index +9/+10, flag mask +10, target +0xB), matches the requested page/group/index (or follows the redirect at +0xC/+0xE recursively), and finally calls ScriptMessageSetup with the resolved record. Returns -1/-2/-3/-4 for the error cases.",
+  "confidence": 0.7,
+  "evidence": "called by 0x14DBB4 IEMessageSetup, 0x15154C IEMessageSetupEx, 0x1561A4 BookIDMessageSetup, 0x159ACC BookIDMessageSetupEx, 0x15A7F0 ScenarioMessageSetup, 0x15D320 ScenarioMessageSetupEx and 0x14DC70/0x156260/0x156B40/0x156B64/0x159B44; calls ScriptMessageSetup (0x156934) and walks self->f_c/self->f_10 records of stride 0x10"
+ },
+ {
+  "address": "0x00158998",
+  "name": "Ui_IsEndShiftFadeColor",
+  "signature": "uint32_t Ui_IsEndShiftFadeColor(void)",
+  "params": {},
+  "summary": "Implements the script native 'IsEndShiftFadeColor' (4-byte validator at 0x158994): queries the main/sub screen fade object's vtable slot +0x54 to report whether the colour-shift fade finished.",
+  "confidence": 0.75,
+  "evidence": "native table 'IsEndShiftFadeColor' = 0x158994, immediately followed by this body (0x158998); dispatch on manager+0x14+0x10/0x1c and vtable slot +0x54"
+ },
+ {
+  "address": "0x00158E90",
+  "name": "Ui_StartShiftFadeColor",
+  "signature": "void Ui_StartShiftFadeColor(int which, float duration, int color)",
+  "params": {
+   "param_1": "which",
+   "param_2": "duration",
+   "param_3": "color"
+  },
+  "summary": "Implements the script native 'StartShiftFadeColor' (validator at 0x158E84 loads the float and falls through): starts the colour-shift fade on the main/sub screen object via vtable slot +0x4C.",
+  "confidence": 0.75,
+  "evidence": "native table 'StartShiftFadeColor' = 0x158E84; body dispatches vtable +0x4C on manager+0x14+0x10/0x1c; paired with 0x158998 IsEndShiftFadeColor"
+ },
+ {
+  "address": "0x0015BCAC",
+  "name": "Debug_AppendLogLine",
+  "signature": "void Debug_AppendLogLine(const char* text)",
+  "params": {
+   "param_1": "text"
+  },
+  "summary": "Appends one formatted line to a fixed ring of ten 0x200-byte debug strings: advances the index modulo 10 and lets the formatter (0x50DD70) write into the current slot, then NUL-terminates it.",
+  "confidence": 0.55,
+  "evidence": "multiplies index by 0x200 into g_0015BD1C, index = (*idx+1) % 10 via a signed-divide-by-10 sequence, calls 0x50DD70(slot, &len, text, 0), writes u16 0 at slot+len*2; callers 0x14930C DBOpenDialog, 0x166164 PartyTalk"
+ },
+ {
+  "address": "0x001611E4",
+  "name": "maybe_Os_AddCounterTicks",
+  "signature": "uint32_t maybe_Os_AddCounterTicks(uint64_t* counters, uint32_t delta)",
+  "params": {
+   "param_1": "counters",
+   "param_2": "delta"
+  },
+  "summary": "Adds a delta to a 64-bit tick counter (and to a second 64-bit accumulator) with carry checking; if the value would overflow the stored limit it reports failure, otherwise performs an SVC #0x18 and returns success. Looks like the engine's frame/tick counter advance.",
+  "confidence": 0.3,
+  "evidence": "ldrd/strd on arg1+0x18, 64-bit adds with CARRY4, software_interrupt(0x18), then checks 'arg1[0x18] < 0' and calls 0x118100; immediately follows maybe_Script_CreateIntTable region"
+ },
+ {
+  "address": "0x001659EC",
+  "name": "Ui_IsEndFade",
+  "signature": "uint32_t Ui_IsEndFade(void)",
+  "params": {},
+  "summary": "Implements the script native 'IsEndFade' (4-byte validator at 0x1659E8, which is only 'cmp r0,#0' and falls through): asks the main/sub screen fade object (vtable slot +0x34) whether the current fade has completed.",
+  "confidence": 0.6,
+  "evidence": "native table 'IsEndFade' = 0x1659E8; 0x1659E8 is 'cmp r0,#0' followed by this body's push {r3,lr}; dispatch through manager+0x14+0x10/0x1c, vtable +0x34"
+ },
+ {
+  "address": "0x00166834",
+  "name": "Ui_GoldWindow_Setup",
+  "signature": "void Ui_GoldWindow_Setup(UiGoldWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initialises the gold display window: takes the window owner from the UI manager, disables the previous owner, links the window node into the layout list and creates the 'win_gold' pane set.",
+  "confidence": 0.7,
+  "evidence": "string s_win_gold_00166988; calls 0x1C50BC(manager, &self->f_284) (window owner), vtable+0x18(0), list link 0x1235A4, then 0x1D85EC(self,&self->f_32c,\"win_gold\",0) and 0x29126C"
+ },
+ {
+  "address": "0x001669F0",
+  "name": "Ui_GoldWindow_Update",
+  "signature": "void Ui_GoldWindow_Update(UiGoldWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update for the gold window: ticks the window's sub-objects, advances the 0x18-byte entry array (up to 0x0C entries) with its vtable callbacks, and clears the pending-close flag when finished.",
+  "confidence": 0.5,
+  "evidence": "operates on self->f_11c..f_128 (array of 0x18 stride), self->f_2d4, self->f_488, self->f_32c, self->f_49c; adjacent to Ui_GoldWindow_Setup (0x166834) and called from the same window object"
+ },
+ {
+  "address": "0x00166B2C",
+  "name": "maybe_Ui_GoldWindow_SetOwner",
+  "signature": "void maybe_Ui_GoldWindow_SetOwner(UiGoldWindow* self, uint32_t owner, uint8_t visible)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "visible"
+  },
+  "summary": "Assigns a new owning object to the gold window (releases the previous owner through its vtable slot +0x7C when the handle generation changed) and stores the visibility byte at +0x4BE.",
+  "confidence": 0.45,
+  "evidence": "handle-generation check g_00166B74/g_00166B78 then (*(*self->f_2d0+0x7c))(); self->f_4be = arg3; caller 0x193E58 creates the gold window and calls this as the last step"
+ },
+ {
+  "address": "0x00168058",
+  "name": "Ui_CreateRootSingleton",
+  "signature": "UiRoot* Ui_CreateRootSingleton(void)",
+  "params": {},
+  "summary": "Constructs the engine-wide UI root object in place: installs the root vtable, builds five layout-animation children, a screen controller, several pane groups and the resource handle, then links them into the root's intrusive lists. Called once, from the shutdown/atexit counterpart 0x10F6BC.",
+  "confidence": 0.55,
+  "evidence": "writes *self = g_00168150 then five 0x291220 children, 0x36B514, five 0x1A6768 children, 0x1D8C2C; the object base is exactly what 0x10F6BC later destroys via its vtable"
+ },
+ {
+  "address": "0x00175808",
+  "name": "Ui_ReleaseSubObjects",
+  "signature": "void Ui_ReleaseSubObjects(UiObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the two optional child objects at +0xE8 and +0xEC and clears the pointers (each freed with the engine deleter 0x10F69C).",
+  "confidence": 0.5,
+  "evidence": "two guarded calls to 0x10F69C followed by zeroing f_e8/f_ec; only caller 0x208BE0 (UI screen owner)"
+ },
+ {
+  "address": "0x00176958",
+  "name": "Ui_CampMenu_Setup",
+  "signature": "void Ui_CampMenu_Setup(UiCampMenu* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the camp menu screen: creates the 'win_camp_main' and 'win_camp_text' layouts, links them into the root list, wires the pager (0x1DAA24) and sets the initial cursor/selection state.",
+  "confidence": 0.75,
+  "evidence": "strings s_win_camp_main_00176a18 and s_win_camp_text_00176a28; creates panes with 0x1D85EC, links with 0x1235A4, pager 0x1DAA24, selection 0x211A98"
+ },
+ {
+  "address": "0x001772C4",
+  "name": "maybe_Field_CreateScreenSystem",
+  "signature": "FieldScreenSystem* maybe_Field_CreateScreenSystem(uint32_t arg1, uint32_t arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Constructor for a 0x328-byte field screen system object: installs the vtables for the screen root, its render and layout children (0x36B45C, 0x211FB0, 0x405610, two 0x1A66A0 animation nodes, 0x1DB550) and stores the passed-in owner/revision.",
+  "confidence": 0.45,
+  "evidence": "same construction sequence as 0x19BDC4/0x19CBF4; callers 0x195F8C (recreate when the field mode changes to 8) and 0x6D6E48; g_001773C0..d4 are the child vtables"
+ },
+ {
+  "address": "0x001775D4",
+  "name": "maybe_Field_InitNpcAction",
+  "signature": "void maybe_Field_InitNpcAction(FieldNpc* npc)",
+  "params": {
+   "param_1": "npc"
+  },
+  "summary": "Initialises the NPC action subsystem: stores the speed value and registers both action tables (g_00177604/g_00177608) through 0x17A7BC, then switches the NPC to action state 2.",
+  "confidence": 0.4,
+  "evidence": "self->f_2c = incoming float; calls 0x17A7BC(self->f_28,&g_00177608,&g_00177604) and 0x1798D0(self->f_28,2)"
+ },
+ {
+  "address": "0x00179084",
+  "name": "maybe_Map_RefreshLevelGrid",
+  "signature": "void maybe_Map_RefreshLevelGrid(MapGrid* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Reloads the collision/placement grid when the current level revision changed: lazily creates the 0x98-byte grid object (vtable g_00179140) and asks 0x17C9E4 to rebuild the cells for the new level id.",
+  "confidence": 0.45,
+  "evidence": "compares self->f_31c with *(g_00179130+8); lazy singleton g_00179134/g_00179138 with 0x11CFAC/0x116AE0/0x627308 and vtable g_00179140; calls 0x17C9E4(grid->f_9c, self->f_31c); callers are field update paths"
+ },
+ {
+  "address": "0x00179144",
+  "name": "maybe_Map_UpdateGridCallback",
+  "signature": "uint32_t maybe_Map_UpdateGridCallback(void)",
+  "params": {},
+  "summary": "One-line trampoline used as a per-frame grid callback: calls Map_UpdateGridInstance (0x179154) and reports success so the field update loop keeps it registered.",
+  "confidence": 0.45,
+  "evidence": "body is 'bl 0x179154; mov r0,#1'; no arguments, no callers (installed as a function pointer)"
+ },
+ {
+  "address": "0x00179154",
+  "name": "maybe_Map_UpdateGridInstance",
+  "signature": "void maybe_Map_UpdateGridInstance(MapGrid* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the grid instance for the current level: when the level revision changed, resolves the instance record with 0x17C8D8 and, if found, queries its transform (+0x14) and submits it via 0x179298 and the record's vtable +8.",
+  "confidence": 0.45,
+  "evidence": "same revision check/lazy grid as 0x179084; calls 0x17C8D8(grid->f_9c, self->f_31c), then 0x179298(self, vtable+0x14, &pos, &pos2) and vtable+8(record,&pos,&pos2); caller only 0x179144"
+ },
+ {
+  "address": "0x001798D0",
+  "name": "maybe_Map_PlaceObject",
+  "signature": "void maybe_Map_PlaceObject(MapObject* object, uint32_t levelId)",
+  "params": {
+   "param_1": "object",
+   "param_2": "levelId"
+  },
+  "summary": "Places/links an object on the level grid: builds the default transform pair, calls 0x179298 with the level id, then inserts it into the grid through 0x17CBAC and stores the resulting node in object+0x31C.",
+  "confidence": 0.4,
+  "evidence": "g_001799BC (default transform), 0x179298, lazy grid vtable g_001799CC, 0x17CBAC(grid->f_9c, levelId, &pos, &pos2), stores result at arg1+0x31c; 10 callers from field placement code"
+ },
+ {
+  "address": "0x0017AF2C",
+  "name": "Mem_ResizeRecordArray",
+  "signature": "void Mem_ResizeRecordArray(RecordArray* array, uint32_t allocTag)",
+  "params": {
+   "param_1": "array",
+   "param_2": "allocTag"
+  },
+  "summary": "Resizes the array's backing store to g_0017AF70 records of 8 bytes: frees the old buffer (0x10F69C), stores the capacity in +0xC and reallocates with 0x10F6EC(capacity*8, tag, 4).",
+  "confidence": 0.55,
+  "evidence": "self->f_c = g_0017AF70 (count); 'func_0010F6EC(iVar1 << 3, arg2, 4)' for the new buffer; frees old at +8 first; callers 0x27CC04, 0x4ABA84 are array owners"
+ },
+ {
+  "address": "0x0017BA04",
+  "name": "Mem_FreeRecordArray",
+  "signature": "void Mem_FreeRecordArray(RecordArray* array)",
+  "params": {
+   "param_1": "array"
+  },
+  "summary": "Destructor for the record array above: installs the released-state vtable, frees the backing store when present and returns the array.",
+  "confidence": 0.55,
+  "evidence": "writes *arg1 = g_0017BA34, guarded 0x10F69C on arg1[2]; exactly the teardown complementary to 0x17AF2C"
+ },
+ {
+  "address": "0x0017C8D8",
+  "name": "Map_FindRecordById",
+  "signature": "void* Map_FindRecordById(MapTable* table, int id)",
+  "params": {
+   "param_1": "table",
+   "param_2": "id"
+  },
+  "summary": "Looks up a record by id in the level/area table: returns the table's own +0xC block when it matches, otherwise the first of the five fixed sub-records (+0x30/+0x54/+0x78/+0x9C) whose id equals the argument; falls back to 0.",
+  "confidence": 0.55,
+  "evidence": "compares arg2 against self->f_10, f_34, f_58, f_7c, f_a0 and returns self+0xc or self+0x30/0x54/0x78/0x9c; early 'func_00214F50' fast path; callers 0x179154, 0x5F2E24, 0x5F5520"
+ },
+ {
+  "address": "0x0017CBAC",
+  "name": "Map_AddInstance",
+  "signature": "uint32_t Map_AddInstance(MapTable* table, uint32_t arg2, uint32_t arg3)",
+  "params": {
+   "param_1": "table",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Adds one instance to the level table: allocates the next handle from the table's wrapping counter (+0xE4) and, if a live container exists, inserts the instance through 0x17C9F8. Returns the handle (or the 'invalid' constant when the container is absent).",
+  "confidence": 0.5,
+  "evidence": "f_e0/f_e4 counter with wrap against g_0017CC20[0], func_00215320 returns the container, calls 0x17C9F8; caller 0x1798D0 Map_PlaceObject"
+ },
+ {
+  "address": "0x0017CC38",
+  "name": "maybe_Map_AddInstanceIfVisible",
+  "signature": "uint32_t maybe_Map_AddInstanceIfVisible(MapTable* table, int kind)",
+  "params": {
+   "param_1": "table",
+   "param_2": "kind"
+  },
+  "summary": "Variant of Map_AddInstance used for kind 5..6 style objects: inserts only when the table is active (or the kind matches), otherwise just returns the current handle.",
+  "confidence": 0.45,
+  "evidence": "checks self->f_e0 == 1 and '1 < arg2-5', then func_002EBA64(self+0xc) and 0x17C9F8(self,arg2,0); wraps f_e4 against g_0017CCAC[0]"
+ },
+ {
+  "address": "0x0017CF50",
+  "name": "Ui_WorldMap_Destroy",
+  "signature": "void Ui_WorldMap_Destroy(void)",
+  "params": {},
+  "summary": "Shutdown wrapper for the world-map object: runs the destructor body (0x17CF60) and then frees the object with 0x10F6CC.",
+  "confidence": 0.55,
+  "evidence": "'bl 0x17CF60; bl 0x10F6CC'; 0x17CF60 sets *arg1 = g_0017D03C (released vtable)"
+ },
+ {
+  "address": "0x0017CF60",
+  "name": "Ui_WorldMap_Destructor",
+  "signature": "UiWorldMap* Ui_WorldMap_Destructor(UiWorldMap* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor body of the world-map screen: releases the four resource handles (f_8, f_C, f_D8, f_DC) through the resource manager, unlinks its intrusive list nodes and clears the map-object pool.",
+  "confidence": 0.55,
+  "evidence": "sets *arg1 = g_0017D03C; four guarded 0x21F8B8(manager, handle) calls; unlinks arg1[0x34]/[0x35]/[0x31]/[0x32]; releases pool with 0x100BE0(arg1+3,g_0017D040,0x24,5)"
+ },
+ {
+  "address": "0x0017D3F4",
+  "name": "Ui_WorldMap_Teardown",
+  "signature": "void Ui_WorldMap_Teardown(UiWorldMap* self, uint32_t vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Partial teardown used when the world map is rebuilt: stores the new vtable, destroys the layout node at +0x124 through 0x3E04BC/0x1D8C2C and frees the object.",
+  "confidence": 0.5,
+  "evidence": "'*arg1 = arg2; iVar1 = func_003E04BC(arg1+0x49); func_001D8C2C(iVar1-0x124); func_0010F6CC()'"
+ },
+ {
+  "address": "0x0017DAD8",
+  "name": "Ui_WorldMap_Setup",
+  "signature": "void Ui_WorldMap_Setup(UiWorldMap* self, WorldMapParams* params, uint16_t* ids)",
+  "params": {
+   "param_1": "self",
+   "param_2": "params",
+   "param_3": "ids"
+  },
+  "summary": "Full world-map screen setup: loads ui_map_pack.bxon, ui_map_param.bxon and ui_map_ship_location.bxon from the pack, finds the 0x5AE map record, copies the map's label/flag arrays, builds the ship/continent mesh objects and applies the mode-specific text/animation settings.",
+  "confidence": 0.8,
+  "evidence": "literal names s_ui_map_pack_bxon_0017dee4, s_ui_map_param_bxon_0017df04, s_ui_map_ship_location_bxon_0017df18; record id checks 0x5AE; calls Ui_WorldMap_Setup helpers 0x17E8FC and the 0x62xxxx map-render API; only caller 0x216DD4 (map screen controller)"
+ },
+ {
+  "address": "0x0017E2F0",
+  "name": "Ui_WorldMap_LoadModels",
+  "signature": "void Ui_WorldMap_LoadModels(UiWorldMap* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Loads the world-map geometry and effect resources: opens the 'world_map/<id>.arc' archive (variant 0x61/0x62), instantiates the five continent/segment meshes listed in the map record and registers them with the render manager.",
+  "confidence": 0.65,
+  "evidence": "strings s_world_map__c__s_arc_0017e6fc and s__s_arc_0017e71c; builds 'world_map/%c%s.arc' with 0x6F0B50; up to five mesh slots at self+0x48; calls 0x1D8B6C/0x3A816C/0x3A7D78 to create meshes"
+ },
+ {
+  "address": "0x0017E7F8",
+  "name": "Ui_WorldMap_SetDisplayMode",
+  "signature": "void Ui_WorldMap_SetDisplayMode(UiWorldMap* self, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Switches the world map between the normal view and the dimmed/disabled view: toggles the render option on the map mesh (0x6216B0) and restores the saved overlay state when leaving mode 0xFF.",
+  "confidence": 0.55,
+  "evidence": "arg2 == 0xff restores *g_0017E8F8/self->f_92/f_93 and calls 0x62155C or 0x17FC64; otherwise 0x6216B0(1), 0x3A7ECC(mesh,arg2) and 0x62161C; callers 0x1C24C4 and 0x257804"
+ },
+ {
+  "address": "0x0017FBB4",
+  "name": "Ui_WorldMap_ReleaseResources",
+  "signature": "void Ui_WorldMap_ReleaseResources(UiWorldMap* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases everything a loaded world map owns: clears the display flag, frees the five mesh slots, the extra mesh at +0x60, the render-target slot and the two layout/state objects, then marks the map unloaded.",
+  "confidence": 0.6,
+  "evidence": "frees f_48..f_58 (5 slots) via 0x21F8B8, f_60, 0x2F7A7C(manager,3), 0x5634E0 on f_44/f_5c, clears f_b4; mirror of Ui_WorldMap_LoadModels; caller 0x218428"
+ },
+ {
+  "address": "0x0017FE58",
+  "name": "Ui_WorldMap_DestroyThunk",
+  "signature": "void Ui_WorldMap_DestroyThunk(void)",
+  "params": {},
+  "summary": "Small shutdown wrapper: destructs the world-map object (0x17FE68) and frees it through 0x10F6CC.",
+  "confidence": 0.55,
+  "evidence": "'bl 0x17FE68; bl 0x10F6CC'"
+ },
+ {
+  "address": "0x0017FE68",
+  "name": "Ui_WorldMap_DestructorBody",
+  "signature": "int Ui_WorldMap_DestructorBody(UiWorldMap* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor body for the alternate world-map object layout (vtable g_0017FF50): releases the mesh handle, the extra object and five sub-handles, then walks the embedded layout/controller chain to its base.",
+  "confidence": 0.5,
+  "evidence": "sets *self = g_0017FF50; 0x21F8B8 on self[8]/self[0x18]/self[0x12..0x16]; 0x5634E0(self+0x11/0x17); chain of 0x12416C on self+0x1f then 0x36B514; caller 0x17FE58"
+ },
+ {
+  "address": "0x001832D4",
+  "name": "maybe_Field_UpdateLocationGrid",
+  "signature": "void maybe_Field_UpdateLocationGrid(FieldActor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Refreshes the actor's location on the field grid after an event: re-evaluates the actor's cell, moves it into the new grid node (0x6282D0/0x17C8C4 when the cell is missing) and sets the actor's state to mode 6.",
+  "confidence": 0.4,
+  "evidence": "calls 0x5E78CC (field event update), 0x3F422C(actor->f_370) then 0x1836A0(actor, cell->f_220); lazy grid vtable g_001833E4, 0x6282D0/0x17C8C4; ends with 0x5E74A0(actor,6,1)"
+ },
+ {
+  "address": "0x00184EF8",
+  "name": "Field_LoadNpcTables",
+  "signature": "void Field_LoadNpcTables(FieldNpcTables* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Loads the three NPC/IE tables (npc_list.bxon, npc_ie.bxon, book_ie.bxon) from the area pack and stores each validated 0xF4/0x46 table plus its resource handle in the field NPC container.",
+  "confidence": 0.7,
+  "evidence": "names s_npc_list_bxon_00185220, s_npc_ie_bxon_0018523c, s_book_ie_bxon_00185248; validates node ids 0xF4 (x2) and 0x46; calls 0x124E6C (area pack), 0x124F60/0x12416C handle pairs; caller 0x60FA28"
+ },
+ {
+  "address": "0x00185270",
+  "name": "Field_SetRegion",
+  "signature": "void Field_SetRegion(FieldRegion* region, uint8_t regionId)",
+  "params": {
+   "param_1": "region",
+   "param_2": "regionId"
+  },
+  "summary": "Switches the active field region: dispatches the region id through 0x63D1B0, then loads 'param_region/<id>.pack' and stores the resulting region-pack handle in the field global container.",
+  "confidence": 0.6,
+  "evidence": "string s_param_region__s_pack_0018551c (formats 'param_region/%s.pack'), 0x63D1B0(regionObj, *arg1), 0x3882F0(..., 2, name) builds the pack entry; stores handle at arg1+4"
+ },
+ {
+  "address": "0x00185550",
+  "name": "Field_ResetNpcTables",
+  "signature": "void Field_ResetNpcTables(FieldNpcTables* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the NPC table container: resets the id byte to 0xFF and releases the four stored handles (table, pair, second table, area pack) by writing the null handle encoding and dropping the references.",
+  "confidence": 0.6,
+  "evidence": "*self = 0xff; *(+8)=0; releases self->f_c, f_10, f_14, f_1c, +4 with the g_0018567C/g_00185684 mask+table pattern and 0x1241D0"
+ },
+ {
+  "address": "0x001856EC",
+  "name": "Field_ReleaseNpcData",
+  "signature": "int Field_ReleaseNpcData(FieldNpcTables* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Full release of the field NPC data: resets the table handles (0x185550) then releases the four nested resource handles at +0x1C and returns the base pointer.",
+  "confidence": 0.55,
+  "evidence": "calls 0x185550 then chain of 0x12416C(-8) three times and 'add r0,#0x1c'; caller 0x6109F4"
+ },
+ {
+  "address": "0x0018CBB0",
+  "name": "maybe_Text_ClearLineBuffer",
+  "signature": "void maybe_Text_ClearLineBuffer(TextLine* lines, const TextLine* source)",
+  "params": {
+   "param_1": "lines",
+   "param_2": "source"
+  },
+  "summary": "Resets 255 text-line records (0x18 bytes each: three words plus the glyph array) and then copies the first 0x11 bytes of each record from the source, i.e. re-initialises the message-line cache from a template.",
+  "confidence": 0.45,
+  "evidence": "0xFF iterations over stride 0x18 zeroing [0..2] and byte 0x10, then 0xFF x 0x116C10(dst, src, 0x11); callers 0x2FCC78/0x2FDEC8"
+ },
+ {
+  "address": "0x0018D0F0",
+  "name": "Pack_FindRecordByIndex",
+  "signature": "void* Pack_FindRecordByIndex(uint32_t index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Resolves an index into the global record table: lazily creates the 0x98-byte table object (vtable g_0018D1C0), looks the index up with 0x63DBA4 and returns the record pointer (adding the stored self-relative offset).",
+  "confidence": 0.55,
+  "evidence": "lazy singleton g_0018D1B0/g_0018D1B4 with 0x11CFAC/0x116AE0/0x11CFDC and vtable g_0018D1C0; 0x63DBA4(table,index) then 'result += *result'; 6 callers incl. 0x18DC74/0x18DC98"
+ },
+ {
+  "address": "0x0018DC74",
+  "name": "maybe_Ui_ApplyCharacterLookParams",
+  "signature": "void maybe_Ui_ApplyCharacterLookParams(CharacterLook* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Pushes a character's appearance/profile parameters into the UI layout table: sets the model/normal ids, the two mesh slots and then registers the six part ids (indices 7..12) derived from the stored character codes (+1, +4, +0x17, +0x67, -0x69, +0x61), plus the extra pair at index 0xD.",
+  "confidence": 0.35,
+  "evidence": "calls func_001F076C(id,value,0) for ids 2,3,7,8,9,10,11,12,13; part ids are 0x18D0F0(c+1)/(c+4)/(c+0x17)/(c+0x67)/(c-0x69)/(c+0x61); caller 0x308F1C"
+ },
+ {
+  "address": "0x0018DC98",
+  "name": "maybe_Ui_ApplyCharacterLookParamsEx",
+  "signature": "void maybe_Ui_ApplyCharacterLookParamsEx(CharacterLook* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant of 0x18DC74 for the pre-built save/character record layout (fields +0x34..+0x3C instead of +0x6C..+0x74); same id/value pushes including the two mesh slots and the 0xD extra value.",
+  "confidence": 0.35,
+  "evidence": "same 0x1F076C id sequence 3,7,8,9,10,11,12,13 with the same +1/+4/+0x17/+0x67/-0x69/+0x61 mappings but reading self->f_34..f_3c and self->f_12; caller 0x443DDC"
+ },
+ {
+  "address": "0x0018F374",
+  "name": "maybe_Field_ReleaseEffectInstances",
+  "signature": "void maybe_Field_ReleaseEffectInstances(FieldEffectList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases every field effect/particle instance registered in the list: for each of the count at +0x18, resolves the instance through its handle and calls 0x5F5D24 to stop/kill it.",
+  "confidence": 0.45,
+  "evidence": "loops self->f_18, per-entry handle+8/+0xc with g_0018F3F8/g_0018F3FC generation check, 0x5F5818 lookup then 0x5F5D24; callers 0x615A90/0x6163A0 (field effect managers)"
+ },
+ {
+  "address": "0x0018F570",
+  "name": "maybe_Field_EnableEffectInstances",
+  "signature": "void maybe_Field_EnableEffectInstances(FieldEffectList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Marks all field effect instances in the list as visible/enabled (0x5F79C4(instance,1)) and sets the list's enabled flag at +0x1C.",
+  "confidence": 0.45,
+  "evidence": "loops self->f_18, 0x5F5818 lookup + 0x5F79C4(iVar3,1), then self->f_1c = 1; sibling of 0x18F374"
+ },
+ {
+  "address": "0x0018F73C",
+  "name": "maybe_Os_CreateAsyncWaitOp",
+  "signature": "void maybe_Os_CreateAsyncWaitOp(AsyncWaitOwner* self, int kind, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "kind"
+  },
+  "summary": "Creates a 0x18-byte asynchronous wait/operation token (three variants for kind 1/2/3, each with its own vtable g_0018F888/8C/90) and stores it in the owner; the token is polled by 0x18F89C and disables the owning manager's polling while active.",
+  "confidence": 0.35,
+  "evidence": "allocates 0x18 bytes via Mem_AllocAligned(0x18, heap, 4); switch on arg2 1..3 chooses vtable; initialises with 0x502490; calls 0x2D23D0/0x2D2564 on manager+0x14 to pause/resume"
+ },
+ {
+  "address": "0x0018F89C",
+  "name": "maybe_Os_PollAsyncWaitOp",
+  "signature": "void maybe_Os_PollAsyncWaitOp(AsyncWaitOwner* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Polls the async token created by 0x18F73C: calls its vtable +8/+0xC to test completion, copies out the result (byte +0xC or +0x10 and 0x6552AC), frees the token with vtable +4 and resumes the manager.",
+  "confidence": 0.35,
+  "evidence": "reads self->f_c, self->f_11 == 1; (**(code**)(*f_c+8))(), fallback +0xC; result stored to self->f_14/f_18 via 0x6552AC; calls 0x2D23D0; caller 0x1F0C30"
+ },
+ {
+  "address": "0x0018FCB0",
+  "name": "maybe_Ui_SetAnimFrame",
+  "signature": "void maybe_Ui_SetAnimFrame(UiWidget* self, uint32_t frame)",
+  "params": {
+   "param_1": "self",
+   "param_2": "frame"
+  },
+  "summary": "Requests the widget's animation object (vtable +0x58) and applies the frame index combined with the widget's 16-bit layer id via 0x1D809C.",
+  "confidence": 0.45,
+  "evidence": "(**(code**)(*arg1+0x58))(arg1) then 0x1D809C(anim, frame | *(u16*)(arg1+10) << 16); 6 callers incl. 0x1C54A0/0x1DB08C"
+ },
+ {
+  "address": "0x0018FE08",
+  "name": "Ui_StartLayoutAnimations",
+  "signature": "void Ui_StartLayoutAnimations(UiWidget* self, int animA, int animB)",
+  "params": {
+   "param_1": "self",
+   "param_2": "animA",
+   "param_3": "animB"
+  },
+  "summary": "Starts up to two layout animations on the widget using the packed key (layer<<16 | index) expected by 0x1A6680.",
+  "confidence": 0.55,
+  "evidence": "two guarded calls to 0x1A6680(self, self->f_28 << 16 | n, anim); callers 0x1C50E0/0x1C54A0/0x1C54EC/0x1DB08C"
+ },
+ {
+  "address": "0x001901F4",
+  "name": "Text_InsertLineChar",
+  "signature": "uint32_t Text_InsertLineChar(TextLine* line, int index)",
+  "params": {
+   "param_1": "line",
+   "param_2": "index"
+  },
+  "summary": "Inserts/replaces one character in a 24-glyph message line: when the layout is not currently active it shifts the tail (0x17-index glyphs) and writes the blank glyph, otherwise it flushes the dirty line and rebuilds its layout via 0x191470/0x19201C/0x191E3C.",
+  "confidence": 0.55,
+  "evidence": "writes u16 to g_0019026C+arg1 and line+index*2; 24-glyph limit (0x18); calls 0x6292A4, 0x116A14, 0x191470, 0x19201C, 0x191E3C; 18+ callers are all text-window code"
+ },
+ {
+  "address": "0x0019201C",
+  "name": "Text_ApplyFontRecord",
+  "signature": "void Text_ApplyFontRecord(TextLayout* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Rebuilds a text layout object from the current font/character record: copies metrics, baseline, colour words, the 0x3C-byte glyph buffer and the 0x28-byte ruby buffer, padding both with 0xFF, and clamps the layout width.",
+  "confidence": 0.5,
+  "evidence": "calls 0x45A5C8/0x45BD14 (font record), writes the u16 metric pairs at 0x12..0x2A, copies 0x3C bytes to +0x129C and 0x28 to +0x1274 filled with 0xFF; 34 callers from text rendering"
+ },
+ {
+  "address": "0x00193248",
+  "name": "maybe_Text_UpdateStyleParams",
+  "signature": "void maybe_Text_UpdateStyleParams(TextObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Packs the 16 style words cached at +0x8668 into a local block, runs them through the style resolver 0x18CC14 and applies the result to the text object with 0x613F14.",
+  "confidence": 0.4,
+  "evidence": "copies 16 u32 from self+0x8668..0x86A4 into locals, calls 0x18CC14(&block) then 0x613F14(self,&block)"
+ },
+ {
+  "address": "0x00193E58",
+  "name": "Ui_CreateWindowById",
+  "signature": "UiWindow* Ui_CreateWindowById(uint32_t out[2], int layoutId, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "out",
+   "param_2": "layoutId"
+  },
+  "summary": "Window factory: allocates g_00193F10 bytes from the UI heap, constructs the window object with 0x167764 for the requested layout id (0xFF means the default 0x11), registers it with the UI manager and binds it to the gold window/owner.",
+  "confidence": 0.55,
+  "evidence": "vtable g_00193F0C stored in out[0]; Mem_AllocAligned(g_00193F10, heap, 4); 0x167764(ptr, layoutId); 0x21F738/0x21F8B8 register; calls 0x166B2C(out[1],arg3,arg4) then vtable+0x24"
+ },
+ {
+  "address": "0x00193F14",
+  "name": "Ui_DestroyWindowById",
+  "signature": "void Ui_DestroyWindowById(UiWindowHandle* handle)",
+  "params": {
+   "param_1": "handle"
+  },
+  "summary": "Destructor for the window created by 0x193E58: installs the released vtable g_00193F50, unregisters the window object from the UI manager and frees the handle.",
+  "confidence": 0.55,
+  "evidence": "*arg1 = g_00193F50; 0x21F8B8(manager, arg1[1]); arg1[1]=0; 0x10F6CC(arg1)"
+ },
+ {
+  "address": "0x00194960",
+  "name": "maybe_Ui_DestroyCompositeWidget",
+  "signature": "void maybe_Ui_DestroyCompositeWidget(UiWidget* self, uint32_t vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Destructor for a composite UI widget: destroys three pane groups (0x3E04BC), finishes one child animation (0x1A6768) and frees the object.",
+  "confidence": 0.45,
+  "evidence": "'*arg1 = arg2' then three 0x3E04BC(-0x54/-0x50/-0x4C) calls, 0x1A6768(-0x4C), 0x10F6CC"
+ },
+ {
+  "address": "0x00194D6C",
+  "name": "Ui_UnlinkWidgetNode",
+  "signature": "void Ui_UnlinkWidgetNode(UiWidget* node, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "node"
+  },
+  "summary": "Removes a widget from its intrusive doubly-linked list (patches the neighbours' next/prev), marks the node unlinked and notifies the screen manager's vtable slot +0xC.",
+  "confidence": 0.55,
+  "evidence": "writes node[1]+4 = node[0] and node[0]+8 = node[1], sets both to node-1 (poison), then manager+0x14+0x1c vtable+0xC(1)"
+ },
+ {
+  "address": "0x0019536C",
+  "name": "maybe_Field_DispatchNpcEvent",
+  "signature": "uint32_t maybe_Field_DispatchNpcEvent(FieldNpc* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Event dispatcher for an NPC/party interaction: inspects the pending event flags at +0x3534 (talk/menu/action bits), resolves the selected party member through 0x640388/0x3BD8A4, updates the cursor state and the cursor sound, then advances the NPC action controller state.",
+  "confidence": 0.35,
+  "evidence": "reads self->f_3534 bits 0x142/4/0x10/1; calls 0x640388/0x6403B4 (UI cursor list), 0x3BD8A4/0x3BD908 (party selection), 0x61B7A4/0x61B724 (cursor), 0x194A70; recovered function with no plain callers (installed as a vtable callback)"
+ },
+ {
+  "address": "0x00195EF0",
+  "name": "Ui_ReleaseMessageWindowRoot",
+  "signature": "void Ui_ReleaseMessageWindowRoot(UiMessageWindowRoot* self, uint32_t vtable)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the message-window root: clears the pending flag, drops the resource handle at +0xD99, destroys the embedded controller at -0x3664 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "'*arg1 = arg2'; arg1[0xd98]=0; handle release of arg1[0xd99] (g_00195F80/F84/F88); 0x3BE544(handle-0x3664); 0x10F6CC"
+ },
+ {
+  "address": "0x00195F8C",
+  "name": "maybe_Field_RebuildScreenSystem",
+  "signature": "void maybe_Field_RebuildScreenSystem(FieldScreenOwner* self, char* mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "When the field requests mode 8, tears down the old 0x328-byte screen system, constructs a new one with 0x1772C4 and marks it as active; used when switching between map/event screen layouts.",
+  "confidence": 0.45,
+  "evidence": "if (*arg2 == 8): releases *(arg1+100), allocates 0x328 via Mem_AllocAligned, calls 0x1772C4(ptr, arg1+0x1c), registers with 0x21F738, sets vtable+0x24 and f_25=1; caller 0x1775D4"
+ },
+ {
+  "address": "0x0019608C",
+  "name": "Ui_CreateMessageWindow",
+  "signature": "UiMessageWindow* Ui_CreateMessageWindow(UiMessageWindow* storage)",
+  "params": {
+   "param_1": "storage"
+  },
+  "summary": "Constructor of the message-window object: builds the 0x2BC32C base, initialises the line buffer and palette, creates the font/resource handles (0x293A00) and the text-layout helper, then returns the adjusted base pointer.",
+  "confidence": 0.55,
+  "evidence": "*arg1 = g_0019631C; 0x2BC32C(arg1+1); sets 0x18/0x20/0x24/0x2C..0x60 fields; creates 0x293A00 layout object with vtable g_00196348; calls 0x5F9C90; returns iVar4-4"
+ },
+ {
+  "address": "0x00196350",
+  "name": "Ui_DestroyMessageWindow",
+  "signature": "void Ui_DestroyMessageWindow(UiMessageWindow* self, uint32_t vtable, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the message window: releases the font handle at +0x64, resets the string pointers/vtables to g_00196400..008, unlinks the line lists and destroys the 0x2BC734 base.",
+  "confidence": 0.55,
+  "evidence": "0x21F8B8(manager, arg1[0x19]); arg1[0x12]=PTR_DAT_00196400; unlinks arg1[0x14]/[0x15]/[0x10]/[0x11]/[9]/[10]; 0x2BC734(arg1+1)"
+ },
+ {
+  "address": "0x0019641C",
+  "name": "Ui_MessageWindow_TogglePage",
+  "signature": "void Ui_MessageWindow_TogglePage(UiMessageWindow* self, int enabled)",
+  "params": {
+   "param_1": "self",
+   "param_2": "enabled"
+  },
+  "summary": "Switches the message window between its two pages (f_140 1<->2) when there is more than one result page, plays the matching layout animation (4/0) and updates the pager widget.",
+  "confidence": 0.55,
+  "evidence": "if arg2 && f_144>1: f_140==1 -> 0x1965FC(self,4), new page 2 else 0x1965FC(self,0), page 1; formats pager text with 0x6F0D9C(g_001964B8,page); 0x1A6680(self, layer<<16|0x10, buf); 0x1D809C(self->f_38, layer<<16)"
+ },
+ {
+  "address": "0x001964BC",
+  "name": "Text_UpdateCursorBlink",
+  "signature": "void Text_UpdateCursorBlink(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the message-window cursor blink timer: once the accumulated time passes the threshold it cycles each of the four line cursors to its alternate glyph animation (0x53/0x54/0x55) and reloads the next blink interval.",
+  "confidence": 0.55,
+  "evidence": "f_14c += g_001965F4; compares with 0x3F7FFFFF; for i<4, if entry+0x6C != -1 picks anim 0x55/0x53/0x54 by glyph class 0x10/2/4/8 and calls 0x1A6680; toggles entry+0x64 % 2; resets f_14c = g_001965F8"
+ },
+ {
+  "address": "0x001965FC",
+  "name": "Text_LayoutLines",
+  "signature": "void Text_LayoutLines(UiMessageWindow* self, int firstLine)",
+  "params": {
+   "param_1": "self",
+   "param_2": "firstLine"
+  },
+  "summary": "Rebuilds the four visible text lines starting at firstLine: stops the old animations, measures each glyph through the font manager (0x66B0E4/0x635EB98) and starts the per-line fade/scroll animations; finally stores the visible line count in +0x148.",
+  "confidence": 0.55,
+  "evidence": "loops 4 lines of 0x3C bytes (f_50..f_60 animation keys), calls 0x1A6680/0x1A629C, 0x3D2E2C; walks font glyphs with 0x66B0E4 and 0x635EB98; writes self->f_148 and calls 0x1D7EE0"
+ },
+ {
+  "address": "0x00196AA0",
+  "name": "Text_ApplyGlyphStyle",
+  "signature": "void Text_ApplyGlyphStyle(TextLine* line)",
+  "params": {
+   "param_1": "line"
+  },
+  "summary": "Chooses the animation/colour for the current glyph class (0x10 = selected, 2 = normal, 4/8 = dimmed) and starts it on the line, then advances the two-entry style toggle.",
+  "confidence": 0.55,
+  "evidence": "reads sVar1 = *(short*)(line + line[5]*2 + 0x18), cases 0x10/2/4/8 -> 0x633560(manager->f_10, 0x55/0x53/0x54) then 0x1A6680(*arg1,arg1[2],anim); line[5] = (line[5]+1)%2"
+ },
+ {
+  "address": "0x00197208",
+  "name": "Text_InitLineStruct",
+  "signature": "TextLine* Text_InitLineStruct(TextLine* line)",
+  "params": {
+   "param_1": "line"
+  },
+  "summary": "Zero-initialises a message-line record (six words plus flags), installs the default style word and resets the glyph-animation slot.",
+  "confidence": 0.55,
+  "evidence": "zeroes arg1[0..5] and byte 0xb, arg1[10] = uRam0019724c, 0x3D2E2C(arg1+7), arg1[6]=0; tiny leaf with 2 callers"
+ },
+ {
+  "address": "0x00197498",
+  "name": "Text_ReleaseLineObjects",
+  "signature": "void Text_ReleaseLineObjects(TextLine* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the two optional objects owned by a text line (at +0xC and +0x14) through their virtual destructor slot +4.",
+  "confidence": 0.55,
+  "evidence": "two guarded (*(*self->f_c+4))() / (*(*self->f_14+4))() calls followed by clearing the pointers"
+ },
+ {
+  "address": "0x00198314",
+  "name": "Text_ProcessControlTag",
+  "signature": "void Text_ProcessControlTag(TextTagBuffer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Consumes one message control tag from the tag buffer: shifts the pending queue, then dispatches on the tag id (1 = party member, 2 = word dictionary, 3 = character name, 0xB/0xD/0xE = item/word references) and registers the resolved string in the text dictionary slot 5 via 0x1F076C.",
+  "confidence": 0.55,
+  "evidence": "switch on local_28 & 0xff with cases 1,2,3,0xb,0xd,0xe; uses 0x61BD4C (decode char), 0x63DDCC/0x63DD90 (word table), 0x66C99C, 0x1F076C(5,string,0/1); called from the message window update"
+ },
+ {
+  "address": "0x00198774",
+  "name": "Ui_EquipmentWindow_Setup",
+  "signature": "void Ui_EquipmentWindow_Setup(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the item/equipment window from its BFLYT panes: win_dougu_party1/dougu1/fukuro1/sort/sort2/sort3/how/num/hand/party2/hp1/dougu2/fukuro2 plus the pager and HP gauge, and binds the sort/selection callbacks.",
+  "confidence": 0.8,
+  "evidence": "strings s_win_dougu_party1_00198af4, s_win_dougu_dougu1_00198b08, s_win_dougu_fukuro1_00198b1c, s_win_dougu_sort_00198b40, s_win_dougu_how_00198b60, s_win_dougu_num_00198b70, s_win_dougu_hand_00198b80, s_win_dougu_party2_00198b90, s_win_dougu_hp1_00198ba4, s_win_dougu_dougu2_00198bb4, s_win_dougu_fukuro2_00198bc8; 13 x 0x1D85EC pane creation"
+ },
+ {
+  "address": "0x00198FB4",
+  "name": "maybe_Ui_EquipmentWindow_SetItemCode",
+  "signature": "void maybe_Ui_EquipmentWindow_SetItemCode(void)",
+  "params": {},
+  "summary": "Decodes the current selection (0x61BD4C/0x66C2DC) and stores the resulting glyph/item code in the UI manager's shared word at +0x94.",
+  "confidence": 0.45,
+  "evidence": "0x61BD4C(&buf), if buffer non-empty 0x66C2DC(&buf) -> *piVar2->f_94"
+ },
+ {
+  "address": "0x00199128",
+  "name": "Ui_EquipmentWindow_Release",
+  "signature": "void Ui_EquipmentWindow_Release(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the item window's major sub-widgets: the party pane group (0x2B20AC), the list pane (0x4E3EB4) and the item-detail window (0x29126C).",
+  "confidence": 0.55,
+  "evidence": "0x2B20AC(self+0x1c4); 0x4E3EB4(self+0x654); 0x29126C(self+0x5f4,0)"
+ },
+ {
+  "address": "0x001993C4",
+  "name": "Ui_EquipmentWindow_FindItemIndex",
+  "signature": "uint32_t Ui_EquipmentWindow_FindItemIndex(UiEquipmentWindow* self, const ItemRef* item)",
+  "params": {
+   "param_1": "self",
+   "param_2": "item"
+  },
+  "summary": "Finds the row index of an item in the equipment window: scans the 0x120-byte row records (+0xC stride) matching the item id and flag, then asks the row pager for the display index; returns the fallback constant when not found.",
+  "confidence": 0.5,
+  "evidence": "loops self->f_1a4 rows at self+0x120 stride 0xc comparing +0x10 with arg2[2] and +0x14 with arg2->f_c; uses 0x63B5E4/B60C/B638 (active tab), vtable +0x6C/+0x68, returns g_001994F0 on miss"
+ },
+ {
+  "address": "0x001994F4",
+  "name": "Ui_EquipmentWindow_Confirm",
+  "signature": "void Ui_EquipmentWindow_Confirm(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Confirms the highlighted item: scrolls the active list to the selected row (0x6E57E4), raises the cursor event flag and restarts the row animation.",
+  "confidence": 0.5,
+  "evidence": "picks f_654 or f_5f4 tab by 0x63B5E4/B60C/B638, computes row offset from vtable +0x68/+0x64, calls 0x6E57E4(tab,row,1); sets f_11c->f_10=1 and f_10d0 anim; g_0019963C+self=1"
+ },
+ {
+  "address": "0x00199640",
+  "name": "Ui_EquipmentWindow_UpdateInput",
+  "signature": "void Ui_EquipmentWindow_UpdateInput(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Input handler for the item window: handles cancel (hide detail), the sort/how popup, confirms the selected row (0x4482F0/0x294378) and updates the pager highlight.",
+  "confidence": 0.5,
+  "evidence": "switch on 0x6333C8(self->f_7d8) with cases 0..4; f_1bc flags 4/1/0x102; calls 0x6D7454, 0x4482F0, 0x294378, 0x29126C, 0x61BD4C, 0x4482F0"
+ },
+ {
+  "address": "0x00199B18",
+  "name": "maybe_Ui_EquipmentWindow_StartAnim",
+  "signature": "void maybe_Ui_EquipmentWindow_StartAnim(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the item window's open animation and resets the embedded layout animation controller.",
+  "confidence": 0.45,
+  "evidence": "0x6D76A0(self+0x120,*g_00199B40,g_00199B40[1]); 0x6190AC(self+0x10d0)"
+ },
+ {
+  "address": "0x00199E30",
+  "name": "Ui_EquipmentWindow_Update",
+  "signature": "void Ui_EquipmentWindow_Update(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Main per-frame update of the item/equipment window: handles tab switching, cursor repeat, the detail popup, the sort popup and the item-use animation, and pushes the current item name into the shared text dictionary.",
+  "confidence": 0.6,
+  "evidence": "large update with f_1bc button bits, f_654/f_5f4 tab selection (0x63B5E4/B60C/B638), 0x3D6138/0x4E3EF4/0x1DAB30 anim calls, 0x1F076C(5,name,1), 0x6D7508(anim,...)"
+ },
+ {
+  "address": "0x0019AD74",
+  "name": "Ui_EquipmentWindow_OpenDetail",
+  "signature": "void Ui_EquipmentWindow_OpenDetail(UiEquipmentWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Opens the item-detail sub-window with the standard 'open' animation: binds the detail widget at +0x1084 to the window and starts the animation sequence (0x6D7508/0x6D7630).",
+  "confidence": 0.5,
+  "evidence": "0x1DAC34(self+0x1084, arg2+0x11c, ...); 0x6D7508(self+0x120, self+0x1084, g_0019ADC4->f_58, f_5c, 1); f_1bc=0; 0x6D7630(self+0x120)"
+ },
+ {
+  "address": "0x0019AF34",
+  "name": "maybe_Ui_EquipmentWindow_OpenDetailEx",
+  "signature": "void maybe_Ui_EquipmentWindow_OpenDetailEx(UiEquipmentWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant of the detail-open call using the second animation descriptor (g_0019AF70->f_60) and leaving the button state untouched.",
+  "confidence": 0.45,
+  "evidence": "0x1DAC34(arg1+0x1084, arg2+0x11c, ...); 0x6D7508(arg1+0x120, arg1+0x1084, g_0019AF70->f_60, *(g_0019AF70+100), 1)"
+ },
+ {
+  "address": "0x0019AF74",
+  "name": "Ui_EquipmentWindow_UseSelectedItem",
+  "signature": "void Ui_EquipmentWindow_UseSelectedItem(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Handles 'use/equip selected item' in the item window: confirms the row, resolves the item name, plays the success/error animation (0x19 = success, 0x18 = failure) and stores the resulting item id in the shared UI state.",
+  "confidence": 0.55,
+  "evidence": "f_1bc bits 1/4/0x102; 0x35EB98(item->f_14), 0x64DF40/item anim, 0x1905E4(row,arg,anim,1), 0x19BC88(self,0x19/0x18), 0x66C2DC(name), 0x6297C8"
+ },
+ {
+  "address": "0x0019B130",
+  "name": "maybe_Ui_EquipmentWindow_UpdateDetailAnim",
+  "signature": "void maybe_Ui_EquipmentWindow_UpdateDetailAnim(UiEquipmentWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the detail sub-window animation: starts/hides the pane animation and, when the confirm flag is set, launches the descriptor-based open sequence.",
+  "confidence": 0.45,
+  "evidence": "if f_1bc&4 -> 0x6D7454; else f_1bc&1 -> 0x2B1E44(self+0x930,...), f_1bc&0x102 -> 0x6D7508(self+0x120, self+0xec0, ...)"
+ },
+ {
+  "address": "0x0019B338",
+  "name": "Ui_EquipmentWindow_UseItemLogic",
+  "signature": "void Ui_EquipmentWindow_UseItemLogic(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Item-use decision logic: checks whether the selected item is usable/equippable in the current context (0x66BC84/0x66C724/0x66C5A8/0x66C184/0x6293E8), and either plays the success animation or falls back to a plain confirm.",
+  "confidence": 0.55,
+  "evidence": "0x62F694(self+0x1084)==1 then item flags from f_10d0+8: 0x66BC84/0x66C724/0x66C5A8/0x66C184, 0x44793C/0x447AEC, anim ids 0x14/0x15/0x23, fallback 0x1994F4"
+ },
+ {
+  "address": "0x0019B7A4",
+  "name": "Ui_EquipmentWindow_SelectItem",
+  "signature": "void Ui_EquipmentWindow_SelectItem(UiEquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Selects the current row: confirms the row through 0x1905E4, plays the 0x14/0x15 selection animation and updates the shared item-name slot; used by the row-press path.",
+  "confidence": 0.55,
+  "evidence": "f_1bc bits; 0x64E010/0x64DF40 item anim, 0x1902CC(row) lookup, 0x1905E4(iVar3,row,anim,1), 0x6D7508(self+0x120, 0, g_0019B94C->f_40, f_44), 0x19BC88(self,0x15/0x14)"
+ },
+ {
+  "address": "0x0019BC88",
+  "name": "Ui_EquipmentWindow_PlayAnim",
+  "signature": "void Ui_EquipmentWindow_PlayAnim(UiEquipmentWindow* self, uint32_t animId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "animId"
+  },
+  "summary": "Clears the window's per-frame state, resolves animId through 0x2BBAD0 and starts that layout animation on the item window (0x1DAB30/0x6D7508/0x6D7630).",
+  "confidence": 0.55,
+  "evidence": "0x2BBAD0(arg2); zeroes f_1120..f_115c; 0x1DAB30(self+0x1084,anim); 0x6D7508(self+0x120,self+0x1084,g_0019BD28->f_58,f_5c,1); f_1bc=0; 0x6D7630"
+ },
+ {
+  "address": "0x0019BDC4",
+  "name": "Ui_ItemMenu_CreateRoot",
+  "signature": "UiItemMenuRoot* Ui_ItemMenu_CreateRoot(uint32_t arg1, uint32_t arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Creates the root object of the item/equipment menu screen (0x390 bytes): installs the root vtable and builds the embedded cursor, list, pager, detail and animation sub-objects used by the win_dougu_* panes.",
+  "confidence": 0.5,
+  "evidence": "same construction pattern as 0x1772C4 (root vtable d8B6C, 0x36B45C, 0x2B20F0, 0x365844, 0x1A66A0 x3, 0x214EAC, 0x2B2070, 0x447E6C, 0x448304, 0x22A8FC, 0x4E3F5C, 0x1DB550); size 0x390; immediately precedes Ui_ItemMenu_Destroy"
+ },
+ {
+  "address": "0x0019C154",
+  "name": "Ui_ItemMenu_DestroyRootThunk",
+  "signature": "void Ui_ItemMenu_DestroyRootThunk(void)",
+  "params": {},
+  "summary": "Shutdown wrapper: runs the item-menu root destructor (0x19C164) and frees the object with 0x10F6CC.",
+  "confidence": 0.55,
+  "evidence": "'bl 0x19C164; bl 0x10F6CC'"
+ },
+ {
+  "address": "0x0019C164",
+  "name": "Ui_ItemMenu_DestroyRoot",
+  "signature": "void Ui_ItemMenu_DestroyRoot(UiItemMenuRoot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the item-menu root: stops the animation controller, releases the three cursor handles, tears down the sub-object chain (0x1DB5D0, 0x1A6768, 0x4E3FC0, 0x22A984, 0x44835C, 0x214F20, 0x2B2130, 0x36B514) and frees the object.",
+  "confidence": 0.5,
+  "evidence": "sets *self = g_0019C3D4; 0x6190AC(self+0x434); writes f_16=0xffff, f_15=0, f_1d=0xff on self[0x47]; long chain of destructor calls on -8/-0x54/-0x9c/-0x418/-0x430; caller 0x19C154"
+ },
+ {
+  "address": "0x0019CBF4",
+  "name": "maybe_Ui_DialogRoot_Create",
+  "signature": "UiDialogRoot* maybe_Ui_DialogRoot_Create(uint32_t arg1, uint32_t arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Creates the message/dialog screen root object: installs the root vtable, initialises the 0x36B45C cursor controller and the 0x184E38 layout node, and links the two intrusive lists.",
+  "confidence": 0.45,
+  "evidence": "root vtable g_0019CC94 written via 0x1D8B6C; 0x36B45C(puVar1+0x48,1,g_0019CC98); 0x184E38(&f_44); list initialisation at +0x414; sets '*(iVar2-0x28) = iVar2-0x164'"
+ },
+ {
+  "address": "0x0019E2D4",
+  "name": "maybe_Ui_MessageWindow_CloseWithEmote",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithEmote(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes a talk session: releases the emote line objects (0x197498) and the emote controller (0x1D8C80), then hides the message window through the text manager (0x625E00).",
+  "confidence": 0.45,
+  "evidence": "0x625E00(*manager, &self->f_b0->f_146); 0x197498(self->f_8c); 0x1D8C80(self->f_88, &self->f_b0->f_146)"
+ },
+ {
+  "address": "0x0019E9E4",
+  "name": "maybe_Ui_MessageWindow_CloseWithTalkData",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithTalkData(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Ends the currently displayed talk: stops the talk-data player (0x249DB4/0x1D60E4), hides the message window (0x625E00) and releases the two cursor/balloon objects.",
+  "confidence": 0.45,
+  "evidence": "if f_b0->f_147==0 -> 0x249DB4(self->f_6c, self->f_b0->f_149); 0x1D60E4(self->f_50,...); 0x625E00(manager,...); 0x397448/0x397984(self->f_70)"
+ },
+ {
+  "address": "0x0019EA58",
+  "name": "maybe_Ui_MessageWindow_CloseWithSpeaker",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithSpeaker(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the speaker/nameplate variant: notifies the face-widget manager (0x1DBB34) and releases the nameplate objects and the message window.",
+  "confidence": 0.45,
+  "evidence": "0x6F1D50 -> 0x1DBB34(manager); 0x397448/0x397984(self->f_70); 0x625E00(manager,&self->f_b0->f_146)"
+ },
+ {
+  "address": "0x0019EAA8",
+  "name": "maybe_Ui_MessageWindow_CloseWithBalloon",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithBalloon(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the balloon/fukidashi variant: hides the message window and releases the balloon widget at +0x84.",
+  "confidence": 0.45,
+  "evidence": "0x625E00(manager,&self->f_b0->f_146) then 0x1EB368(self->f_84)"
+ },
+ {
+  "address": "0x0019ECA8",
+  "name": "maybe_Ui_MessageWindow_CloseWithLayout",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithLayout(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the layout-backed variant: releases the layout widget at +0x5C (0x206AE4) and hides the message window.",
+  "confidence": 0.45,
+  "evidence": "0x206AE4(self->f_5c,&self->f_b0->f_146); 0x625E00(manager,&self->f_b0->f_146)"
+ },
+ {
+  "address": "0x0019ECE4",
+  "name": "Ui_MessageWindow_CloseAll",
+  "signature": "void Ui_MessageWindow_CloseAll(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Full teardown of all message sub-systems: releases the balloon, gauge, layout, nameplate and talk widgets, unloads the game-common pack and notifies the UI manager.",
+  "confidence": 0.55,
+  "evidence": "calls 0x336BB8(f_58), 0x2F266C(f_50), 0x206408(f_5c), 0x235848(f_48), 0x1D10C0(f_4c), 0x2F5238(f_80), 0x626360(manager), 0x2498FC(f_6c), 0x388320(pack,1,\"s_gamecmn_pack_0019ed60\")"
+ },
+ {
+  "address": "0x0019ED70",
+  "name": "maybe_Ui_MessageWindow_CloseWithCursor",
+  "signature": "uint32_t maybe_Ui_MessageWindow_CloseWithCursor(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the window via the cursor controller: clears the cursor state, releases both choice widgets and hides the message window; returns the window handle.",
+  "confidence": 0.45,
+  "evidence": "manager+0x14+0xc vtable+8(0); 0x24CB9C(self->f_6c,1/2); 0x625FD8(manager); returns self->f_8c"
+ },
+ {
+  "address": "0x0019F034",
+  "name": "maybe_Ui_MessageWindow_CloseWithPager",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithPager(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the paged-message variant: stops the pager animation (0x39772C), releases the pager widgets and restores the choice handler.",
+  "confidence": 0.45,
+  "evidence": "0x39772C(self->f_70); 0x24CB9C(f_6c,1/2); 0x1C839C(self->f_54,1,-1,0); 0x625FD8(manager)"
+ },
+ {
+  "address": "0x0019F084",
+  "name": "maybe_Ui_MessageWindow_CloseWithInput",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithInput(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the input-prompt variant: stops the prompt animation, resets the face widget (0x1DBCC4), releases the pager widgets and re-enables the input handler.",
+  "confidence": 0.45,
+  "evidence": "manager+0x14+0xc vtable+8(0); 0x39772C(f_70); 0x6F1D50 -> 0x1DBCC4(manager,0); 0x24CB9C(f_6c,1/2); manager+0x14+0x10 vtable+0x28(1); 0x625FD8"
+ },
+ {
+  "address": "0x0019F144",
+  "name": "maybe_Ui_MessageWindow_HideCursor",
+  "signature": "void maybe_Ui_MessageWindow_HideCursor(void)",
+  "params": {},
+  "summary": "Minimal close path: only clears the cursor/input state on the UI manager (+0x14 +0xC, vtable slot +8).",
+  "confidence": 0.45,
+  "evidence": "single call '(**(code**)(*piVar1+8))(piVar1,0)' on *(manager+0x14)+0xc"
+ },
+ {
+  "address": "0x0019F4FC",
+  "name": "maybe_Ui_MessageWindow_CloseWithChoice",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithChoice(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the yes/no choice variant: releases the choice widget at +0x5C and restores the choice handler.",
+  "confidence": 0.45,
+  "evidence": "manager+0x14+0xc vtable+8(0); 0x207760(self->f_5c); 0x1C839C(self->f_54,1,-1,0)"
+ },
+ {
+  "address": "0x0019F554",
+  "name": "maybe_Ui_MessageWindow_CloseWithEmoteLine",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithEmoteLine(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant that releases the emote line (0x1D8C80) and the emote animation objects (0x397448/0x397984) before hiding the window.",
+  "confidence": 0.45,
+  "evidence": "0x1D8C80(self->f_88,&self->f_b0->f_146); 0x397448/0x397984(self->f_70); 0x625E00(manager,...)"
+ },
+ {
+  "address": "0x0019F7CC",
+  "name": "Ui_MessageWindow_CloseWithWindowOnly",
+  "signature": "void Ui_MessageWindow_CloseWithWindowOnly(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Smallest close variant: only asks the text manager to hide the window (0x625E00), leaving sub-widgets to their owners.",
+  "confidence": 0.5,
+  "evidence": "single call 0x625E00(*manager, &arg1->f_b0->f_146)"
+ },
+ {
+  "address": "0x0019FA7C",
+  "name": "maybe_Ui_MessageWindow_CloseWithGauge",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithGauge(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the gauge/HP-bar variant: releases the gauge widget at +0x80 (0x2F56CC) and hides the window.",
+  "confidence": 0.45,
+  "evidence": "0x2F56CC(self->f_80,&self->f_b0->f_146); 0x625E00(manager,&self->f_b0->f_146)"
+ },
+ {
+  "address": "0x0019FDC8",
+  "name": "maybe_Ui_MessageWindow_CloseWithPage",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithPage(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the single-page variant: stops the page animation and releases the pager widgets, then hides the window.",
+  "confidence": 0.45,
+  "evidence": "0x39772C(self->f_70); 0x24CB9C(f_6c,1/2); 0x625FD8(manager)"
+ },
+ {
+  "address": "0x001A00D4",
+  "name": "maybe_Ui_MessageWindow_CloseWithNameTag",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithNameTag(UiMessageWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes the name-tag variant: clears the cursor state, releases the name-tag widgets and tears down the name-tag renderer at +0x80.",
+  "confidence": 0.45,
+  "evidence": "manager+0x14+0xc vtable+8(0); 0x24CB9C(f_6c,1/2); 0x2F5868(self->f_80)"
+ },
+ {
+  "address": "0x001A0464",
+  "name": "Input_GetButtonState",
+  "signature": "uint32_t Input_GetButtonState(UiInputOwner* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Combines three pad queries (ids 1, 2 and 3 from 0x6336B8 — typically trigger, repeat and hold) into one button mask for the owning window.",
+  "confidence": 0.5,
+  "evidence": "returns 0x6336B8(self->f_10,1) | 0x6336B8(...,2) | 0x6336B8(...,3)"
+ },
+ {
+  "address": "0x001A1A00",
+  "name": "maybe_Ui_MessageWindow_AdvanceState",
+  "signature": "uint32_t maybe_Ui_MessageWindow_AdvanceState(UiMessageWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the message-window state machine from state 9/10/11 (name plate / page / close); on other states it increments f_1D, restamps the timer and notifies the text manager (0x626050).",
+  "confidence": 0.4,
+  "evidence": "switch on self->f_1d values 9/0xa/0xb; calls 0x397514, 0x24CB9C, 0x396BEC, 0x640C64, 0x626050; sets f_20 = g_001A1D94"
+ },
+ {
+  "address": "0x001A1AA4",
+  "name": "maybe_Ui_MessageWindow_AdvanceStateEx",
+  "signature": "uint32_t maybe_Ui_MessageWindow_AdvanceStateEx(uint32_t a, int b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Second stage of the same state machine (Thumb): when the pending choice/input became valid it releases the talk player, layout and face widgets, notifies the text manager and advances f_1D.",
+  "confidence": 0.35,
+  "evidence": "calls 0x20D1C4(self->f_5c), 0x66A874(self->f_b4), 0x610078, 0x206BBC, 0x253EA0, 0x626050; increments self->f_1d"
+ },
+ {
+  "address": "0x001A2394",
+  "name": "maybe_Ui_MessageWindow_NotifyTextManager",
+  "signature": "void maybe_Ui_MessageWindow_NotifyTextManager(void)",
+  "params": {},
+  "summary": "Two-call helper that fetches the game manager singleton and calls the text-manager notification entry 0x62688C.",
+  "confidence": 0.45,
+  "evidence": "0x6F229C(&tmp); 0x62688C(*manager); single basic block"
+ },
+ {
+  "address": "0x001A27B0",
+  "name": "maybe_Ui_Hud_HideSequence",
+  "signature": "uint32_t maybe_Ui_Hud_HideSequence(UiHudStepper* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Step-driven HUD hide sequence used when a full-screen message/menu opens: hides the cursor, waits for the layout animation, unloads the common pack and finally clears the ten HUD element flags at +0x114..+0x11D.",
+  "confidence": 0.45,
+  "evidence": "state machine on self->f_18 (0..4); calls 0x626BB4, 0x645638, 0x62669C, 0x66D1C0, 0x6260B4, 0x6268A0; sets self->f_54->f_114..f_11d = 0; final vtable+0x14(1)"
+ },
+ {
+  "address": "0x001A2D94",
+  "name": "maybe_Ui_Hud_ShowSequence",
+  "signature": "uint32_t maybe_Ui_Hud_ShowSequence(UiHudStepper* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Mirror of Ui_Hud_HideSequence: step-driven restore of the HUD after a full-screen overlay, ending with all ten HUD element flags set back to 1 and the cursor re-enabled.",
+  "confidence": 0.45,
+  "evidence": "state machine on self->f_18; calls 0x6267D4, 0x645638, 0x626A6C, 0x645608, 0x625FEC; sets self->f_54->f_114..f_11d = 1; final vtable+0x14(0)"
+ },
+ {
+  "address": "0x001A5CB4",
+  "name": "Ui_Layout_UpdateChildTransforms",
+  "signature": "void Ui_Layout_UpdateChildTransforms(UiLayoutNode* node, UiTransform* out, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "node",
+   "param_2": "out"
+  },
+  "summary": "Walks the node's child list and combines every visible child's transform into the caller's transform via 0x53CD1C, skipping the sentinel entry.",
+  "confidence": 0.5,
+  "evidence": "iterates node+4's doubly-linked child list, checks child->f_11 bit 1 and vtable+8 != g_001A5D48, then 0x53CD1C(arg3,out,child,arg4)"
+ },
+ {
+  "address": "0x001A6460",
+  "name": "Ui_Pane_SetVisibleWithAnim",
+  "signature": "void Ui_Pane_SetVisibleWithAnim(UiPane* self, int visible)",
+  "params": {
+   "param_1": "self",
+   "param_2": "visible"
+  },
+  "summary": "Shows/hides a pane pair with the layout fade: applies the hidden/visible colour from g_001A651C, hides the opposite pane group and disables/enables the matching pane.",
+  "confidence": 0.55,
+  "evidence": "self->f_12 = arg2; vtable+0x4C(colour from g_001A651C[0]/[2]); 0x3E043C(pane,0) on either +0x14 or +100; 0x3DFF34(pane,0)"
+ },
+ {
+  "address": "0x001A664C",
+  "name": "Ui_Pane_PlayLayoutAnim",
+  "signature": "void Ui_Pane_PlayLayoutAnim(UiPane* self, int animKind)",
+  "params": {
+   "param_1": "self",
+   "param_2": "animKind"
+  },
+  "summary": "Starts layout animation 0xC or 0xD on the pane (through 0x2BCFF4) using the pane's packed layer/index key.",
+  "confidence": 0.55,
+  "evidence": "animId = arg2 ? 0xd : 0xc; 0x2BCFF4(animId); if self->f_30 -> self = self->f_34, then 0x3A7A2C(self, (u16)self->f_28<<16 | 2, anim, 1)"
+ },
+ {
+  "address": "0x001B65EC",
+  "name": "maybe_Ui_LoadingScreen_Update",
+  "signature": "void maybe_Ui_LoadingScreen_Update(UiLoadingScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the loading-screen widget: accumulates elapsed time, marks the loading flag, blocks input through the manager and, once the threshold is reached, completes the load and copies the resulting frame/phase pair.",
+  "confidence": 0.45,
+  "evidence": "accumulates arg1[6] against g_001B689C threshold; creates a 0x1C object with vtable g_001B6874 and a 0x?? object with 0x10B2C4; calls manager vtable+0x28(0,1); 0x1EE018; copies g_001B6894->f_8/f_c"
+ },
+ {
+  "address": "0x001B68A0",
+  "name": "maybe_Ui_QueryRectPairA",
+  "signature": "void maybe_Ui_QueryRectPairA(uint32_t out[2])",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "If the manager's interface returns non-zero, copies the two words of the global rectangle/animation constant g_001B68E0 into the output pair.",
+  "confidence": 0.3,
+  "evidence": "manager+0x14+0x1c vtable+0x24(0); on success out = *g_001B68E0 / g_001B68E0[1]"
+ },
+ {
+  "address": "0x001B68E4",
+  "name": "maybe_Ui_QueryRectPairB",
+  "signature": "void maybe_Ui_QueryRectPairB(uint32_t out[2])",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Same shape as 0x1B68A0 but queries vtable slot +0x30 and copies g_001B6924->f_10/f_14; a second screen-rect/state pair used by the loading screen.",
+  "confidence": 0.3,
+  "evidence": "manager+0x14+0x1c vtable+0x30(0); out[0]=g_001B6924->f_10, out[1]=g_001B6924->f_14"
+ },
+ {
+  "address": "0x001B6990",
+  "name": "Ui_LoadingScreen_Create",
+  "signature": "UiLoadingScreen* Ui_LoadingScreen_Create(UiLoadingScreen* storage)",
+  "params": {
+   "param_1": "storage"
+  },
+  "summary": "Builds the loading-screen object: allocates the 0x174-byte window, two supporting objects (0x1D8B6C/0x3E0454 and 0x1DAB30), a 0x36C-entry pool (0x100050) and the animation controller; initialises the progress bars.",
+  "confidence": 0.5,
+  "evidence": "vtable g_001B6D4C/g_001B6D58/g_001B6D90; allocates 0x174 via Mem_AllocAligned; func_00100050(puVar4+0x4f, g_001B6D60, 0x36c, 9); 0x1DA828; 0x1EC1D0; sets arg1[4..6]=uVar12"
+ },
+ {
+  "address": "0x001B6D98",
+  "name": "Ui_LoadingScreen_Destroy",
+  "signature": "int Ui_LoadingScreen_Destroy(UiLoadingScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the loading screen: unregisters and clears the two owned widgets at +8 and +0xC, returning the object.",
+  "confidence": 0.55,
+  "evidence": "two 0x21F8B8(manager, handle) calls followed by zeroing; returns self"
+ },
+ {
+  "address": "0x001B8410",
+  "name": "Ui_Part_PlayAnimFast",
+  "signature": "void Ui_Part_PlayAnimFast(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'fast' layout animation on a UI part and applies the frame value to the part's animation object through 0x6463F8.",
+  "confidence": 0.65,
+  "evidence": "string literal 'fast' at 0x1B8484 passed to 0x1B966C; then 0x6463F8(self->f_60, resolved, self->f_4a)"
+ },
+ {
+  "address": "0x001B8510",
+  "name": "Ui_Part_PlayAnimDisabled",
+  "signature": "void Ui_Part_PlayAnimDisabled(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'disabled' layout animation on a UI part.",
+  "confidence": 0.7,
+  "evidence": "string 'disabled' at 0x1B8537 (code takes s__disabled_001b8537 + 1 to skip the leading length byte); 0x1B966C(self,name,0)"
+ },
+ {
+  "address": "0x001B8544",
+  "name": "Ui_Part_PlayAnimNormal",
+  "signature": "void Ui_Part_PlayAnimNormal(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'normal' layout animation on a UI part and restarts its animation from frame 0 (0x6470C4).",
+  "confidence": 0.7,
+  "evidence": "string 'normal' at 0x1B85AF (+1); 0x1B966C; then vtable+0x2C(part, g_001B85B8, 1) and 0x6470C4(self->f_60, resolved)"
+ },
+ {
+  "address": "0x001B8FB8",
+  "name": "Ui_Part_PlayAnimOpenedIn",
+  "signature": "void Ui_Part_PlayAnimOpenedIn(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'opened_in' layout animation (the open-in transition) and applies its frame to the animation object.",
+  "confidence": 0.7,
+  "evidence": "string 'opened_in' at 0x1B901B (+1); 0x1B966C(self,name,0); 0x6463F8(self->f_60, vtable+0x2C(part,&g_001B9028,1), self->f_4a)"
+ },
+ {
+  "address": "0x001B95E4",
+  "name": "Ui_Part_ClearAnimsAndPlayOpenedIn",
+  "signature": "void Ui_Part_ClearAnimsAndPlayOpenedIn(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the three sub-animation flags on this part (bits 0xFE on +0x44) and then starts the 'opened_in' animation.",
+  "confidence": 0.55,
+  "evidence": "loops 3 entries of g_001B9658, resolves each via vtable+0x2C and clears bit 0 of f_44; then 0x1B966C(self,'opened_in',0)"
+ },
+ {
+  "address": "0x001B966C",
+  "name": "Ui_AttachLayoutAnimation",
+  "signature": "int Ui_AttachLayoutAnimation(UiAnimatedPart* self, const char* name, int frameBase)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name",
+   "param_3": "frameBase"
+  },
+  "summary": "Finds the first free animation slot among the eight pairs at +0x64..+0xA0, stores the optional base frame, creates the named layout animation with 0x53D604 and returns the animation object (or 0).",
+  "confidence": 0.65,
+  "evidence": "searches the +0x64..+0xA0 pairs; 0x53D604(frameBase?frameBase:*(self+4), name, 0, 1); stores into slot[0]/slot[1]; calls vtable+0x54 on the new animator"
+ },
+ {
+  "address": "0x001B98F8",
+  "name": "Ui_Part_PlayAnimOpenedIn2",
+  "signature": "void Ui_Part_PlayAnimOpenedIn2(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the second 'opened_in2' open animation variant on the part.",
+  "confidence": 0.65,
+  "evidence": "string 'opened_in2' at 0x1B995B (+1); 0x1B966C; 0x6463F8 with &LAB_001B9968 as the frame source"
+ },
+ {
+  "address": "0x001B9970",
+  "name": "Ui_Part_PlayAnimOpened",
+  "signature": "void Ui_Part_PlayAnimOpened(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'opened' layout animation on the part and applies its frame.",
+  "confidence": 0.7,
+  "evidence": "string 'opened' at 0x1B99E3 (+1); 0x1B966C; 0x6463F8(self->f_60, ..., self->f_4a)"
+ },
+ {
+  "address": "0x001B99F4",
+  "name": "Ui_Part_PlayAnimSeal",
+  "signature": "void Ui_Part_PlayAnimSeal(UiAnimatedPart* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the 'seal' layout animation (used for the sealed-door / sealed-chest UI part).",
+  "confidence": 0.6,
+  "evidence": "string 'seal' at 0x1B9A1C; 0x1B966C(self,&g_001B9A1C,0)"
+ },
+ {
+  "address": "0x001BA12C",
+  "name": "Ui_AttachLayoutAnimationEx",
+  "signature": "int Ui_AttachLayoutAnimationEx(UiAnimatedPart* self, const char* name, int frameBase)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name",
+   "param_3": "frameBase"
+  },
+  "summary": "Same as Ui_AttachLayoutAnimation but for the second slot bank at +0x94..+0xB0 (four pairs), used by parts that own two independent animation sets.",
+  "confidence": 0.55,
+  "evidence": "mirrors 0x1B966C but scans f_94/f_98, f_9c/f_a0, f_a4/f_a8, f_ac/f_b0; 0x53D604 + vtable+0x54"
+ },
+ {
+  "address": "0x001BABC4",
+  "name": "maybe_Ui_PanelGroup_Push",
+  "signature": "void maybe_Ui_PanelGroup_Push(UiPanelGroup* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Registers the current panel on the panel group's stack (up to four entries), switches the active panel through 0x1A5F9C and re-lays out the group before notifying the screen (0x3B3334 for the two string/name fields).",
+  "confidence": 0.45,
+  "evidence": "uses piVar3[0xf] stack count < 4, entries at [i*3+3..5], 0x123594 unlink, 0x1A5F9C(panel,1); 0x1A61FC/0x6D76A0; 0x3B3334(self,0xe/0xf,...); f_49=1 at the end"
+ },
+ {
+  "address": "0x001BB13C",
+  "name": "maybe_Ui_PanelGroup_Update",
+  "signature": "void maybe_Ui_PanelGroup_Update(UiPanelGroup* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Input/visibility update for the panel group: handles the cancel/release flags (+0x14 bits 4/1), toggles the selected panel and re-lays out the group when the panel changed.",
+  "confidence": 0.4,
+  "evidence": "tests self->f_c->f_14 bits 4 and 1, 0x37E600, 0x6443AC, 0x41A678, 0x297864/0x296FD8, 0x6E6180 on self+0x4c"
+ }
+]

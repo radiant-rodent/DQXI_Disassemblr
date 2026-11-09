@@ -1,0 +1,1884 @@
+[
+ {
+  "address": "0x0065854C",
+  "name": "maybe_Container_HashMap_LookupBySlot",
+  "signature": "void* maybe_Container_HashMap_LookupBySlot(ContainerHashMap* self, unsigned int unused, unsigned int slot)",
+  "params": {
+   "self": "hash map: value array at +0x21c (count +0x210), bucket array at +0x3cc (count +0x3c0), key array at +0x564 (8-byte stride), built-count at +0x560",
+   "unused": "ignored (Ghidra arg2; the disassembly never reads r1)",
+   "slot": "index into the key/bucket array"
+  },
+  "summary": "Looks up the record that owns key slot `slot`. For the small table it returns the packed value at self+0x21c+slot*4; for the main table it hashes the 8-byte key at self+0x564+slot*8 and linear-probes the bucket array at +0x3cc, returning the first bucket whose stored key at +0x20 matches. When the map is not fully built (count == capacity) the bucket is used directly.",
+  "confidence": 0.42,
+  "evidence": "Two parallel tables (count at +0x210 with values at +0x21c, count at +0x3c0 with bucket pointers at +0x3cc); key array with 8-byte stride at +0x564; 'full' flag compares +0x560 against +0x3c0. Callees: 0x0050D6A4 (8-byte copy helper) and 0x00658C38 (bucket key compare, takes bucket+0x20). Nearest named neighbour is maybe_Svc_CacheIndex_WriteTable (0x658618), i.e. this is the same cache/index container but the lookup side."
+ },
+ {
+  "address": "0x00658604",
+  "name": "maybe_Container_HashMap_GetCapacity",
+  "signature": "unsigned int maybe_Container_HashMap_GetCapacity(void)",
+  "params": {},
+  "summary": "Returns the second word of the global container returned by 0x00658548 (the map's capacity/count field at +4), or 0 when that global is null. One-line accessor used by C runtime code.",
+  "confidence": 0.3,
+  "evidence": "Body is only call func_00658548() and return *(u32*)(result+4) with a null guard. func_00658548 has no readable C (Ghidra merged it into a container); its sibling 0x0065854C is the hash-map lookup, so +4 is most likely the map's capacity field. Caller 0x004121B4."
+ },
+ {
+  "address": "0x00659540",
+  "name": "Gfx_GpuCmd_WriteQuantizedFloat24",
+  "signature": "unsigned int* Gfx_GpuCmd_WriteQuantizedFloat24(GfxFloat24Spec* spec, unsigned int* out, float value)",
+  "params": {
+   "spec": "packed spec: word at +0 describes sign/exponent/mantissa, floats at +8/+12 are the range endpoints",
+   "out": "PICA200 command-list write cursor",
+   "value": "normalised float in s0"
+  },
+  "summary": "Quantises `value` against the packed exponent/mantissa spec and appends it as a PICA200 FLOAT24 constant followed by register 0x000F004E. When the sign bit is clear the value is mapped into [lo,hi] taken from the spec and scaled by 128/2^exp; when it is set the value is divided by (2^exp)-1. A zero input is written as the raw mantissa or as 0.",
+  "confidence": 0.55,
+  "evidence": "Literal pool at 0x0065962C..0x00659638 holds 128.0f, 0.0f, the command word 0x000F004E and 16777215.0f. Callee func_00508114 converts a float to PICA FLOAT24 (asm 0x00508114: vmov r0,s0 then pack sign/exponent/mantissa). Called twice by 0x0065A0B0 with spec = descriptor+0xBC and value = float at context+0xC4. Neighbour 0x006594D0 is Gfx_GpuCmd_WriteTextureBind (N_084), same command-writing family."
+ },
+ {
+  "address": "0x0065973C",
+  "name": "maybe_Gfx_StateTable_StoreEntry",
+  "signature": "void maybe_Gfx_StateTable_StoreEntry(GfxStateSource* self, GfxStateTable* table, unsigned short id, void* param)",
+  "params": {
+   "self": "source object: kind byte +0x28, flags +0x29, id bytes +0x2c..+0x2e",
+   "table": "state table whose 0x218-byte slots start at +8",
+   "id": "slot index (16-bit)",
+   "param": "float parameters forwarded to the payload builder"
+  },
+  "summary": "Builds one 0x218-byte state-table slot: the 0x210-byte payload is produced by 0x005342D8 (colour/gradient ramp evaluator) from self+0x28 and the caller's float parameters, then the slot header is stamped with enable=1, self+0x29 bit0 and the three id bytes at +0x2c..0x2e.",
+  "confidence": 0.45,
+  "evidence": "Slot address = table->base + (id & 0xffff)*0x218; payload copy via func_00508C40 immediately after func_005342D8 (516-byte stack buffer, switch on a ramp type with in_s0..in_s4 floats). Header bytes written: [0]=1, [1]=self->f_29&1, [2..4]=self->f_2c..f_2e. Only caller 0x0057E5F8 (maybe_Gfx_CharModel_UpdateProjMatrices)."
+ },
+ {
+  "address": "0x00659B50",
+  "name": "Gfx_StateTable_EmitEntry",
+  "signature": "unsigned short Gfx_StateTable_EmitEntry(GfxStateSource* self, unsigned int** out, GfxStateSlot* slot, GfxStateTable* table, unsigned int boundId)",
+  "params": {
+   "slot": "descriptor holding the slot id at +0x22",
+   "out": "command-list cursor (in/out)",
+   "table": "state table base",
+   "boundId": "id currently bound in the GPU state"
+  },
+  "summary": "Appends one state-table slot to the PICA command list: always writes the 4-word header (enable/flag word, register 0x000F00?? pair, 24-bit id, trailing command word), and when the slot's id differs from the currently bound id it also copies the 0x210-byte cached payload (memcpy of 0x210). Returns the slot id so the caller can track what is bound.",
+  "confidence": 0.5,
+  "evidence": "Slot = table->base + id*0x218; payload copy func_00116C10(dst, slot+8, 0x210) only in the id != boundId branch; both branches emit the same 4-word header with literals g_00659C1C/g_00659C20 (command words at 0x659C1C/0x659C20). Called by the three draw paths 0x005659E8 / 0x0057A26C (Gfx_SceneObject_DrawParts) / 0x0057BA58 (Gfx_CharModel_DrawPart)."
+ },
+ {
+  "address": "0x00659C24",
+  "name": "Gfx_MaterialState_WriteConstants",
+  "signature": "void Gfx_MaterialState_WriteConstants(GfxRenderContext* ctx, unsigned int** out, GfxMaterialDesc* mat, GfxModelInstance* inst)",
+  "params": {
+   "ctx": "render context (texture id bytes reachable through ctx+8->+0x24)",
+   "out": "command-list cursor (in&out)",
+   "mat": "material descriptor with bit flags at +0 and parameter arrays",
+   "inst": "model instance providing the 8 per-slot multipliers"
+  },
+  "summary": "Emits the per-material GPU constants for one draw: texture-stage indices (flag 0x400), a packed word (0x800), the 8-byte material block plus four 24-bit colour/uniform words (consecutive write 0x804F02C0), three float triplets (flag 0x8000), and the lighting/normal uniforms built from 1/255-scaled 24-bit colours (flag 0x200), finally the per-slot colour-modulation block (flag 1).",
+  "confidence": 0.55,
+  "evidence": "Register literals at 0x0065A084..0x0065A0AC: 0x000F00F3/FB, 0x000F00C3/CB/D3/DB, 0x000F0103, 0x804F02C0 (consecutive write, 0x4F words from register 0x02C0), 0x000F0081, 0x3B808081 (= 1/255), 0x000F01C0. Callees func_005331CC (material-flag test) and func_0050881C (DMA block append), func_0065A66C (colour modulation). Same three draw callers as 0x00659B50."
+ },
+ {
+  "address": "0x0065A0B0",
+  "name": "Gfx_MaterialState_WriteAndCacheBlock",
+  "signature": "void Gfx_MaterialState_WriteAndCacheBlock(GfxRenderContext* ctx, unsigned int** out, GfxDrawRecord* rec, GfxModelInstance* inst)",
+  "params": {
+   "ctx": "render context",
+   "out": "command-list cursor",
+   "rec": "draw record: flag word at +0, cached block id at +6, cached size at +8",
+   "inst": "model instance/descriptor array"
+  },
+  "summary": "Writes (or re-emits from cache) the 0x210-byte command block of one draw record. First call builds the block inline, stores its word offset/size back into the record and marks bit 0x80 'cached'; later calls just re-append the stored block and the eight per-slot strip headers. Also appends the tail buffers (ctx+200, ctx+4, rec+0xa0..+0xaa).",
+  "confidence": 0.5,
+  "evidence": "Record fields (u16* arg3): +0 flags, +6 block id, +8 block size in words, +0xe index into the instance array, +0xa0..+0xaa extra DMA ranges; cache path uses func_00508A44(arg2, rec+6, size<<2). Callees func_006597C0 (block encoder), func_0065A4F0 (header), func_00656D5C/func_00656FCC (block alloc/append), func_00659540 (FLOAT24 constant). Called by the same three draw paths as 0x00659B50."
+ },
+ {
+  "address": "0x0065A3E4",
+  "name": "Gfx_DrawRecord_WriteSubBuffers",
+  "signature": "void Gfx_DrawRecord_WriteSubBuffers(GfxRenderContext* ctx, unsigned int** out, GfxDrawRecord* rec, GfxModelInstance* inst)",
+  "params": {
+   "ctx": "render context (unused directly)",
+   "out": "command-list cursor",
+   "rec": "draw record with the slot index at +0x20",
+   "inst": "instance array base pointer"
+  },
+  "summary": "For the eight slots of one draw record, appends the two optional sub-buffers (arrays at +0x238 and at +0x258 in the 0x278-byte instance record) as tagged DMA blocks, tagging them 0x800+slot*0x100 and 0x1000+slot*0x100.",
+  "confidence": 0.5,
+  "evidence": "Loop i<8 over inst[*rec+0x20 *0x278 + i*4 + 0x238] and +600(=0x258); each block written as an 8-byte header built on the stack (tag = i*0x100+0x800 / +0x1000 and a register word from g_0065A4EC+0x14 / +0xc) followed by func_00508A44(block data). Same three draw callers as 0x00659B50."
+ },
+ {
+  "address": "0x0065A4F0",
+  "name": "Gfx_DrawRecord_WriteSlotHeader",
+  "signature": "void Gfx_DrawRecord_WriteSlotHeader(GfxRenderContext* ctx, unsigned int** out, GfxSlotHeader* hdr)",
+  "params": {
+   "ctx": "render context: 24 bytes of header source at +0xa8, layer pointers at +0x8c",
+   "out": "command-list cursor",
+   "hdr": "slot header with two packed id fields at +0x19c / +0x19e"
+  },
+  "summary": "Writes the fixed per-slot header: copies 24 bytes from ctx+0xa8, patches the two id fields (bits 8-10 of words 2 and 4 from hdr+0x19c/+0x19e), then emits one 8-byte tag+address pair for each of the six layer pointers and finally packs the six 'layer enabled' bits into the header's first word.",
+  "confidence": 0.5,
+  "evidence": "memcpy(dst, ctx+0xa8, 0x18); masks 0xFFFFF8FF on puVar3[2] and puVar3[4] then or-in hdr->f_19c/f_19e<<8; loop 6 over *(ctx+0x8c+i*4) emitting func_00125640(8 bytes) + func_00508A44; final word sets bits 1,5,9,0xd,0x11,0x15,0x19 from the six 'layer present' flags. Only caller 0x0065A0B0."
+ },
+ {
+  "address": "0x0065A66C",
+  "name": "Gfx_DrawRecord_ApplyColorModulation",
+  "signature": "void Gfx_DrawRecord_ApplyColorModulation(GfxRenderContext* ctx, unsigned int** out, GfxModelInstance* inst, GfxDrawRecord* rec)",
+  "params": {
+   "ctx": "render context (flag byte at +6)",
+   "out": "command-list cursor",
+   "inst": "instance array base pointer",
+   "rec": "draw record carrying the eight 16-bit colour multipliers at +0x40..+0x4e"
+  },
+  "summary": "For each of the eight slots of a draw record, multiplies the slot's 16-bit colour/UV components by the record's 8.8 multipliers (>>8) into the slot's packed vertex fields, then hands the slot to 0x00657124 to append its command block. The ctx flag bit 0x10 selects a variant that leaves the last three components unmodulated. Finishes by adding the record's offset to the packed RGB and clamping each channel to 0xff.",
+  "confidence": 0.5,
+  "evidence": "Nested 8-iteration loops writing puVar5[i*0x2c+8..0x13] = (short)inst[...]->f_1b4..f_1c2 * (short)rec->f_40..0x4e >> 8; per slot call func_00657124(slot+4, *arg2); tail clamps (rec->f_3c..f_3e + product) to 0xff. Only caller 0x00659C24."
+ },
+ {
+  "address": "0x0065AC3C",
+  "name": "Gfx_Mesh_ParseSections",
+  "signature": "void Gfx_Mesh_ParseSections(GfxModelInstance* inst, GfxMeshData* mesh, GfxMeshBuffers* buf, int baseOffset, GfxMeshChunk* chunkDesc)",
+  "params": {
+   "inst": "model instance (part table at +0x70, 100-byte parts)",
+   "mesh": "mesh descriptor: sub-table offsets at +0x2c/+0x34/+0x3c/+0x44",
+   "buf": "destination buffer descriptor being filled",
+   "baseOffset": "byte offset added to every sub-table offset",
+   "chunkDesc": "float parameters for the matrix builder"
+  },
+  "summary": "Parses the chunked mesh header (sub-tables at +0x2c/+0x34/+0x3c, plus +0x44 for two-vertex-buffer meshes), allocates the vertex/index/BL-index arrays from those counts, fills them per part (pos + matrix from 0x001252E8), builds the part matrices (0x0065B038) and sets the 'has bone palette' bit when any part uses it.",
+  "confidence": 0.5,
+  "evidence": "Offsets self->f_2c/f_34/f_3c/f_44 read through func_0053385C (aligned u32 read from the chunk stream); counts scaled by g_0065ADEC and shifted 0x25/0x23; loop over parts writes u16 ids and copies 0x30-byte matrices with func_001252E8; calls func_0065B038(inst,buf) and sets buf[1]=mesh type, bit0 = bVar1 ('uses extra attribute'). Only caller 0x0057B330 (Gfx_CharModel_Init)."
+ },
+ {
+  "address": "0x0065AFBC",
+  "name": "maybe_Gfx_Mesh_ParseTextureChunk",
+  "signature": "void maybe_Gfx_Mesh_ParseTextureChunk(GfxMeshData* mesh, GfxTextureInfo* tex, GfxMeshBuffers* buf, int baseOffset, GfxMeshChunk* chunkDesc)",
+  "params": {
+   "tex": "texture info: bit pointer at +0x7c, bit count at +0x80",
+   "mesh": "unused mesh descriptor",
+   "buf": "destination descriptor",
+   "baseOffset": "byte offset for the chunk stream",
+   "chunkDesc": "chunk header with the sub-table offset at +0x4c"
+  },
+  "summary": "Reads one texture-bitmap sub-chunk of a mesh: resolves the source offset, stores the source pointer and bit count into the buffer descriptor, copies the packed bit data (rounded to whole bytes) and marks the entry as present.",
+  "confidence": 0.45,
+  "evidence": "func_0053385C(local,&offset, chunkDesc->f_4c, 4) then *buf=src, buf[1]=tex->f_80, memcpy-style func_00125640(src, tex->f_7c, (f_80+7)>>3), buf[2] byte = 1. Only caller 0x0057B330 (Gfx_CharModel_Init), same family as 0x0065AC3C."
+ },
+ {
+  "address": "0x0065B038",
+  "name": "Gfx_Model_BuildPartMatrices",
+  "signature": "void Gfx_Model_BuildPartMatrices(GfxModelInstance* inst, GfxMeshBuffers* buf)",
+  "params": {
+   "inst": "model instance: 100-byte part table at +0x70, part count at +0x10",
+   "buf": "buffer whose matrix array is at +0xc with 0x40-byte stride"
+  },
+  "summary": "Builds a 3x4 transform matrix for every model part from the part's Euler angles and scale, using the sine/cosine lookup table at 0x0065B304 and 2*pi wrapping, then multiplies in the part's pre-transform (0x0012515C) and marks the matrix slot dirty (bit 1).",
+  "confidence": 0.6,
+  "evidence": "Per part: sin/cos LUT lookups (g_0065B304 table, g_0065B2FC/g_0065B300/g_0065B308/g_0065B30C constants for 2*pi/step) then the classic 3-angle rotation concatenation into puVar9[4..0xf]; scale from puVar7[8..10] applied through a local 4x4 built from 1.0f; func_0012515C matrix multiply; sets buf[i].flag |= 2. Called by 0x0065AC3C (init) and 0x006F2DEC."
+ },
+ {
+  "address": "0x0065B310",
+  "name": "Gfx_Mesh_AllocSubmeshBuffers",
+  "signature": "void Gfx_Mesh_AllocSubmeshBuffers(GfxModelInstance* inst, GfxMeshData* mesh, GfxMeshBuffers* buf, int baseOffset, unsigned int dataOffset, GfxMeshChunk* chunkDesc)",
+  "params": {
+   "buf": "output: buffer pointer + count at +0/+4",
+   "inst": "model instance",
+   "mesh": "mesh descriptor with vertex/index sizes at +0x20/+0x24",
+   "dataOffset": "running allocation cursor",
+   "chunkDesc": "chunk header with sizes at +0x1c..+0x24"
+  },
+  "summary": "Allocates and initialises the per-submesh 0x158-byte buffer records: clears each record, then reserves space for the vertex and index data (aligned to 16 bytes) from the submesh sizes in the chunk header and stores the word offsets into each record.",
+  "confidence": 0.5,
+  "evidence": "Count = (u64)uStack_3c * g_0065B4EC >> 0x26; per record: *puVar1=0x100, bytes 2/3 = 0, words 2/6/8 = 0, u16 0x10/0x11 = 0, then func_00100050 (Ghidra-marked 'noreturn' initialiser). Sizes from chunkDesc[9]/[8] via func_0011CFAC (align-up), per-submesh 2 auxiliary offsets written at +0x14/+0x18. Callers 0x0065AC3C and 0x006F2DEC."
+ },
+ {
+  "address": "0x0065B4F8",
+  "name": "maybe_Gfx_Mesh_SetupIndexBufferTable",
+  "signature": "void maybe_Gfx_Mesh_SetupIndexBufferTable(GfxMeshBuffers* out, GfxMeshData* mesh, GfxBufferTable* table, unsigned int dataOffset, GfxMeshChunk* chunkDesc)",
+  "params": {
+   "out": "returns the advanced allocation cursor",
+   "mesh": "mesh descriptor: part array at +0x68, 0x1c stride",
+   "table": "output array of {pointer,count} pairs",
+   "dataOffset": "allocation cursor",
+   "chunkDesc": "chunk header with the table size at +0x54"
+  },
+  "summary": "Builds the index-buffer table for a mesh: one {pointer,count} pair per 0x1c-stride part entry, each pointing at an aligned block of (part->count * 0x18) bytes and holding the element count (size scaled by the constant at 0x0065B614).",
+  "confidence": 0.45,
+  "evidence": "Table count from func_0053385C(...,chunkDesc->f_54,4)>>3; per entry uVar2 = *(part+4)*0x18 bytes, pointer aligned to 4, count = (u64)uVar2*g_0065B614>>0x24; returns advanced cursor. Only caller 0x0057B330."
+ },
+ {
+  "address": "0x0065B618",
+  "name": "maybe_Gfx_Mesh_SetupVertexBufferTable",
+  "signature": "void maybe_Gfx_Mesh_SetupVertexBufferTable(GfxMeshBuffers* out, GfxMeshData* mesh, GfxBufferTable* table, unsigned int dataOffset, GfxMeshChunk* chunkDesc)",
+  "params": {
+   "out": "returns the advanced allocation cursor",
+   "mesh": "mesh descriptor: part array at +0x68, 0x1c stride",
+   "table": "output array of 12-byte {pointer,count,byte} entries",
+   "dataOffset": "allocation cursor",
+   "chunkDesc": "chunk header with the table size at +0x5c"
+  },
+  "summary": "Builds the vertex-buffer table for a mesh: per part it stores an aligned pointer to (count * 8) bytes, the vertex count taken from the packed half-word at part+0x14, and a flag byte; the constant at 0x0065B75C converts the table size into an entry count.",
+  "confidence": 0.45,
+  "evidence": "Entry count = (u64)local_1c * g_0065B75C >> 0x23; per entry count = (u16&0xff) at part+0x14 >>1 plus the odd flag; block size = count*8, aligned to 4; entry layout {u32 ptr, u32 count, u8 flag}. Only caller 0x0057B330."
+ },
+ {
+  "address": "0x0065B760",
+  "name": "Math_ComputeNormalizedRatio",
+  "signature": "float Math_ComputeNormalizedRatio(float* range, float value)",
+  "params": {
+   "range": "{start, end, mode, ...}: floats at +0/+4 and a mode byte at +8",
+   "value": "input value in s0"
+  },
+  "summary": "Normalises `value` against the {start,end} pair in `range` and returns the result in s0. Three modes: mode 0 returns the value unchanged (clamped by the caller's compare), modes 1 and 2 compute (value-start)/(end-start). Used by the keyframe evaluators.",
+  "confidence": 0.5,
+  "evidence": "Reads range[0], range[1], byte at +8 (mode); modes 1/2 compute (in_s0 - start)/(end - start) then call func_006731EC (float->int saturating convert, asm 0x006731EC decodes the float exponent) — i.e. the ratio is truncated to an integer step. Callers 0x0065B890 (dispatcher), 0x0065C210, 0x00712100/0x00712200 table users."
+ },
+ {
+  "address": "0x0065B890",
+  "name": "maybe_Math_EvaluateInterpolator",
+  "signature": "void maybe_Math_EvaluateInterpolator(Interpolator* self)",
+  "params": {
+   "self": "interpolator: kind at +0xc, mode at +0xd, parameter block at +0"
+  },
+  "summary": "Evaluates one interpolator object: normalises the current value (0x0065B760) and then tail-calls the per-kind/mode implementation through the 0x20-byte-stride jump table at 0x0065B8C4 with index kind*0x20 + mode*4.",
+  "confidence": 0.45,
+  "evidence": "Calls func_0065B760(self) then an indirect call through g_0065B8C4 + self->f_c*0x20 + self->f_d*4, passing self. Ghidra: 'could not recover jumptable ... too many branches'. Callers 0x0065B890 itself is called from 0x00712100/0x00712200/0x007126D0 table entries."
+ },
+ {
+  "address": "0x0065B8C8",
+  "name": "Gfx_Scene_CullNodeWalk",
+  "signature": "unsigned int Gfx_Scene_CullNodeWalk(GfxVisibilityTree* tree, unsigned short* cursor, GfxNodeBounds* bounds, GfxCullPlanes* planes)",
+  "params": {
+   "tree": "node graph: count at +4, 8-byte link array at +0 (next sibling/index)",
+   "cursor": "in/out node cursor (u16 index, plus 2 flag bytes)",
+   "bounds": "per-node 0x18-stride AABBs (min/max xyz)",
+   "planes": "cull planes: enabled flag at +0x1e, up to 4 planes at +0x18 with 4 floats each"
+  },
+  "summary": "Walks the scene's node-visibility graph starting at *cursor and returns the next node that passes the plane tests. Each node keeps a 2-byte 'next/child' link table, a 0x18-byte AABB and a list of up to four planes (normal + distance); the walk follows links until a node is accepted or it wraps back to the start.",
+  "confidence": 0.5,
+  "evidence": "Node array with 8-byte stride and link bytes at +0/+2/+3/+4; per-node AABB floats pfVar10[0..5] compared against arg4[0..5]; up to *(u8*)(arg4+0x79) planes with coefficients arg4[i*4+6..9] evaluated as dot(normal, min/max)+d; arg4->f_1e gates the AABB test. Returns the node id at *cursor (or count when exhausted). Callers 0x0065C4CC / 0x0065C6C4 / 0x0065D06C."
+ },
+ {
+  "address": "0x0065C210",
+  "name": "Anim_UpdateTrackBitVisibility",
+  "signature": "void Anim_UpdateTrackBitVisibility(AnimTrackSet* self, unsigned char* bits, short* trackIds, float time)",
+  "params": {
+   "self": "track set: count at +0x10, pointers at +0xc",
+   "bits": "output bit array (one bit per track id)",
+   "trackIds": "ids of the tracks to evaluate",
+   "time": "current animation time in s0"
+  },
+  "summary": "For every track in the set, evaluates whether `time` falls inside a keyframe whose bit is set (tracks store a time range at +8/+0xc, a frame-bit array at +0x14 and a frame count at +0x18) and writes the yes/no answer into the output bit array — except for the special track kind 0x32, which is skipped, and the non-array case which writes a single flag byte.",
+  "confidence": 0.5,
+  "evidence": "Per track: if kind==1 test bit 0 of the first byte else normalise time against +8 and index the bit array by [0x14 + idx/8] & (1<<idx&7); track type 0x32 writes into bits[id>>3] instead; else writes arg2[2]. Callees func_0065B760 (ratio), 0x00712100/0x00712200. Callers 0x0057A26C (Gfx_SceneObject_DrawParts) / 0x0057BA58 (Gfx_CharModel_DrawPart)."
+ },
+ {
+  "address": "0x0065C348",
+  "name": "Gfx_BoneMatrix_WriteRows",
+  "signature": "void Gfx_BoneMatrix_WriteRows(GfxBoneSlot* self, unsigned int* matrix)",
+  "params": {
+   "self": "bone slot: flags at +8, source vectors at +0xc and +0x10 and +0x14",
+   "matrix": "12-word 3x4 matrix in the command record (rows at +1/+7/+0xb and +4/+8/+0xc)"
+  },
+  "summary": "Fills the three translation components of a 3x4 bone matrix from the slot's source vectors, honouring the per-row flags at +8 (0x20/0x10 suppress, 0x4/0x2 read the vector directly instead of converting, 0x8 patches only the first row, 0x1 skips the third).",
+  "confidence": 0.5,
+  "evidence": "Bit tests on *(self+8): 0x20 skips row0, 0x4 uses the stored triple, otherwise func_00712200 converts; then 0x10/0x2 for row1 with func_0051B2EC; then 0x8/0x1 for row2 with func_00712200; writes matrix[1..3], [7],[0xb],[0xf] and masks 0xFD7FFFFF/0xF3FFFFFF. Callers 0x006F3CD0 and 0x007126D0 (matrix LUT helpers)."
+ },
+ {
+  "address": "0x0065C468",
+  "name": "Gfx_BoneMatrix_AppendCached",
+  "signature": "void Gfx_BoneMatrix_AppendCached(GfxBoneCache* self, unsigned int* out)",
+  "params": {
+   "self": "cache: DMA range at +8 (count +0xc), palette at +0x10 (count +0x14), tail range at +0x18 (count +0x1c)",
+   "out": "command-list cursor"
+  },
+  "summary": "Re-appends a cached bone block: the prepared DMA words, optionally the per-bone palette range (skipped when the palette mode is zero), and the tail range — used to replay a bone matrix set without rebuilding it.",
+  "confidence": 0.5,
+  "evidence": "func_00508A44(out, *(self+8), self->f_c<<2); if (self->f_14 * -0x34 != 0) func_00508A44(out, self->f_10->f_2c, self->f_10->f_30<<2); func_00508A44(out, self->f_18, self->f_1c<<2). Called from the two draw paths 0x0057A26C / 0x0057BA58."
+ },
+ {
+  "address": "0x0065C4CC",
+  "name": "Gfx_MeshChunk_DrawStrips",
+  "signature": "void Gfx_MeshChunk_DrawStrips(GfxMeshChunkDraw* self, unsigned int** out, GfxMeshBuffers* buf, GfxNodeBounds* bounds, GfxCullPlanes* planes, GfxDrawTag* tag)",
+  "params": {
+   "self": "chunk node: source range +8/+0xc, palette at +0x18/+0x1c, mesh data at +0x2c",
+   "out": "command-list cursor",
+   "buf": "mesh buffers (per-node matrix array at +0x14)",
+   "bounds": "per-node AABBs",
+   "planes": "cull planes",
+   "tag": "draw tag: byte +2 is the block length"
+  },
+  "summary": "Draws one visible mesh chunk: appends the node's prepared DMA block, binds the chunk's 0x30-byte matrix through a DMA record, then loops 0x0065B8C8 over the culled sub-nodes and emits one triangle-strip header per visible sub-node (start index, index count, three strip descriptors).",
+  "confidence": 0.5,
+  "evidence": "Chunk index = (self - meshData->f_40)/0x34 (via g_0065C6A8 magic division); matrix copy func_0012558C(out+2, buf->f_14 + idx*0x30, g_0065C6B0); pair (meshData->f_68[..].f_18 | 0x7FFF0000, g_0065C6B4) then the func_0065B8C8 loop emitting 0x12-word strip headers; tail func_00508A44(self+0x18). Callers 0x0057A26C / 0x0057BA58."
+ },
+ {
+  "address": "0x0065C6C4",
+  "name": "maybe_Gfx_MeshChunk_DrawStripsWithPalette",
+  "signature": "void maybe_Gfx_MeshChunk_DrawStripsWithPalette(GfxMeshChunkDraw* self, unsigned int** out, GfxMeshBuffers* buf, GfxNodeBounds* bounds, GfxCullPlanes* planes, GfxDrawTag* tag, void* paletteSource)",
+  "params": {
+   "self": "chunk node",
+   "out": "command-list cursor",
+   "buf": "mesh buffers",
+   "bounds": "per-node AABBs",
+   "planes": "cull planes",
+   "tag": "draw tag",
+   "paletteSource": "source of the 0x40-byte palette converted by 0x00125500"
+  },
+  "summary": "Same strip drawing as 0x0065C4CC but the chunk matrix comes from a palette entry that is first run through 0x00125500 (mmat/matrix conversion) into a 0x40-byte staging buffer before being DMA-bound.",
+  "confidence": 0.45,
+  "evidence": "func_00125500(auStack_58, arg7, buf->f_14 + idx*0x30) before func_0012558C of the 0x10-word block; rest of the body identical to 0x0065C4CC including the func_0065B8C8 loop and the 0x12-word strip header. Callers 0x0057A26C / 0x0057BA58."
+ },
+ {
+  "address": "0x0065C8D8",
+  "name": "Gfx_MeshChunk_DrawPartList",
+  "signature": "void Gfx_MeshChunk_DrawPartList(GfxMeshChunkDraw* self, unsigned int** out, GfxMeshBuffers* buf, GfxDrawTag* tag)",
+  "params": {
+   "self": "chunk node: part list at +0x10, part count at +0x14 (0x34-byte parts)",
+   "out": "command-list cursor",
+   "buf": "mesh buffers",
+   "tag": "draw tag"
+  },
+  "summary": "Emits one draw for each of the chunk's 0x34-byte part entries: a single matrix bind, a multi-matrix block (several 0x30-byte matrices packed into the strip header), or a palette-transformed variant, followed by the optional secondary DMA block at part+0x2c.",
+  "confidence": 0.5,
+  "evidence": "Loop over parts (stride 0x34): flag bit0 = palette path (func_0012515C merge), bit1 = multi-matrix path (u16 count at +2, ids at +4, matrices from buf->f_14+id*0x30 packed 4-at-a-time), else single matrix func_0012558C; every branch ends with func_00508B9C/func_00508BE8 appending the part's own DMA block. Callers 0x0057A26C / 0x0057BA58."
+ },
+ {
+  "address": "0x0065CCA0",
+  "name": "maybe_Gfx_MeshChunk_DrawPartListAlt",
+  "signature": "void maybe_Gfx_MeshChunk_DrawPartListAlt(GfxMeshChunkDraw* self, unsigned int** out, GfxMeshBuffers* buf, GfxDrawTag* tag, void* paletteSource)",
+  "params": {
+   "self": "chunk node: part list at +0x10, count at +0x14",
+   "out": "command-list cursor",
+   "buf": "mesh buffers",
+   "tag": "draw tag",
+   "paletteSource": "palette/matrix source for 0x00125500"
+  },
+  "summary": "Variant of 0x0065C8D8 that converts every part matrix through 0x00125500 first (the part-list path used when the matrices come from an external palette) and appends the part DMA block with its own size instead of the shared one.",
+  "confidence": 0.45,
+  "evidence": "Same 0x34-stride loop and three flag branches as 0x0065C8D8 but func_00125500(local, arg5, buf->f_14+id*0x30) is used for the matrix fetch and the tail block uses part->f_30<<2 elements; distinct command words g_0065D064/68. Callers 0x0057A26C / 0x0057BA58."
+ },
+ {
+  "address": "0x0065D06C",
+  "name": "Gfx_MeshChunk_DrawStripsOnly",
+  "signature": "void Gfx_MeshChunk_DrawStripsOnly(GfxMeshChunkDraw* self, unsigned int** out, GfxNodeBounds* bounds, GfxCullPlanes* planes)",
+  "params": {
+   "self": "chunk node",
+   "out": "command-list cursor",
+   "bounds": "per-node AABBs",
+   "planes": "cull planes"
+  },
+  "summary": "Cheapest chunk draw path: appends the node's DMA block and the chunk-index uniform, then emits only the triangle-strip headers for the sub-nodes that survive the cull walk (no matrix bind at all — the matrix was already bound by the caller).",
+  "confidence": 0.5,
+  "evidence": "func_00508A44 of the +8/+0xc range, pair (meshData->f_68[..].f_18|0x7FFF0000, g_0065D1D0), then a func_0065B8C8 loop writing 0x12-word strip blocks with command words g_0065D1D4..g_0065D1DC; no matrix copy. Only caller 0x005659E8."
+ },
+ {
+  "address": "0x0065D1E0",
+  "name": "maybe_Gfx_MeshChunk_WritePartMatrices",
+  "signature": "void maybe_Gfx_MeshChunk_WritePartMatrices(GfxMeshChunkDraw* self, unsigned int** out, GfxMeshPartList* parts, GfxMeshBuffers* buf, GfxDrawTag* tag)",
+  "params": {
+   "self": "chunk node (uses +0x2c palette)",
+   "out": "command-list cursor",
+   "parts": "part list: flags at +0, u16 count at +2, ids at +4",
+   "buf": "mesh buffers (matrix array at +0x14)",
+   "tag": "draw tag"
+  },
+  "summary": "Writes the matrices of a part list in one of three forms: a single 0x30-byte matrix DMA bind (no flags), a packed multi-matrix block for all listed ids (bit 1), or a palette-merged matrix array (bit 0) appended as a raw DMA block; used by 0x0065C8D8/0x0065CCA0 for the individual part branches.",
+  "confidence": 0.45,
+  "evidence": "Three branches on parts->f_0 flags: bit1 -> gather matrices for each u16 id at +4 into local_3e0 then func_0050881C(out, tag[2], local, count*3); bit0 -> func_0012515C merge with palette self->f_2c->f_70+id*100+0x2c then func_0050881C; else func_0012558C of a single matrix with the g_0065D364 word. Only caller 0x005659E8."
+ },
+ {
+  "address": "0x0065DCEC",
+  "name": "maybe_Math_EvaluateAnglePair",
+  "signature": "void maybe_Math_EvaluateAnglePair(MathAngleCache* self, float* angles, int force)",
+  "params": {
+   "self": "cache: dirty-mask byte at +0xd1",
+   "angles": "angle pair passed in s0/s1",
+   "force": "non-zero forces evaluation"
+  },
+  "summary": "Recomputes the sine/cosine pair for the two cached angles when the corresponding mask bits in self+0xd1 are clear; the two halves of the byte are checked independently so each angle can be refreshed on its own.",
+  "confidence": 0.35,
+  "evidence": "Two tests on (self->f_d1 & 3) and ((self->f_d1 & 0xf) >> 2), each calling func_00672DB4 when zero and arg3 != 0; func_00672DB4 (asm 0x00672DB4) is the saturating float->int helper (exponent-decode clamp), so the routine converts the two cached float angles to integer form. Called by 0x0065DD98 and 0x0053952C."
+ },
+ {
+  "address": "0x0065DD98",
+  "name": "maybe_Math_ApplyRotationToMatrix",
+  "signature": "void maybe_Math_ApplyRotationToMatrix(MathMatrixSource* self, float* matrix)",
+  "params": {
+   "self": "source: matrix at +0x48, angle cache at +0x3c/+0xd1",
+   "matrix": "12-float 3x4 matrix updated in place"
+  },
+  "summary": "Applies a cached rotation to a 3x4 matrix: copies the source matrix, refreshes the angle pair, then rotates rows 0 and 1 by (cos,sin) and folds the translation into column 3 before negating the three Y components.",
+  "confidence": 0.4,
+  "evidence": "func_001252C8(matrix, self+0x48) (matrix copy), func_0065D4C4(self), func_0065DCEC(self, self+0x3c, 0) then matrix[1]/[5]/[9] negated and matrix[3]/[7]/[0xb] updated with *matrix*cos + m[1]*sin; reads s0/s1 from the angle pair. Only caller 0x0053952C."
+ },
+ {
+  "address": "0x0065DF90",
+  "name": "maybe_Sound_SeqParam_GetPointer",
+  "signature": "void maybe_Sound_SeqParam_GetPointer(SoundParamAccessor* self, unsigned int id, unsigned int flags)",
+  "params": {
+   "self": "accessor: base sequence at +4, optional extension object at +8",
+   "id": "parameter id",
+   "flags": "optional override"
+  },
+  "summary": "Resolves a parameter pointer through the base sound sequence (0x00660A94) unless an attached extension object claims the request: when the extension's flag byte at +4 is set and its vtable slot +0x0C returns non-zero, the base call is skipped.",
+  "confidence": 0.45,
+  "evidence": "Body: base=*(self+4), ext=*(self+8); if (ext && (ext->byte4) && ext->vtable[0x0C](ext) != 0) return; else func_00660A94(base, arg2). Callers are sound-track code 0x005442F8 / 0x0054455C / 0x00545520 / 0x00545BDC / 0x00546D3A. The whole 0x0065DF90..0x0065E4A4 block has this same 'base + extension slot' shape (slots 0x0C,0x18,0x1C,0x24,0x28,0x2C,0x38,0x3C,0x48,0x50)."
+ },
+ {
+  "address": "0x0065DFD8",
+  "name": "maybe_Sound_SeqParam_GetHeaderWord",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetHeaderWord(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns the parameter word from the base sequence (0x00660AF8) OR-ed with the value produced by the extension's vtable slot +0x1C, or just the base value when no extension is attached.",
+  "confidence": 0.4,
+  "evidence": "result = func_00660AF8(*(self+4)); if (ext) { if (ext->byte4 == 0) uVar3 = 0; else uVar3 = ext->vtable[0x1C](ext,arg2,arg3); result |= uVar3; }. Callers 0x0054A3B8 / 0x00660330."
+ },
+ {
+  "address": "0x0065E030",
+  "name": "maybe_Sound_SeqParam_GetRangePair",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetRangePair(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output buffer for the extension implementation"
+  },
+  "summary": "Returns the {pointer,count} range of a sequence parameter from the base (0x00660BA4) combined with the extension's vtable slot +0x28.",
+  "confidence": 0.4,
+  "evidence": "result = func_00660BA4(*(self+4)); then the same guarded OR with ext->vtable[0x28](ext,arg2,arg3). Only caller 0x00660330 (the parameter-change notifier)."
+ },
+ {
+  "address": "0x0065E088",
+  "name": "maybe_Sound_SeqParam_GetVoiceParams",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetVoiceParams(SoundParamAccessor* self, unsigned int id, SoundVoiceParam* out)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out": "voice parameter block filled by both the base and the extension"
+  },
+  "summary": "Fills a voice-parameter block (ids, flags and size bytes) from the base sequence (0x00660C30) and lets the extension's vtable slot +0x18 overwrite/merge its own values.",
+  "confidence": 0.45,
+  "evidence": "result = func_00660C30(*(self+4)); base body writes out[0],out[1],out[4] (byte), bytes 0x15/0x16, out[3],out[2] from the record returned by 0x0065F678; extension OR via slot 0x18. Callers 0x0054455C / 0x0054A3B8 / 0x00660330."
+ },
+ {
+  "address": "0x0065E138",
+  "name": "maybe_Sound_SeqParam_GetEntryTriple",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetEntryTriple(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns the three-word + two-byte parameter entry of the base sequence (0x00660CF0) merged with the extension's vtable slot +0x38.",
+  "confidence": 0.4,
+  "evidence": "result = func_00660CF0(*(self+4)); guarded OR with ext->vtable[0x38]. Only caller 0x0054264C."
+ },
+ {
+  "address": "0x0065E190",
+  "name": "maybe_Sound_SeqParam_ApplyTimestamp",
+  "signature": "void maybe_Sound_SeqParam_ApplyTimestamp(SoundParamAccessor* self, unsigned int value)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "value": "timestamp/value forwarded to the extension"
+  },
+  "summary": "Queries the base sequence for a 64-bit timestamp (0x00660D3C) and, when an extension is attached and enabled, forwards the value to its vtable slot +0x50.",
+  "confidence": 0.35,
+  "evidence": "uVar3 = func_00660D3C(*(self+4)); if (ext) uVar1 = ext->byte4; if (ext && uVar1) ext->vtable[0x50](ext,arg2,(int)uVar3). Only caller 0x0054264C."
+ },
+ {
+  "address": "0x0065E340",
+  "name": "maybe_Sound_SeqParam_GetWaveRef",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetWaveRef(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns a wave-bank reference {id, value, byte} from the base sequence (0x006610B0) merged with the extension's vtable slot +0x2C.",
+  "confidence": 0.4,
+  "evidence": "result = func_006610B0(*(self+4)); base writes *out=*rec, out[1]=0x0065FCA4(rec), out[2] byte = rec[1]; extension slot 0x2C. Called from 9 sound sites (0x00543318, 0x0054A170, 0x0054A230, 0x0054A8D0, 0x0054AA78, 0x0054ABB0, 0x0054C498, 0x0054C5C0, 0x00660330)."
+ },
+ {
+  "address": "0x0065E3F4",
+  "name": "maybe_Sound_SeqParam_GetTrackKind",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetTrackKind(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns the track-kind parameter block of the base sequence (0x006612B4: value, offset, size byte, flag byte) merged with the extension's vtable slot +0x3C.",
+  "confidence": 0.4,
+  "evidence": "result = func_006612B4(*(self+4)); extension slot 0x3C; base writes *out, out[5], byte at out+6, byte at out+0x19 and func_0065FCC4(out+1). Callers 0x0054455C / 0x00549D10 / 0x00549F18 / 0x0054A3B8."
+ },
+ {
+  "address": "0x0065E44C",
+  "name": "maybe_Sound_SeqParam_GetTrackChannel",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetTrackChannel(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns the track/channel assignment {id, value, byte, flag} of the base sequence (0x00660D5C, which only answers for entry kind 3) merged with the extension's vtable slot +0x48.",
+  "confidence": 0.4,
+  "evidence": "result = func_00660D5C(*(self+4)); base checks func_0065FF20()==3 before filling out[0],out[1],byte out+8,flag out+9; extension slot 0x48. Callers 0x0054455C / 0x00549B7C / 0x0054A3B8."
+ },
+ {
+  "address": "0x0065E4A4",
+  "name": "maybe_Sound_SeqParam_GetPointerTriple",
+  "signature": "unsigned int maybe_Sound_SeqParam_GetPointerTriple(SoundParamAccessor* self, unsigned int id, unsigned int out2)",
+  "params": {
+   "self": "accessor: base at +4, extension at +8",
+   "id": "parameter id",
+   "out2": "output for the extension implementation"
+  },
+  "summary": "Returns a {word, word, address} triple for a sequence parameter (base 0x00660DC8 resolves an in-record offset to a pointer) merged with the extension's vtable slot +0x24.",
+  "confidence": 0.4,
+  "evidence": "result = func_00660DC8(*(self+4)); base writes out[0]=*rec, out[1]=rec[1], out[2]=rec+rec[3]; extension slot 0x24. Callers 0x00549D10 / 0x0054A3B8."
+ },
+ {
+  "address": "0x0065EC70",
+  "name": "maybe_Sound_SeqField_GetPointerByTag",
+  "signature": "void* maybe_Sound_SeqField_GetPointerByTag(SoundSeqRecord* rec, unsigned int fieldOffset, unsigned int unused, unsigned int index)",
+  "params": {
+   "rec": "sequence record (relative-offset table at +4)",
+   "fieldOffset": "unused",
+   "unused": "unused",
+   "index": "sub-record index"
+  },
+  "summary": "Resolves a nested record by index: reads the field selector of type 9 at the record's sub-table, and returns base+offset+*(offset+4) — the classic relative-pointer chase used by this file format. Returns the shared default (g_0065ECA8) when the field is missing.",
+  "confidence": 0.45,
+  "evidence": "local = index; func_00661534(rec+4,&local,9) then result = local + rec + *(int*)(local+rec+4); default g_0065ECA8. Same code shape as 0x00662F88 (second table at +4) and 0x0065FF98. Caller 0x006604F8."
+ },
+ {
+  "address": "0x0065ECAC",
+  "name": "maybe_Sound_SeqField_GetByteDefault40",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteDefault40(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "sequence record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Reads a byte-typed field (type 0) from a sequence record and returns the low byte, falling back to 0x40 (64) when the field is absent — the default used for level/pan-like parameters.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,0); if 0 -> 0x40 else local&0xff. Identical shape to 0x0065ED00 / 0x0065FFC0 / 0x00662F5C (each defaulting differently: 0x40, 0x40, 0x40, and 0x3c/0x7f elsewhere). Caller 0x006604F8."
+ },
+ {
+  "address": "0x0065ECD4",
+  "name": "maybe_Sound_SeqField_GetByteHi",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteHi(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "sequence record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Reads a half-word-typed field (type 2) and returns its high byte ((value & 0xffff) >> 8), or 0 when the field is missing.",
+  "confidence": 0.4,
+  "evidence": "func_00661534(rec+4,&local,2); result = (local & 0xffff) >> 8. Same type-2 accessor family as 0x0065FFC0 and 0x006662F5C. Caller 0x006604F8."
+ },
+ {
+  "address": "0x0065ED00",
+  "name": "maybe_Sound_SeqField_GetByteDefault40B",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteDefault40B(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "sequence record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Reads a type-2 field and returns its low byte, defaulting to 0x40 when absent (the second of the two 0x40-defaulted accessors).",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,2); if 0 -> 0x40 else local&0xff. Caller 0x006604F8."
+ },
+ {
+  "address": "0x0065ED9C",
+  "name": "maybe_Sound_SeqField_GetByteDefault60",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteDefault60(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "sequence record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Reads a type-1 field as a byte, defaulting to 0x60 (96) when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,1); if 0 -> 0x60 else local&0xff. Caller 0x006604F8."
+ },
+ {
+  "address": "0x0065EDE0",
+  "name": "Sound_SeqVoice_FillDescriptor",
+  "signature": "unsigned int Sound_SeqVoice_FillDescriptor(SoundSeqVoice* self, SoundVoiceDescriptor* out, int trackIndex, unsigned int rowIndex, unsigned int subIndex)",
+  "params": {
+   "self": "voice source: enabled byte at +8, table root at +4",
+   "out": "descriptor to fill (ids at +0/+4, floats, bytes 0x11..0x16, pointer at +0xC)",
+   "trackIndex": "track index (-1 = none)",
+   "rowIndex": "row index",
+   "subIndex": "sub-entry index"
+  },
+  "summary": "Resolves (track,row,sub) through three nested table lookups and fills a 0x17-word voice descriptor: the record id pair, the detune/volume floats, the six parameter bytes and the sample pointer, using the pre-packed record at 0x00663018 when available and the individual accessors otherwise.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x00662F50/0x00662F00/0x00662E4C/0x00663120 (index -> record chain), 0x00662F44 (table), then either copies a packed u32 block from 0x00663018 or calls 0x00662FC4/0x006630F8/0x0066305C/0x00663084/0x00662FEC/0x00662F5C/m210b/0x00662F88. Writes bytes at 0x11,0x12,0x13,0x15,0x16 and the float at +8. Caller 0x006617E8 (voice creation)."
+ },
+ {
+  "address": "0x0065F87C",
+  "name": "Sound_SeqResource_ResolveId",
+  "signature": "int Sound_SeqResource_ResolveId(SoundSeqResource* self, unsigned int id, unsigned int unused, unsigned int index)",
+  "params": {
+   "self": "resource with six sub-table offsets at +4/+0xc/+0x14/+0x1c/+0x24/+0x2c",
+   "id": "packed id: high byte = table 1..6, low 24 bits = record index",
+   "index": "field index inside the record"
+  },
+  "summary": "Resolves a packed (table<<24 | index) id against the six sub-tables of a sequence resource and returns the field selected by `index` inside the record (via 0x00661534), or -1 when the table, the record or the field does not exist.",
+  "confidence": 0.5,
+  "evidence": "switch (arg2 >> 24) cases 1..6 select self->f_4 / f_c / f_14 / f_2c / f_1c / f_24, each read as a count + (offset,pointer) pair array with 8-byte stride; guard *puVar1 <= (arg2 & 0xffffff) -> -1; field read at record+0x14 / +0x18 / +0xc / +4 / +8. Callers 0x00660A94 and the field accessors 0x0065F... family."
+ },
+ {
+  "address": "0x0065FBD4",
+  "name": "maybe_Sound_SeqField_GetByte_Off08",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByte_Off08(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +8)",
+   "index": "field index"
+  },
+  "summary": "Byte field accessor on the record's +8 sub-table (type 0), defaulting to 0x40.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+8,&local,0); default 0x40 else local&0xff. Called by 0x00660D5C (track/channel accessor)."
+ },
+ {
+  "address": "0x0065FBFC",
+  "name": "maybe_Sound_SeqField_GetByteHi_Off08",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteHi_Off08(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +8)",
+   "index": "field index"
+  },
+  "summary": "High-byte accessor on the +8 sub-table (type 0), returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+8,&local,0); result = (local & 0xffff) >> 8. Called by 0x00660D5C."
+ },
+ {
+  "address": "0x0065FCA4",
+  "name": "maybe_Sound_SeqField_GetValue_Off08",
+  "signature": "unsigned int maybe_Sound_SeqField_GetValue_Off08(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +8)",
+   "index": "field index"
+  },
+  "summary": "Full-word accessor (type 1) on the +8 sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+8,&local,1); result = local. Called by 0x006610B0."
+ },
+ {
+  "address": "0x0065FD24",
+  "name": "maybe_Sound_SeqField_GetValue_Off0C",
+  "signature": "unsigned int maybe_Sound_SeqField_GetValue_Off0C(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0xc)",
+   "index": "field index"
+  },
+  "summary": "Full-word accessor (type 0) on the +0xc sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0xc,&local,0); result = local. Called by 0x006612B4."
+ },
+ {
+  "address": "0x0065FD44",
+  "name": "maybe_Sound_SeqField_GetByte_Off0C",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByte_Off0C(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0xc)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 1) on the +0xc sub-table, defaulting to 0x40.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0xc,&local,1); default 0x40 else local&0xff. Called by 0x006612B4."
+ },
+ {
+  "address": "0x0065FD6C",
+  "name": "maybe_Sound_SeqField_GetFlag_Off0C",
+  "signature": "unsigned int maybe_Sound_SeqField_GetFlag_Off0C(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0xc)",
+   "index": "field index"
+  },
+  "summary": "Boolean accessor on the +0xc sub-table: returns 0 when the field is absent or its high byte is zero, otherwise 1.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0xc,&local,1); result = 0; if (iVar1==0 || (local&0xffff)>>8 != 0) result = 1. Called by 0x006612B4."
+ },
+ {
+  "address": "0x0065FED0",
+  "name": "maybe_Sound_SeqField_GetByte_Off14",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByte_Off14(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 1, low byte) on the +0x14 sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,1); result = local & 0xff. Called by 0x00660C30."
+ },
+ {
+  "address": "0x0065FEF4",
+  "name": "maybe_Sound_SeqField_GetByteHi_Off14",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteHi_Off14(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "High-byte accessor (type 1) on the +0x14 sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,1); result = (local & 0xffff) >> 8. Called by 0x00660C30."
+ },
+ {
+  "address": "0x0065FF50",
+  "name": "maybe_Sound_SeqField_GetInt_Off14",
+  "signature": "unsigned int maybe_Sound_SeqField_GetInt_Off14(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "Integer accessor (type 0x1F) on the +0x14 sub-table, returning 0xFFFFFFFF when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,0x1f); default 0xffffffff. Called by 0x00660D3C."
+ },
+ {
+  "address": "0x0065FF74",
+  "name": "maybe_Sound_SeqField_GetFlagBit0_Off14",
+  "signature": "unsigned int maybe_Sound_SeqField_GetFlagBit0_Off14(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "Reads a type-0x11 field and returns bit 0 only (a single boolean flag), or 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,0x11); result = local & 1. Called by 0x00660C30."
+ },
+ {
+  "address": "0x0065FF98",
+  "name": "maybe_Sound_SeqField_GetPointer_Off14",
+  "signature": "void* maybe_Sound_SeqField_GetPointer_Off14(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "Resolves a type-8 relative pointer inside the +0x14 sub-table (base+offset, without the extra dereference of the type-9 variant), returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,8); result = local + rec (no second dereference, unlike 0x0065EC70 / 0x00662F88). Called by 0x00660CF0."
+ },
+ {
+  "address": "0x0065FFC0",
+  "name": "maybe_Sound_SeqField_GetByteHi_Off14B",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteHi_Off14B(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "High-byte accessor (type 2) on the +0x14 sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,2); result = (local & 0xffff) >> 8. Called by 0x00660C30."
+ },
+ {
+  "address": "0x0065FFF8",
+  "name": "maybe_Sound_SeqField_GetByte_Off14B",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByte_Off14B(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +0x14)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 2) on the +0x14 sub-table, defaulting to 0x40.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+0x14,&local,2); default 0x40 else local&0xff. Called by 0x00660C30."
+ },
+ {
+  "address": "0x00660330",
+  "name": "maybe_Sound_SeqParam_NotifyChange",
+  "signature": "unsigned int maybe_Sound_SeqParam_NotifyChange(SoundParamOwner* self, unsigned int id)",
+  "params": {
+   "self": "owner: vtable at +0, accessor pair at +4 (base) / +8 (extension)",
+   "id": "packed parameter id (high byte selects the kind)"
+  },
+  "summary": "Dispatches a parameter-change notification by the id's high byte (1 = voice params, 3 = header word, 5 = wave ref, 6 = range pair), stores the resolved value in a local, and lets the owner's vtable slot +0x10 react when the parameter actually exists.",
+  "confidence": 0.45,
+  "evidence": "switch (arg2>>24): 1 -> 0x0065E088, 3 -> 0x0065DFD8, 5 -> 0x0065E340, 6 -> 0x0065E030, each filling local_28 (pre-set to -1); if (local_28[0] != -1) result = self->vtable[0x10](self). Callers 0x0054C498 / 0x0054C5C0 / 0x0054FC00 / 0x00554670."
+ },
+ {
+  "address": "0x006604F8",
+  "name": "maybe_Sound_Seq_GetVoiceSlot",
+  "signature": "unsigned int maybe_Sound_Seq_GetVoiceSlot(SoundParamOwner* self, SoundVoiceSlot* out, unsigned int trackIndex, unsigned int rowIndex)",
+  "params": {
+   "self": "owner (sequence at +4)",
+   "out": "slot descriptor: id pair, float at +0x14, pointer at +8, bytes at +0xD..+0x10",
+   "trackIndex": "track index",
+   "rowIndex": "row index"
+  },
+  "summary": "Resolves a voice slot from the sequence's track/row tables and fills the slot descriptor through the field accessors (0x0065EC70/0x0065ECAC/0x0065ED00/0x0065ECD4/0x0065ED9C), returning 0 when the index pair is out of range.",
+  "confidence": 0.45,
+  "evidence": "0x0065E9A0(seq, trackIndex) -> 0x0065E9D4(.,rowIndex) -> record; 0x0065E994(seq) gives the count; bounds check *rec < *count; fills *out=table[id*2+1], out[1]=table[id*2+2], float out[5], pointer out+2 via 0x0065EC70, bytes 0xD/0xE/0xF/0x10. Callers 0x00549B7C / 0x0054A3B8 / 0x0054A9FC / 0x0054C5C0."
+ },
+ {
+  "address": "0x006606D0",
+  "name": "Sound_Stream_ReadBlockAt",
+  "signature": "bool Sound_Stream_ReadBlockAt(SoundStreamHandle* self, void* dst, int blockIndex)",
+  "params": {
+   "self": "stream handle: vtable at +0, block size u16 at +0xC, base offset at +8",
+   "dst": "destination (0x100 bytes)",
+   "blockIndex": "block number"
+  },
+  "summary": "Seeks the underlying sound stream to blockIndex * blockSize + baseOffset (vtable +0x40) and reads exactly 0x100 bytes into dst (vtable +0x24); returns true only when the full block was read.",
+  "confidence": 0.55,
+  "evidence": "(*vtable[0x40])(obj, (u16)self[3]*arg3 + self[2], 0) then (*vtable[0x24])(obj, stack, 0x100), compares to 0x100 and memcpy's. Only caller 0x00551718 (Sound_Stream_AdvanceReadPointer)."
+ },
+ {
+  "address": "0x00660780",
+  "name": "Sound_WaveInfo_CopyDescriptor",
+  "signature": "unsigned int Sound_WaveInfo_CopyDescriptor(SoundParamOwner* self, SoundWaveDescriptor* out)",
+  "params": {
+   "self": "owner (wave info at +4)",
+   "out": "0x4C-byte descriptor copy"
+  },
+  "summary": "Copies the 0x4C-byte wave descriptor (format bytes, sample rate, loop points, channel pointers) from the loaded wave info into the caller's buffer, with two fields swapped depending on a format-version constant (g_00660864).",
+  "confidence": 0.5,
+  "evidence": "Source = func_0065F324(*(self+4)); copies bytes 0..3, words +4,+8, then every word up to +0x40 field by field; the last two fields pick f_44/f_48 vs f_8/f_c depending on g_00660864 <= *(u32*)(*self+8). Callers 0x0054B898 / 0x00550F18."
+ },
+ {
+  "address": "0x00660868",
+  "name": "Sound_WaveInfo_CopySubBlock",
+  "signature": "unsigned int Sound_WaveInfo_CopySubBlock(SoundParamOwner* self, unsigned char* out, int index)",
+  "params": {
+   "self": "owner (wave info at +4)",
+   "out": "output block: 4 header bytes + up to 2 payload bytes",
+   "index": "sub-block index"
+  },
+  "summary": "Copies one variable-length sub-block of the wave info: 4 header bytes plus between 0 and 2 payload bytes taken from the length-prefixed area at header+8.",
+  "confidence": 0.5,
+  "evidence": "count = *(int*)puVar3 < arg3 guard, block = func_0065F358(record,index); payload length = *(rec + *(int*)(rec+8)) & 0xff, clamped to 2; copies bytes 4..4+len into out+5. Only caller 0x00551988 (Sound_Stream_UpdateRingPointers)."
+ },
+ {
+  "address": "0x0066092C",
+  "name": "maybe_Sound_WaveInfo_GetSubBlockPair",
+  "signature": "bool maybe_Sound_WaveInfo_GetSubBlockPair(SoundParamOwner* self, void* outA, void* outB, unsigned int index)",
+  "params": {
+   "self": "owner (wave info at +4)",
+   "outA": "first 0x26 bytes",
+   "outB": "pointer field at +0x26",
+   "index": "sub-block index"
+  },
+  "summary": "Copies a 0x26-byte sub-block of the wave info and the attached pointer that follows it, returning false when the sub-block is missing.",
+  "confidence": 0.45,
+  "evidence": "0x0065F33C(parent) -> 0x0065F38C(.,index) -> 0x0065F2F0(); memcpy(outA, p, 0x26) and func_0011FFD8(outB, p+0x26). Caller 0x00550F18 (Sound_Stream_FillPcmBuffer)."
+ },
+ {
+  "address": "0x006609FC",
+  "name": "Sound_Resource_CheckMagic",
+  "signature": "unsigned int Sound_Resource_CheckMagic(SoundResourceHeader* self)",
+  "params": {
+   "self": "resource: magic offset table at +0, payload pointer at +0, guard byte at +0xC"
+  },
+  "summary": "Verifies that the sound resource carries the expected magic word at the offset described by its own header (0x0065F420), returning 1 when it matches g_00660A34 and 0 otherwise.",
+  "confidence": 0.5,
+  "evidence": "if (self->f_c == 0) return 0; iVar3=*self; iVar1=func_0065F420(iVar3); compare *(int*)(iVar3+iVar1) with g_00660A34. Only caller 0x0054AA78."
+ },
+ {
+  "address": "0x00660A94",
+  "name": "Sound_Seq_ResolveRecord",
+  "signature": "void* Sound_Seq_ResolveRecord(SoundSeqData* self)",
+  "params": {
+   "self": "sequence data: chunk base at +0x38, id at +0x3C"
+  },
+  "summary": "Returns a pointer to the record selected by the sequence's current id: resolves the id through 0x0065F87C, adds the record's own relative offset at +4 and then the entry offset at +8.",
+  "confidence": 0.5,
+  "evidence": "if (self->f_38 == 0) return 0; idx = func_0065F87C(self->f_3c); base = self->f_38 + *(int*)(self->f_38+4); result = base + *(int*)(base + idx*0xc + 8). Called by 0x0065DF90."
+ },
+ {
+  "address": "0x00660AF8",
+  "name": "maybe_Sound_Seq_GetHeaderWord",
+  "signature": "bool maybe_Sound_Seq_GetHeaderWord(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "receives the header word"
+  },
+  "summary": "Reads the first word of the record resolved by 0x0065F5D4 and returns false when the record does not exist.",
+  "confidence": 0.4,
+  "evidence": "puVar1 = func_0065F5D4(self->f_3c); if (puVar1 != 0) *arg3 = *puVar1; return puVar1 != 0. Called by 0x0065DFD8."
+ },
+ {
+  "address": "0x00660BA4",
+  "name": "maybe_Sound_Seq_GetDataRange",
+  "signature": "unsigned int maybe_Sound_Seq_GetDataRange(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "{word, length}"
+  },
+  "summary": "Resolves the {pointer,length} range of a sequence entry: depending on the entry kind it stores either the raw length or a computed size (kind 0 uses the u32 at +8, kind 1 clears the second word, kind 2 reports failure).",
+  "confidence": 0.4,
+  "evidence": "func_0065F63C(self->f_3c) -> count, then func_0065F610(.,*count) -> entry, func_0065FE84() -> kind; writes *out=count, out[1]=entry[2] or 0xffffffff; returns 1/0. Called by 0x0065E030."
+ },
+ {
+  "address": "0x00660C30",
+  "name": "maybe_Sound_Seq_GetVoiceParamsBase",
+  "signature": "bool maybe_Sound_Seq_GetVoiceParamsBase(SoundSeqData* self, unsigned int id, SoundVoiceParam* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "voice parameter block"
+  },
+  "summary": "Base implementation of the voice-parameter query: fills {word, word, size, flag, byte 0x15, byte 0x16, byte 0x14} from the record selected by 0x0065F678 using the field accessors at record+0x14.",
+  "confidence": 0.45,
+  "evidence": "puVar2 = func_0065F678(self->f_3c); out[0]=puVar2[0], out[1]=puVar2[1], out[4]=byte(puVar2+2), byte out+0x15=0x0065FED0, byte out+0x16=0x0065FEF4, out[3]=0x0065FFF8, out[2]=0x0065FFC0, byte out+0x16=0x0065FF74. Called by 0x0065E088."
+ },
+ {
+  "address": "0x00660CF0",
+  "name": "maybe_Sound_Seq_GetEntryPairBase",
+  "signature": "unsigned int maybe_Sound_Seq_GetEntryPairBase(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "3 words + 2 bytes"
+  },
+  "summary": "Base implementation of the entry-pair query: copies the {id, value, byte, byte} of the record selected by 0x0065F678 via the type-8 pointer accessor.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = func_0065F678(self->f_3c); then 0x0065FF98(.) -> puVar2; out[0]=*puVar2, out[1]=puVar2[1], out[2] byte, out+9 byte. Called by 0x0065E138."
+ },
+ {
+  "address": "0x00660D3C",
+  "name": "maybe_Sound_Seq_GetTrackOffsetBase",
+  "signature": "void maybe_Sound_Seq_GetTrackOffsetBase(SoundSeqData* self)",
+  "params": {
+   "self": "sequence data (id at +0x3C)"
+  },
+  "summary": "Base implementation of the timestamp query: returns 0xFFFFFFFF through the type-0x1F field of the record resolved by 0x0065F678, ignoring the result (the caller receives it in registers).",
+  "confidence": 0.35,
+  "evidence": "iVar1 = func_0065F678(self->f_3c); if (iVar1 != 0) func_0065FF50(); — same fat-call pattern as 0x00660CF0. Called by 0x0065E190."
+ },
+ {
+  "address": "0x00660D5C",
+  "name": "maybe_Sound_Seq_GetTrackChannelBase",
+  "signature": "unsigned int maybe_Sound_Seq_GetTrackChannelBase(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "{id, value, byte, flag}"
+  },
+  "summary": "Base implementation of the track/channel query: only answers when the record kind is 3, then copies {id, value, byte, is-nonzero flag} from the type-3 pointer of the +8 sub-table.",
+  "confidence": 0.4,
+  "evidence": "iVar2 = func_0065F678(self->f_3c); if (func_0065FF20() == 3) { puVar5 = func_0065FFEC(iVar2); out[0]=puVar5[0], out[1]=puVar5[1], byte=0x0065FBD4, flag=(0x0065FBFC != 0). } Called by 0x0065E44C."
+ },
+ {
+  "address": "0x00660DC8",
+  "name": "maybe_Sound_Seq_GetPointerPairBase",
+  "signature": "bool maybe_Sound_Seq_GetPointerPairBase(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "{word, word, address}"
+  },
+  "summary": "Base implementation of the pointer-triple query: stores the two leading words of the resolved record and the address computed from its own relative offset at +0xC.",
+  "confidence": 0.4,
+  "evidence": "puVar1 = func_0065FABC(self->f_3c); out[0]=*puVar1, out[1]=puVar1[1], out[2]=puVar1+puVar1[3]. Called by 0x0065E4A4."
+ },
+ {
+  "address": "0x006610B0",
+  "name": "maybe_Sound_Seq_GetWaveRefBase",
+  "signature": "bool maybe_Sound_Seq_GetWaveRefBase(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "{id, value, byte}"
+  },
+  "summary": "Base implementation of the wave-reference query: copies the record's leading word, its type-1 field (0x0065FCA4) and its second byte.",
+  "confidence": 0.4,
+  "evidence": "puVar1 = func_0065FAF8(self->f_3c); out[0]=*puVar1; out[1]=0x0065FCA4(puVar1); byte out+8 = puVar1[1]&0xff. Called by 0x0065E340."
+ },
+ {
+  "address": "0x006612B4",
+  "name": "maybe_Sound_Seq_GetTrackKindBase",
+  "signature": "unsigned int maybe_Sound_Seq_GetTrackKindBase(SoundSeqData* self, unsigned int id, unsigned int* out)",
+  "params": {
+   "self": "sequence data (id at +0x3C)",
+   "id": "parameter id",
+   "out": "{value, size, byte, flag}"
+  },
+  "summary": "Base implementation of the track-kind query: only answers when the record kind is 1, then fills the value, the size from record+8, a byte and a flag from the +0xC table accessors.",
+  "confidence": 0.4,
+  "evidence": "iVar2 = func_0065F678(self->f_3c); if (func_0065FF20() == 1) { iVar2 = func_0066002C(iVar2); out[0]=0x0065FD24(); out[5]=*(iVar2+8); byte out+6=0x0065FD44; byte out+0x19=0x0065FD6C; 0x0065FCC4(iVar2,out+1); return 1; } Called by 0x0065E3F4."
+ },
+ {
+  "address": "0x00661480",
+  "name": "Sound_WaveInfo_CopyHeaderFixed",
+  "signature": "unsigned int Sound_WaveInfo_CopyHeaderFixed(SoundParamOwner* self, void* out)",
+  "params": {
+   "self": "owner (wave info at +4)",
+   "out": "0x4C-byte destination"
+  },
+  "summary": "Copies the fixed 0x4C-byte wave-info header to the caller and always reports success.",
+  "confidence": 0.5,
+  "evidence": "uVar1 = func_0065F324(*(self+4)); func_00116C10(out, uVar1, 0x4c); return 1. Caller 0x00553368 (Sound_Track_ExecuteCommand)."
+ },
+ {
+  "address": "0x006614A8",
+  "name": "maybe_Sound_Seq_GetEntryPairByIndex",
+  "signature": "unsigned int maybe_Sound_Seq_GetEntryPairByIndex(SoundParamOwner* self, unsigned int* out, int index)",
+  "params": {
+   "self": "owner (entry table at +8)",
+   "out": "{word, word, word}",
+   "index": "entry index (0x14-byte stride)"
+  },
+  "summary": "Copies the first two words of entry `index` from the owner's 0x14-stride table and appends the value from 0x00661474.",
+  "confidence": 0.4,
+  "evidence": "puVar1 = *(self+8) + index*0x14 + 4; out[0]=puVar1[0], out[1]=puVar1[1], out[2]=func_00661474(); return 1. Caller 0x00553368 (Sound_Track_ExecuteCommand)."
+ },
+ {
+  "address": "0x006614E4",
+  "name": "maybe_Sound_WaveInfo_GetSubBlockPairAlt",
+  "signature": "bool maybe_Sound_WaveInfo_GetSubBlockPairAlt(SoundParamOwner* self, void* outA, void* outB, unsigned int index)",
+  "params": {
+   "self": "owner (wave info at +4)",
+   "outA": "first 0x26 bytes",
+   "outB": "pointer field at +0x26",
+   "index": "sub-block index"
+  },
+  "summary": "Second copy of the 0x26-byte sub-block fetch (identical to 0x0066092C) used by the track-command path.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same body as 0x0066092C: 0x0065F33C/0x0065F38C/0x0065F2F0 then memcpy 0x26 and func_0011FFD8(p+0x26). Caller 0x005539F8 (Sound_Track_DispatchMidiEvent)."
+ },
+ {
+  "address": "0x006617E8",
+  "name": "Sound_Voice_CreateFromSeqRecord",
+  "signature": "SoundVoice* Sound_Voice_CreateFromSeqRecord(unsigned int owner, unsigned int accessor, SoundParamOwner* seq, unsigned int* args)",
+  "params": {
+   "owner": "owning track/player",
+   "accessor": "sequence accessor object",
+   "seq": "sequence owner whose record is played",
+   "args": "{trackRow, subIndex, volume, pan, priority, ...}"
+  },
+  "summary": "Starts a sequence voice: resolves the note row through 0x0065EDE0, looks up the wave/sample header, parses its format with 0x0065EF6C, allocates the voice with 0x00555E38 (top 2 channels) and then sets pitch, volume, pan, priority and sample pointers through the 0x0054xxxx sound-track helpers before starting the note (0x005561BC).",
+  "confidence": 0.55,
+  "evidence": "Calls 0x0065EDE0 (voice descriptor), 0x0066097C, 0x0054944C, 0x0065EF6C (maybe_Sound_WaveInfo_ParseFormat, N_035), 0x00555E38 (Sound_SeqPlayer_StartMultiVoiceNote area), then writes voice->f_194/f_195/f_19c/f_198/f_17c/f_b0/f_174 and calls 0x00547134/0x005472D8/0x005472F8/0x00547370/0x005561BC. Only caller 0x00545B58 (sound sequence player)."
+ },
+ {
+  "address": "0x00662F5C",
+  "name": "maybe_Sound_SeqField_GetByteHi_Off04",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteHi_Off04(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "High-byte accessor (type 4) on the +4 sub-table, returning 0 when absent.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,4); result = (local & 0xffff) >> 8. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x00662F88",
+  "name": "maybe_Sound_SeqField_GetPointerByTag_Off04",
+  "signature": "void* maybe_Sound_SeqField_GetPointerByTag_Off04(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Type-9 relative-pointer chase on the +4 sub-table: returns base+offset+*(offset+4), or the shared default (g_00662FC0) when the field is missing.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,9) then result = local + rec + *(int*)(local+rec+4); default g_00662FC0. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x00662FC4",
+  "name": "maybe_Sound_SeqField_GetByteDefault3C",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteDefault3C(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 0) on the +4 sub-table, defaulting to 0x3C (60, i.e. middle C) when the field is absent — consistent with this table holding note/velocity style values.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,0); default 0x3c else local&0xff. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x00662FEC",
+  "name": "maybe_Sound_SeqField_GetFlag_Off04",
+  "signature": "unsigned int maybe_Sound_SeqField_GetFlag_Off04(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Boolean accessor on the +4 sub-table: 1 when the field exists and its low byte is non-zero, otherwise 0.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,4); if (iVar1 != 0 && (local & 0xff) != 0) result = 1. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x0066305C",
+  "name": "maybe_Sound_SeqField_GetByte_Off04",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByte_Off04(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 2) on the +4 sub-table, defaulting to 0x40.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,2); default 0x40 else local&0xff. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x006630F8",
+  "name": "maybe_Sound_SeqField_GetByteDefault7F",
+  "signature": "unsigned int maybe_Sound_SeqField_GetByteDefault7F(SoundSeqRecord* rec, unsigned int unused1, unsigned int unused2, unsigned int index)",
+  "params": {
+   "rec": "record (field table at +4)",
+   "index": "field index"
+  },
+  "summary": "Byte accessor (type 1) on the +4 sub-table, defaulting to 0x7F (127 = maximum) when the field is absent — the velocity/volume style default.",
+  "confidence": 0.45,
+  "evidence": "func_00661534(rec+4,&local,1); default 0x7f else local&0xff. Called by 0x0065EDE0."
+ },
+ {
+  "address": "0x006633EC",
+  "name": "maybe_Ui_Element_GetMetricC",
+  "signature": "float maybe_Ui_Element_GetMetricC(UiElementHolder* self)",
+  "params": {
+   "self": "holder with the element interface pointer at +0x24"
+  },
+  "summary": "Returns a float metric of the element interface stored at self+0x24 by calling its vtable slot +0x0C and converting the integer result to float.",
+  "confidence": 0.35,
+  "evidence": "uVar1 = (*self->f_24->vtable[3])(self->f_24); VectorSignedToFloat(uVar1). Callers 0x006F06CC / 0x006F0774 (UI window helpers around 0x006EF6E4 maybe_Ui_Window_CreateModelView)."
+ },
+ {
+  "address": "0x00663418",
+  "name": "maybe_Ui_Element_GetMetricA",
+  "signature": "float maybe_Ui_Element_GetMetricA(UiElementHolder* self)",
+  "params": {
+   "self": "holder with the element interface pointer at +0x24"
+  },
+  "summary": "Returns a float metric of the element interface stored at self+0x24 via vtable slot +0x14.",
+  "confidence": 0.35,
+  "evidence": "uVar1 = (*self->f_24->vtable[5])(self->f_24); VectorSignedToFloat(uVar1). Only caller 0x006EF8C4, which uses the value as a scale in a window layout computation."
+ },
+ {
+  "address": "0x00663444",
+  "name": "maybe_Ui_Element_GetMetricB",
+  "signature": "float maybe_Ui_Element_GetMetricB(UiElementHolder* self)",
+  "params": {
+   "self": "holder with the element interface pointer at +0x24"
+  },
+  "summary": "Returns a float metric of the element interface stored at self+0x24 via vtable slot +0x10.",
+  "confidence": 0.35,
+  "evidence": "uVar1 = (*self->f_24->vtable[4])(self->f_24); VectorSignedToFloat(uVar1). Only caller 0x006F0774."
+ },
+ {
+  "address": "0x00663474",
+  "name": "std_CopyBlock64",
+  "signature": "void* std_CopyBlock64(void* src, void* dst)",
+  "params": {
+   "src": "source (0x40 bytes)",
+   "dst": "destination"
+  },
+  "summary": "Copies a fixed 64-byte block with the optimised memcpy (0x00116C10) and returns dst+0x40 so callers can chain writes into a packed structure.",
+  "confidence": 0.7,
+  "evidence": "func_00116C10(arg2, arg1, 0x40); return arg2 + 0x40. No callers in the readable corpus (invoked through a table)."
+ },
+ {
+  "address": "0x00663898",
+  "name": "maybe_Font_Atlas_GetPageSize",
+  "signature": "void maybe_Font_Atlas_GetPageSize(unsigned int* out, UiCellSource* src)",
+  "params": {
+   "out": "{0, width, height}",
+   "src": "object with a vtable at +0 whose slot +0x50 reports the layout kind"
+  },
+  "summary": "Fills a {0,width,height} triple describing the current atlas page; the size comes from the global page descriptor (0x006638D4 +0x18/+0x1C) when the source reports layout kind 1, otherwise the triple stays zero.",
+  "confidence": 0.45,
+  "evidence": "(*src->vtable[0x50])(src) == 1 -> uVar2=g_006638D4->f_18, uVar3=g_006638D4->f_1C; out[0]=0. Callers 0x006EFB18 / 0x006F00C8 (UI window code)."
+ },
+ {
+  "address": "0x006638E8",
+  "name": "Font_Atlas_GetCellAt",
+  "signature": "unsigned char Font_Atlas_GetCellAt(AtlasPageSet* set, AtlasPage* page, int layer, unsigned int x, unsigned int y)",
+  "params": {
+   "set": "atlas set: page array at +0x28, grid stride/offset from page->+0x48/+0x46",
+   "page": "page record",
+   "layer": "layer/sub-index (usually 0)",
+   "x": "pixel x (scaled by the page's per-axis factor)",
+   "y": "pixel y"
+  },
+  "summary": "Samples one byte of an atlas page grid at pixel (x,y). It computes the cell address from the page's own scale/offset fields (u16 at +0x10..+0x16 divided by the record's +0x2C/+0x2E), bounds-checks it against the page rectangle (u16 at +8/+0xA and +0xC/+0xE) and returns the byte at that cell, or 0xFF when the coordinate is outside.",
+  "confidence": 0.5,
+  "evidence": "div-based index computation with func_0011CD80(u16 * coord, divisor) for both axes; entry = set->f_28 + (dy*f_48 + f_46 + dx)*0x14; cell = *(page->f_10 + (y-origin)*pitch + (x-origin) + index); default result 0xff. Callers 0x00664A80 and 0x0066503C (Font_Atlas_LookupCell, N_076) — i.e. the font/glyph page lookup path."
+ },
+ {
+  "address": "0x00664A80",
+  "name": "maybe_Font_Atlas_GetGlyphCellByte",
+  "signature": "unsigned int maybe_Font_Atlas_GetGlyphCellByte(unsigned int* request)",
+  "params": {
+   "request": "caller request: word at +0 selects the cell column"
+  },
+  "summary": "Returns the glyph/atlas cell byte for the current page: lazily creates the global glyph page table (0x00664F78) on first use, picks the active page index (with an optional indirection through +0xFEC) and samples the page grid through 0x006638E8 at (request*8, 0).",
+  "confidence": 0.42,
+  "evidence": "One-time global init (g_00664F74 flag, allocation with g_00664F7C/80/84/88 constants), then iVar4 = page->f_f54 with index page->f_f64 (indirected through +0xF84 when +0xFE4 is set), cell = 0x006638D8(.) then 0x006638E8(page, cell, 0, *arg1 << 3); default 0xff. Callers 0x002D78C0, 0x003BCC78, 0x00423478, 0x005A3604, 0x005A3630."
+ },
+ {
+  "address": "0x006650F4",
+  "name": "maybe_Font_Atlas_FindPageForGlyph",
+  "signature": "void maybe_Font_Atlas_FindPageForGlyph(FontAtlasSet* self, unsigned int target, char* outPage, unsigned char* outCell)",
+  "params": {
+   "self": "atlas set: page count at +4->+0x1C, per-page values at +0x54 (11 bytes), optional page map at +0x94",
+   "target": "value to get closest to",
+   "outPage": "best page index",
+   "outCell": "best cell index"
+  },
+  "summary": "Scans every page and its eleven stored values and picks the page/cell whose value is closest to `target` (only values on the same side of the target and below the current best are accepted). Returns page 0 / cell 10 untouched when there are no pages.",
+  "confidence": 0.45,
+  "evidence": "Page loop over page->f_1c with optional indirection self->f_94 -> *(self+i*4+0x34); inner loop 11 over *(page + cell + 0x54); selection compares both against arg2 and against the running best (uVar5 = 0xff); defaults outCell=10. Callers 0x0029DE10 / 0x0029EF00 / 0x005E6784."
+ },
+ {
+  "address": "0x00665A24",
+  "name": "Math_BuildCombinedBounds",
+  "signature": "void Math_BuildCombinedBounds(BoundsSource* self, float* out)",
+  "params": {
+   "self": "source: flags at +0x60, point spheres at +0x64 (0x14 stride), oriented boxes at +0x74 (0x28 stride), AABBs at +0x84 (0x2C stride)",
+   "out": "24 floats: min/max xyz, centre xyz, half-extents and a radius"
+  },
+  "summary": "Builds the combined bounding volume of an object by unioning, in order, a set of spheres (centre+radius), oriented boxes (converted with 0x00574484 and offset by their own extents) and axis-aligned boxes (0x00573B6C), then writes the min/max corners, the centre and a radius computed from the half-extent diagonal. When bit 1 of +0x60 is clear it simply forwards to the cached bounds at self+0x10.",
+  "confidence": 0.55,
+  "evidence": "func_00575E38 (Math_UnionAabb, N_093) chained over three arrays; func_00574484 for the oriented-box corners; func_00573B6C (Math_ComputeRotatedAabb, N_093) for the last group; g_00665E44/58 constants (empty bounds), g_00665E5C = 0.5f; SQRT of the half-extent squares written to out[3]. Only caller 0x0058765C."
+ },
+ {
+  "address": "0x0066650C",
+  "name": "maybe_Text_Style_IsPlainRecord",
+  "signature": "unsigned char maybe_Text_Style_IsPlainRecord(StyleOwner* self, unsigned int id, unsigned int unused, unsigned int manager)",
+  "params": {
+   "self": "owner whose style record is at +0x175C",
+   "id": "style id compared when no record id is set",
+   "manager": "global data manager supplied in r3"
+  },
+  "summary": "Style predicate: when the current style has no record id (-1) it compares the stored style byte with `id`, otherwise it looks the record up in the data manager (0x0063D018) and reports whether its kind byte at +0xDC is zero.",
+  "confidence": 0.4,
+  "evidence": "f_175c->f_de == -1 ? (f_ce == 1) : manager lookup func_0063D018(*(0x0011CB38(.)), f_de)->f_dc == 0. Caller 0x004DEBBC (maybe_Text_TalkWindow_ResolveLineStyle)."
+ },
+ {
+  "address": "0x00666570",
+  "name": "maybe_Text_Style_MatchesId",
+  "signature": "unsigned int maybe_Text_Style_MatchesId(StyleOwner* self, unsigned int id)",
+  "params": {
+   "self": "owner whose style record is at +0x175C",
+   "id": "style id to test (1 or 2)"
+  },
+  "summary": "Style predicate: compares the owner's stored style id directly when no record id is set; otherwise maps the record's flag byte at +0xEB to ids 1/2 and tests the requested id.",
+  "confidence": 0.4,
+  "evidence": "f_175c->f_de == -1 ? (f_cd == arg2) : (lookup(f_de)->f_eb == 1 ? arg2 == 2 : arg2 == 1). Callers 0x004DF680 / 0x004F5858 (Text_Scroll_UpdateStateMachine)."
+ },
+ {
+  "address": "0x00666628",
+  "name": "maybe_Text_Style_IsSpecialKind",
+  "signature": "unsigned int maybe_Text_Style_IsSpecialKind(StyleOwner* self, unsigned int unused1, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "self": "owner whose style record is at +0x175C",
+   "manager": "global data manager"
+  },
+  "summary": "Returns 1 when the current style is one of the four special styles (bytes 8..11) or when the looked-up record's kind byte at +0xDC equals 5.",
+  "confidence": 0.4,
+  "evidence": "f_175c->f_ce in {8,9,10,11} when f_de == -1, else func_0063D018(manager, f_de)->f_dc == 5. Only caller 0x004DEBBC."
+ },
+ {
+  "address": "0x00666874",
+  "name": "Data_IsRecordOrderLess",
+  "signature": "bool Data_IsRecordOrderLess(unsigned int unused, unsigned int idA, unsigned int idB, unsigned int manager)",
+  "params": {
+   "unused": "ignored first argument",
+   "idA": "first record id",
+   "idB": "second record id",
+   "manager": "global data manager"
+  },
+  "summary": "Sort predicate over the data tables: looks both ids up with 0x0063DED4 and compares their sort byte at +0xB, returning true when A sorts before B.",
+  "confidence": 0.5,
+  "evidence": "Two func_0063DED4 lookups through func_0011CB38(.) and return iVar2->f_b < iVar3->f_b. Only caller 0x0071C610 (script binding table)."
+ },
+ {
+  "address": "0x0066699C",
+  "name": "maybe_Data_ValidateGroupSlots",
+  "signature": "unsigned int maybe_Data_ValidateGroupSlots(char* groups, unsigned int unused1, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "groups": "array of 4-byte group headers: id, up to n ids, count byte",
+   "manager": "global data manager"
+  },
+  "summary": "Validates a group table: for every group it checks that none of the declared slots still holds the 0xFF 'unset' sentinel, returning 0 as soon as an unset slot is found (used to decide whether a recipe/party group is complete).",
+  "confidence": 0.45,
+  "evidence": "If *groups == 0xff return 0; groupCount = func_0063F108(manager,*groups)->f_10; per group scan arg1[i*4+2 .. +2+count-1] for 0xff; return 1 when none. Callers 0x00263E18 / 0x0047A0E4."
+ },
+ {
+  "address": "0x00666A50",
+  "name": "Data_IsLastGroupIndex",
+  "signature": "unsigned int Data_IsLastGroupIndex(char* group, unsigned int unused1, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "group": "group entry: table id at +8, slot index at +9",
+   "manager": "global data manager"
+  },
+  "summary": "Returns 1 when the slot index stored at group+9 is the last slot of the table referenced by the id at group+8 (both must be set, i.e. not 0xFF).",
+  "confidence": 0.5,
+  "evidence": "cVar1 = *(arg1+8); if != -1 and *(arg1+9) != -1 -> func_0063F108(manager, id)->f_10 - 1 == *(u8*)(arg1+9). Only caller 0x00261DC4."
+ },
+ {
+  "address": "0x00666AAC",
+  "name": "Data_FindIdByName",
+  "signature": "int Data_FindIdByName(DataOwner* self, const char* name)",
+  "params": {
+   "self": "owner with the name table at +0x60 (count at +0x12, entries at +0x34)",
+   "name": "NUL-terminated name"
+  },
+  "summary": "Hashes the name (multiply/xor rolling hash) and scans the owner's name table (8-byte entries: hash + u16 id) for a matching hash and equal string, returning the stored 16-bit id or -1.",
+  "confidence": 0.6,
+  "evidence": "Rolling hash with g_00666B68/g_00666B6C multipliers, then loop i<f_12 comparing *(u32*)(f_60+0x34+i*8) and func_0010540C(entry+1, name) == 0 (strcmp); returns *(short*)(f_60+0x34+i*8+4). Only caller 0x00267D18."
+ },
+ {
+  "address": "0x00666FD0",
+  "name": "Data_IsRecordSortBefore",
+  "signature": "unsigned int Data_IsRecordSortBefore(unsigned int unused, unsigned int idA, unsigned int idB, unsigned int manager)",
+  "params": {
+   "unused": "ignored",
+   "idA": "first record id",
+   "idB": "second record id",
+   "manager": "global data manager"
+  },
+  "summary": "Sort predicate over the data tables: compares the sort key at +0x26 of both records (ties broken by id order), returning 1 when A should be listed before B.",
+  "confidence": 0.5,
+  "evidence": "func_0063E998(manager, idA) and (manager, idB); if A null -> 0; if B non-null then compare f_26 and fall back to idA > idB. Callers 0x0071D06C / 0x007231A0 (script binding tables)."
+ },
+ {
+  "address": "0x00667068",
+  "name": "maybe_Text_Style_GetField12",
+  "signature": "unsigned char maybe_Text_Style_GetField12(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Returns byte +0x12 of the current style record — a small style/classification field read by the UI style interface.",
+  "confidence": 0.45,
+  "evidence": "return *(u8*)(*(int*)(*(int*)(arg1+4)+0x298)+0x12). Callers 0x005BD58C / 0x005BDA18 / 0x005C1D64 / 0x005C2F9C (text/UI window code)."
+ },
+ {
+  "address": "0x00667108",
+  "name": "maybe_Text_Style_GetCategory",
+  "signature": "unsigned int maybe_Text_Style_GetCategory(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Maps the style record's type byte at +0x13 onto three coarse categories (1 for types 0/1/5, 2 for type 2, 3 for types 3/4/7, 0 otherwise).",
+  "confidence": 0.45,
+  "evidence": "switch (*(u8*)(*(int*)(*(int*)(arg1+4)+0x298)+0x13)) cases 0,1,5 -> 1; 2 -> 2; 3,4,7 -> 3; default 0. Only caller 0x005C2F9C."
+ },
+ {
+  "address": "0x006674A4",
+  "name": "Data_PureVirtualStub",
+  "signature": "void Data_PureVirtualStub(void)",
+  "params": {},
+  "summary": "Unimplemented virtual slot: it builds the trap frame and calls the runtime's fatal handler (0x00100050, marked 'does not return' by Ghidra). Present in the vtable so a missing override fails loudly instead of jumping to garbage.",
+  "confidence": 0.55,
+  "evidence": "Body is only func_00100050(local_68, g_00667660, 8) annotated '/* WARNING: Subroutine does not return */'; the same 68-byte stack frame pattern returns g_00667660 (a message/code pair). Only caller 0x005C3B10."
+ },
+ {
+  "address": "0x00667668",
+  "name": "maybe_Field2D_Sprite_ResetSubObject",
+  "signature": "void maybe_Field2D_Sprite_ResetSubObject(unsigned int unused, unsigned int id, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "unused": "ignored",
+   "id": "object id",
+   "manager": "global data manager"
+  },
+  "summary": "Looks an object up through 0x006F202C/0x002E5A34 and resets its sub-object at +0x3C with 0x003DF8D8 (an 'initialise/clear' helper) using the constant at 0x0066769C.",
+  "confidence": 0.4,
+  "evidence": "puVar1 = func_006F202C(&arg4); iVar2 = func_002E5A34(*puVar1, arg2); func_003DF8D8(*(int*)(iVar2+4)+0x3c, 0, g_0066769C). Callers 0x005BE390 / 0x005C5F24 / 0x005C6DC0 / 0x005C6E12 / 0x005C6E92."
+ },
+ {
+  "address": "0x00667724",
+  "name": "maybe_Text_Window_CollectLayoutRanges",
+  "signature": "void maybe_Text_Window_CollectLayoutRanges(unsigned int unused, TextWindow* win)",
+  "params": {
+   "unused": "ignored first argument",
+   "win": "text window: layout object at +0x4C8, line array at +0x4E8/+0x4EC (0xE8 stride), rect at +0x1F/+0x24"
+  },
+  "summary": "Re-collects the window's layout ranges: asks the layout object for its current box, resets the per-line data, converts the box into two probe points (box centre -2 and +2) through the text layout mapper (0x005C092C) and hands both to the layout interface (vtable +0x24).",
+  "confidence": 0.4,
+  "evidence": "0x005C809C(win->f_4C8) then vtable[0x3c]; loop over 0xE8-stride lines calling 0x005CA9F8(line->f_E0, local); 0x00667C44(&local_60, win->f_4C8); two func_005C092C(win+0xd8, point, win+0x1f, win+0x24) calls with centre-2 / centre+2; final vtable[0x24](obj, win[1], &pair). Callers 0x005C6C48 / 0x005C6D9C."
+ },
+ {
+  "address": "0x006678E0",
+  "name": "maybe_Text_Window_FindElementAtOffset",
+  "signature": "void maybe_Text_Window_FindElementAtOffset(TextHit* out, TextWindow* win, unsigned int offset)",
+  "params": {
+   "out": "hit result: byte at +0, word at +4, x/y at +8/+0xC, self-pointer at +0x10",
+   "win": "text window (layout at +8, object at +0x10, hit-test at +0x20)",
+   "offset": "character offset"
+  },
+  "summary": "Hit-tests a character offset in a text window: maps the offset to a point with the layout helper (0x005C9F38) plus the window's own origin, computes the glyph rect (0x005BE14C/0x005C1098) and returns it together with the span id when 0x005BDC98 reports a hit.",
+  "confidence": 0.45,
+  "evidence": "src = win->f_10; 0x005C9F38(&rect, src, &point at +0x78/+0x7C + 0x005C0A30(offset)); 0x005BE14C(src, hit, offset, byte) -> 0x005C1098(...); func_005BDC98(win->f_20,&pt,&size2) == 0 -> fill hit (byte id, word, x/y, self). Caller 0x005C4720."
+ },
+ {
+  "address": "0x00667A18",
+  "name": "maybe_Text_Window_FindElementAtPoint",
+  "signature": "void maybe_Text_Window_FindElementAtPoint(TextHit* out, TextWindow* win, unsigned int point)",
+  "params": {
+   "out": "hit: x/y + self-pointer",
+   "win": "text window",
+   "point": "packed point to test"
+  },
+  "summary": "Hit-tests a point against the window's text layout: clamps the point through 0x005BC8EC, and when it moved, runs the layout hit test 0x005BDC98 and returns the mapped position.",
+  "confidence": 0.45,
+  "evidence": "0x005BC8EC(&local, win->f_10, &pt(from +0x78/+0x7C), arg3); if point changed -> func_005BDC98(win->f_20,&local,&size2)==0 -> out = mapped pt + self. Only caller 0x005C4CA8."
+ },
+ {
+  "address": "0x00667AE8",
+  "name": "maybe_Ui_Element_IsInteractive",
+  "signature": "unsigned int maybe_Ui_Element_IsInteractive(UiElement* self)",
+  "params": {
+   "self": "element: interface pointer at +0x88, payload at +8"
+  },
+  "summary": "Reports whether an element takes part in interaction: false when the interface's vtable slot +8 reports 'not idle' or when the attached payload is neither of the two recognised object kinds (0x00669B68 / 0x00669B7C).",
+  "confidence": 0.4,
+  "evidence": "iVar1 = (*self->f_88->vtable[2])(self->f_88, self+8); if (iVar1==0 && 0x00669B68(*(self+8)) && 0x00669B7C(*(self+8))) result = 0 else 1. Callers 0x005C5F24 / 0x005C6DC0 / 0x005C71EC / 0x005C73D8 / 0x005C7A70 / 0x005C7CFE."
+ },
+ {
+  "address": "0x00667B40",
+  "name": "maybe_Text_Window_FindElementAtOffsetAlt",
+  "signature": "void maybe_Text_Window_FindElementAtOffsetAlt(TextHit* out, TextWindow* win, unsigned int offset)",
+  "params": {
+   "out": "hit result",
+   "win": "text window",
+   "offset": "character offset"
+  },
+  "summary": "Variant of the offset hit-test used when the window only needs the leading edge: tests the offset through 0x005C9E44 and returns the mapped x/y without computing a glyph rectangle.",
+  "confidence": 0.4,
+  "evidence": "if (func_005C9E44(win->f_10,&pt) != 0) { local = pt.x + 0x005C0A30(offset); ... func_005BDC98(win->f_20,&local,&size2)==0 -> out = local + self. } Caller 0x005C4720."
+ },
+ {
+  "address": "0x00667DE0",
+  "name": "maybe_Text_Style_GetField18",
+  "signature": "unsigned char maybe_Text_Style_GetField18(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Returns byte +0x18 of the current style record (a second style/classification field).",
+  "confidence": 0.45,
+  "evidence": "return *(u8*)(*(int*)(*(int*)(arg1+4)+0x298)+0x18). Callers 0x005C1D64 / 0x005C563C."
+ },
+ {
+  "address": "0x00667E00",
+  "name": "maybe_Text_Window_IsPointInScrollArea",
+  "signature": "unsigned int maybe_Text_Window_IsPointInScrollArea(TextWindow* self, unsigned int direction)",
+  "params": {
+   "self": "text window: source at +8 (fields +0x78/+0x7C/+0x2C0/+0x2BC/+0x2D4), scroll area record at +0x2D4",
+   "direction": "0 = left, otherwise right"
+  },
+  "summary": "Decides whether the scroll cursor still has room in the requested direction: it builds the scroll area rectangle from the window's cursor position and the area record's +0x10..+0x16 offsets and checks containment, then asks 0x005CED04 for the final word.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = *(*(self+8)+0x2d4); if 0 -> 0; cursor x = *(win+0x78) + (arg2 ? +2 : -2); rect from +0x2C0/+0x2BC + record +0x12/+0x10 and +0x14/+0x16; containment test then func_005CED04(self+8, arg2). Only caller 0x005CED04's users (0x005C4720 family)."
+ },
+ {
+  "address": "0x00668134",
+  "name": "Data_NoOpStub",
+  "signature": "void Data_NoOpStub(void)",
+  "params": {},
+  "summary": "Empty virtual slot (immediately returns). Exists so the vtable has a valid target for an optional notification.",
+  "confidence": 0.5,
+  "evidence": "Function body is a single 'return'. Only caller 0x005C5C44."
+ },
+ {
+  "address": "0x0066818C",
+  "name": "maybe_Ui_Element_IsInteractiveB",
+  "signature": "unsigned int maybe_Ui_Element_IsInteractiveB(UiElement* self)",
+  "params": {
+   "self": "element: interface pointer at +0xA0, payload at +8"
+  },
+  "summary": "Second implementation of the interaction test, identical to 0x00667AE8 but reading the interface pointer from +0xA0 instead of +0x88 (the same interface implemented by another class).",
+  "confidence": 0.4,
+  "evidence": "Same body shape as 0x00667AE8 with self->f_a0; calls 0x00669B68 / 0x00669B7C. Callers identical to 0x00667AE8."
+ },
+ {
+  "address": "0x00668250",
+  "name": "maybe_Text_Style_FindAlternateEntry",
+  "signature": "void maybe_Text_Style_FindAlternateEntry(unsigned short* out, StyleSource* src, int useAlternate)",
+  "params": {
+   "out": "{u16 id, u16 index, int index}",
+   "src": "style source: table at *(src+4)+0x2B4",
+   "useAlternate": "selects the second table when non-zero"
+  },
+  "summary": "Picks a style entry from the window's style table: uses the fixed entry when the global selector is -1, the entry at the given index when it is 0/1/2, and otherwise scans the table for the first entry whose id differs and whose flagged byte passes 0x005BCA50.",
+  "confidence": 0.4,
+  "evidence": "puVar3 = *(*(arg2+4)+0x2b4); if (arg3 && (0x0063B9CC(*(arg2+4)) || puVar3[2] > 0)) puVar3 += 2; global selector *g_0066838C; per-entry u16 id + byte -> func_005BCA50; out[0]=id, out+2=index. Caller 0x005C0610."
+ },
+ {
+  "address": "0x006683E4",
+  "name": "maybe_Ui_List_InsertEntry",
+  "signature": "void maybe_Ui_List_InsertEntry(UiListBuild* build, void* entry)",
+  "params": {
+   "build": "{list object, capacity, array, &count, ...}",
+   "entry": "entry to insert"
+  },
+  "summary": "Appends an entry to a UI list being built and notifies the list (0x005CC2E4); if the list rejects it, the count is rolled back so the array stays consistent.",
+  "confidence": 0.45,
+  "evidence": "*(u32**)(build[2] + *build[3]*4) = entry; ++*build[3]; uVar1 = 0x0066846C(entry, *entry); iVar2 = 0x005CC2E4(build[0], uVar1, build[1], build[2], build[3], build[4], build[5]); if (iVar2 == 0) --*build[3]. Recursive with 0x005CC2E4."
+ },
+ {
+  "address": "0x00668774",
+  "name": "Ui_Rect_IntersectsElement",
+  "signature": "unsigned int Ui_Rect_IntersectsElement(int* rect, UiElement* element)",
+  "params": {
+   "rect": "{x, y, w, h}",
+   "element": "element with vtable slots +8 (bounds out) and +0xC (visibility test)"
+  },
+  "summary": "Rectangle overlap test against an element: asks the element whether it is visible (vtable +0xC) and its bounds (vtable +8), then tests the two rectangles for overlap.",
+  "confidence": 0.55,
+  "evidence": "if ((*vtable[3])(el) == 0) { (*vtable[2])(&bounds, el); return rect.x < bounds.x+w && rect.y < bounds.y+h && bounds.x < rect.x+rect.w && bounds.y < rect.y+rect.h; } Callers 0x005BDC98 / 0x00714658 / 0x00714928."
+ },
+ {
+  "address": "0x00668818",
+  "name": "maybe_Text_Style_GetField15",
+  "signature": "int maybe_Text_Style_GetField15(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Returns the signed byte at +0x15 of the current style record.",
+  "confidence": 0.45,
+  "evidence": "return (int)*(char*)(*(int*)(*(int*)(arg1+4)+0x298)+0x15). Only caller 0x005BCED0."
+ },
+ {
+  "address": "0x0066882C",
+  "name": "maybe_Text_Style_GetField14",
+  "signature": "int maybe_Text_Style_GetField14(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Returns the signed byte at +0x14 of the current style record.",
+  "confidence": 0.45,
+  "evidence": "return (int)*(char*)(*(int*)(*(int*)(arg1+4)+0x298)+0x14). Callers 0x005BCF90 / 0x005C1D64."
+ },
+ {
+  "address": "0x006688B4",
+  "name": "maybe_Text_Style_GetField12B",
+  "signature": "unsigned char maybe_Text_Style_GetField12B(UiStyleHolder* self)",
+  "params": {
+   "self": "holder: style record at *(self+4)+0x298"
+  },
+  "summary": "Second read path for byte +0x12 of the style record (same value as 0x00667068, reached through a different vtable entry).",
+  "confidence": 0.45,
+  "evidence": "return *(u8*)(*(int*)(*(int*)(arg1+4)+0x298)+0x12) — identical body to 0x00667068. Only caller 0x005BCCD0."
+ },
+ {
+  "address": "0x0066AAD0",
+  "name": "maybe_Data_IsSlotEmpty",
+  "signature": "unsigned int maybe_Data_IsSlotEmpty(unsigned int* slots, int index)",
+  "params": {
+   "slots": "array of 8-byte pointer slots",
+   "index": "slot index"
+  },
+  "summary": "Reports whether a slot in an 8-byte-stride pointer array is free: true when the slot holds no pointer, or (for index 0) when the lazily created slot manager reports fewer than two live users.",
+  "confidence": 0.4,
+  "evidence": "One-time initialisation of the global at g_0066AC58 (flag g_0066AC54, sizes g_0066AC5C..6C), then if (arg2 == 0 && manager->f_27714 < 2) bVar1 = true; return bVar1 || *(arg1 + arg2*8) == 0. Callers 0x00176BAC / 0x00177144 / 0x004AFB64 / 0x004AFB88 / 0x004B0098 / 0x004B01CC / 0x004B01F0 / 0x004B062C (UI window state code)."
+ },
+ {
+  "address": "0x0066BE98",
+  "name": "maybe_Data_IsRecordSibling",
+  "signature": "bool maybe_Data_IsRecordSibling(unsigned short* entry, unsigned int unused1, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "entry": "entry header: u16 id at +0, base/parent pointer at +2, group base byte at parent+0x10",
+   "manager": "global data manager"
+  },
+  "summary": "Checks that two entries belong to the same group: the entry's own id (minus the group base byte stored on its parent record at +0x10) must equal the same difference computed for the entry's sibling id at +1.",
+  "confidence": 0.4,
+  "evidence": "uVar5 = (*arg1 + 1) & 0xffff; if (uVar5 < g_0066BF24) iVar1 = func_0063CDD8(manager, uVar5); uVar4 = (*(arg1+2) ? *arg1 - *(u8*)(*(arg1+2)+0x10) : g_0066BF28); uVar3 = (iVar1 ? uVar5 - iVar1->f_10 : g_0066BF28); return uVar4 == uVar3. Callers 0x00364CC0 / 0x003EFE4C / 0x0041C4DC / 0x0064A45C."
+ },
+ {
+  "address": "0x0066BF5C",
+  "name": "maybe_Data_ResolveRelativeEntry8",
+  "signature": "void* maybe_Data_ResolveRelativeEntry8(unsigned short* key, GroupRecord* group, unsigned int unused, unsigned int manager)",
+  "params": {
+   "key": "u16 id whose group base is at +2",
+   "group": "group record: relative offset at +8",
+   "manager": "global data manager"
+  },
+  "summary": "Resolves the record for `key` inside the group chunk: follows the group's own relative offset at +8, and when that is empty falls back to the record found through the manager by (key - base byte), following its relative offset at +8 as well.",
+  "confidence": 0.45,
+  "evidence": "result = group+8 + *(int*)(group+8) when non-zero; else func_0063CDD8(manager, key - *(u8*)(group+0x10)) then again +8 and relative offset; returns 0 when both links are empty. Callers 0x005BE390 / 0x005C5F24 / 0x005C6DC0 / 0x005C6E12 / 0x005C6E92."
+ },
+ {
+  "address": "0x0066BFB8",
+  "name": "maybe_Data_ResolveRelativeEntry8OrTrap",
+  "signature": "void* maybe_Data_ResolveRelativeEntry8OrTrap(unsigned short* key, GroupRecord* group, unsigned int unused, unsigned int manager)",
+  "params": {
+   "key": "u16 id",
+   "group": "group record",
+   "manager": "global data manager"
+  },
+  "summary": "Same relative-offset resolution as 0x0066BF5C but reports a fatal error through 0x00707BD4 when the link chain is broken; the returned pointer is always the static default entry (0x0066C0A0 + 4).",
+  "confidence": 0.4,
+  "evidence": "Identical chase of +8-relative links; on failure or on success it calls func_00707BD4(g_0066C0A0, g_0066C0B4[, &g_0066C0B8]) and returns g_0066C0A0+4; also checks a global 'initialised' bit at g_0066C098+4 and traps via func_0010009C when clear. Callers 0x002B7CD0 / 0x003D9A00 / 0x004A4640."
+ },
+ {
+  "address": "0x0066C0BC",
+  "name": "Data_FindRecordIndexById",
+  "signature": "unsigned int Data_FindRecordIndexById(unsigned short* entry)",
+  "params": {
+   "entry": "entry header: u16 id at +0, group/parent pointer at +2"
+  },
+  "summary": "Returns the index of the record whose leading u16 matches the entry's normalised id: it walks the table returned by 0x0063E998(manager, 0) (0x14-byte stride, up to 0x2E18 bytes) and divides the offset by the record size; returns the default at 0x0066C168 when not found.",
+  "confidence": 0.5,
+  "evidence": "uVar6 = *(arg1+2) ? *arg1 - *(u8*)(*(arg1+2)+0x10) : g_0066C168; puVar3 = func_0063E998(manager,0); loop while (puVar5 != puVar3 + 0x2e18 && *puVar5 != uVar6) puVar5 += 0x14; index = (offset * g_0066C16C) >> 0x24 (i.e. /0x14). Only caller 0x00364CC0 / 0x0041C4DC."
+ },
+ {
+  "address": "0x0066C304",
+  "name": "Data_GetFieldById",
+  "signature": "unsigned int Data_GetFieldById(unsigned short* entry, unsigned int unused1, unsigned int unused2, unsigned int manager)",
+  "params": {
+   "entry": "entry header: u16 id at +0",
+   "manager": "global data manager"
+  },
+  "summary": "Looks the entry's id up through 0x0063D96C and returns the first u16 of the found record, or the default value at 0x0066C330 when the lookup fails.",
+  "confidence": 0.5,
+  "evidence": "puVar2 = func_0063D96C(manager, *arg1); result = (puVar2 ? *puVar2 : g_0066C330). Called from many UI/script sites (0x002C4004, 0x006113D0, 0x00611538, 0x00611C28, 0x00611DE4, 0x00613C54, 0x00644154, 0x007143A8, 0x00716198 ...)."
+ },
+ {
+  "address": "0x0066C3C0",
+  "name": "maybe_Data_ResolveRelativeEntry4",
+  "signature": "void* maybe_Data_ResolveRelativeEntry4(unsigned short* key, GroupRecord* group, unsigned int unused, unsigned int manager)",
+  "params": {
+   "key": "u16 id",
+   "group": "group record: relative offset at +4",
+   "manager": "global data manager"
+  },
+  "summary": "Same relative-link resolution as 0x0066BF5C but for the +4 link of the entry record (the second parallel list in the same chunk format).",
+  "confidence": 0.45,
+  "evidence": "result = group+4 + *(int*)(group+4) else func_0063CDD8(manager, key - base)->+4 relative; returns 0 when empty. No callers in the readable corpus (table-driven)."
+ },
+ {
+  "address": "0x0066C834",
+  "name": "Text_ExpandLineBreak",
+  "signature": "unsigned short* Text_ExpandLineBreak(unsigned short* text, GroupRecord* group, unsigned int unused, unsigned int manager)",
+  "params": {
+   "text": "u16 text with a group/parent pointer at +2 (offset field at +4)",
+   "group": "group record",
+   "manager": "global data manager"
+  },
+  "summary": "Normalises a UTF-16 control-code string into the shared scratch buffer at 0x0066C8E0, translating a raw U+000A line break into U+3000 (ideographic space) so the message renderer does not treat it as a hard break, and returns the scratch buffer.",
+  "confidence": 0.55,
+  "evidence": "func_001113EC(g_0066C8E0, 0x100) clears the buffer; then it follows the entry's relative link (with a 0x0063CDD8 fallback); while copying u16 by u16 it emits 0x3000 whenever the source word is 10, then returns g_0066C8E0. Callers 0x005C1D64 / 0x005C563C."
+ },
+ {
+  "address": "0x0066D0D0",
+  "name": "maybe_Svc_IsSubsystemReady",
+  "signature": "unsigned int maybe_Svc_IsSubsystemReady(char* initFlag)",
+  "params": {
+   "initFlag": "latch that is cleared once the subsystem object has been created"
+  },
+  "summary": "Lazily creates the 0x21C-byte subsystem object on first use (through 0x00122120) and then returns the inverse of 0x00645638's result, i.e. 'the subsystem is not busy'.",
+  "confidence": 0.35,
+  "evidence": "if (*arg1) { *arg1 = 0; allocate 0x21c bytes, alignment from g_0066D158, *puVar4 = g_0066D15C; } uVar5 = func_00645638(); return uVar5 ^ 1. No callers in the readable corpus."
+ },
+ {
+  "address": "0x0066D714",
+  "name": "maybe_Svc_ForwardThunk421308",
+  "signature": "void maybe_Svc_ForwardThunk421308(void)",
+  "params": {},
+  "summary": "Tail-call thunk that forwards to 0x00421308 with no argument changes, used as a vtable/callback trampoline.",
+  "confidence": 0.3,
+  "evidence": "Body is a single call to func_00421308 and return. No callers in the readable corpus."
+ },
+ {
+  "address": "0x00670A3C",
+  "name": "maybe_Field2D_Map_ResetIfLoaded",
+  "signature": "void maybe_Field2D_Map_ResetIfLoaded(unsigned int map)",
+  "params": {
+   "map": "map/level object passed straight to the reset routine"
+  },
+  "summary": "Resets the 2D map state only when the map system is currently active (0x0063B994 returns non-zero), by forwarding to 0x005CA718.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = func_0063B994(); if (iVar1 != 0) func_005CA718(arg1). No callers in the readable corpus."
+ },
+ {
+  "address": "0x00670A64",
+  "name": "maybe_Field2D_Map_SelectLayerRange",
+  "signature": "void maybe_Field2D_Map_SelectLayerRange(int self, unsigned int unused, unsigned int layerTag, unsigned int* first, unsigned int* last)",
+  "params": {
+   "self": "map object (destination object slot at +0x2FE0, map root at +0x2C88)",
+   "layerTag": "tag forwarded to the layer builder",
+   "first": "start of the entry range",
+   "last": "end of the entry range"
+  },
+  "summary": "Rebuilds the map's active object from a range of entries: copies the range into a stack buffer, tears down the previous object at +0x2FE0 and builds a new one through 0x005C7A70 with the map root and the range.",
+  "confidence": 0.4,
+  "evidence": "Copies [arg4,arg5) words into local_28 (Ghidra's unrolled loop), releases *(self+0x2fe0) via its vtable, then iVar2 = func_005C7A70(self+0x2c88, self+0x20, arg3, local_28, puVar3, &descr) and stores it back. No callers in the readable corpus."
+ },
+ {
+  "address": "0x00670B98",
+  "name": "maybe_Field2D_Map_MarkLayerFlag",
+  "signature": "void maybe_Field2D_Map_MarkLayerFlag(MapRoot* self, unsigned int layerId, int enable)",
+  "params": {
+   "self": "map root: layer id at +0x330, pair list +0x414..+0x454, owner at +0x3F0",
+   "layerId": "layer id to look for",
+   "enable": "only acts when 1"
+  },
+  "summary": "When enable == 1 and one of the map's 8-byte layer pairs matches layerId through 0x0066AF84, sets the 'layer changed' flag at owner+0x27A4; the routine then always forwards to 0x005C3430 (map refresh).",
+  "confidence": 0.4,
+  "evidence": "Loop over puVar2 = &self->f_414 while puVar2 != self->f_454 && 0x0066AF84(self->f_330, *puVar2) == 0; on a hit sets self->f_3f0->f_27a4 = 1; then func_005C3430(). No callers in the readable corpus."
+ },
+ {
+  "address": "0x00670DB0",
+  "name": "maybe_Field2D_Map_ReplaceOverlay",
+  "signature": "void maybe_Field2D_Map_ReplaceOverlay(MapRoot* self, unsigned int unused, unsigned int overlay, int apply)",
+  "params": {
+   "self": "map root: current overlay at +0x338",
+   "overlay": "new overlay object",
+   "apply": "when non-zero the new overlay is installed"
+  },
+  "summary": "Releases the map's current overlay object and, when `apply` is set, installs the new one through 0x005BDA18.",
+  "confidence": 0.45,
+  "evidence": "if (self->f_338) uVar1 = (**self->f_338)(); if (arg4) uVar1 = arg3; self->f_338 = 0; if (arg4) func_005BDA18(uVar1). No callers in the readable corpus."
+ },
+ {
+  "address": "0x00671168",
+  "name": "Field2D_Map_CompactLayerObjects",
+  "signature": "void Field2D_Map_CompactLayerObjects(MapState* self, unsigned int unused, MapOwner* owner)",
+  "params": {
+   "self": "map state (flag byte at +0xB0 / pointer at +0xB8)",
+   "owner": "owner with the 0x40-stride object array at +0x4D4 (count +0x4D0)"
+  },
+  "summary": "Compacts the owner's 0x40-stride object array in place, dropping every object whose sub-object (at +0x38) reports a non-positive count through its vtable, and resets the state byte to 0.",
+  "confidence": 0.5,
+  "evidence": "Count from 0x4D0, entries 0x40 bytes; for each entry calls (*entry->f_38->vtable[0x1c])(entry->f_38) and keeps it when > 0, moving kept entries down (0x005CFC68 updates the moved slot); writes the new count and sets the state byte/pointer at +0xB0/+0xB8 to 0. No callers (vtable)."
+ },
+ {
+  "address": "0x00671318",
+  "name": "maybe_Field2D_Map_RebuildPrimaryObject",
+  "signature": "void maybe_Field2D_Map_RebuildPrimaryObject(MapRoot* self)",
+  "params": {
+   "self": "map root: ready flag compared at +0x50, object at +0xA0, builder input at +0x70"
+  },
+  "summary": "Rebuilds the map's primary object when the map is idle (self+0x58 still points at the inline default): frees the old object, builds a new one with 0x005BE5A8, otherwise just refreshes with 0x005C72CC.",
+  "confidence": 0.45,
+  "evidence": "if (self->f_58 == self+0x50) { release self->f_a0; uVar1 = func_005BE5A8(&self->f_70,&descr); install; } else func_005C72CC(). No callers (vtable)."
+ },
+ {
+  "address": "0x006713D4",
+  "name": "maybe_Field2D_Map_SetVariantObject",
+  "signature": "void maybe_Field2D_Map_SetVariantObject(MapRoot* self, unsigned int unused, unsigned int variant, int mode, int apply)",
+  "params": {
+   "self": "map root (object slot at +0xA0, builder input at +0x70)",
+   "variant": "variant selector",
+   "mode": "0..3 selects the builder",
+   "apply": "when non-zero use 0x005C7350 instead of rebuilding"
+  },
+  "summary": "Switches the map's object to one of three variants (mode 0/1 -> 0x005BE5A8 or 0x005BE748, mode 2 -> 0x005C03C4), or, when `apply` is set, asks 0x005C7350 to install the variant directly; mode 3 just refreshes.",
+  "confidence": 0.4,
+  "evidence": "Four-way branch on arg4 with distinct g_0067152x descriptor constants; each non-apply branch releases self->f_a0 and rebuilds through a different 0x005BExxx builder; arg5 != 0 routes to func_005C7350(self,&descr). No callers (vtable)."
+ },
+ {
+  "address": "0x00671634",
+  "name": "maybe_Field2D_Map_SetVariantObjectB",
+  "signature": "void maybe_Field2D_Map_SetVariantObjectB(MapRoot* self, unsigned int unused, MapOwner* owner, int mode, int apply)",
+  "params": {
+   "self": "map root",
+   "owner": "owner object (field +0x4C8 tested, byte +0x3E0 set)",
+   "mode": "0 or 1",
+   "apply": "when non-zero install directly"
+  },
+  "summary": "Variant switch that also records the mode in the owner (byte +0x3E0 for mode 1): mode 0 rebuilds through 0x005BE5A8, mode 1 through 0x005BE800, and with `apply` set it installs through 0x005C7350.",
+  "confidence": 0.4,
+  "evidence": "mode 0: checks (*owner->f_4C8->vtable[0x1c])() < 1 -> 0x005C1994(owner); then builder 0x005BE5A8 or func_005C7350; mode 1: owner->f_3e0 = arg5, builder 0x005BE800. Descriptor constants g_0067177x. No callers (vtable)."
+ },
+ {
+  "address": "0x00671810",
+  "name": "Field2D_Map_CompactLayerObjectsB",
+  "signature": "void Field2D_Map_CompactLayerObjectsB(MapState* self, unsigned int unused, MapOwner* owner)",
+  "params": {
+   "self": "map state (flag byte at +0xB0 / pointer at +0xB8)",
+   "owner": "owner with the 0x40-stride object array at +0x4D4"
+  },
+  "summary": "Identical compaction to 0x00671168 but leaves the state byte at 2 instead of 0 (the 'variants' pass of the same routine).",
+  "confidence": 0.5,
+  "evidence": "Body identical to 0x00671168 (same 0x40-stride loop, 0x005CFC68, count update) except that the state byte written at +0xB0 is 2. No callers (vtable)."
+ },
+ {
+  "address": "0x006719D4",
+  "name": "maybe_Field2D_Map_RebuildOverlayA",
+  "signature": "void maybe_Field2D_Map_RebuildOverlayA(MapRoot* self, int unused)",
+  "params": {
+   "self": "map root (overlay at +0x88, builder input at +0x38/+8)",
+   "unused": "unused second argument"
+  },
+  "summary": "Rebuilds the map's overlay object: releases the current one, builds a new one with 0x005C95A4 from self+0x38 and self+8, and installs it.",
+  "confidence": 0.45,
+  "evidence": "release self->f_88; iVar1 = self+0x38; uVar2 = func_005C95A4(iVar1, arg2 = self+8); install. 0x00671A30 is a byte-identical twin. No callers (vtable)."
+ },
+ {
+  "address": "0x00671A30",
+  "name": "maybe_Field2D_Map_RebuildOverlayB",
+  "signature": "void maybe_Field2D_Map_RebuildOverlayB(MapRoot* self, int unused)",
+  "params": {
+   "self": "map root",
+   "unused": "unused second argument"
+  },
+  "summary": "Byte-identical twin of 0x006719D4 (likely the second virtual entry of the same interface); rebuilds the overlay through 0x005C95A4.",
+  "confidence": 0.45,
+  "evidence": "Same body as 0x006719D4: release self->f_88, func_005C95A4(self+0x38, self+8), reinstall. No callers (vtable)."
+ },
+ {
+  "address": "0x00671AA0",
+  "name": "maybe_Field2D_Map_ResetOverlayA",
+  "signature": "void maybe_Field2D_Map_ResetOverlayA(unsigned int map)",
+  "params": {
+   "map": "map object forwarded to the reset helper"
+  },
+  "summary": "Resets the overlay: calls 0x005CA4A8 (clear) and then 0x005CA31C(map) (reset) in that fixed order.",
+  "confidence": 0.45,
+  "evidence": "func_005CA4A8(); func_005CA31C(arg1). 0x00671AFC is byte-identical. No callers (vtable)."
+ },
+ {
+  "address": "0x00671AFC",
+  "name": "maybe_Field2D_Map_ResetOverlayB",
+  "signature": "void maybe_Field2D_Map_ResetOverlayB(unsigned int map)",
+  "params": {
+   "map": "map object forwarded to the reset helper"
+  },
+  "summary": "Byte-identical twin of 0x00671AA0 (second virtual entry): clear through 0x005CA4A8 then reset through 0x005CA31C.",
+  "confidence": 0.45,
+  "evidence": "Same two calls as 0x00671AA0. No callers (vtable)."
+ },
+ {
+  "address": "0x00671B14",
+  "name": "maybe_Field2D_Map_CreateOverlayObject",
+  "signature": "void maybe_Field2D_Map_CreateOverlayObject(MapRoot* self, unsigned int unused, unsigned int arg3, unsigned int arg4, unsigned int arg5)",
+  "params": {
+   "self": "map root (object slot at +0xA0, builder input at +0x70)",
+   "arg3": "builder parameter",
+   "arg4": "builder parameter",
+   "arg5": "builder parameter"
+  },
+  "summary": "Creates (or replaces) the map's overlay object with a five-argument builder (0x005CC9B0), releasing the previous object first.",
+  "confidence": 0.45,
+  "evidence": "release self->f_a0; uVar1 = func_005CC9B0(&self->f_70, self+8, arg3, arg4, arg5, &descr(g_00671BB4/B8)); reinstall. No callers (vtable)."
+ },
+ {
+  "address": "0x00671BBC",
+  "name": "maybe_Field2D_Map_CreateOverlayForChip",
+  "signature": "void maybe_Field2D_Map_CreateOverlayForChip(MapRoot* self, unsigned int unused, unsigned int param)",
+  "params": {
+   "self": "map root (chip info through self+8 -> +0x2B4 -> +0x22)",
+   "param": "builder parameter"
+  },
+  "summary": "Creates the overlay object appropriate to the current chip/map kind: kind 2 uses the two-step builder 0x005CD340, every other kind uses 0x005CEE70; the previous object is released first.",
+  "confidence": 0.4,
+  "evidence": "if (*(u8*)(*(int*)(*(int*)(self+8)+0x2b4)+0x22) == 2) iVar1 = func_005CD340(self+0x70, self+8, arg3, &descr) else iVar1 = func_005CEE70(...); then release + install. No callers (vtable)."
+ },
+ {
+  "address": "0x00671CEC",
+  "name": "maybe_Field2D_Map_RebuildOverlayC",
+  "signature": "void maybe_Field2D_Map_RebuildOverlayC(MapRoot* self)",
+  "params": {
+   "self": "map root (object slot at +0xA0, builder input at +0x70)"
+  },
+  "summary": "Refresh path for the map overlay: clears through 0x005CA54C, releases the current object, rebuilds it with 0x005CC878 and reinstalls.",
+  "confidence": 0.45,
+  "evidence": "func_005CA54C(); release self->f_a0; uVar2 = func_005CC878(self+0x70, self+8); reinstall. No callers (vtable)."
+ },
+ {
+  "address": "0x00671E78",
+  "name": "maybe_Field2D_Map_PlayChipEffect",
+  "signature": "bool maybe_Field2D_Map_PlayChipEffect(MapEffect* self, unsigned int effectId)",
+  "params": {
+   "self": "map effect object: animation list at +0x304, owner pointer at +0xB8",
+   "effectId": "effect/animation id"
+  },
+  "summary": "Starts the animation attached to a data record: looks the record up by id in the data manager (0x0063FFAC), and when the record carries a non-empty relative offset, starts it through 0x001BBF84 on the object's animation list.",
+  "confidence": 0.4,
+  "evidence": "piVar2 = func_0063FFAC(*(0x0011CB38(.)), effectId); iVar3 = *piVar2; if (iVar3 && iVar3 + piVar2) func_001BBF84(&self->f_304, &descr(g_00671EE0, self->f_b8), 0, effectId); return iVar3 != 0 && link != 0. No callers in the readable corpus."
+ }
+]

@@ -137,9 +137,16 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 .selected
                 .and_then(|i| app.panels.maps.list.get(i).cloned());
             let mut clicked = None;
+            let nav = crate::ui::list_nav(ui.ctx(), &list, selected.as_ref());
+            if let Some((item, _)) = &nav {
+                clicked = Some(item.clone());
+            }
+            let nav_row = nav.map(|(_, r)| r);
             use egui_extras::{Column, TableBuilder};
+            use crate::ui::TableNav;
             TableBuilder::new(ui)
                 .id_salt("area_scroll")
+                .nav_scroll(nav_row)
                 .striped(true)
                 .sense(egui::Sense::click())
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))

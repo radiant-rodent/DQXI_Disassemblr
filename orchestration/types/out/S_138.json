@@ -1,0 +1,407 @@
+[
+  {
+    "class": "Ui_MessageQueue",
+    "type": "UiMessageQueue",
+    "summary": "FIFO of pending 'item received' messages: each 16-byte entry carries two words and three u16 item ids; Pop writes the head entry's three item names into message args 5-7 and shifts the remaining entries down one slot.",
+    "size": 248,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "maybe_Ui_MessageQueue_Pop 0x003B02E8: for the three u16 ids at +0xC/+0xE/+0x10 it calls Item_LookupRecord 0x0061BD4C -> Text_FormatMessageArg 0x0066C99C -> Message_SetArg(i+5, text, 1); it then memmoves 0xE0 bytes from +0x14 down to +4 and writes 0 to +0xF4. The loop bound (param+0xF4) plus the 0x10 shift shows a 15-entry 0x10-stride array starting at +4; +4..+0x13 is the head entry that is consumed.",
+    "fields": [
+      {
+        "offset": 20,
+        "name": "pendingEntries",
+        "type": "u8[0xE0]",
+        "size": 224,
+        "confidence": 0.5,
+        "evidence": "Memmove source in maybe_Ui_MessageQueue_Pop: the 0xE0-byte block at +0x14 is copied down to +4 (one 0x10-byte entry consumed), i.e. +0x14..+0xF3 holds the waiting 16-byte entries (head entry lives at +4..+0x13, its item ids at +0xC..+0x11)."
+      },
+      {
+        "offset": 244,
+        "name": "maybe_tailWord",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "Written to 0 by the same Pop after the shift and used as the exclusive end of the 0xE0-byte memmove loop; it is the first word of the unused trailing 16-byte slot (queue terminator), no reader treats it as a count."
+      }
+    ]
+  },
+  {
+    "class": "Ui_MessageStyle",
+    "type": "UiMessageStyle",
+    "summary": "Message window (0x31C4 bytes) whose two trailing bytes cache the 0..4 style level of its two message-style channels so ApplyLevelA/B can re-push them after the window is restored.",
+    "size": 12740,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ui_MessageStyle_SetLevelA 0x00612110 stores the level at +0x31C1, Ui_MessageStyle_SetLevelB 0x00612374 stores it at +0x31C0; helpers 0x00116C84/0x00116CE4 clamp above 4 and write level*0.25 into the shared message-style object's float channels +0x1A90/+0x1A94. ApplyLevelA/B (0x00612624/0x00612950) are the restore path invoked by Ui_DataPanel_OpenWithStrings/Restore.",
+    "fields": [
+      {
+        "offset": 12736,
+        "name": "styleLevelB",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.7,
+        "evidence": "Ui_MessageStyle_SetLevelB 0x00612374: *(char*)(self+0x31C0) = (char)level; Ui_MessageStyle_ApplyLevelB 0x00612950 reads it back and calls 0x00116CE4, the channel-B helper (target float +0x1A94, level*0.25)."
+      },
+      {
+        "offset": 12737,
+        "name": "styleLevelA",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.7,
+        "evidence": "Ui_MessageStyle_SetLevelA 0x00612110: *(char*)(self+0x31C1) = (char)level; Ui_MessageStyle_ApplyLevelA 0x00612624 re-applies it through 0x00116C84, the channel-A helper (target float +0x1A90, level*0.25)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_NumberPopup",
+    "type": "UiNumberPopup",
+    "summary": "Small popup window that plays a one-shot number animation; the clip created by its InitChild slot is owned at +0x4C.",
+    "size": 80,
+    "base": "Ui_Object",
+    "confidence": 0.7,
+    "evidence": "Ctor 0x0059305C = Ui_Object_CtorBase 0x001A66A0 + vtable DAT_00593078 (0x0077DA74) + puVar2[0x13]=0; InitChild 0x00593024 runs Ui_PlayAnimByName 0x0053D604(*(self+4), &DAT_00593058, loop=0, start=1) and stores the returned clip at +0x4C. Non-deleting ctor/child layout matches the other Ui_Object windows that keep the first derived word at +0x4C (Ui_Object ends at +0x4C).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x0059305C stores DAT_00593078 = vtable 0x0077DA74; slot 1 is Ui_NumberPopup_Delete and slot 8 Ui_NumberPopup_InitChild."
+      },
+      {
+        "offset": 76,
+        "name": "animClip",
+        "type": "Ui_AnimClip*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "Ui_NumberPopup_InitChild 0x00593024: *(self+0x4C) = Ui_PlayAnimByName(*(self+4), &DAT_00593058, 0, 1); the ctor zeroes the same slot (puVar2[0x13]=0)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ObjectBase",
+    "type": "UiObjectBase",
+    "summary": "Gfx_ObjectDesc-derived named descriptor object (M1 label Ui_ObjectBase); its only recovered constructor is Battle_ActionSubObject_BaseCtor, which stores the owning object at +0x28.",
+    "size": 44,
+    "base": "Gfx_ObjectDesc",
+    "confidence": 0.55,
+    "evidence": "Battle_ActionSubObject_BaseCtor 0x00322CC8 calls Gfx_ObjectDesc_Init 0x00193D84(self,owner,id,tag,kind,4), installs vtable 0x00763A48 and writes puVar1[10]=owner (+0x28). Its 21 callers are Battle_ActionSubObject_CreateA..F and battle animation window ctors, so the batch label 'Ui_ObjectBase' is a naming-sweep artefact; kept for stability.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "0x00322CC8: *puVar1 = DAT_00322CFC = 0x00763A48 immediately after Gfx_ObjectDesc_Init; slot 1 is maybe_Battle_Action_DeletingDestructorBase."
+      },
+      {
+        "offset": 40,
+        "name": "owner",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "Same ctor writes its second argument to puVar1[10] (+0x28); the R_K01 dossier for 0x00322CC8 names that argument 'owner' and all callers pass the action-sequence object that owns the sub-object."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ObjectDesc",
+    "type": "UiObjectDesc",
+    "summary": "Gfx_ObjectDesc-derived base descriptor of the animation-capable UI object class (Ui_Object_CtorBase_2), storing its owner/data word at +0x28.",
+    "size": 44,
+    "base": "Gfx_ObjectDesc",
+    "confidence": 0.5,
+    "evidence": "Ui_Object_CtorBase_2 0x004B4320 forwards its arguments to Gfx_ObjectDesc_Init with flags 0x12000002, installs vtable 0x00776BE8 and writes +0x28; the animation-capable Ui_Object class (vtable 0x00776C20) derives from it. Only caller: Ui_EquipWindow_LoadPreviewModel 0x003E7DD0.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "0x004B4320: *puVar1 = DAT_004B4350 (0x00776BE8), the base table installed after Gfx_ObjectDesc_Init; the batch did not flag it because the store uses a data address."
+      },
+      {
+        "offset": 40,
+        "name": "maybe_owner",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "puVar1[10] = param_2 in Ui_Object_CtorBase_2; the R2_010 dossier calls it the 'owner/data word', so the role is owner-or-context, not proven to be a pointer to a specific class."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ObjectRef",
+    "type": "UiObjectRef",
+    "summary": "Prompt/dialog reference record: holds the prompt controller pointer used by Ui_PromptRef_IsFirstChoiceConfirmed and an active flag.",
+    "size": 72,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "0x0062F694 Ui_PromptRef_IsFirstChoiceConfirmed reads the flag at +0x44, follows the pointer at +0x24 and asks 0x00629128 whether option 0 (confirm) is selected; 89 UI callers (Ui_UpdateWindowConfirm, Shop_CanAfford, Ui_EquipmentWindow_ConfirmItemList, ...).",
+    "fields": [
+      {
+        "offset": 36,
+        "name": "promptController",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "0x0062F694: param_1 = *(int*)(param_1 + 0x24) before the option query; the dossier describes +0x24 as the prompt's controller/state object."
+      },
+      {
+        "offset": 68,
+        "name": "isActive",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.7,
+        "evidence": "0x0062F694: bVar3 = *(char*)(param_1 + 0x44) != '\\0' gates the whole check; when clear the function returns 0 without touching +0x24."
+      }
+    ]
+  },
+  {
+    "class": "Ui_PanePair",
+    "type": "UiPanePair",
+    "summary": "Two-pane cross-fade window: two inline Ui_AnimRefList groups (one per pane) at +0x4C/+0x9C, plus cached pane pointers and timing words up to +0x100.",
+    "size": 260,
+    "base": "Ui_Object",
+    "confidence": 0.6,
+    "evidence": "Ctor 0x003190F4 = Ui_Object_CtorBase + vtable 0x007630A0 + Ui_AnimRefList_Ctor 0x003E0454 at +0x4C and +0x9C, then zeroes +0xEC..+0xF4, sets bytes +0xF8/+0xF9=0xFF and dwords +0xFC/+0x100=-1 (so the object is 0x104 bytes, not 80). InitPanes 0x00318F60 binds both lists and stores panes at +0xEC/+0xF0; vtable slot 9 is Ui_PaneCrossFade_Update.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x003190F4 stores DAT_00319140 = 0x007630A0; slots 0/1 are the dtor/delete, slot 8 is Ui_TwoPaneWindow_InitPanes and slot 9 Ui_PaneCrossFade_Update."
+      },
+      {
+        "offset": 76,
+        "name": "paneAnimRefLists",
+        "type": "Ui_AnimRefList[2]",
+        "size": 160,
+        "confidence": 0.6,
+        "evidence": "Ui_AnimRefList_Ctor 0x003E0454 is called on self+0x4C and on self+0x9C - two contiguous 0x50-byte records; Ui_TwoPaneWindow_InitPanes 0x00318F60 binds self+0x4C and self+0x9C to two different layout animations (DAT_003190E8 / DAT_003190EC)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_PartyItemCounter",
+    "type": "UiPartyItemCounter",
+    "summary": "Row widget that shows, for the currently selected item, which party members carry a copy of it and the total owned count.",
+    "size": 76,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ui_PartyItemCounter_Refresh 0x004B4EC4 walks the party (Party_CountAliveMembers / Party_GetActiveMemberDataByIndex), counts matches of the item id at +0x4A in each member's inventory (0x00629150/0x00629890) and sets pane (tagBase<<16 | 10+memberIndex) to icon 0x11/0x1F, then pane (tagBase<<16 | 0x15) to the ItemBag total from 0x0066AC7C(work+0x24ACC, id).",
+    "fields": [
+      {
+        "offset": 40,
+        "name": "textLayerId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.7,
+        "evidence": "Pane tag = (*(u16*)(self+0x28) << 16) | (10+memberIndex) and | 0x15 for the total; the same 'self->f_28 << 16' tag math is Ui_TextRow's textLayerId, so this is the member-row text-layer base id."
+      },
+      {
+        "offset": 74,
+        "name": "itemId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.8,
+        "evidence": "Compared with 0xFFFF (= no item) and passed to Item_LookupRecord-style helpers; the owned total comes from 0x0066AC7C(work+0x24ACC, *(u16*)(self+0x4A)), i.e. the ItemBag lookup for this item id."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ResourceCache",
+    "type": "UiResourceCache",
+    "summary": "Name-keyed cache of loaded UI resources: an intrusive entry list whose 0x9C-byte nodes hold the resource name at +8 and the loaded handle at +0x88.",
+    "size": 116,
+    "base": null,
+    "confidence": 0.3,
+    "evidence": "Ui_ResourceCache_CreateEntry 0x00536728 allocates 0x9C bytes, copies a <=0x7F name into +8 and inserts the node with 0x0011FCF8(self, self+4, node), returning node+0x88; Ui_ResourceCache_Clear 0x005362A0 and maybe_Ui_ResourceCache_DestroyAll 0x005367BC walk the list, unlink with 0x0011FCBC and release the handle at +0x88 (own flag +0x8C) via 0x0053CEF8 / Ui_Resource_FreeTaggedBlock 0x00536104.",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "maybe_firstEntry",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "Ui_ResourceCache_Clear 0x005362A0 and maybe_Ui_ResourceCache_DestroyAll 0x005367BC both read param_1[1] as the entry node they unlink (0x0011FCBC) and free; insertion passes both self and self+4 to 0x0011FCF8, so +0/+4 are the two words of the intrusive list head."
+      },
+      {
+        "offset": 112,
+        "name": "unknown_0x70",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real field: 0x70 = 4 * vtable slot 0x1C in maybe_Ui_ResourceCache_GetOrCreate 0x002F7A24 ('(**(code **)(*param_1 + 0x1c))(param_1,param_2)') - the vtable lives in *param_1, and there is no access to self+0x70 anywhere."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ResourceTree",
+    "type": "UiResourceTree",
+    "summary": "UI resource dependency tree: BuildNode resolves a skill/spell record id and appends the matching node to the embedded dependency container.",
+    "size": 800,
+    "base": null,
+    "confidence": 0.35,
+    "evidence": "Ui_ResourceTree_BuildNode 0x0070F8AC maps nodeType 0/1 to SkillRecord +0xA4 (0x0018C1B8) / SpellRecord +0x2C8 (0x0018C184) and calls maybe_Resource_BuildDependencyTree 0x001BBF84(self+0x304, self+0xB4, nodeType); that callee walks a node list at container+0x14/+0x18 and allocates 0x18-byte tagged nodes, so the recorded 776-byte size is only 'last strong field + 4'.",
+    "fields": [
+      {
+        "offset": 180,
+        "name": "maybe_treeParent",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.35,
+        "evidence": "Passed as the 'parent' argument of 0x001BBF84; the callee reads *(u32*)(parent+4) as the allocator/tag for its 0x18-byte nodes and forwards the same parent through the recursion. Exact type is an embedded node/context object, not a pointer."
+      },
+      {
+        "offset": 772,
+        "name": "maybe_dependencyTree",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "Passed as the container ('self') of 0x001BBF84, whose node-list head/tail are at +0x14/+0x18 of that container (= absolute +0x318/+0x31C), so the tree object extends past the recorded 0x308 end (size 0x320 assumed here)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_Result",
+    "type": "UiResult",
+    "summary": "Equipment-window row (M1 label Ui_Result): holds the row's item id and the currently selected equipment slot index.",
+    "size": 212,
+    "base": null,
+    "confidence": 0.75,
+    "evidence": "maybe_Ui_EquipSlot_FindNextForItem 0x0064893C reads the u16 item id at +0x4A, rejects non-equipment ids (0xA4..0x9BF and 0xB19..0xB1C) and advances the byte at +0xD0 through the 11-entry 0x1C-byte slot table at 0x0072960C (per-slot predicate), wrapping at 10. Callers Ui_Row_RefreshValue 0x003B5F14 and Ui_Row_SetIndex 0x003B650C show this is an equip-window row, not a results screen.",
+    "fields": [
+      {
+        "offset": 74,
+        "name": "itemId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.8,
+        "evidence": "FUN_0061BD4C(local_28, *(u16*)(param_1+0x4a)) = Item_LookupRecord on the row's item; the following equip-range test (local_28[0]-0xA4 < 0x91B or -0xB19 < 4) decides whether the row may stay selected."
+      },
+      {
+        "offset": 208,
+        "name": "slotIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.7,
+        "evidence": "Returned as the row's current equipment slot and incremented/wrapped 0..10 while searching the 11 slots; compared with *(u8*)(param_1+0xD0) to detect the full wrap (LAB_00648a0c)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_RowListOwner",
+    "type": "UiRowListOwner",
+    "summary": "Play-time display window (M1 label Ui_RowListOwner): large UI object owning three inline 0x50-byte animation references and five 0x3B8-byte digit rows.",
+    "size": 5232,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "0x0021E648 is Ui_TimeDisplayWindow_Dtor: it releases Ui_LayoutRef_Release 0x003E04BC at +0x1380/+0x13D0/+0x1420, destroys the five 0x3B8-byte digit rows at +0x1298 with std_destroy_range 0x00100BE0, then calls Ui_Object_DtorBase 0x001A6768. Ui_SetupTimeDisplay 0x0021E3E4 binds the same three refs and builds the 5 x 0x3B8 row / 6 x 0x9C pane layout, so the batch label comes from the naming sweep.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "The destructor starts with *param_1 = param_2 - the base-vtable store of the deleting-destructor thunk, same pattern as Ui_Object_DtorBase's '*self = 0x007593A4'."
+      },
+      {
+        "offset": 5152,
+        "name": "durationAnimRef",
+        "type": "Ui_AnimRefList",
+        "size": 80,
+        "confidence": 0.6,
+        "evidence": "Third of three 0x50-byte animation references released by Ui_LayoutRef_Release in 0x0021E648 (+0x1380, +0x13D0, +0x1420); the recorded size 0x1424 is 0x4C bytes short of this record's 0x50 bytes."
+      }
+    ]
+  },
+  {
+    "class": "Ui_SelectableGrid",
+    "type": "UiSelectableGrid",
+    "summary": "Twelve-cell selectable grid shared by the casino and smith menus: one inline Ui_AnimRefList cell per entry constructed at +0x4C.",
+    "size": 1036,
+    "base": "Ui_Object",
+    "confidence": 0.7,
+    "evidence": "Ui_SelectableGrid_Ctor 0x003701B4 = Ui_Object_CtorBase + vtable 0x75DC34 + std_ConstructArray(self+0x4C, Ui_AnimRefList_Ctor 0x003E0454, elemSize 0x50, count 12). InitPanes 0x00294530 binds the twelve cells at stride 0x50 with the name pattern 'win_party_select%d'; callers Ui_CasinoWindow_Ctor 0x002401EC and Ui_SmithMenu_Ctor 0x003F05DC. Object really ends at 0x4C+12*0x50 = 0x40C.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x003701B4 stores DAT_003701F8 = 0x0075DC34; slot 1 is maybe_Ui_Widget_DtorA and slot 8 is Ui_PartySelectWindow_InitPanes."
+      },
+      {
+        "offset": 76,
+        "name": "cells",
+        "type": "Ui_AnimRefList[12]",
+        "size": 960,
+        "confidence": 0.7,
+        "evidence": "std_ConstructArray(puVar1+0x13, DAT_003701FC, 0x50, 0xC) default-constructs twelve 0x50-byte Ui_AnimRefList cells starting at +0x4C; InitPanes 0x00294530 then binds cell i at param_1 + i*0x14 words (0x50 bytes)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_SideCrossFade",
+    "type": "UiSideCrossFade",
+    "summary": "Two-sided cross-fade state used by the ranking panel: pointers to the left/right pane visibility bytes plus a slot selector at +8 and a 0/1/2 state byte at +9.",
+    "size": 12,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ui_SideCrossFade_Begin 0x004DAE68 stores the two visibility-byte pointers at +0/+4, the animation slot byte at +8 (2 when slot==0, else 0) and the state byte at +9; Ui_SideCrossFade_Update 0x004DAFEC drives state 1->2, polls the tweens via 0x00649B80/0x00649AAC and clears both pointers. Only caller: Ui_RankingPanel_Update 0x003A5EC4.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "leftVisible",
+        "type": "char*",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "param_1[0] = leftVisible (uint8_t* in the callee) in Begin; *leftVisible is set to 1 when the left pane starts fading and to 0 when it finishes."
+      },
+      {
+        "offset": 4,
+        "name": "rightVisible",
+        "type": "char*",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "param_1[1] = rightVisible; the fade writes *(u8*)rightVisible = 0/1 and polls the right pane's tween (0x00649B80(iVar2+0x5C)) before advancing the state."
+      }
+    ]
+  },
+  {
+    "class": "Ui_SlotSub",
+    "type": "UiSlotSub",
+    "summary": "Small slot-machine sub-window (cursor-window child) whose Init slot plays a layout animation and stores the clip at +0x4C.",
+    "size": 80,
+    "base": "Ui_Object",
+    "confidence": 0.7,
+    "evidence": "Ui_SlotSub_Ctor 0x00326838 = Ui_Object_CtorBase + vtable the data word at DAT_00326854 (0x00763DC8) + puVar2[0x13]=0; its Init vtable slot 0x003267D8 calls Ui_PlayAnimByName 0x0053D604(*(self+4), (*(*self+0x5C))(self), 0, 1) and stores the clip at +0x4C. Caller Ui_CursorWindow_Ctor_2 0x004DC528.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x00326838 stores DAT_00326854 = vtable 0x00763DC8; slot 1 is maybe_Ui_SlotSub_Delete and slot 8 is 0x003267D8 (the Init that plays the clip animation)."
+      },
+      {
+        "offset": 76,
+        "name": "animClip",
+        "type": "Ui_AnimClip*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "Ctor zeroes puVar2[0x13] (+0x4C); Init 0x003267D8 sets param_1[0x13] = Ui_PlayAnimByName(*(self+4), animName, 0, 1), the same clip pointer role as Ui_NumberPopup."
+      }
+    ]
+  }
+]

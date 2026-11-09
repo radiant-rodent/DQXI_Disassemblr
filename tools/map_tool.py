@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Decode DQXI level packs into an editable scene description.
 
 The game stores a level as:
@@ -76,6 +76,152 @@ def candidate_objects(struct: dict, raw: bytes) -> list[dict]:
     for path, rec in collect_records(struct.get("root")):
         size = rec.get("$size")
         off = int(rec["$offset"], 16)
+        if size == 100 and "/+0x1F0/items" in path:
+            # field actor (NPC or monster): confirmed in the emulator, docs/LEVEL_FORMAT.md
+            px, py, pz = (f32(raw, off + 0x20 + i * 4) for i in range(3))
+            rx, ry, rz = (f32(raw, off + 0x2C + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                if not all(plausible(v) for v in (rx, ry, rz)):
+                    rx = ry = rz = 0.0
+                entity = u32(raw, off + 0x5C)
+                out.append({
+                    "kind": "actor",
+                    "shape": 100,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [rx, ry, rz],
+                    "field_offsets": {
+                        "position": [f"0x{off + 0x20:X}", f"0x{off + 0x24:X}", f"0x{off + 0x28:X}"],
+                        "rotation": [f"0x{off + 0x2C:X}", f"0x{off + 0x30:X}", f"0x{off + 0x34:X}"],
+                    },
+                    "props": [
+                        {"name": "entity id", "offset": f"0x{off + 0x5C:X}", "type": "u16", "value": entity & 0xFFFF,
+                         "editable": True, "hint": "which character or monster this is; scripts call GetActorID(id)"},
+                        {"name": "entity class", "offset": f"0x{off + 0x5E:X}", "type": "u16", "value": entity >> 16,
+                         "editable": True, "hint": "0x300 usual, 0x100 / 0x200 variants (unknown meaning)"},
+                        {"name": "flags 54", "offset": f"0x{off + 0x54:X}", "type": "u32", "value": u32(raw, off + 0x54),
+                         "editable": False, "hint": "unknown"},
+                        {"name": "flags 58", "offset": f"0x{off + 0x58:X}", "type": "u32", "value": u32(raw, off + 0x58),
+                         "editable": False, "hint": "unknown"},
+                        {"name": "key 60", "offset": f"0x{off + 0x60:X}", "type": "u32", "value": u32(raw, off + 0x60),
+                         "editable": False, "hint": "unknown"},
+                    ],
+                })
+            continue
+        if size == 108 and "/+0x240/items" in path:
+            # gimmick (chest / search spot / door ...): docs/GIMMICK_DECOMP.md. +0x64 low u16 = row of fixed_drop_param
+            kinds = {0: "item box", 1: "slot machine", 2: "door", 3: "keyed door", 4: "event door", 5: "one-way door", 6: "one-way door", 7: "storage", 8: "breakable"}
+            px, py, pz = (f32(raw, off + 0x48 + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                kind = raw[off + 0x62]
+                out.append({
+                    "kind": "gimmick",
+                    "shape": 108,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "field_offsets": {"position": [f"0x{off + 0x48:X}", f"0x{off + 0x4C:X}", f"0x{off + 0x50:X}"]},
+                    "props": [
+                        {"name": "drop row", "offset": f"0x{off + 0x64:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x64:off + 0x66], "little"),
+                         "editable": True, "hint": "row of fieldcmn/fixed_drop_param (item + count the spot gives); 65535 = none / glitter"},
+                        {"name": "gimmick id", "offset": f"0x{off + 0x66:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x66:off + 0x68], "little"),
+                         "editable": False, "hint": "per-level counter"},
+                        {"name": "interaction kind", "offset": f"0x{off + 0x62:X}", "type": "u8", "value": kind,
+                         "editable": False, "hint": kinds.get(kind, "script RCommand type (docs/GIMMICK_DECOMP.md)")},
+                        {"name": "object type", "offset": f"0x{off + 0x60:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x60:off + 0x62], "little"),
+                         "editable": False, "hint": "0x2CF / 0x2D0"},
+                    ],
+                })
+            continue
+        if size == 104 and "/+0x218/items" in path:
+            # roaming symbol (candidate monster, dungeon levels, docs/CUSTOM_ROOM.md): position at +0x20, the word at +0x5C = (u16 type, u16 group)
+            px, py, pz = (f32(raw, off + 0x20 + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                out.append({
+                    "kind": "symbol",
+                    "shape": 104,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "field_offsets": {"position": [f"0x{off + 0x20:X}", f"0x{off + 0x24:X}", f"0x{off + 0x28:X}"]},
+                    "props": [
+                        {"name": "type", "offset": f"0x{off + 0x5C:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x5C:off + 0x5E], "little"),
+                         "editable": False, "hint": "2 on every record seen"},
+                        {"name": "group", "offset": f"0x{off + 0x5E:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x5E:off + 0x60], "little"),
+                         "editable": True, "hint": "candidate monster / encounter id (0x8F..0xDC in d001_001a); not proven"},
+                        {"name": "flags 54", "offset": f"0x{off + 0x54:X}", "type": "u32", "value": u32(raw, off + 0x54),
+                         "editable": False, "hint": "0x1010000 / 0x1010001"},
+                        {"name": "key 64", "offset": f"0x{off + 0x64:X}", "type": "u32", "value": u32(raw, off + 0x64),
+                         "editable": False, "hint": "0x0A...... like the actor key"},
+                    ],
+                })
+            continue
+        if size == 24 and "/+0x68/items" in path:
+            # map-jump table entry: low half of the word at +0x0C = destination map id (row of syscmn/level_map),
+            # high half = locator / kind (docs/LEVEL_FORMAT.md, Warps). It has no position of its own.
+            if u32(raw, off + 0x08) == 0xFFFFFFFF:
+                word = u32(raw, off + 0x0C)
+                out.append({
+                    "kind": "exit",
+                    "shape": 24,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [0.0, 0.0, 0.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "field_offsets": {},
+                    "props": [
+                        {"name": "destination map", "offset": f"0x{off + 0x0C:X}", "type": "u16", "value": word & 0xFFFF,
+                         "editable": True, "hint": "row of syscmn/level_map: the level this exit leads to"},
+                        {"name": "locator", "offset": f"0x{off + 0x0E:X}", "type": "u16", "value": word >> 16,
+                         "editable": True, "hint": "where the player arrives / exit kind (high half of the word)"},
+                        {"name": "word 10", "offset": f"0x{off + 0x10:X}", "type": "u32", "value": u32(raw, off + 0x10),
+                         "editable": False, "hint": "unknown (0x30001FF on most exits)"},
+                        {"name": "word 14", "offset": f"0x{off + 0x14:X}", "type": "u32", "value": u32(raw, off + 0x14),
+                         "editable": False, "hint": "unknown (looks like a hash / id)"},
+                    ],
+                })
+            continue
+        if size == 48 and "/+0x1B8/items" in path:
+            # door / exit trigger volume (candidate, docs/LEVEL_FORMAT.md, Warps): map id in the low half of +0x28
+            tag = int.from_bytes(raw[off + 0x2A:off + 0x2C], "little")  # (`struct` is a parameter here)
+            dest = int.from_bytes(raw[off + 0x28:off + 0x2A], "little")
+            px, py, pz = (f32(raw, off + 0x10 + i * 4) for i in range(3))
+            if tag == 0x4003 and 0x100 <= dest < 0x1000 and all(plausible(v) for v in (px, py, pz)):
+                ry = f32(raw, off + 0x20)
+                out.append({
+                    "kind": "trigger",
+                    "shape": 48,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, ry if plausible(ry) else 0.0, 0.0],
+                    "field_offsets": {
+                        "position": [f"0x{off + 0x10:X}", f"0x{off + 0x14:X}", f"0x{off + 0x18:X}"],
+                        "rotation": [f"0x{off + 0x1C:X}", f"0x{off + 0x20:X}", f"0x{off + 0x24:X}"],
+                    },
+                    "props": [
+                        {"name": "trigger id", "offset": f"0x{off + 0x28:X}", "type": "u16", "value": dest,
+                         "editable": True,
+                         "hint": "level-local trigger id (not a map id); see docs/LEVEL_FORMAT.md, Warps"},
+                        {"name": "tag", "offset": f"0x{off + 0x2A:X}", "type": "u16", "value": tag,
+                         "editable": False, "hint": "0x4003 on every trigger seen"},
+                        {"name": "word 08", "offset": f"0x{off + 0x08:X}", "type": "u32", "value": u32(raw, off + 0x08),
+                         "editable": False, "hint": "unknown"},
+                        {"name": "word 0C", "offset": f"0x{off + 0x0C:X}", "type": "u32", "value": u32(raw, off + 0x0C),
+                         "editable": False, "hint": "unknown"},
+                        {"name": "word 2C", "offset": f"0x{off + 0x2C:X}", "type": "u32", "value": u32(raw, off + 0x2C),
+                         "editable": False, "hint": "unknown (looks like a hash)"},
+                    ],
+                })
+            continue
         if size == 68:
             px, py, pz = (f32(raw, off + i * 4) for i in range(3))
             sx, sy, sz = (f32(raw, off + 0x30 + i * 4) for i in range(3))
@@ -199,6 +345,22 @@ def export_maps(limit: int | None, only: str | None) -> int:
     return 0
 
 
+def write_edit(raw: bytearray, off: int, edit: dict) -> None:
+    """One edit of a project file: a float by default, or ``"type"``: u8 / u16 / u32 / f32."""
+    kind = edit.get("type", "f32")
+    value = edit["value"]
+    if kind == "f32":
+        struct.pack_into("<f", raw, off, float(value))
+    elif kind in ("u8", "u16", "u32"):
+        size = {"u8": 1, "u16": 2, "u32": 4}[kind]
+        number = int(value)
+        if not 0 <= number < (1 << (8 * size)):
+            raise ValueError(f"offset 0x{off:X}: {number} does not fit {kind}")
+        raw[off:off + size] = number.to_bytes(size, "little")
+    else:
+        raise ValueError(f"unknown edit type {kind!r}")
+
+
 def patch_project(project_path: Path) -> int:
     project = json.loads(project_path.read_text(encoding="utf-8"))
     map_id = project["map"]
@@ -207,12 +369,17 @@ def patch_project(project_path: Path) -> int:
     edits = project.get("edits", [])
     for edit in edits:
         off = int(edit["offset"], 16)
-        value = float(edit["value"])
-        struct.pack_into("<f", raw, off, value)
+        write_edit(raw, off, edit)
+    data = bytes(raw)
+    ops = project.get("ops") or []
+    if ops:
+        from tools import level_records
+
+        data, _ = level_records.apply_ops(data, ops)
     out = OUT_DIR / map_id / "level3d.patched.bxon"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(bytes(raw))
-    print(f"Wrote {out} ({len(edits)} float edits, size unchanged={len(raw) == src.stat().st_size})")
+    out.write_bytes(data)
+    print(f"Wrote {out} ({len(edits)} float edits, {len(ops)} record ops, size unchanged={len(data) == src.stat().st_size})")
     return 0
 
 

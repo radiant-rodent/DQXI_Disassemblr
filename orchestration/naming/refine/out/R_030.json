@@ -1,0 +1,1131 @@
+[
+ {
+  "address": "0x00113A50",
+  "name": "maybe_Gfx_ProcessFrame",
+  "signature": "u32 maybe_Gfx_ProcessFrame(void)",
+  "params": {},
+  "summary": "Per-frame service routine of the GPU/audio IPC library: it first services the retrace and 'should close' callbacks, then either handles a command from the 0x0079C000 command ring (kinds 2/5/8/9, where 8 and 9 call maybe_Snd_SetMasterEnable(0/1)) or runs the render-state machine (modes 0..4) that walks the callback table at 0x007AE954.",
+  "confidence": 0.4,
+  "evidence": "NEW: the named callees split the body in two halves that the old summary blurred - the 2/5 branches use the already named maybe_Gfx_WriteGpuBuffer/maybe_Gfx_ReadGpuBuffer, while the 8/9 branches call the named maybe_Snd_SetMasterEnable, so it is a *shared* gfx+audio service routine rather than a pure renderer frame driver. Still no caller by name (it is reached from a thread/vtable entry), so the name stays maybe_.",
+  "previous_name": "maybe_Gfx_ProcessFrame",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00119498",
+  "name": "maybe_Snd_InitRuntimeBlock",
+  "signature": "void maybe_Snd_InitRuntimeBlock(RuntimeBlock* self)",
+  "params": {
+   "self": "runtime block (handle, IPC size, 4 transfer buffers, worker)"
+  },
+  "summary": "Initialises the runtime block used by the draw-state singleton: clears the callback/state fields, creates the owner handle, sizes the four transfer buffers from the IPC answer, installs the completion callback and starts the worker through 0x00111F60.",
+  "confidence": 0.42,
+  "evidence": "NEW: its only caller is maybe_Gfx_InitDrawState (0x001135D0), which creates the 28-word draw-state object and then calls this - so the block belongs to the GPU/draw path, and the 'Snd_' prefix inherited from N_032 is not supported. The worker/transfer-buffer shape is right, the subsystem prefix is not.",
+  "previous_name": "maybe_Snd_InitRuntimeBlock",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001DBD58",
+  "name": "maybe_Fs_AsyncLoadWorker",
+  "signature": "u32 maybe_Fs_AsyncLoadWorker(FsLoadWorker* worker)",
+  "params": {
+   "worker": "worker control block (enable byte +4, request flags +8, stream +0x10, ring +0x44)"
+  },
+  "summary": "Worker loop of the asynchronous loader: while the enable byte is set it takes the stream lock, turns the request flag bits into seek (bit 0) / read (bit 1) calls on the 0x514xxx stream helpers, invokes the completion callback and sleeps when there is nothing to do.",
+  "confidence": 0.35,
+  "evidence": "NEW: the callee set is now named (the 0x514xxx helpers are the same stream ring used by Fs_SeekStream in this batch), which confirms the seek/read worker role, but nothing names the owner of the block and there is no caller (it is a thread body), so it stays maybe_.",
+  "previous_name": "maybe_Fs_AsyncLoadWorker",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00112050",
+  "name": "Svc_Cfg_AcquireService",
+  "signature": "u32 Svc_Cfg_AcquireService(void)",
+  "params": {},
+  "summary": "Reference-counted acquire of the process-wide 'cfg:u' session: on first use it resolves the service name, opens the handle into 0x007AF0F8 and marks the session open, then increments the user count under the global config monitor.",
+  "confidence": 0.55,
+  "evidence": "NEW: two independent facts pinned this. (1) The already confident wrapper Os_AcquireSharedSession (0x0010BDF8, 0.50) is exactly `iVar1 = <this>(); if (iVar1 < 0) func_0011ED40(...)`, i.e. the assert-on-error wrapper around this call. (2) The name argument at 0x007418BC+4 is the pointer 0x0078C452, which is the ASCII string 'cfg:u'; it goes through 0x0011CCA0 (verified strlen) into 0x001192C0 (srvGetServiceHandle). So the 'shared session' is the 3DS config service, not an anonymous one. Caller 0x0010BDF8 keeps its generic name; it should be reconciled in a later merge.",
+  "previous_name": "maybe_Os_AcquireSharedSession",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001073BC",
+  "name": "Gfx_ShutdownGlobalState",
+  "signature": "void Gfx_ShutdownGlobalState(void)",
+  "params": {},
+  "summary": "Tears the GPU state down once: if the running flag is set it takes the state lock, calls the named Gfx_ShutdownChannel, releases the lock, marks the state dead (-1), closes the two kernel handles and clears the flag.",
+  "confidence": 0.5,
+  "evidence": "NEW: the middle call is now the named Gfx_ShutdownChannel (0x0010BA40) and the only caller is maybe_Gfx_ReleaseRenderer, so this is the flag-guarded process-wide wrapper around the channel teardown rather than a second shutdown implementation.",
+  "previous_name": "maybe_Gfx_ShutdownGlobalState",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00112A9C",
+  "name": "Snd_InitChannelState",
+  "signature": "void Snd_InitChannelState(ChannelState* state)",
+  "params": {
+   "state": "per-channel state block (two DSP units at +0x30/+0x31)"
+  },
+  "summary": "Resets a full sound-channel state block to its defaults: writes the two unit records and the per-unit DSP words through the named Snd setters, clears the filter/pan/ADPCM bytes, seeds the volume pair (-1 / 0x7F) and arms the enable flags.",
+  "confidence": 0.5,
+  "evidence": "NEW: its caller is the confident Snd_InitSystemState (0x0010C738), which allocates the state object and then calls this to default it, and every callee is a named per-unit Snd setter (SetChannelDataAddress, SetUnitLoopInfo, SetUnitAdpcmWord, SetChannelRate, SetChannelVolume). That pins both the subsystem and the 'default a fresh channel state' role.",
+  "previous_name": "maybe_Snd_InitChannelState",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00117E88",
+  "name": "maybe_Os_UnlockMonitor",
+  "signature": "void maybe_Os_UnlockMonitor(OsMonitor* monitor)",
+  "params": {
+   "monitor": "monitor whose state byte is f_76"
+  },
+  "summary": "Two-mode monitor release: for a monitor whose state byte f_76 is not 2 it drops the recursion through 0x00117ED0 and then waits on the semaphore at +100; otherwise it clears f_76, decrements the recursion count and, when it reaches zero, clears the owner and sets the event.",
+  "confidence": 0.4,
+  "evidence": "NEW: 0x00117E50 (Os_LockMonitor, 0.55) is the hot lock and is always paired with the *unnamed* 0x00117ED0 as its unlock (98 uses), so this rarer wrapper is not the general unlock the old name claims; it only runs for monitors that carry the f_76 state byte and has no caller by name. Kept maybe_ because the object type it serves is still unknown.",
+  "previous_name": "maybe_Os_UnlockMonitor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011820C",
+  "name": "Svc_Cfg_CloseServiceS",
+  "signature": "void Svc_Cfg_CloseServiceS(void)",
+  "params": {},
+  "summary": "Drops one user of the lazily opened 'cfg:s' session; when the count reaches zero it closes the handle in 0x007B2CFC and restores the cached handle word into 0x007AF0F8.",
+  "confidence": 0.55,
+  "evidence": "NEW: pairs with 0x001182FC, whose IPC open call passes the literal 0x0078C6F3 = 'cfg:s' (verified: bytes 'cfg:s\\0' at 0x0078C6F3), and the release dispatcher 0x0011212C calls it for kind 1. The old 'A/B' suffix was a placeholder; the service name is now known.",
+  "previous_name": "maybe_Os_CloseSharedSessionA",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118288",
+  "name": "Svc_Cfg_CloseServiceI",
+  "signature": "void Svc_Cfg_CloseServiceI(void)",
+  "params": {},
+  "summary": "Drops one user of the lazily opened 'cfg:i' session; at zero it closes the handle in 0x007B2CF8 and copies the cached handle into both 0x007AF0F8 and 0x007B2CFC.",
+  "confidence": 0.55,
+  "evidence": "NEW: the matching open 0x001183A4 reads the pointer stored at 0x00754F90, which is 0x0078C6ED = 'cfg:i' (verified bytes 'cfg:i\\0'), and 0x0011212C calls this for kind 2. So the second 'shared session' is the cfg import session.",
+  "previous_name": "maybe_Os_CloseSharedSessionB",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011896C",
+  "name": "maybe_Snd_WaitTransferDone",
+  "signature": "void maybe_Snd_WaitTransferDone(Transfer* transfer)",
+  "params": {
+   "transfer": "transfer record (state byte at +0, wait object at +0xc)"
+  },
+  "summary": "Waits for an asynchronous IPC transfer to complete: it polls the completion object under the global monitor, sleeps and retries while the status is 'busy', then retires the record, sends the follow-up request through maybe_Svc_SendRequestBuffer128 and re-arms the wait object.",
+  "confidence": 0.4,
+  "evidence": "NEW: the two helper calls are now named - maybe_Svc_SendRequestBuffer128 and maybe_Os_SetSyncState - which confirms this is the generic IPC-wait retry loop, but the transfer record is shared by several services, so the 'Snd_' attribution is still only inherited from N_032.",
+  "previous_name": "maybe_Snd_WaitTransferDone",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F336C",
+  "name": "maybe_Gfx_SetLayerStateA",
+  "signature": "void maybe_Gfx_SetLayerStateA(u32 layer, u32 owner, u32 value)",
+  "params": {
+   "layer": "0..3",
+   "owner": "non-zero = layer owned (callers store a code address)",
+   "value": "second per-layer word"
+  },
+  "summary": "First of four parallel layer-ownership tables (globals 0x007C8698/0x007C86E0 style, lock 0x007C8668): keeps the count of owned layers, stores the owner word for the layer and a second value, ignoring no-op changes.",
+  "confidence": 0.4,
+  "evidence": "NEW: the callers are now readable and they always call all four copies with the same layer id: Gfx_MoviePlayer_Init binds layer 1 with a code address as the 'enabled' word (0x004FC854 / 0x004FC800), Ui_LoadIconTextures binds layer 3 with 0x00160440 / 0x00160E94, Sound_StreamPlayer_Shutdown and Sound_StreamThreads_Shutdown clear layer 2/3, and Gfx_ResetRenderer clears layer 1. So the stored word is an owner/callback per layer (a pointer, not a boolean) and the counter counts layers that have an owner; 'SetLayerState' is still only a description of the bookkeeping, and four parallel tables for four display layers is an inference.",
+  "previous_name": "maybe_Gfx_SetLayerStateA",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F33E0",
+  "name": "maybe_Gfx_SetLayerStateB",
+  "signature": "void maybe_Gfx_SetLayerStateB(u32 layer, u32 owner, u32 value)",
+  "params": {
+   "layer": "0..3",
+   "owner": "non-zero = layer owned",
+   "value": "second per-layer word"
+  },
+  "summary": "Second copy of the four-layer ownership tracker, byte-identical to 0x001F336C but using table 0x007C8674 (same lock 0x007C8668); the four copies are always updated together with the same layer id.",
+  "confidence": 0.4,
+  "evidence": "NEW: same caller set as 0x001F336C (Gfx_MoviePlayer_Init, Ui_LoadIconTextures, Gfx_ResetRenderer, the two sound shutdown paths), and the arguments show the second word is an owner pointer rather than a boolean. Kept maybe_ because what the four tables actually gate is still unproven.",
+  "previous_name": "maybe_Gfx_SetLayerStateB",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F3454",
+  "name": "maybe_Gfx_SetLayerStateC",
+  "signature": "void maybe_Gfx_SetLayerStateC(u32 layer, u32 owner, u32 value)",
+  "params": {
+   "layer": "0..3",
+   "owner": "non-zero = layer owned",
+   "value": "second per-layer word"
+  },
+  "summary": "Third copy of the four-layer ownership tracker (table 0x007C86E0, lock 0x007C865C), called in lock-step with the A/B/D copies from the movie, UI-icon and sound shutdown paths.",
+  "confidence": 0.4,
+  "evidence": "NEW: called together with A/B/D with identical arguments; note it uses the *second* lock (0x007C865C) together with copy D, so the four tables form two lock domains, which the first pass missed. Still no proof of what the tables gate.",
+  "previous_name": "maybe_Gfx_SetLayerStateC",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F34C8",
+  "name": "maybe_Gfx_SetLayerStateD",
+  "signature": "void maybe_Gfx_SetLayerStateD(u32 layer, u32 owner, u32 value)",
+  "params": {
+   "layer": "0..3",
+   "owner": "non-zero = layer owned",
+   "value": "second per-layer word"
+  },
+  "summary": "Fourth copy of the four-layer ownership tracker (table 0x007C86BC, lock 0x007C865C), always called together with copy C.",
+  "confidence": 0.4,
+  "evidence": "NEW: same caller set and same arguments as copy C, sharing its lock; the A/B pair uses 0x007C8668 instead. Kept maybe_ - the tables' purpose is still inferred from the movie/icon callers only.",
+  "previous_name": "maybe_Gfx_SetLayerStateD",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00500134",
+  "name": "Gfx_Movie_AdvanceTracks",
+  "signature": "void Gfx_Movie_AdvanceTracks(GfxMovieContext* self, u32 arg2, u32 arg3, int arg4)",
+  "params": {
+   "self": "movie/track context (state byte +0xC, tracks +0x304/+0x484, frame rings +0x464/+0x540)",
+   "arg2": "unused by the recovered body",
+   "arg3": "unused by the recovered body",
+   "arg4": "unused by the recovered body"
+  },
+  "summary": "One step of the movie track/decoder state machine: it reads the track info and text samples, runs the open->play->end states (0..8), drops already-shown frames from the two per-track rings and feeds the video and audio decoders.",
+  "confidence": 0.5,
+  "evidence": "NEW: the name `Gfx_Movie_Update` is already taken by the confident player update at 0x004FE174 (0.70), and this is a different object: its caller maybe_Gfx_Movie_WaitTracksFinished loops on it (yield, call, sleep) until the track state byte +0x10 reaches 1, and every callee is the track/decoder half (Movie_ReadTrackInfo, Movie_ReadTextSamples, MovieDecoder_FeedVideo/FeedAudio, CheckEndOfStream). So it advances the tracks, it does not update the player.",
+  "previous_name": "maybe_Gfx_Movie_Update",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00517942",
+  "name": "maybe_Sound_MixerThread_MainThumb",
+  "signature": "void maybe_Sound_MixerThread_MainThumb(u32 thread, u32 thread2, int thread3, u32 thread4, int frame)",
+  "params": {},
+  "summary": "Thumb-mode mixer thread body (twin of the ARM copy at 0x00517B6C): waits for the DSP display event, runs the per-frame audio update, advances the 64-bit frame clock with svc 0x28 and loops while the run flag is set.",
+  "confidence": 0.42,
+  "evidence": "NEW: the body's callback slots (+0x20/+0x28/+0x30 with the +0x24/+0x2c arguments) are the same ones maybe_Sound_Frame_BeginUpdate and maybe_Sound_WaitForDisplayTime now provide names for, which supports the mixer-thread reading. Confidence stays under 0.5 because the decompilation is damaged (unaff_r4/r7, in_lr and a bogus CONCAT44 of the first argument), so only the disassembly of 0x00517B6C can settle the register roles.",
+  "previous_name": "maybe_Sound_MixerThread_MainThumb",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001121E4",
+  "name": "maybe_Svc_Cfg_EnsureService",
+  "signature": "u32 maybe_Svc_Cfg_EnsureService(u8* kindOut, u32 unused, u16* resultOut)",
+  "params": {
+   "kindOut": "0 = cfg:u already open, 1 = opened cfg:s, 2 = opened cfg:i",
+   "unused": "second argument, not used by the body",
+   "resultOut": "low halfword of the error code"
+  },
+  "summary": "Makes sure one of the three config sessions is usable: it first tries the refcounted cfg:u acquire, and if that fails it opens cfg:s, then cfg:i, writing which one succeeded (0/1/2) to kindOut; the same kind value is what 0x0011212C consumes again on release.",
+  "confidence": 0.45,
+  "evidence": "NEW: this reads as *acquire*, not release - the callees are now named Svc_Cfg_AcquireService and the two Svc_Cfg_OpenService helpers, and its output is exactly the kind argument of the release dispatcher 0x0011212C. The old name 'ReleaseSharedSessionEx' had the direction backwards. Confidence stays 0.45 because Ghidra truncates the flow with 'bad instruction data' half-way (halt_baddata), so the cleanup arm is only partly recovered.",
+  "previous_name": "maybe_Os_ReleaseSharedSessionEx",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00509D40",
+  "name": "maybe_Svc_Cecd_EnsureReady",
+  "signature": "int maybe_Svc_Cecd_EnsureReady(int which, int blocking)",
+  "params": {
+   "which": "0 = primary cecd session, 1 = secondary",
+   "blocking": "0 = poll with retries, 1 = just send the query"
+  },
+  "summary": "Makes sure the cecd content session is up before a create/read/write: it starts the service (0x0050F2A4), sleeps 16 ms, then either sends the 0x0B/0x0C request once or polls up to 60 times while the change-state event is pending.",
+  "confidence": 0.45,
+  "evidence": "NEW: every caller is one of the cecd retry wrappers (Svc_Cecd_CreateWithRetry, ReadWithRetry, DeleteWithRetry, WriteDispatchWithRetry, ...) plus Ui_IconCache_FinishLoad, and the two branch targets 0x0050CAFC(0xB)/0x0050CAFC(0xC) are the cecd request senders. So the role ('make the session ready') is confirmed, the 'Ui_IconCache' prefix is only the call site, hence the corrected name stays maybe_ at 0.45.",
+  "previous_name": "maybe_Ui_IconCache_EnsureService",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00106280",
+  "name": "maybe_Gfx_ReleaseFinishedUploads",
+  "signature": "void maybe_Gfx_ReleaseFinishedUploads(GfxUploadQueue* self)",
+  "params": {
+   "self": "upload queue (4 slot masks at +0x90, 0x14-byte records at +0x7C, free list at +0x80)"
+  },
+  "summary": "Reaps completed texture uploads: for each of the four queues it walks the live-slot bitmask, releases the finished block through 0x0010EF64/0x0010F044 under the renderer monitor, returns the slot to the free list and records the completion tick.",
+  "confidence": 0.45,
+  "evidence": "NEW: its caller is maybe_Gfx_UpdateFrameTasks (per-frame task pump), which fits a reap-on-update function, and the slot/free-list bookkeeping (masks at +0x90, count +0x8C, per-owner counts at +0xA0) matches the first-pass reading. The two release helpers 0x0010EF64/0x0010F044 are still unnamed, so 'texture upload' remains an inference - kept maybe_.",
+  "previous_name": "maybe_Gfx_ReleaseFinishedUploads",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010C548",
+  "name": "maybe_Gfx_ShutdownChannelLocked",
+  "signature": "u32 maybe_Gfx_ShutdownChannelLocked(void)",
+  "params": {},
+  "summary": "Locked wrapper around the GPU channel teardown: takes the global renderer monitor, calls the named Gfx_ShutdownChannel and releases the monitor; always returns 0.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callee at 0x0010BA40 is now the named Gfx_ShutdownChannel, not a flush routine, and this body is byte-for-byte the same lock/call/unlock triple that Gfx_ShutdownGlobalState (0x001073BC) inlines. So 'FlushPending' described the wrong callee; the function only performs the shutdown under the global lock. It has no caller by name and the lock owner is unproven, hence maybe_ at 0.45.",
+  "previous_name": "maybe_Gfx_FlushPending",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010CCB0",
+  "name": "maybe_Os_InsertListNodeByKey",
+  "signature": "void maybe_Os_InsertListNodeByKey(OsListNode* node)",
+  "params": {
+   "node": "node with next +0, prev +4, key +0x10"
+  },
+  "summary": "Inserts a node into the global ordered list at 0x007AE954 (head +4, tail +8) sorted by the 32-bit key at +0x10, under the monitor at 0x007E793C, patching both link directions.",
+  "confidence": 0.45,
+  "evidence": "NEW: the list header is the *same* global 0x007AE954 whose callback slots maybe_Gfx_ProcessFrame walks, and its caller is maybe_Os_InitSyncPrimitives, so this is the ordered insert for that global registry rather than a timer queue as the first pass guessed. Kept maybe_ because which node kind is registered (sync object, retrace callback, ...) is not proven.",
+  "previous_name": "maybe_Os_InsertListNodeByKey",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011212C",
+  "name": "Svc_Cfg_ReleaseService",
+  "signature": "void Svc_Cfg_ReleaseService(int kind)",
+  "params": {
+   "kind": "0 = cfg:u (main), 1 = cfg:s, 2 = cfg:i"
+  },
+  "summary": "Releases one user of the config sessions: kind 0 decrements the cfg:u count and closes that handle at zero, kind 1/2 dispatch to the cfg:s / cfg:i close helpers.",
+  "confidence": 0.55,
+  "evidence": "NEW: the two auxiliaries it dispatches to are now identified by their service strings ('cfg:s' at 0x0078C6F3, 'cfg:i' at 0x0078C6ED), and the kind value is exactly what maybe_Svc_Cfg_EnsureService writes out. So the dispatcher is the release half of the cfg session manager.",
+  "previous_name": "maybe_Os_ReleaseSharedSession",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011223E",
+  "name": "maybe_Snd_SetChannelFilterParams",
+  "signature": "void maybe_Snd_SetChannelFilterParams(u32 unit, u16* unitA, u16* unitB, u32 flags, ...)",
+  "params": {
+   "unit": "0/1 DSP unit index",
+   "unitA": "first unit record",
+   "unitB": "second unit record",
+   "flags": "bit 2 = filter word group, bit 4 = extended group"
+  },
+  "summary": "Writes a caller-supplied block of filter/pan words into the two sound-unit records and pushes them to the DSP command stream through maybe_Snd_SetChannelFilterCoefficients / maybe_Snd_SetChannelFilterInfo.",
+  "confidence": 0.3,
+  "evidence": "NEW: the tail of the body is dominated by the named sound setters maybe_Snd_SetChannelFilterCoefficients and maybe_Snd_SetChannelFilterInfo on the channel global 0x007EF414, so 'Gfx_ConfigureMaterialUnits' was a wrong guess. But the decompilation is broken and overlapping: the header says 18 Thumb bytes, while the body also contains a byte-identical copy of the cfg:u release count/close block (which belongs to 0x00112250). Confidence therefore stays 0.30 - only a fresh disassembly of the 18 bytes can settle the real prototype.",
+  "previous_name": "maybe_Gfx_ConfigureMaterialUnits",
+  "previous_confidence": 0.2,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00112250",
+  "name": "maybe_Svc_Cfg_ReleaseServiceU",
+  "signature": "void maybe_Svc_Cfg_ReleaseServiceU(void)",
+  "params": {},
+  "summary": "Second copy of the cfg:u release path: decrements the user count under the config monitor and, at zero, closes the handle in 0x007AF0F8 and resets it to the sentinel.",
+  "confidence": 0.45,
+  "evidence": "NEW: the body is identical to the kind==0 arm of 0x0011212C (same globals 0x007AF0EC/0x007AF0F8, same software_interrupt(0x23) close), so the 'NoArgs' suffix only described the ABI, not the role. No caller by name - it may be an inlined duplicate left by the original build - hence maybe_ at 0.45.",
+  "previous_name": "maybe_Os_ReleaseSharedSessionNoArgs",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00112E38",
+  "name": "maybe_Snd_InitStreamContext",
+  "signature": "int maybe_Snd_InitStreamContext(StreamContext* ctx, int flags)",
+  "params": {
+   "ctx": "stream context (handle +0, count +4, state byte +0x4c7)",
+   "flags": "non-zero also releases/restores the 24 channel objects"
+  },
+  "summary": "Brings up a streaming context: creates the kernel handle, asks for the unit count, sets the 0x2000 transfer buffer, resets the 24 channel objects and (on the full path) restores the channel state and re-arms the unit defaults.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now named (maybe_Snd_SetupChannelBuffers, maybe_Snd_RestoreChannelState, maybe_Gfx_ReleaseChannelObjects, maybe_Snd_ResetChannelUnitsToDefault) and one caller is maybe_Gfx_BeginFrame, so the 'stream/24-channel context' role holds. What the context is a stream *of* is still not proven.",
+  "previous_name": "maybe_Snd_InitStreamContext",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001132DC",
+  "name": "maybe_Snd_TeardownStreamContext",
+  "signature": "int maybe_Snd_TeardownStreamContext(StreamContext* ctx, int releaseBuffers)",
+  "params": {
+   "ctx": "stream context created by 0x00112E38",
+   "releaseBuffers": "also release the sample buffer (3 instead of 1)"
+  },
+  "summary": "Tears a streaming context down: stops the channels (request 2 with mode 1/3), waits for the transfer to finish, clears the active flag, releases the sample buffer when asked, closes the handle and returns the cached error code.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller is the flagged shutdown maybe_Snd_Shutdown (0x00107628) and the request/status helpers 0x001185A0/0x0011856C/0x001188B8 form the same pair as the init side; the 'teardown' half is therefore right. The 'Snd_' prefix still rests on the sound-module callers only.",
+  "previous_name": "maybe_Snd_TeardownStreamContext",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001135D0",
+  "name": "maybe_Gfx_InitDrawState",
+  "signature": "void maybe_Gfx_InitDrawState(void)",
+  "params": {},
+  "summary": "One-shot initialisation of the shared draw-state object: opens the gsp::Gpu session, publishes the handle, clears the 28-word state block at 0x007A1C40 and installs it as the singleton's f_1c, then starts the runtime block through maybe_Snd_InitRuntimeBlock.",
+  "confidence": 0.42,
+  "evidence": "NEW: the singleton pointer it fills (0x007AF178->f_1c, 7 slots at +0x10) is exactly what the sibling maybe_Gfx_ExchangeSlotValue (0x001138B8) hands out, and the handle it opens comes from the literal 0x007AF17C = 'gsp::Gpu' (verified string at 0x0078C495). So the 'draw state' reading is supported; 'Init' is right, the subsystem is the GPU channel.",
+  "previous_name": "maybe_Gfx_InitDrawState",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001138B8",
+  "name": "maybe_Gfx_ExchangeSlotValue",
+  "signature": "u32 maybe_Gfx_ExchangeSlotValue(u32 value, u32 slot)",
+  "params": {
+   "value": "new value",
+   "slot": "0..6"
+  },
+  "summary": "Exchanges one of the seven 32-bit slots of the draw-state object (singleton->f_1c) under that object's monitor and returns the previous content; slots >= 7 are ignored.",
+  "confidence": 0.4,
+  "evidence": "NEW: the object is the same 0x007A1C40 block that maybe_Gfx_InitDrawState installs and clears (7 words at +0x10), and the function *returns the old value*, so 'Set...SlotValue' understated it. What the slots mean (surfaces? command slots?) is still unknown, so maybe_ at 0.40.",
+  "previous_name": "maybe_Gfx_SetSurfaceSlotValue",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001182FC",
+  "name": "Svc_Cfg_OpenServiceS",
+  "signature": "int Svc_Cfg_OpenServiceS(void)",
+  "params": {},
+  "summary": "Reference-counted open of the 'cfg:s' session: on first use it opens the service handle into 0x007B2CFC and publishes it as the current config handle, then increments the user count; the 'already open' error code is passed through.",
+  "confidence": 0.55,
+  "evidence": "NEW: the IPC open call receives the pointer stored at 0x00754F98, which is 0x0078C6F3 = 'cfg:s' (verified: 'cfg:s\\0' at 0x0078C6F3) and the strlen/srvGetServiceHandle pair is the same one the confident Svc_Cecd_OpenService uses. The old 'A' suffix is replaced by the actual service name.",
+  "previous_name": "maybe_Os_OpenSharedSessionA",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001183A4",
+  "name": "Svc_Cfg_OpenServiceI",
+  "signature": "int Svc_Cfg_OpenServiceI(void)",
+  "params": {},
+  "summary": "Reference-counted open of the 'cfg:i' session: on first use it opens the handle into 0x007B2CF8, copies it into the two current-handle slots and increments the count.",
+  "confidence": 0.55,
+  "evidence": "NEW: the open call reads the pointer stored at 0x00754F90, which is 0x0078C6ED = 'cfg:i' (verified bytes 'cfg:i\\0'), the twin of the 'cfg:s' open. Both are called from maybe_Svc_Cfg_EnsureService.",
+  "previous_name": "maybe_Os_OpenSharedSessionB",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011CAB4",
+  "name": "maybe_Mem_PoolAllocNode",
+  "signature": "u32* maybe_Mem_PoolAllocNode(void* pool)",
+  "params": {
+   "pool": "pool whose free list is at +0x24, live count +0x2c, monitor +0x30, flag word +0x14"
+  },
+  "summary": "Pops one node off a shared-memory pool's free list, bumps the live count and, when the pool's flag bit 0 is set, relocates the node into the pool's window through 0x00118B28; returns NULL when the pool is exhausted.",
+  "confidence": 0.48,
+  "evidence": "NEW: the object layout matches the *named* free path exactly - maybe_Svc_Object_ReleaseRef (0x00505314) pushes onto f_24, decrements f_2c and locks f_30, which is precisely this function's pop/increment/lock - so it is the allocator of those object pools, not an 'OS queue'. All eight named callers (Svc_Object_CreateWithBuffer, Svc_Content_OpenRecord, Snd_CreateStreamDecoder, ...) use its return value as a fresh object. The relocation branch (flag 0x14 bit 0) shows the pool lives in mapped shared memory, which is why the node address has to be fixed up.",
+  "previous_name": "maybe_Os_QueueAllocNode",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011F3C0",
+  "name": "maybe_Snd_ChannelWorker",
+  "signature": "void maybe_Snd_ChannelWorker(SndWorker* worker)",
+  "params": {
+   "worker": "worker block (enable byte +0x77, ring +0x34, callback table +0x10)"
+  },
+  "summary": "Worker loop: waits on the worker event, takes one 0x34-byte command record out of the request ring (with an exclusive-access index update), dispatches it through the worker's callback table and, for state-1 records, wakes the waiters.",
+  "confidence": 0.42,
+  "evidence": "NEW: the 0x34 stride and the callback table at +0x10 are the same worker block that maybe_Snd_InitRuntimeBlock (0x00119498) fills and starts, and the type byte +2 of the record selects the 'stop' path - so the loop is the consumer of that ring. Which subsystem owns the worker is still not proven and the body has odd register-held constants, hence maybe_ at 0.42.",
+  "previous_name": "maybe_Snd_ChannelWorker",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123260",
+  "name": "maybe_Os_ReleaseSharedHandle",
+  "signature": "int maybe_Os_ReleaseSharedHandle(u32 monitor)",
+  "params": {
+   "monitor": "monitor word used for the unlock"
+  },
+  "summary": "Releases one reference to a shared kernel handle: on the last user it closes the handle at 0x007AF900, restores the sentinel value and returns the result; otherwise it only decrements the count and returns the cached code.",
+  "confidence": 0.45,
+  "evidence": "NEW: it is the same refcount/close shape as the cfg close helpers in this batch (count at +4, handle in a global slot, close via software_interrupt(0x23) and reset to the process-handle constant 0x00741AD4), so the pattern is confirmed even though the handle's owner is not. No caller by name.",
+  "previous_name": "maybe_Os_ReleaseSharedHandle",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001580CC",
+  "name": "maybe_Fs_SeekStream",
+  "signature": "u32 maybe_Fs_SeekStream(Stream* stream, u32 posLo, u32 posHi, u32 limit)",
+  "params": {
+   "stream": "stream object (position pair 0/4, end 6/7, owner at 0x4c)",
+   "posLo": "low word of the target position",
+   "posHi": "high word of the target position",
+   "limit": "upper bound"
+  },
+  "summary": "Seeks a stream: if the target 64-bit position is inside [0, end] it stores the new current/end/hint pairs, calls the stream owner's vtable slot +0x40 (seek) and clears the pending event; returns 1 when the seek was accepted.",
+  "confidence": 0.45,
+  "evidence": "NEW: the 64-bit bounds arithmetic and the vtable +0x40 call are the same idiom the other Fs stream helpers in this batch use, and the signature now shows all four arguments; the 'seek' reading is still reconstructed from the owner callback rather than from a named caller, so maybe_ at 0.45.",
+  "previous_name": "maybe_Fs_SeekStream",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004FC230",
+  "name": "Gfx_MovieTrack_Create",
+  "signature": "u32 Gfx_MovieTrack_Create(u32 channel, u32 streamId, u32 frameCount)",
+  "params": {
+   "channel": "decoder channel / player id",
+   "streamId": "stream index",
+   "frameCount": "number of 0x18-byte frame descriptors to allocate"
+  },
+  "summary": "Allocates a free 0x70-byte movie-track slot, allocates its frameCount*0x18 descriptor table, opens the decoder channel through 0x0051649C and resets the per-track counters; 0xFFFFFFFF when no slot is free.",
+  "confidence": 0.55,
+  "evidence": "NEW: its only caller is now the named Gfx_MovieBuffer_Ctor, which passes (player, streamId, frameCount) and stores the returned index - the allocation role and the track table layout are confirmed by the whole Gfx_MovieTrack_* family being named now.",
+  "previous_name": "maybe_Gfx_MovieTrack_Create",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004FC694",
+  "name": "Gfx_MovieTrack_QueueBuffer",
+  "signature": "u32 Gfx_MovieTrack_QueueBuffer(u32 track, void* data, u32 size)",
+  "params": {
+   "track": "track index",
+   "data": "buffer to submit",
+   "size": "buffer size"
+  },
+  "summary": "Submits one input buffer for a movie track: refuses when the track has no free frame slot or the 64-entry completion ring is full, flushes the buffer for DMA and pushes {track, data, size} into the ring; returns 1 when queued.",
+  "confidence": 0.55,
+  "evidence": "NEW: its caller is the named Gfx_MovieBuffer_Read, which hands it the buffer it just read, and the ring it writes (0x007C805C, head 0x007AE154+0x18) is drained by Gfx_MovieTrack_UpdateAll - so submit-in / pump-out is now verified on both ends.",
+  "previous_name": "maybe_Gfx_MovieTrack_QueueBuffer",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004FC8A8",
+  "name": "Gfx_MovieTrack_UpdateAll",
+  "signature": "void Gfx_MovieTrack_UpdateAll(void)",
+  "params": {},
+  "summary": "Per-frame pump of the movie player: under the player lock and the sound driver lock it retires finished frames, feeds every queued buffer from the 64-entry ring into the decoder, accounts the consumed samples and releases the frame slots.",
+  "confidence": 0.55,
+  "evidence": "NEW: it is called by the named Gfx_Movie_WaitForTracks and its input ring is filled by the named Gfx_MovieTrack_QueueBuffer; the two per-track rings (0x11 and 0x12 indices, 0x18-byte descriptors whose type byte +0x11 is 3) match the descriptors allocated by Gfx_MovieTrack_Create.",
+  "previous_name": "maybe_Gfx_MovieTrack_UpdateAll",
+  "previous_confidence": 0.47,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004FCEA0",
+  "name": "Gfx_MovieTrack_Destroy",
+  "signature": "void Gfx_MovieTrack_Destroy(u32 track)",
+  "params": {
+   "track": "track index"
+  },
+  "summary": "Frees one movie track: closes its decoder handle (0x00519BE4), gives the frame-descriptor table back to the player allocator and clears both pointers; out-of-range indices are ignored.",
+  "confidence": 0.5,
+  "evidence": "NEW: it is the exact inverse of the now-confirmed Gfx_MovieTrack_Create (same 0x007AE154 manager, same 0x70-byte slot, same +0/+4 pointers) and is inlined per slot by the player shutdown loop 0x004FCC28.",
+  "previous_name": "maybe_Gfx_MovieTrack_Destroy",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005017B0",
+  "name": "maybe_Svc_AcClient_Query",
+  "signature": "int maybe_Svc_AcClient_Query(u32 cmd, u32* out, u32 command, u32 command2)",
+  "params": {
+   "cmd": "client object",
+   "out": "word filled by the final command-4 call",
+   "command": "first command payload",
+   "command2": "second command payload"
+  },
+  "summary": "Sends one 'ac' client request and, when the reply asks for a session, lazily opens the service and retries the command; the actual work is delegated to the four command helpers (0x27/0x2D/0x24/0x04).",
+  "confidence": 0.48,
+  "evidence": "NEW: the caller is now the named maybe_Svc_AcClient_QueryIfReady and the callees are named maybe_Svc_AcClient_Cmd0027/002D/0024/0004, plus the ndm:u session acquire in the open branch - so this is the generic ac-client command dispatcher, and 'Query' is only a generic label for it. Kept maybe_ because the name does not distinguish it from the four wrappers it dispatches to.",
+  "previous_name": "maybe_Svc_AcClient_Query",
+  "previous_confidence": 0.48,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005049DC",
+  "name": "Svc_Object_Release",
+  "signature": "void Svc_Object_Release(SvcObject* obj)",
+  "params": {
+   "obj": "service object (vtable +0, owner pointer +4)"
+  },
+  "summary": "Releases a service object: calls its close entry (vtable +0x34) and pushes it back onto the free list embedded in its owner, decrementing the owner's live counter.",
+  "confidence": 0.5,
+  "evidence": "NEW: it is slot 0 of vtable 0x00780E48 and the owner layout (free list f_dc, count f_e4, monitor f_e8) is the mirror of maybe_Mem_PoolAllocNode's pop, which pins the 'release an object to its pool' role.",
+  "previous_name": "maybe_Svc_Object_Release",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00505314",
+  "name": "Svc_Object_ReleaseRef",
+  "signature": "void Svc_Object_ReleaseRef(SvcObject* object)",
+  "params": {
+   "object": "service object (vtable +0)"
+  },
+  "summary": "Closes an object (vtable +0x34) and returns it to the global pool at 0x007E7B1C, decrementing the live counter under the pool monitor.",
+  "confidence": 0.5,
+  "evidence": "NEW: slot 1 of vtable 0x00780F1C and byte-identical in shape to the confirmed 0x005049DC and 0x0050572C; the pool offsets (list +0x24, count +0x2c, monitor +0x30) are exactly what maybe_Mem_PoolAllocNode allocates from.",
+  "previous_name": "maybe_Svc_Object_ReleaseRef",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050572C",
+  "name": "Svc_Object_ReleaseRefB",
+  "signature": "void Svc_Object_ReleaseRefB(SvcObject* object)",
+  "params": {
+   "object": "service object (vtable +0)"
+  },
+  "summary": "Same release as 0x00505314 for the second object pool (owner reached through 0x007AEA48); slot 1 of vtable 0x00780F60.",
+  "confidence": 0.5,
+  "evidence": "NEW: identical body to the two confirmed release helpers, only the pool owner differs (indirect through 0x007AEA48+4); the vtable slot makes the family unambiguous.",
+  "previous_name": "maybe_Svc_Object_ReleaseRefB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050A010",
+  "name": "maybe_Ui_IconCache_StartServiceDeferred",
+  "signature": "int maybe_Ui_IconCache_StartServiceDeferred(void)",
+  "params": {},
+  "summary": "Starts the cecd content session without the retry loop: if the state block says 'ready but not started' it takes the lock, starts the service, sleeps 16 ms and marks it started, so the caller can poll later.",
+  "confidence": 0.42,
+  "evidence": "NEW: it shares the exact state bytes (0x007AE9E0+1/+2) and the 16,000,000-tick sleep with maybe_Svc_Cecd_EnsureReady (0x00509D40); the only difference is that it never polls, which is what 'deferred' should mean. Its callers are the cache-open paths (maybe_Ui_IconCache_Open, maybe_Field_Object2D_GetSpriteHandle).",
+  "previous_name": "maybe_Ui_IconCache_StartServiceDeferred",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0050A100",
+  "name": "maybe_Ui_IconCache_ReadEntryHeaders",
+  "signature": "int maybe_Ui_IconCache_ReadEntryHeaders(UiIconCache* self, UiIconPage* page, int* outPtrs, u32 size, int pageIndex)",
+  "params": {
+   "self": "cache object (two page slots at +0x3A8 and +0x558)",
+   "page": "page header result",
+   "outPtrs": "entry pointer array",
+   "size": "unused fifth argument",
+   "pageIndex": "0 = first page, 1 = second page"
+  },
+  "summary": "Reads one page of the icon/content cache: it queries the page size through the object's stat entry, allocates the page buffer, reads it, validates the 0x6060 entry tag and the object id, and stores the 0x70-byte entry pointers for the caller.",
+  "confidence": 0.45,
+  "evidence": "NEW: both callers now pass a page slot (maybe_Ui_IconCache_Open with &f_1fc/&f_21c, maybe_Ui_IconCache_RequestPage with self+0x7f/self+0x87), which confirms the first/second-page argument; the 0x70-byte stride, the 0x6060 tag and the count*0x70+0x20 size check are unchanged. 'ReadEntryHeaders' still understates it (it also reads the whole page), but the role is right.",
+  "previous_name": "maybe_Ui_IconCache_ReadEntryHeaders",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0050D864",
+  "name": "maybe_Ui_IconCache_IsContentReady",
+  "signature": "bool maybe_Ui_IconCache_IsContentReady(void)",
+  "params": {},
+  "summary": "Returns whether the cached content is at least as new as the system's content version: it reads the version word from the kernel (class 0xD0000), fetches the cache info through maybe_Svc_FetchContentInfo and compares the stored halfword at +0x2C with the low half of the version.",
+  "confidence": 0.45,
+  "evidence": "NEW: it is called by the now-readable maybe_Ui_IconCache_BeginLoad as the 'content present?' gate, and the info source maybe_Svc_FetchContentInfo uses the 'icon' literal - so the predicate role and the icon-cache subject hold. What the version class 0xD0000 really is remains an inference, hence maybe_.",
+  "previous_name": "maybe_Ui_IconCache_IsContentReady",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005170A0",
+  "name": "Sound_Channel_Reinsert",
+  "signature": "void Sound_Channel_Reinsert(SoundChannelPool* pool, SoundChannelNode* node, int time)",
+  "params": {
+   "pool": "pool with head +4 / tail +8",
+   "node": "node with next +0x24, prev +0x28, time +0x20",
+   "time": "new scheduling time"
+  },
+  "summary": "Unlinks a channel node from the pool's time-ordered list and re-inserts it at the position matching its new timestamp, under the pool monitor.",
+  "confidence": 0.5,
+  "evidence": "NEW: pure list surgery on the same {+0x24 next, +0x28 prev, +0x20 time} nodes as the confirmed Sound_Channel_* family in this batch, with both unlink and sorted insert visible - the name needs no inference beyond the code.",
+  "previous_name": "maybe_Sound_Channel_Reinsert",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005184AC",
+  "name": "Sound_Channel_InvokeCallback",
+  "signature": "void Sound_Channel_InvokeCallback(SoundChannel* self, u32 sub, u32 buf)",
+  "params": {
+   "self": "channel (hooks at +0x14/+0x18 indexed by sub, arg at +0x1c/+0x20)",
+   "sub": "0 or 1",
+   "buf": "base of the 4-chunk sample buffer"
+  },
+  "summary": "Calls the decode/mix hook registered for one of the channel's two slots with the four 0x280-byte chunk pointers, a length of 0xA0 and the hook's argument, under the channel's own monitor.",
+  "confidence": 0.5,
+  "evidence": "NEW: the hook table and argument table are read as self+sub*4+0x14 / +0x1c and the four chunk offsets (0, 0x280, 0x500, 0x780) match the buffer layout used by the confirmed Sound_Channel_ApplyCommand / CancelBuffer siblings.",
+  "previous_name": "maybe_Sound_Channel_InvokeCallback",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00519DE8",
+  "name": "Sound_Channel_ApplyCommand",
+  "signature": "void Sound_Channel_ApplyCommand(SoundChannelNode* self, u16* packet)",
+  "params": {
+   "self": "channel node",
+   "packet": "u16 command packet (id at +2, word at +4, start/end ids at +8/+10)"
+  },
+  "summary": "Applies a command packet to a channel: if the packet's stream id matches it stores the byte-swapped word, drops the buffers up to the packet's start id (marking them state 3) and derives the running flag from the packet's low byte.",
+  "confidence": 0.5,
+  "evidence": "NEW: the buffer states 1/2/3 and the +0x70 monitor are shared with the confirmed Sound_Channel_CancelBuffer / Reinsert siblings in this batch, and the 0xA0-byte audio-unit protocol matches InvokeCallback; the 'apply command' reading is directly supported by the packet fields it consumes.",
+  "previous_name": "maybe_Sound_Channel_ApplyCommand",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051A2BC",
+  "name": "Sound_Channel_CancelBuffer",
+  "signature": "void Sound_Channel_CancelBuffer(SoundChannelNode* self, SoundWaveBuffer* buf)",
+  "params": {
+   "self": "channel node",
+   "buf": "buffer to cancel"
+  },
+  "summary": "Walks the channel's buffer list and, when the buffer is still queued (state != 3), raises the channel's cancel flag (+0x6F bit 1) so the refill path drops it.",
+  "confidence": 0.5,
+  "evidence": "NEW: the list walk (+0x30 head, +0x14 next) and the state byte +0x11 are the same ones Sound_Channel_ApplyCommand marks with state 3, so the two together are the cancel protocol; no further inference is needed for this 96-byte function.",
+  "previous_name": "maybe_Sound_Channel_CancelBuffer",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051A5E4",
+  "name": "maybe_Svc_UnlinkSharedEntry",
+  "signature": "void* maybe_Svc_UnlinkSharedEntry(u32 handle)",
+  "params": {
+   "handle": "owner/handle word stored at entry+0xc"
+  },
+  "summary": "Searches the global shared-resource list at 0x007F2358 for the entry whose +0xC field equals the handle, unlinks it from the list and returns it (NULL when absent); it does not free anything itself.",
+  "confidence": 0.4,
+  "evidence": "NEW: the returns-value use by the callers (maybe_Svc_ReleaseSharedState / ReleaseAllSharedState release the returned entry afterwards) shows this is only the unlink/lookup half, so 'ReleaseSharedResource' named the caller's job. The list is an intrusive prev/next list with a sentinel, not the pooled-object free list used elsewhere. Kept maybe_ because the list's owner is still unidentified.",
+  "previous_name": "maybe_Os_ReleaseSharedResource",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051BCE0",
+  "name": "maybe_Gfx_EnsureGpuSession",
+  "signature": "void maybe_Gfx_EnsureGpuSession(void)",
+  "params": {},
+  "summary": "Opens the gsp::Gpu session on first use: it takes the GPU global lock, resolves the service name, opens the handle into 0x007AF18C, mirrors it into the block's f_14 and submits the open IPC; when already open it only re-sends the IPC.",
+  "confidence": 0.45,
+  "evidence": "NEW: the session block is 0x007AF178, the same one maybe_Gfx_InitDrawState fills, and its name pointer 0x007AF17C is the string 0x0078C495 = 'gsp::Gpu' (verified in rodata). So 'Sound_OpenDriverSession' was wrong about the subsystem; the caller (0x0051C254, a worker that retries) just needs the GPU session up. 'Ensure' at 0.45 because the caller's reasons are not documented.",
+  "previous_name": "maybe_Sound_OpenDriverSession",
+  "previous_confidence": 0.48,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005480C4",
+  "name": "Sound_Stream_CancelWorkByOwner",
+  "signature": "void Sound_Stream_CancelWorkByOwner(SoundEngine* engine, u32 owner)",
+  "params": {
+   "engine": "sound engine (three 0xC-stride lanes at +4, monitor +0x2C)",
+   "owner": "owner id stored at node+0x14"
+  },
+  "summary": "Cancels every queued job of one owner: under the engine monitor it walks the three work lanes, unlinks each node whose owner field matches, marks it cancelled (state 4) and releases its wait object.",
+  "confidence": 0.55,
+  "evidence": "NEW: the three-lane layout and the node fields (owner at +0x14, state byte at +4, wait object at +8) are shared with the two duplicate copies in this batch, and 0x00111AD60 finishes the wait; the stream end path calls it, so the cancel-by-owner role is settled.",
+  "previous_name": "maybe_Sound_Stream_CancelWorkByOwner",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005498FC",
+  "name": "maybe_Svc_SetFieldLocked",
+  "signature": "void maybe_Svc_SetFieldLocked(u32 value, LockedObject* object)",
+  "params": {
+   "value": "new value",
+   "object": "object whose +0x180 field is published under its +0x184 monitor"
+  },
+  "summary": "Three-line setter: stores the value in object+0x180 while holding the monitor at object+0x184.",
+  "confidence": 0.45,
+  "evidence": "NEW: the +0x180/+0x184 pair is the same 'published field + its monitor' idiom used by the confirmed sound stream helpers in this batch, so the description is right; the 'Svc_' prefix and the field's meaning are still guesses with no caller by name.",
+  "previous_name": "maybe_Svc_SetFieldLocked",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005514B4",
+  "name": "Sound_Stream_CancelWorkByOwnerA",
+  "signature": "void Sound_Stream_CancelWorkByOwnerA(u32 owner)",
+  "params": {
+   "owner": "owner id to cancel"
+  },
+  "summary": "Copy of 0x005480C4 that fetches the engine through 0x00547FB0 first: unlinks and cancels (state 4) every queued node owned by `owner` across the three lanes.",
+  "confidence": 0.5,
+  "evidence": "NEW: instruction-for-instruction the same as the confirmed 0x005480C4, only the engine lookup differs; its caller (maybe_Sound_SeqPlayer_StopVoices, now readable) passes player->f_60 as the owner, which fits 'cancel the work of this stream'.",
+  "previous_name": "maybe_Sound_Stream_CancelWorkByOwnerA",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00551B58",
+  "name": "Sound_Stream_CancelWorkByOwnerB",
+  "signature": "void Sound_Stream_CancelWorkByOwnerB(u32 owner)",
+  "params": {
+   "owner": "owner id to cancel"
+  },
+  "summary": "Third identical copy of the owner-based work cancellation (engine via 0x00547FB0), called from the stream end path instead of the stop-voices path.",
+  "confidence": 0.5,
+  "evidence": "NEW: byte-identical to the confirmed 0x005480C4/0x005514B4; its caller maybe_Sound_Stream_OnEnd passes self+0x8C5 as the owner, i.e. the stream that just ended.",
+  "previous_name": "maybe_Sound_Stream_CancelWorkByOwnerB",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x006616BC",
+  "name": "Sound_SeqPlayer_GetPlaybackInfo",
+  "signature": "u32 Sound_SeqPlayer_GetPlaybackInfo(SoundSeqPlayer* player, u32* out)",
+  "params": {
+   "player": "sequence player",
+   "out": "4-word record (byte, three words)"
+  },
+  "summary": "Copies the player's current playback state (byte +0x90 plus the three position/count words +0x8C/+0x94/+0x98) into the caller's record under the driver lock; returns 1 when playing, 0 otherwise.",
+  "confidence": 0.5,
+  "evidence": "NEW: the fields it copies are the same ones the now-named Sound_SeqPlayer_GetPosition reads (+0x74/+0x78) in the same locked block, so the 'read the playback state' role is confirmed; the caller-side types are still inferred.",
+  "previous_name": "maybe_Sound_SeqPlayer_GetPlaybackInfo",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00661730",
+  "name": "Sound_SeqPlayer_GetPosition",
+  "signature": "u32 Sound_SeqPlayer_GetPosition(SoundSeqPlayer* player, int which)",
+  "params": {
+   "player": "sequence player",
+   "which": "0 = f_74, non-zero = f_78"
+  },
+  "summary": "Returns one of the player's two playback positions under the driver lock: -1 when the player is not open, 0 when it is open but not playing, otherwise f_78 (which != 0) or f_74.",
+  "confidence": 0.5,
+  "evidence": "NEW: same open/playing flags and lock as the confirmed GetPlaybackInfo sibling, and 0x0054FE18 uses the same two fields as start/duration - the 'position query' reading holds.",
+  "previous_name": "maybe_Sound_SeqPlayer_GetPosition",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x006B93A4",
+  "name": "maybe_Gfx_MovieQueue_Peek",
+  "signature": "u32 maybe_Gfx_MovieQueue_Peek(MovieFrameQueue* queue, u32* out)",
+  "params": {
+   "queue": "frame queue (ring at +0x28, head +0x34, count +0x38, stamps +0x2C/+0x18)",
+   "out": "11-word frame record"
+  },
+  "summary": "Copies the next decoded movie frame descriptor (surface, two converted addresses, timestamps and flags) out of the ring queue under the global movie lock and returns 1; returns 0 when the queue is empty.",
+  "confidence": 0.45,
+  "evidence": "NEW: the ring description matches 0x004FC8A8's track rings only in shape, not in offsets, and no caller is named; the two address converters 0x0014ECCC/0x0014ECE0 are still unnamed. The 'peek a queued frame' reading is consistent but unproven, so maybe_ at 0.45.",
+  "previous_name": "maybe_Gfx_MovieQueue_Peek",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006E7624",
+  "name": "maybe_Mem_HeapFreeLocked",
+  "signature": "void maybe_Mem_HeapFreeLocked(MemHeapHandle* handle, u32 block)",
+  "params": {
+   "handle": "heap handle wrapper (heap at +4)",
+   "block": "block to free"
+  },
+  "summary": "Frees a block through the heap stored in the handle, taking the heap's +0x58 monitor around the call.",
+  "confidence": 0.45,
+  "evidence": "NEW: the free helper 0x0050E5B8 is still only named maybe_Text_Font_ReleaseRef (0.45), which is almost certainly a wrong name for a heap free, so the 'heap' reading rests on the lock offset only; the +0x58 monitor is shared with 0x006E7654. Kept maybe_.",
+  "previous_name": "maybe_Mem_HeapFreeLocked",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00107100",
+  "name": "maybe_Os_WaitSyncObject",
+  "signature": "u32 maybe_Os_WaitSyncObject(void)",
+  "params": {},
+  "summary": "Waits for the global synchronisation object and returns its transferred value: it validates the eight wait slots, spins on the event (sleeping 1,000,000 ticks), consumes the result and clears the pending flag.",
+  "confidence": 0.45,
+  "evidence": "NEW: its caller is the confident Os_ShutdownSyncPrimitives, which calls it and then maybe_Snd_Shutdown; the eight slot words at 0x007E7978 and the sentinel checks are visible, but what the transferred value means is not.",
+  "previous_name": "maybe_Os_WaitSyncObject",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00107628",
+  "name": "Snd_Shutdown",
+  "signature": "u8 Snd_Shutdown(void)",
+  "params": {},
+  "summary": "Flag-guarded shutdown of the sound runtime: releases the DSP block, flushes pending commands, stops the voice group, releases the channel objects and tears down the stream context.",
+  "confidence": 0.5,
+  "evidence": "NEW: the body calls the named voice/stream teardown helpers (maybe_Snd_StopVoiceGroup, maybe_Snd_TeardownStreamContext) and is called from Os_ShutdownSyncPrimitives right after the sync-object wait - a single 'tear the audio runtime down' entry point.",
+  "previous_name": "maybe_Snd_Shutdown",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0010AD08",
+  "name": "maybe_Gfx_SignalFrameReady",
+  "signature": "void maybe_Gfx_SignalFrameReady(void)",
+  "params": {},
+  "summary": "If a display frame record is active, publishes its ready byte and wakes the waiting frame event (interrupt mask saved/restored around the update).",
+  "confidence": 0.45,
+  "evidence": "NEW: it is called from the confident Gfx_Display_PresentFrame, which fits 'signal that the presented frame is ready', but the same call also appears in Fs_FileJob_Update/UpdateAlt, so the trigger is broader than the first pass thought. Kept maybe_ because the record layout (+0xa0 pointer, 0x1C stride) is unverified.",
+  "previous_name": "maybe_Gfx_SignalFrameReady",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010AE64",
+  "name": "maybe_Gfx_WaitFrameDeadline",
+  "signature": "void maybe_Gfx_WaitFrameDeadline(void)",
+  "params": {},
+  "summary": "Waits until the frame deadline (64-bit tick pair at +0x178/+0x17C) expires and then calls the registered deadline callback with the remaining tick count.",
+  "confidence": 0.45,
+  "evidence": "NEW: called from the same present/file-update set as maybe_Gfx_SignalFrameReady and reading the same display block (0x007E7780); the callback is reached through a jumptable Ghidra could not recover, so the body is partly reconstructed and the confidence stays below 0.5.",
+  "previous_name": "maybe_Gfx_WaitFrameDeadline",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010C694",
+  "name": "Svc_Ndm_AcquireService",
+  "signature": "int Svc_Ndm_AcquireService(void)",
+  "params": {},
+  "summary": "Reference-counted acquire of the 'ndm:u' session: on first use it waits for the runtime, resolves the service name at 0x007418E4 ('ndm:u') and opens the handle into 0x007B00E8, then increments the user count.",
+  "confidence": 0.55,
+  "evidence": "NEW: the literal passed to the strlen/srvGetServiceHandle pair is the pointer at 0x007418E4, which is the ASCII string 'ndm:u' (verified in rodata 0x00725000). So the old 'Ui_AcquireAtlasContext' name was wrong about both the subsystem and the object: it is the 3DS network-daemon session. Callers are Os_SendIpcRequest1, Ui_IconAtlas_Load and the ac-client query, i.e. the network/content code.",
+  "previous_name": "maybe_Ui_AcquireAtlasContext",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010DA64",
+  "name": "maybe_Gfx_WaitForIpcIdle",
+  "signature": "int maybe_Gfx_WaitForIpcIdle(u32 arg1, u8* out)",
+  "params": {
+   "arg1": "argument of the 0x003B0040 status query",
+   "out": "display mode result (optional)"
+  },
+  "summary": "Waits for the GPU IPC channel to become idle: after the optional 0x400/0x200 capability queries it calls the 0x001139F0(3) helper and polls command 0x003B0040 with a 10 ms sleep until the answer is no longer one of the three 'busy' codes, then negotiates the display mode.",
+  "confidence": 0.45,
+  "evidence": "NEW: all three IPC wrappers are now the named Gfx_IpcCmd90040 / Gfx_IpcCmd3B0040 and the caller set is the gfx sync-submit/wait paths (Gfx_WaitSyncSubmit, Gfx_WaitSyncSubmitNoLock), so 'Svc_WaitState3' named the state write (3) instead of the purpose. The three busy error codes are still not identified, so maybe_ at 0.45.",
+  "previous_name": "maybe_Svc_WaitState3",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00248CCC",
+  "name": "maybe_Save_ClearTask",
+  "signature": "void maybe_Save_ClearTask(SaveTask* task)",
+  "params": {
+   "task": "save/load task (state byte +0, file handle +0xC as index<<12|generation)"
+  },
+  "summary": "Releases the file handle owned by a save/load task (returns the entry to the 0x007BA2D0 handle table when the generation matches) and resets the task state byte and handle field to 'no handle'.",
+  "confidence": 0.45,
+  "evidence": "NEW: all three call sites are the save-slot task machine - Save_LoadTask_Update clears the task on an unexpected mode, Save_SaveTask_BeginSlot aborts when the slot state is not 1/2/4, and the script callback path - so 'Ui_ClearLoadTask' had the wrong subsystem. The body is also a handle-table release (Pack_FreeHandleEntry + generation check), not a UI element reset.",
+  "previous_name": "maybe_Ui_ClearLoadTask",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00111D0C",
+  "name": "maybe_Save_BeginLoad",
+  "signature": "void maybe_Save_BeginLoad(SaveTask* self)",
+  "params": {
+   "self": "save/load work object (state +0xE110, data area +0xE120, lock +0xE118)"
+  },
+  "summary": "Prepares the save work for the next read: sets state 2, clears the 0x2A0-byte loaded-data area and the 0xE3C0/0xE3C4/0xE3C5 flags, and re-initialises the futex at +0xE118 depending on its -1/-2 state.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller Save_LoadTask_Update calls it as the mode 6/7 completion hook and both share the same work object (slot table +0xE1C0, mode byte +0xE3C4), so 'begin load' is the confirmed role. Confidence stays 0.45 because the decompilation is damaged: unaff_r4/r5/r6 and in_lr are passed straight into the futex helper 0x0011CC10.",
+  "previous_name": "maybe_Save_BeginLoad",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00541F1C",
+  "name": "Sound_StreamBuffer_Reset",
+  "signature": "u32* Sound_StreamBuffer_Reset(u32* self)",
+  "params": {
+   "self": "stream buffer object (vtable +0, four 0x10-byte descriptors at +8)"
+  },
+  "summary": "Re-initialises a sound stream-buffer object: installs vtable 0x007816D8, destroys the four old buffer descriptors once, clears the flag/count fields, seeds the two 1.0f words and destroys the descriptor range.",
+  "confidence": 0.5,
+  "evidence": "NEW: its caller is the confident Sound_StreamBuffer_Dtor, which calls this before freeing - so it is the 'reset/teardown the buffer contents' step of that object, and the vtable install confirms it works on the stream-buffer class.",
+  "previous_name": "maybe_Sound_StreamBuffer_Reset",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00114C58",
+  "name": "maybe_Mem_PoolDestroy",
+  "signature": "void maybe_Mem_PoolDestroy(Pool* pool, u32 block, u32 count, u32 flags)",
+  "params": {
+   "pool": "pool descriptor (four 0x10-byte sublists at +0)",
+   "block": "unused by the recovered body",
+   "count": "unused by the recovered body",
+   "flags": "unused by the recovered body"
+  },
+  "summary": "Empties a pool: walks its four sublists, detaches every chunk and appends it to a temporary list, then re-initialises the pool descriptor and marks it reset.",
+  "confidence": 0.45,
+  "evidence": "NEW: the caller set (Sound_StreamBuffer_Dtor, Sound_StreamPlayer_Release) and the callees (maybe_Container_ListAppend, maybe_Mem_PoolInit, the chunk-callback pointer 0x0011B034) confirm 'empty and re-init a pool'; the three trailing arguments are not used by the recovered body, so the prototype remains a reconstruction.",
+  "previous_name": "maybe_Mem_PoolDestroy",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00115018",
+  "name": "maybe_Snd_WaitBufferId",
+  "signature": "void maybe_Snd_WaitBufferId(SndBufferOwner* owner, u32 id)",
+  "params": {
+   "owner": "queue owner (queue at +0xB4)",
+   "id": "id to wait for"
+  },
+  "summary": "Blocks on the owner's queue until the entry with the requested id arrives, refreshing the 'current entry' fields (+0x178/+0x184/+0x188/+0x18C) and clearing them when the entry is the last one.",
+  "confidence": 0.45,
+  "evidence": "NEW: the pop is the confident Os_QueuePopBlocking, and the three named callers (Snd_QueueWaveCommand, Sound_StreamPlayer_Shutdown, maybe_Fs_Archive_CancelRequest) all wait for a request id - so the primitive is shared between the archive and stream queues and the 'Snd_' prefix is only one of its users.",
+  "previous_name": "maybe_Snd_WaitBufferId",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00547E7C",
+  "name": "maybe_Sound_Stream_QueueWork",
+  "signature": "void maybe_Sound_Stream_QueueWork(SoundWorkItem* item, u32 arg2, u32 b, u32 context)",
+  "params": {
+   "item": "work item",
+   "arg2": "reserved",
+   "b": "reserved",
+   "context": "cookie passed to the queue"
+  },
+  "summary": "Initialises a work item (clears +0x54, self-links +0x7C/+0x80, copies the queue head from +0x14) and then enqueues it on the engine's job queue with the item cookie, signalling the queue.",
+  "confidence": 0.48,
+  "evidence": "NEW: the readable body overruns into 0x00547EB0, but the disassembly shows the real function is only 0x34 bytes: push {r4,lr}; str 0 at [r4,#0x54]; str r4 at [r4,#0x7C] and [r4,#0x80]; ldr/str [r4,#0x14]->[r4]; bl 0x00547FB0 (engine); add r1,r4,#0x64; pop {r4,lr}; mov r2,#1; then a tail branch into the queue helper. So the 'prepare + queue the work item' role holds, but the extra arguments in the Ghidra prototype (and the unaff_r4 fifth argument) do not exist - hence maybe_ at 0.48 rather than a confirmation.",
+  "previous_name": "maybe_Sound_Stream_QueueWork",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00547EB0",
+  "name": "Sound_Stream_QueueWorkLane",
+  "signature": "void Sound_Stream_QueueWorkLane(SoundEngine* engine, SoundWorkItem* item, u32 lane)",
+  "params": {
+   "engine": "sound engine",
+   "item": "work item",
+   "lane": "0..2"
+  },
+  "summary": "Pushes a work item onto one of the engine's three per-lane job lists under the engine lock and signals the queue.",
+  "confidence": 0.5,
+  "evidence": "NEW: the lane index selects `engine + lane*0xC`, exactly the three lists that the confirmed Sound_Stream_CancelWorkByOwner walks, and the callers (Sound_Player_Update, Sound_SeqPlayer_Update) pass the lane explicitly.",
+  "previous_name": "maybe_Sound_Stream_QueueWorkLane",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00115410",
+  "name": "maybe_Snd_SubmitBuffer",
+  "signature": "u32 maybe_Snd_SubmitBuffer(u32* entry)",
+  "params": {
+   "entry": "buffer entry (link word +0, sequence word +8)"
+  },
+  "summary": "Appends a buffer entry to the owner's submission chain, publishes it with a memory barrier and either hands it to the queue or waits for room, then assigns and returns the next sequence number.",
+  "confidence": 0.3,
+  "evidence": "NEW: nothing new can be trusted here - the body is a fragment that reads the owner and flags from unaff_r4/r5/r7 and the header's '2920 Thumb bytes' does not match the 20-statement body, so the decompilation is damaged and only a fresh disassembly pass can confirm the submit/sequence reading. Confidence stays at the previous 0.30.",
+  "previous_name": "maybe_Snd_SubmitBuffer",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001167C8",
+  "name": "maybe_Container_MapLowerBound",
+  "signature": "void maybe_Container_MapLowerBound(u32* out, u32 tree, u32* key)",
+  "params": {
+   "out": "two words: found node and predecessor",
+   "tree": "tree header (end node +4, root +8)",
+   "key": "two-word key (id +0, name +4)"
+  },
+  "summary": "Lower-bound lookup in the engine's keyed name map: builds a 0x1F-byte label from the key's name, walks the tree by the 32-bit id, and compares the label with the 0x20-byte node name to find the first node >= key.",
+  "confidence": 0.45,
+  "evidence": "NEW: the three confident callers (Container_HashTableInsert, Container_NameMap_Find, Fs_Task_Create) pass `&result, map+0x18` and expect the two-word result, so this is the map's own lookup helper rather than an RB-tree lower_bound as the first pass assumed; the two-word key (id + name) and the 0x20-byte node compare are visible. Still maybe_ because the tree's real container type is unproven.",
+  "previous_name": "maybe_Container_MapLowerBound",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011B840",
+  "name": "Snd_QueueObjectCommand",
+  "signature": "u32 Snd_QueueObjectCommand(int* obj, u8 subtype)",
+  "params": {
+   "obj": "object whose vtable slot +0x20 supplies the value",
+   "subtype": "command subtype byte"
+  },
+  "summary": "Queues a type-9 sound command carrying the value from the target object's vtable slot +0x20 plus a caller-supplied subtype byte, links it into the engine's command chain and returns the sequence number.",
+  "confidence": 0.5,
+  "evidence": "NEW: its three callers are the confident Sound_ArchiveStream_StartStream, Sound_Voice_AllocateAndStart and Sound_Voice_ReleaseEntryStream, all in the sound stream player, and it allocates its node through the named maybe_Snd_QueueCommandBuffer(engine, 6) - so the 'queue a sound command' role is settled.",
+  "previous_name": "maybe_Snd_QueueObjectCommand",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011E54C",
+  "name": "maybe_Svc_Ir_CloseService",
+  "signature": "void maybe_Svc_Ir_CloseService(void)",
+  "params": {},
+  "summary": "Closes the shared service session opened by maybe_Svc_Ir_SetupChannel: sends the 0x00020000 close command, closes the shared-memory handle, releases the session handle, unmaps the shared memory and clears the open flag.",
+  "confidence": 0.45,
+  "evidence": "NEW: it is the exact inverse of 0x00122200 - same globals (open flag 0x007B2D08 / 0x007B2D2C, shared memory 0x7F2DE0), and that function's open call uses the service-name literal 0x00754FC0 = 'ir:USER' (verified bytes). The old 'Gfx_FinalizeSession' name claimed a GPU session, which the string contradicts. Kept at 0.45 because the callers (Gfx_ShutdownChannel among them) still look GPU-side and the conflict needs a follow-up.",
+  "previous_name": "maybe_Gfx_FinalizeSession",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00122200",
+  "name": "maybe_Svc_Ir_SetupChannel",
+  "signature": "u32 maybe_Svc_Ir_SetupChannel(u32 service, u32 buffer, int a, u32 b, int c, u32 d, u32 flags)",
+  "params": {
+   "service": "service block value",
+   "buffer": "shared-memory size/offset argument",
+   "a": "first coordinate",
+   "b": "width",
+   "c": "second coordinate",
+   "d": "height",
+   "flags": "mode"
+  },
+  "summary": "Opens the shared service session on first use, maps the shared memory, sends the channel setup request (coordinates + sizes in 8.8 fixed point) and initialises the endpoint, cleaning up on failure.",
+  "confidence": 0.35,
+  "evidence": "NEW: the name went through 0x00754FC0, which is the ASCII string 'ir:USER' (verified in rodata: bytes 69 72 3A 55 53 45 52 00), and the open uses the same strlen/srvGetServiceHandle pair as the verified Svc_Cecd_OpenService. So the 'Snd_SetupChannelBuffer' name cannot be right. What the client is for cannot be settled from this body alone, and the caller Gfx_OpenGpuChannel passes five arguments that do not match the reconstructed seven-parameter prototype, so confidence stays 0.35 - flagged as an open problem.",
+  "previous_name": "maybe_Snd_SetupChannelBuffer",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00509B40",
+  "name": "maybe_Svc_SyncObject_DestroyB",
+  "signature": "int maybe_Svc_SyncObject_DestroyB(SvcSyncHandle* self)",
+  "params": {
+   "self": "sync object (kernel handle at +0x14)"
+  },
+  "summary": "Destroys the second kind of synchronisation object: closes its kernel handle and clears the stored handle field; returns the object.",
+  "confidence": 0.45,
+  "evidence": "NEW: it is the sibling of 0x00509A20 (same shape, different close helper) and both are waited on together by the content-cache code at 0x0050A714, so 'destroy one of the two sync objects' holds; which primitive each kind is (event vs condition) is still unknown, hence maybe_.",
+  "previous_name": "maybe_Svc_SyncObject_DestroyB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00146D34",
+  "name": "maybe_Ui_MessageWindow_Command",
+  "signature": "void maybe_Ui_MessageWindow_Command(int mode)",
+  "params": {
+   "mode": "0 = clear text, 1 = finish if the panel is visible, 2 = force end"
+  },
+  "summary": "Script-facing message-window command: fetches the window from the UI core (ctx+0x10 -> +0x98) and, by mode, clears the text, ends the message when the owning panel's +0x60 flag is set (otherwise clears), or calls the force-end helper.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now Ui_GetCore / Ui_MessageWindow_SetTextFromWork and the window lookup is the same Ui_GetCore(...)->+0x10->+0x98 chain used by the other message natives, so the message-window reading is confirmed. The function is a bound Squirrel native sitting in the 0x146xxx native block between CameraZoom and GetActorID, but native_names.json has no entry for it, so the real script name is unknown - kept maybe_.",
+  "previous_name": "maybe_Ui_MessageWindow_Command",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ }
+]

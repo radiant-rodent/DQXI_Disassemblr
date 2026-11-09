@@ -1,0 +1,113 @@
+[
+  {
+    "class": "Text_Font",
+    "type": "TextFont",
+    "summary": "88-byte object that owns an embedded nn::fnd::ExpHeap at +0x18 and releases blocks from it (ctor 0x0050E588, free path 0x0050E5B8). The Text_Font label comes only from the recovered function name; both methods are allocator code, so the font role is unproven.",
+    "size": 88,
+    "base": null,
+    "confidence": 0.35,
+    "evidence": "Ctor 0x0050E588 does add r0,r0,#0x18 / bl 0x0050E60C (nn::fnd::ExpHeap::Create: writes FourCC 0x45585048 'EXPH') and then self->f_54 = 0. The only other method, 0x0050E5B8, passes &self->f_18 to 0x0050E69C (ExpHeap free-list unlink/coalesce, creates a new 'FR' free block) and decrements self->f_54. maybe_Mem_HeapFreeLocked (0x006E7624) calls it under the heap monitor at +0x58.",
+    "fields": [
+      {
+        "offset": 24,
+        "name": "heapMagic",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "Start of the embedded nn::fnd::ExpHeap: ctor 0x0050E588 passes self+0x18 to ExpHeap::Create, which writes the heap FourCC 0x45585048 ('EXPH') as the first word and the managed range at heap+0x18/+0x1c. 0x0050E5B8 passes the same &self->f_18 to the ExpHeap free routine 0x0050E69C."
+      },
+      {
+        "offset": 84,
+        "name": "maybe_blockCounter",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.35,
+        "evidence": "Ctor 0x0050E588 sets self->f_54 = 0 immediately after creating the embedded ExpHeap; 0x0050E5B8 decrements it once per released block after the free-list update (ldr r0,[r4,#0x54]; sub r0,r0,#1; str r0,[r4,#0x54]). A live-block count fits, but the matching increment is not in this function, so the exact counter meaning is unproven."
+      }
+    ]
+  },
+  {
+    "class": "Text_LayoutLine",
+    "type": "TextLayoutLine",
+    "summary": "Per-line text layout record used by the character-run emitter: it carries a font-provider pointer and floats for glyph scale and line-height offset. The 40-byte size is only the highest strong field; the record really continues past +0x38 (see evidence).",
+    "size": 40,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "Text_LayoutLine_GetFontMetric (0x0071330C) reads the pointer at +0x24 and calls its vtable slot +0x28, then returns f32 (self+0x38) + height * f32 (self+0x0C) (asm: ldr r0,[r4,#0x24]; ldr r1,[r0]; ldr r1,[r1,#0x28]; blx r1; vldr s0,[r4,#0x38]; vldr s2,[r4,#0xc]; vmla.f32). Ui_Text_EmitCharRun (0x003A7024) passes the same record, writes +0x08/+0x0C/+0x10/+0x14 and reads +0x30/+0x38; Text_LayoutLine_TransformBounds (0x00713344) copies 0x48 bytes of it as a transform block. So the real record is larger than 40 bytes and the 0x43e0 field below belongs to a different owner.",
+    "fields": [
+      {
+        "offset": 36,
+        "name": "maybe_fontProvider",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "GetFontMetric (0x0071330C) checks self+0x24 and calls (*(void**)*(self+0x24))[+0x28] which returns an int font line height; that value is multiplied by the float at self+0x0C and added to the float at self+0x38. The pointer is therefore a font/metrics object, but its class is not recovered (Font_GlyphCache's vtable has only 8 slots, so it cannot be that type)."
+      },
+      {
+        "offset": 17376,
+        "name": "unknown_glyphCache",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "Only access is in 0x002FCFD4 (named Text_LayoutLine_AutoSize): it calls Text_GlyphCache_FindOrInsert(self+0x43e0, ...), but that method treats its argument as a page-builder object of at least 0x4400 bytes and also uses self+0x580, so it cannot be this 40-byte line record. Mistyped self; the offset has no meaning for Text_LayoutLine and was deliberately not named."
+      }
+    ]
+  },
+  {
+    "class": "Text_CommandExecutor",
+    "type": "TextCommandExecutor",
+    "summary": "Sixteen-byte text command holder: an embedded command state at +8 is reset, then Text_ExecuteCommand runs the opcode byte stored at +0xC once during initialisation.",
+    "size": 16,
+    "base": null,
+    "confidence": 0.55,
+    "evidence": "Ctor 0x0039AA28: add r0,r0,#8 / bl 0x00257D04 (state reset) then ldrb r1,[r4,#0xc] / add r0,r4,#8 / mov r2,#0 / b 0x00257B30 (Text_ExecuteCommand, which dispatches an 8-entry handler table on its command argument and clamps values above 7). The next function 0x0039AA4C also operates on self+8 (query via 0x00257FB0), confirming that the real state object starts at +8.",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "commandId",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.6,
+        "evidence": "Read with ldrb r1,[r4,#0xc] in ctor 0x0039AA28 and passed as the command argument of Text_ExecuteCommand(self+8, command, 0); 0x00257B30 uses it as an index into the 8-entry command handler table (values > 7 fall back to 0)."
+      }
+    ]
+  },
+  {
+    "class": "Text_GlyphBox",
+    "type": "TextGlyphBox",
+    "summary": "Eight-byte 2D point holding the text pen position {x, y} tested by Text_GlyphBox_IntersectsRect; the generated class name comes from the function name, the struct itself is just a point.",
+    "size": 8,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "0x005CE294 (Text_GlyphBox_IntersectsRect) loads the pair with ldrd r2,r3,[r5] and uses r2 as x and r3 as y when building the glyph rectangle, then compares it with the clip rect (x, y, w, h) given in r4. The disassembly shows arithmetic on both words, so the first argument is a 2-int point, not a box record.",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "y",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "0x005CE294 loads the pair with ldrd r2,r3,[r5]; r3 (word at +4) is added to the glyph bottom (add r0,r0,r3) and compared against clip.y and clip.y+clip.h, while word +0 is the matching x coordinate. This is the y of the text pen position."
+      }
+    ]
+  },
+  {
+    "class": "Text_MessageStack",
+    "type": "TextMessageStack",
+    "summary": "Message queue: a contiguous array of 0x2C-byte pending message entries (two argument strings and a format byte) between the begin/end pointers at +4/+8, plus a pointer at +0x594 to the message-data table used to look up a record when an entry is popped.",
+    "size": 1432,
+    "base": null,
+    "confidence": 0.35,
+    "evidence": "Text_MessageStack_Pop (0x002C3678) compares [self+4] and [self+8] (begin/end of the entry array, 0x2C stride), binds Message_SetArg(2, entry+0x18, 1) and Message_SetArg(3, entry+4, 1), refreshes the message formatter at *0x007AC834 (+0x848/+0x844), then memmoves the following entries down and subtracts 0x2C from [self+8]. Pop also reads [self+0x594] and passes it with id 0x2B to 0x00644BE4.",
+    "fields": [
+      {
+        "offset": 1428,
+        "name": "maybe_messageTable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "0x002C3678 does ldr r0,[r7,#0x594] / mov r1,#0x2b / bl 0x00644BE4; that getter dereferences the pointer once and indexes an 8-byte-stride record table (element count at table+0x60, rows via table+0x58, extra offset at rows+0x24). The returned record becomes Pop's return value, so +0x594 points at the message/record table owner; the exact table class is not recovered."
+      }
+    ]
+  }
+]

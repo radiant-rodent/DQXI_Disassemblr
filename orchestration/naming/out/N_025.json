@@ -1,0 +1,1770 @@
+[
+ {
+  "address": "0x002A66EC",
+  "name": "maybe_Actor_ActionSeq_RunCommon",
+  "signature": "u32 maybe_Actor_ActionSeq_RunCommon(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner (f_3534 = state flags, f_3570 = sequence data, f_3574 = owning actor)"
+  },
+  "summary": "One step of the field-actor action-sequence runner for the 'common' node kind: while the sequence is waiting it only toggles the node's work byte, otherwise it asks the owning actor (vtable +0x14) to switch to action 0x13/0x14/0x15/0x16 depending on the node's two flag bytes and finally commits it (vtable +0x10).",
+  "confidence": 0.45,
+  "evidence": "Shares the exact prologue with 0x002FDA70/0x00308264/0x00307DA8: `f3534 = self->f_3534; if ((f3534 & 0x142)==0) ...` and `piVar5 = &self->f_3574`, then `(**(code**)(*piVar5+0x14))(piVar5,0x13|0x14|0x15|0x16)` and `(+0x10)(piVar5)` to commit; `self->f_356c = 1` marks the step done. Node data comes from f_3570->f_34 + i*0x10 (16-byte command nodes, see 0x002FDA70 counting them)."
+ },
+ {
+  "address": "0x002A69A0",
+  "name": "maybe_Actor_ActionSeq_StartCommon",
+  "signature": "void maybe_Actor_ActionSeq_StartCommon(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Resets the runner's private list at +0xd36 (splices it to itself), re-reads the current gameplay flag word from the global work object, then asks the owning actor for action 0x0e \u2014 i.e. the 'start' node of a common sequence.",
+  "confidence": 0.42,
+  "evidence": "`self[0xd38]/self[0xd39]` list splice around `self+0xd37`, `func_00123594(self,self+0xd36)` (list release/reset), `func_006F20C0` fetches the global work object and calls `func_0062A480/0x62A320` on work+0x24a98, then `(**(code**)(*self+0x54))(self,0xe,0xffffffff)`. Byte-identical tail in 0x00308970 (same 0x0e request)."
+ },
+ {
+  "address": "0x002A6B08",
+  "name": "maybe_Actor_SubObject_ReleaseCommon",
+  "signature": "void maybe_Actor_SubObject_ReleaseCommon(void* self)",
+  "params": {
+   "self": "actor sub-object owning a child list at +0x3468"
+  },
+  "summary": "Drains the child list, releases the list at +0x3468 and then hands the object to the deleter for +0xd00 \u2014 the tail-end destructor of a field-actor sub-object.",
+  "confidence": 0.4,
+  "evidence": "`while (func_0062F070(self) > 1) func_0010EBD8(self);` (pop children), `func_00123594(self)` , `func_003BD148(self,self+0x3468)`, then `func_0029126C(self+0xd00,1)` which Ghidra marks 'does not return' (free). Same shape as 0x00308D10/0x00307A28."
+ },
+ {
+  "address": "0x002A6D28",
+  "name": "maybe_Actor_ActionSeq_RunChoice",
+  "signature": "u32 maybe_Actor_ActionSeq_RunChoice(ActorActionSeq* self, int unused, int unused2, int unused3)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step for the 'choice/branch' node kind: reads the branch selector from the global work object (+0x24a98) and requests one of actor actions 3,5,6,7,9,10,0x0c or 0x10 \u2014 the mapping table for a multi-way branch node.",
+  "confidence": 0.42,
+  "evidence": "Nested if-chain on `func_006509AC(&self->f_d00)` returning 0/1/2/3, and on `self->f_3570->f_523/f_524`, each arm calling `(**(code**)(*piVar4+0x14))(piVar4,3|5|6|7|9|10|0xc|0x10)`; `func_0066B264(work+0x24a98)` gates the 9/10 pair. `self->f_356c=1` on completion."
+ },
+ {
+  "address": "0x002A76A8",
+  "name": "maybe_Actor_ActionSeq_Broken",
+  "signature": "void maybe_Actor_ActionSeq_Broken(void* arg1)",
+  "params": {
+   "arg1": "object pointer"
+  },
+  "summary": "Body did not decompile: Ghidra hit 'bad instruction data' after the first virtual call (vtable+0x54 with id 0x1b), so the only reliable fact is that it issues action 0x1b and then reads the global work object. Kept as a placeholder until the raw assembly at 0x002A76A8 is re-analysed.",
+  "confidence": 0.15,
+  "evidence": "`/* WARNING: Control flow encountered bad instruction data */`, `halt_baddata()`; before the corruption: `pcVar2 = *(code**)(*arg1+0x54); (*pcVar2)(arg1,0x1b); func_006F20C0(...)`."
+ },
+ {
+  "address": "0x002A891C",
+  "name": "Container_KeyedList_Select",
+  "signature": "u32 Container_KeyedList_Select(Container* self, u32 index, int subIndex)",
+  "params": {
+   "self": "indexed container (count f_40 at +0x40, element array f_3c, current key pair f_39/f_3a)",
+   "index": "element index to select",
+   "subIndex": "secondary key (0 = primary slot)"
+  },
+  "summary": "Selects element `index` of a container only if it exists and its sort key (f_18) is not before the currently selected element's key; optionally runs the element's own +0x20/+0x28/+0x24 vtable checks and a `func_0063AF80` notification, then stores the new key pair. Returns 1 on success, 0 when the move is illegal.",
+  "confidence": 0.5,
+  "evidence": "Bounds checks `arg2 < self->f_40` and `self->f_38 < self->f_40`, element pointers at `self->f_3c + arg2*4`, ordering compare on `iVar2->f_18` vs `uVar3->f_18`, vtable slots +0x20/+0x24/+0x28, `func_0063AF80(self,arg2)` then `self->f_39 = local_18` (CONCAT11 of the two keys). Called by 0x002A8698, 0x002A86C0, 0x00377398, 0x005E7828."
+ },
+ {
+  "address": "0x002A8BA4",
+  "name": "Container_SlotReplace",
+  "signature": "u32 Container_SlotReplace(Container* self, u32 index, void* object)",
+  "params": {
+   "self": "slot container",
+   "index": "slot index",
+   "object": "new object (may be NULL)"
+  },
+  "summary": "Replaces the object stored in slot `index`: destroys the previous occupant through its vtable slot +4, then stores the new pointer. Used by the field/monster action tables to register a compiled action object in a numbered slot.",
+  "confidence": 0.62,
+  "evidence": "`if (arg2 < self->f_40) { piVar2 = *(int**)(self->f_3c+arg2*4); if (piVar2) (**(code**)(*piVar2+4))(); *(u32*)(self->f_3c+arg2*4) = arg3; result = 1; }`. 44 callers incl. Field_SetupNpcActionScript, Field_SetupEnemyAi, Monster_SetupEcology, Field_RegisterActorActions, Battle_ActionAnimTable_Build, Battle_AddSkillAction."
+ },
+ {
+  "address": "0x002A8BFC",
+  "name": "Battle_ActionAnimEntry_Create",
+  "signature": "void* Battle_ActionAnimEntry_Create(u32 owner, ActionAnimDesc* src, ActionAnimDesc* src2)",
+  "params": {
+   "owner": "owning table/actor",
+   "src": "parameter block copied into the new entry",
+   "src2": "secondary parameter block (one field read at +4)"
+  },
+  "summary": "Allocates and initialises one action-animation entry (0x4c bytes) from two parameter blocks: copies position/rotation words, sets the id/flag bytes at +0x35..+0x3a, clears the two counters at +0x3c/+0x40 and stamps the default animation id.",
+  "confidence": 0.55,
+  "evidence": "Allocator `func_0026502C(arg1,&local_28,&local_10)` with two 8-byte descriptors from the literal pool, then `*(u8*)((int)puVar2+0x35)=1; +0x36=0; +0x37=0; puVar2->f_e=0xff; +0x39=0xff; puVar2[0x11]=g_002a8c9c`. 18 callers are all 'ActionAnim'/'ActionList' initialisers (Battle_ActionAnimWindow_Init, Ui_ActionListWindow_Init, Battle_ActionAnimTable_Build)."
+ },
+ {
+  "address": "0x002A8CCC",
+  "name": "Anim_ActionSeq_AdvanceEvents",
+  "signature": "void Anim_ActionSeq_AdvanceEvents(AnimActionSeq* self, int unused, int deltaTime)",
+  "params": {
+   "self": "action-sequence player (current time f_10, cursors f_14/f_16/f_18/f_1a/f_1c, header f_c)",
+   "deltaTime": "time step added to the current time"
+  },
+  "summary": "Advances an action/animation sequence by `deltaTime` and fires every event whose timestamp falls in the newly covered interval. Five parallel event arrays are walked with different record strides (0x14/0x08/0x18/0x3c/0x08), which is why the five cursor fields exist.",
+  "confidence": 0.62,
+  "evidence": "Header `self->f_c` holds counts at +8/+0x10/+0x18/+0x20/+0x28 and relative pointers at +0xc/+0x14/+0x1c/+0x24/+0x2c; events compared against `self->f_10` and `self->f_10+arg3`; per-kind handlers func_0014BB5C, func_0014BBE8, func_0014BCA8, func_0014C150 and func_00220B20(self->f_8, name, arg, 0). Cursors are stored back as shorts at f_14/f_16/f_18/f_1a/f_1c and the end time at f_20/f_24."
+ },
+ {
+  "address": "0x002A92D8",
+  "name": "Anim_ActionSeq_Reset",
+  "signature": "void Anim_ActionSeq_Reset(AnimActionSeq* self, void* sequenceData, int playNow)",
+  "params": {
+   "self": "action-sequence player",
+   "sequenceData": "sequence header to play",
+   "playNow": "non-zero to fire the first frame immediately"
+  },
+  "summary": "Prepares the sequence player for a new sequence: stores the header, zeroes the time and all five event cursors, and marks both end times as 'not reached' (0xffffffff); when `playNow` is set it immediately dispatches the events at time 0.",
+  "confidence": 0.6,
+  "evidence": "`self->f_c = arg2; self->f_10 = 0; self->f_14..f_1c = 0; self->f_20 = self->f_24 = 0xffffffff;` then `if (arg3) { func_002A8CCC(self,0); self->f_28 = 1; }`. Callers 0x00223030 and itself. The 0xffffffff sentinels are the same ones 0x002A8CCC compares against."
+ },
+ {
+  "address": "0x002A99C8",
+  "name": "Ui_MessageWindow_BuildLines",
+  "signature": "void Ui_MessageWindow_BuildLines(UiMessageWindow* self)",
+  "params": {
+   "self": "message window (line index f_c90 at +0xc90, per-line records at +0x5d0, 0x60 bytes each)"
+  },
+  "summary": "Appends the next visible talk line(s) for the current speaker: resolves the speaker object (window vtable +0x48), looks up its text record, fills the 0x60-byte line record at +0x5d0 (clearing its 18 sub-fields and the 0x38-byte tail), then binds the line's text to the renderer and advances the line index up to 0x47 (71) lines.",
+  "confidence": 0.55,
+  "evidence": "Loop bounded by `local_30 = 3` when the speaker model has flag 0xa0 else 1; `arg1[0xc90]` indexes `arg1[0xc90]*0x18 + 0x5d0` and `*0x60 + 0x1746`; clears bytes up to +0x179d; calls func_00486208 / func_00490994 / func_00497520 (line builders) and func_001FC4FC(self,line,model,record,1); caps the index at 0x47. Line record size and the 0xc90 counter match 0x002ABE74's 10-rows-per-page layout."
+ },
+ {
+  "address": "0x002A9D40",
+  "name": "Ui_MessageWindow_CanShowMessage",
+  "signature": "u32 Ui_MessageWindow_CanShowMessage(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Returns 0 when the current speaker is in state 4 or 8 (i.e. hidden/removed) so the message must not be drawn; otherwise refreshes the name/face lookup and returns 1.",
+  "confidence": 0.5,
+  "evidence": "`(**(*arg1+0x48))(arg1,0)` gives the speaker object; `iVar2->f_10 != 0` gates the body; text id read from `iVar2->f_768`; `local_1c->f_29 == 0x08 || == 0x04` returns 0. Same accessors (func_0035EB98 + func_006292F0) as 0x002A99C8."
+ },
+ {
+  "address": "0x002A9E18",
+  "name": "maybe_Ui_MessageWindow_GetTalkId",
+  "signature": "u32 maybe_Ui_MessageWindow_GetTalkId(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Resolves the talk/message id currently assigned to the speaker: converts the window's text id (`f_768`) through the message table, and if nothing is found falls back to the speaker record's +0xa8 field; special-cases value 0x237 (the 'no message' sentinel, mapped to 0x23b for the enemy variant).",
+  "confidence": 0.42,
+  "evidence": "`char arg1[0xca4]` selects between func_006292F0(uVar4,0) and (uVar4,1); `result != 0x237`, then `result + 4 & 0xffff`; falls back to `iVar2->f_a8` from func_0063FDAC. Callers 0x002A9924 and 0x002A9F4C (the neighbouring page/show helpers)."
+ },
+ {
+  "address": "0x002ABD48",
+  "name": "Ui_RowListWindow_ApplyRowColors",
+  "signature": "void Ui_RowListWindow_ApplyRowColors(UiRowListWindow* self)",
+  "params": {
+   "self": "10-row list window (rows of 0x18 bytes at +0x70, 'dimmed' flag at +0x48)"
+  },
+  "summary": "Re-applies the four per-row text colours (normal, highlighted, dim, disabled) to all ten visible rows; when the window is flagged as dimmed the extra colour from the second pool entry is also written to the first three columns.",
+  "confidence": 0.55,
+  "evidence": "Outer loop `iVar5 = 0..9` over `arg1 + iVar5*0x18` rows; four `func_001A629C(*puVar4, row->f_74/f_78/f_7c/f_80, &colour)` calls with colours taken from the pool word at g_002abe70 (`*puVar2` and `puVar2[2]`); the `arg1->f_48 != 0` branch selects the second colour set. Called by 0x002ABE74 after every page change."
+ },
+ {
+  "address": "0x002ABE74",
+  "name": "Ui_RowListWindow_LoadPage",
+  "signature": "void Ui_RowListWindow_LoadPage(UiRowListWindow* self, int page)",
+  "params": {
+   "self": "10-row list window",
+   "page": "zero-based page number"
+  },
+  "summary": "Fills the ten visible rows from the page's glyph-id table (`f_160`, two bytes per entry): each row gets either a formatted glyph string (via func_002AC044) or blanked text plus the default colour, then the scrollbar is moved to `page*10 + rows` and the colours are refreshed.",
+  "confidence": 0.55,
+  "evidence": "`iVar2 = arg2*10 + iVar5` compared with `self->f_4c` (entry count); `*(u16*)(self->f_160 + iVar2*2)` compared with 0xffff (g_002abfd8); rows at `self+iVar5*0x18+0x70`; `self->f_50 = iVar5` (page-relative scroll position); `func_001D809C(self->f_38, pos-1 | self->f_28<<16)` sets the scrollbar; ends with `func_002ABD48(self)` (colour refresh). 10 rows/page matches DQXI's book/item list windows."
+ },
+ {
+  "address": "0x002AF9AC",
+  "name": "Ui_MessageWindow_SetNumberArg",
+  "signature": "u32 Ui_MessageWindow_SetNumberArg(UiMessageWindow* self, u32 arg2)",
+  "params": {
+   "self": "message window holding two numeric arguments (f_208/f_20c/f_210)",
+   "arg2": "return value passed through unchanged"
+  },
+  "summary": "Pushes the window's stored number into the message text: when the 'already formatted' flag (f_214) is clear it renders `f_20c` with format id `f_210` into a local string and binds it as message argument 2, otherwise it resolves `f_20c` as a name-table id; in both cases the same string is also bound as argument 5.",
+  "confidence": 0.55,
+  "evidence": "`func_005E5B98(&local_120, self->f_20c & 0xffff, self->f_210)` (printf-style) vs `func_0035EB98(root,self->f_20c)` (name id \u2192 table entry at +0xca); both then `func_006D3EA0(2,g_002afa80,value)` and `func_006D3EA0(5,g_002afa80,func_0066C99C(str,1))`. func_006D3EA0 is the same 2-arg/5-arg message-argument setter used by 0x002E4DD0 and 0x002F73A8."
+ },
+ {
+  "address": "0x002B0044",
+  "name": "maybe_Ui_MessageWindow_StepCode3E",
+  "signature": "void maybe_Ui_MessageWindow_StepCode3E(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step (points at the window through +4)"
+  },
+  "summary": "One step of the message-window script for control code 0x3e: when the window is in state 2/4 it feeds code 0x3e to the message interpreter and then times the next step from the global step table; in states 3/5 it only schedules the next step.",
+  "confidence": 0.42,
+  "evidence": "`cVar1 = *(char*)(*(int*)(self+4) + 0xd3c)` inspected against 2/3/4/5; `local_18 = 0x3e; func_0030F258(*(u32*)(self+4),&local_18,0)`; next times copied from `g_002b00d0->f_c/f_10` or `f_30/f_34`. funct_0030F258 is the message control-code dispatcher (see 0x0030F258), so 0x3e is a message tag, not a character."
+ },
+ {
+  "address": "0x002B00D4",
+  "name": "maybe_Ui_MessageWindow_StepCode3F42",
+  "signature": "void maybe_Ui_MessageWindow_StepCode3F42(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step"
+  },
+  "summary": "One step of the message-window script for control code 0x3f (window states 2/4) or 0x42 (states 3/5), followed by scheduling the next step from a different pair of the same global timing table.",
+  "confidence": 0.42,
+  "evidence": "`local_18 = 0x3f;`/`local_18 = 0x42;` before `func_0030F258`, timed from `g_002b0170->f_10/f_14` and `f_18/f_1c`. Direct sibling of 0x002B0044 with the same 2/4 vs 3/5 state split."
+ },
+ {
+  "address": "0x002B0174",
+  "name": "maybe_Ui_MessageWindow_StepNextQueuedByte",
+  "signature": "void maybe_Ui_MessageWindow_StepNextQueuedByte(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step; the window's byte cursor is at +0x1948/+0x194c"
+  },
+  "summary": "Pops the next tag byte from the window's script cursor and feeds it to the message interpreter; when the cursor is exhausted the step task finishes with state 1.",
+  "confidence": 0.45,
+  "evidence": "`f1948 = iVar4->f_1948; f194c = iVar4->f_194c; if (f1948 == f194c) { *(u8*)(self+8) = 1; ... }` then `local_28 = *f1948`, `func_00111378(f1948, f1948+1, f194c-f1948)` (memmove) and `func_0030F258(window,&local_28,0)`. The 0x1948/0x194c cursor pair is also used by 0x0030F258's caller set."
+ },
+ {
+  "address": "0x002B02C8",
+  "name": "maybe_Ui_MessageWindow_StepCode3D",
+  "signature": "void maybe_Ui_MessageWindow_StepCode3D(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step"
+  },
+  "summary": "Releases the currently shown sub-window (0x0030E4B8 with mode 7) and feeds control code 0x3d through the message interpreter, then schedules the next step.",
+  "confidence": 0.45,
+  "evidence": "`func_0030E4B8(*(u32*)(self+4),7); local_18 = 0x3d; func_0030F258(*(u32*)(self+4),&local_18);` then times from g_002b031c. The 7 argument matches the child-index argument of 0x0030E4B8."
+ },
+ {
+  "address": "0x002B0358",
+  "name": "maybe_Ui_MessageWindow_StepQueuedByteEx",
+  "signature": "void maybe_Ui_MessageWindow_StepQueuedByteEx(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step"
+  },
+  "summary": "Variant of the queued-byte step: pops one byte, reports the 'more bytes follow' flag as the third argument of the interpreter, hard-codes a length of 0x14 and finishes the task with step state 5 when the queue is empty.",
+  "confidence": 0.42,
+  "evidence": "`*(u8*)(self+8) = 5;` on empty queue; `uStack_1c = 0x14;` then `func_0030F258(iVar3,&uStack_20, iVar3->f_1948 != iVar3->f_194c)` \u2014 the only caller that passes a non-zero third argument, which 0x0030F258 uses as `local_40` ('more text follows')."
+ },
+ {
+  "address": "0x002B04D4",
+  "name": "maybe_Ui_MessageWindow_StepBranchOnFlag8",
+  "signature": "void maybe_Ui_MessageWindow_StepBranchOnFlag8(UiMessageWindow* self)",
+  "params": {
+   "self": "message-window script step"
+  },
+  "summary": "Branches the message script on a progress flag: releases the window, then either enables tags 0x20..0x25 (flag clear) or 0x20/0x21 (flag set) and pops the next queued byte, finishing with a step time read from the table.",
+  "confidence": 0.45,
+  "evidence": "`if (func_00641BF0(window,8) == 0)` \u2192 `func_006E4618(window+0x1944, 0x22/0x23/0x24/0x25)` + `func_0030E39C(window,8)`; else `func_006E4618(window+0x1944,0x21/0x20)`. The 0x1944 array is the tag-enable table used by 0x0030E39C (which ORs a byte at root+0x2d390). Then reads `*iVar2->f_1948` and calls 0x0030F258."
+ },
+ {
+  "address": "0x002B0A08",
+  "name": "Ui_MessageWindow_SetCounterDisplay",
+  "signature": "void Ui_MessageWindow_SetCounterDisplay(CounterWidget* self, int value, u32 divisor, u32 arg4)",
+  "params": {
+   "self": "three-pane counter widget (panes at +0xc, +0x10, +0x14)",
+   "value": "counter value (0xffff hides the widget)",
+   "divisor": "value written into the number label (clamped to 99)"
+  },
+  "summary": "Shows or hides a small 3-pane counter (icon + number): on 0xffff both the icon and its two text panes are hidden, otherwise they are shown, the main label gets the value from `divisor` (clamped to 99) and the secondary label is formatted through func_006F0E1C.",
+  "confidence": 0.5,
+  "evidence": "`if (arg2 != 0xffff && arg4 != 0)` branch sets `f_44 |= 1` on the three panes at arg1[3], arg1[4], arg1[5] and formats `local_30 = 99` clamp then `func_006F0E1C(auStack_2c,&g_002b0afc,*puVar3)`; the else branch clears bit 0 of all three `f_44` visible flags. Same f_44 visible-flag convention as 0x0030D67C/0x0030DB68."
+ },
+ {
+  "address": "0x002B20AC",
+  "name": "Ui_ListWindow_RefreshScrollBar",
+  "signature": "void Ui_ListWindow_RefreshScrollBar(UiListWindow* self)",
+  "params": {
+   "self": "list window exposing its row list through vtable +0x58"
+  },
+  "summary": "Recomputes the list window's scrollbar: asks the window for its row list (vtable +0x58), counts the entries with func_0063A8A0 and sets the scrollbar position/size from the row count and the window's page word.",
+  "confidence": 0.55,
+  "evidence": "`iVar1 = (**(code**)(*arg1+0x58))(arg1); iVar2 = func_0063A8A0(arg1+0x104); func_001D809C(iVar1, iVar2+3 | *(u16*)(arg1+10)<<16);`. Called from Ui_EquipmentWindow_Release, which is the same list family as 0x002ABE74."
+ },
+ {
+  "address": "0x002B2480",
+  "name": "maybe_Ui_Pane_SetCornerRotation",
+  "signature": "void maybe_Ui_Pane_SetCornerRotation(UiPane* self, int corner)",
+  "params": {
+   "self": "pane with a 2x2 corner matrix at +5*4 and scale/rotation at +0x28/+0x2c/+0x30",
+   "corner": "1..3 selects which corner of the source rectangle is pinned"
+  },
+  "summary": "Re-anchors a 2D pane on one of its four corners: copies the source rectangle into the pane transform and then offsets/rotates it so the requested corner stays fixed, keeping the scale at 1 and forcing the 'transform dirty' bits.",
+  "confidence": 0.42,
+  "evidence": "`func_0053E9A4(arg1[1],0,arg1+5)` writes the source rect; `arg1[1]->f_28/f_2c/f_30 = g_002b275c` (float 1.0) and `f_44 = f_44 & 0xef | 0x10`; branches on `arg2 == 1/2/3` build corner vectors from `arg1[5..0xc]`/`arg1[9..0x10]` and feed them to vtable +0x44/+0x48. Callers pass 1, 2 or 3 only."
+ },
+ {
+  "address": "0x002B3BC0",
+  "name": "maybe_Gfx_SpriteActor_StopAttachedEffect",
+  "signature": "void maybe_Gfx_SpriteActor_StopAttachedEffect(SpriteActor* self)",
+  "params": {
+   "self": "2D sprite actor with an optional attached effect at f_298"
+  },
+  "summary": "Stops and detaches the effect that a 2D sprite actor started earlier: only does anything while the 'effect active' flag (f_297) is set; it fetches the effect transform, looks up the effect resource for the current animation frame and then releases the effect object and clears the flag.",
+  "confidence": 0.42,
+  "evidence": "`if (self->f_297) { func_0031A6AC(&local_24,*self->f_2b8,self->f_2b4->f_17); uVar2 = func_005F4E14(self,self->f_2c4); func_0011FFD8(...); func_005F4DB8(self,&params); func_005C86A0(self->f_298); self->f_297 = 0; }`. Callers 0x005CA718 and itself (0x005CA718 is the sprite-actor update region)."
+ },
+ {
+  "address": "0x002B3F94",
+  "name": "Gfx_SpriteActor_CreateEightParts",
+  "signature": "void Gfx_SpriteActor_CreateEightParts(SpriteActor* self, SpritePartDesc* desc)",
+  "params": {
+   "self": "sprite actor whose parts array starts at +0x298 (0x48 bytes per part)",
+   "desc": "part descriptor (position at +4/+8/+0xc, rect at +0x10..+0x18, colour-anim id at +0x1c)"
+  },
+  "summary": "Builds the eight sprite parts of a 2D effect actor: copies the descriptor, creates the colour animator, converts the descriptor rectangle into part-space coordinates and adds all eight children (each 0x48 bytes at +0x298 + i*0x48) with their own animated colour.",
+  "confidence": 0.5,
+  "evidence": "`self->f_b4/f_b0/f_ac` copied from arg2+4/+8/+0xc; `func_00319848()` + `func_0029E41C()` provide the animation object stored in `self->f_b8->f_128`; `func_0028E2A0(self,&rect)` (colour animator); loop `i = 0..7` with `func_0047B314(i)` / `func_0047AF94(...)` and `func_00335A6C(self,&part,self+0x298+i*0x48,0)` (AddChild); ends with `func_0047AF5C(&self->f_204,1)`."
+ },
+ {
+  "address": "0x002B7CD0",
+  "name": "maybe_Ui_Pane_CreateEffectForTextId",
+  "signature": "void maybe_Ui_Pane_CreateEffectForTextId(UiPane* self, u32 textId)",
+  "params": {
+   "self": "pane with an effect slot at +0x120 and a handle pair at +0x124",
+   "textId": "text/glyph id used to look up the effect name"
+  },
+  "summary": "Swaps the effect shown on a pane to the one named by `textId`: hides the current effect, resolves the text id to a string, creates the named UI effect and assigns it to the pane's handle pair.",
+  "confidence": 0.45,
+  "evidence": "`iVar1 = self->f_120; if (iVar1) iVar1->f_44 &= 0xfe;` (hide), `func_0061BD4C(auStack_10,arg2)`, `func_0066BF4C(auStack_10)` \u2192 non-null check, `func_0066BFB8(auStack_10)` \u2192 name, `func_003A69C8(&self->f_124,name)` = maybe_Ui_Effect_Create, `func_003A6BD4(&self->f_124)` = maybe_Ui_HandlePair_Assign. Callers 0x002B90F0 and 0x002BB538 (both icon-style updaters)."
+ },
+ {
+  "address": "0x002B7D5C",
+  "name": "Ui_Pane_ShowWithSpriteSize",
+  "signature": "void Ui_Pane_ShowWithSpriteSize(UiPane* self)",
+  "params": {
+   "self": "pane whose sprite data is at f_78"
+  },
+  "summary": "Makes a pane visible and sizes it from its sprite sheet: reads the two 16-bit size fields at sprite record +4/+6 and stores them as the pane's width/height, setting the 'size dirty' flag bits.",
+  "confidence": 0.55,
+  "evidence": "`func_0065D448(self)` \u2192 sprite record; `uVar1 = *(u16*)(iVar2->f_78+4); ... *(u16*)(iVar2->f_78+6)`; `self->f_3c = width; self->f_40 = height; self->f_44 = self->f_44 & 0xee | 0x11`. Byte-identical twin: 0x002D5B58 (same fields, only the initial bit-0 set differs)."
+ },
+ {
+  "address": "0x002B90F0",
+  "name": "maybe_Ui_MessageWindow_ApplyIconStyles",
+  "signature": "void maybe_Ui_MessageWindow_ApplyIconStyles(UiMessageWindow* self, u32 messageId, u32 unused, u32 unused2)",
+  "params": {
+   "self": "message window with a 4-byte style array at +0x54..+0x57",
+   "messageId": "message whose inline icons must be re-styled"
+  },
+  "summary": "Decides how the inline icon glyphs of a message are drawn: glyphs in the icon ranges (0xa19..0xa82, 0xa4.., 0xb19..) get one of two style bytes, held-item/party icons get a third, and the four-byte style array is rewritten; unknown ids reset the array to the default 'plain text' pattern.",
+  "confidence": 0.45,
+  "evidence": "Ranges `local_38[0] - 0xa19 < 0x69`, `uVar9 - 0xa4`, `uVar9 - 0xb19 < 4`, `uVar9 - 0x9bf < 0x5a`; `self->f_54..f_57` written with 2/7 patterns; `self->f_49 < 0x1f` + `func_0066C1A8(local_38,self->f_49)` picks the item-icon path; ends with `func_002B7DAC(self)` then `func_002B7CD0(self,arg2)` (effect swap). Callback is a window-parameter refresh."
+ },
+ {
+  "address": "0x002BD770",
+  "name": "Ui_StampWindow_ShowStamp",
+  "signature": "void Ui_StampWindow_ShowStamp(StampWindow* self, int animate, int stampIndex)",
+  "params": {
+   "self": "stamp/quest-mark widget (sprite name chosen by `stampIndex`)",
+   "animate": "non-zero plays the pop-in animation",
+   "stampIndex": "0 = stamp1, otherwise stamp2"
+  },
+  "summary": "Shows a quest/book stamp: picks the `stamp1` or `stamp2` sprite name, binds it to the widget's sprite pane, resets the pane transform and either stays at full scale or slides/zooms in from the animation start value.",
+  "confidence": 0.5,
+  "evidence": "String constants `s_stamp1_002bd800` / `s_stamp2_002bd7f8` selected by `arg3`; `func_003E00CC(arg1+0x4c,arg1[1],pcVar1,0)` assigns the sprite; `func_003DFF34(arg1+0x4c,0)` resets it; `arg2` selects `*(float*)(arg1+100) = g_002bd808` vs `g_002bd808 - g_002bd80c` after `func_00649BD4`. Then a virtual '+0x24' call starts the tween."
+ },
+ {
+  "address": "0x002BDE74",
+  "name": "maybe_Ui_FlagTable_ClearEntry",
+  "signature": "void maybe_Ui_FlagTable_ClearEntry(u32 index, u32 kind, u32 unused, u32 unused2)",
+  "params": {
+   "index": "index into the per-object id table",
+   "kind": "must be 3 for the write to happen"
+  },
+  "summary": "Clears one byte of the global per-object flag array: the id table at g_002bdec8 maps `index` to a byte offset and the byte at root+0x2a4e6+offset is set to 0xff (i.e. 'unset'); does nothing for other `kind` values.",
+  "confidence": 0.3,
+  "evidence": "`func_005E754C(); if (arg2 == 3) { uVar1 = *(u16*)(g_002bdec8 + arg1); if (uVar1 != 0xffff) *(u8*)(*piVar2 + uVar1 + 0x2a4e6) = 0xff; }` where `*piVar2` is the global root object (see 0x0030E39C for the same root)."
+ },
+ {
+  "address": "0x002C1474",
+  "name": "Gfx_Model_Release",
+  "signature": "void Gfx_Model_Release(ModelOwner* self)",
+  "params": {
+   "self": "object owning a model handle at +0x224"
+  },
+  "summary": "Releases the model owned by this object: stops its animation, detaches it from the draw list and finally destroys it; all three calls are guarded by the same null check on the handle.",
+  "confidence": 0.55,
+  "evidence": "`if (self->f_224 != 0) { func_0040AD50(); } if (self->f_224 != 0) { func_0040BA78(self->f_224,1); } if (self->f_224 != 0) { func_0040B748(self->f_224,1,1); }` \u2014 0x0040B748 is the destroy form, 0x0040BA78 the visibility/flag form used all over the model code."
+ },
+ {
+  "address": "0x002C1CF8",
+  "name": "maybe_Actor_ActionSeq_RunEx",
+  "signature": "void maybe_Actor_ActionSeq_RunEx(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step that first asks the global actor manager (func_0064274C) whether a special situation is active and then requests actor action 0, 3 or 0xe accordingly \u2014 a two-way branch step.",
+  "confidence": 0.35,
+  "evidence": "`iVar1 = func_0064274C();` then `if (iVar1 == 0) (*self->f_35c->f_14)(&self->f_35c,0); else (...)(&self->f_35c,3);` followed by `(*self->f_35c->f_10)(&self->f_35c)` to commit. Uses object offset f_35c (this class puts its action object there instead of f_3574)."
+ },
+ {
+  "address": "0x002C2144",
+  "name": "maybe_Text_CharSet_BuildIconGlyphs",
+  "signature": "void maybe_Text_CharSet_BuildIconGlyphs(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list (u16 array at +10, count at +0x228, available bit at +0x22d)"
+  },
+  "summary": "Fills the candidate list used by the name/word-entry screen with the icon glyph ids (0x9bf..0xa18) that the current save actually has unlocked: each glyph record must have the 'available' flag (0x20) set and be present in the root object's glyph bitmap at +0x295c8.",
+  "confidence": 0.45,
+  "evidence": "Loop `for (i = 0; i < g_002c3aec; i++)` with `func_0061BD4C(&w, i)`, glyph record flag test `uVar3 & 0x20` / `& 0x40`, bitmap test `*(u32*)(root + 0x295c8 + (id>>5 & 0x7ff)*4) & 1 << (id & 0x1f)`, range `id - 0x9bf < 0x5a`; appends de-duplicated ids at `(u16*)(self+10)` and bumps `self[0x8a]`; ends with vtable +0x1c (refresh) and `*(u8*)(self+0x22d) = 0`."
+ },
+ {
+  "address": "0x002C21AC",
+  "name": "maybe_Actor_ActionSeq_RunEx2",
+  "signature": "u32 maybe_Actor_ActionSeq_RunEx2(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step that plays the 'idle/wait' node: for the waiting state it requests action 10 (or asks the actor to commit), and for the busy state it requests action 9/0x0b depending on func_006426A8, then sets the runner's 'in progress' byte.",
+  "confidence": 0.4,
+  "evidence": "`f344 = self->f_344; if ((f344 & 0x142)==0) { if ((f344 & 4)==0) {...} else { (**(code**)(*piVar3+0x14))(piVar3,10); ... } } else { ... func_006426A8(self) ... (...,9) ... (...,0xb); } self->f_4a9 = 1;` plus `self->f_4a8 = 3`. Same flag/action pattern as 0x002A66EC but with the f_35c action object."
+ },
+ {
+  "address": "0x002C244C",
+  "name": "maybe_Ui_SetResultFlags",
+  "signature": "void maybe_Ui_SetResultFlags(u32 unused, u32 mode, int value)",
+  "params": {
+   "unused": "unused first argument",
+   "mode": "index passed to the two handlers",
+   "value": "value forwarded to the second handler"
+  },
+  "summary": "Records a result on the global work object: calls the two handlers for `mode` on the object at +0x228, then sets the 'result available' byte at root+0x2d303.",
+  "confidence": 0.3,
+  "evidence": "`func_0032BD58(); iVar1 = func_00642688(arg1); if (iVar1 != 0) { uVar2 = func_00642710(arg1,1); func_001DAB30(arg1+0x228,uVar2); uVar2 = func_00642710(arg1,2); func_001DAAE0(arg1+0x228,uVar2); *(u8*)(*piVar3 + 0x2d303) = 1; }` \u2014 the root offset 0x2d303 is in the same per-save byte block as 0x2d412/0x2d544 used by 0x002CD498."
+ },
+ {
+  "address": "0x002C2DC4",
+  "name": "maybe_Ui_NumberPane_Show",
+  "signature": "u32 maybe_Ui_NumberPane_Show(u32 self, u16* args, int paneBase)",
+  "params": {
+   "self": "base object (pane table at +0xd4)",
+   "args": "argument block (u16 id at +0, byte at +2, u32 at +4)",
+   "paneBase": "index offset for the number/label panes"
+  },
+  "summary": "Puts a formatted number or name into two panes of a legend/label group: resolves the argument block to either a formatted number (via the printf-like helper) or a name-table string, writes both panes, and chooses between the two-variant and the single-variant pane layout.",
+  "confidence": 0.35,
+  "evidence": "`func_0061BD4C(auStack_30,*arg2)` \u2192 `local_2c`; `func_003A7A2C(arg1+0xd4, arg3+1)` then `func_003A7A2C(arg1+0xd4, arg3+6, iVar6, 1)`; number path uses `func_0011CB38` + `func_00640200(*p,0x13)/(*p,0x15)` (two arg slots), name path uses `func_0066C99C` + `func_00640200(*p,0x1f)`; `func_00707C1C(root+0x848, func_002C2F6C, value)` is the same sprintf helper seen in 0x0030F258."
+ },
+ {
+  "address": "0x002C3774",
+  "name": "maybe_Text_CharSet_BuildAscii",
+  "signature": "void maybe_Text_CharSet_BuildAscii(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Fills the candidate list with the printable ASCII characters (codes 0x32..0xa3) that the save has unlocked (flag 0x20, not 0x40), de-duplicating and keeping the count in +0x228.",
+  "confidence": 0.42,
+  "evidence": "Single filter `local_20[0] - 0x32 < 0x72`; same `& 0x20 / & 0x40` flag test and same append/de-duplicate idiom as the other builders; `*(u8*)((int)arg1+0x22d) = 0` at the end. Differs from 0x002C38FC only by the range test."
+ },
+ {
+  "address": "0x002C38FC",
+  "name": "maybe_Text_CharSet_BuildIconGlyphsAlt",
+  "signature": "void maybe_Text_CharSet_BuildIconGlyphsAlt(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Same icon-glyph filter as 0x002C2144 (ids 0x9bf..0xa18 checked against the glyph bitmap) but with the looser unlocked-flag test, and it marks the list as 'not a category list' (+0x22d = 0).",
+  "confidence": 0.42,
+  "evidence": "Identical body to 0x002C2144 except the flag test drops the `& 0x40 == 0` condition; range `local_28[0] - 0x9bf < 0x5a`; bitmap test at root+0x295c8 with the same shift/mask."
+ },
+ {
+  "address": "0x002C3AF0",
+  "name": "maybe_Text_CharSet_BuildNoSmallKana",
+  "signature": "void maybe_Text_CharSet_BuildNoSmallKana(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Fills the candidate list while excluding three character classes (record byte +0xc equal to 0x25/0x26/0x27) unless the code is above 0x31 \u2014 i.e. the 'no small kana / no punctuation' variant of the kana keyboard page.",
+  "confidence": 0.32,
+  "evidence": "`bVar1 = local_1c->f_c; bVar1 != 0x25 && bVar1 != 0x27` then `bVar9 = (bVar1 == 0x26) ? (0x31 < local_20[0]) : (0x31 < local_20[0])`; de-dup append at +10; tail `vtable+0x1c` and `+0x22d = 0`. The +0xc character-class byte is the same one 0x002C3E30 compares against its argument."
+ },
+ {
+  "address": "0x002C3CA0",
+  "name": "maybe_Text_CharSet_BuildRangeA19",
+  "signature": "void maybe_Text_CharSet_BuildRangeA19(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Fills the candidate list with the glyph block 0xa19..0xa81 (the second icon/frame block) without consulting the per-glyph bitmap, so it shows every unlocked glyph of that block.",
+  "confidence": 0.4,
+  "evidence": "Single test `local_20[0] - 0xa19 < 0x69` plus the `&0x20 / &0x40` flag test; same append idiom; `+0x22d = 0` at the end. The 0xa19 boundary is the same one used by 0x002B90F0's icon styling."
+ },
+ {
+  "address": "0x002C3E30",
+  "name": "maybe_Text_CharSet_BuildByCategory",
+  "signature": "void maybe_Text_CharSet_BuildByCategory(TextCharSet* self, u32 category)",
+  "params": {
+   "self": "character-candidate list",
+   "category": "character-class id (record byte +0xc) to keep"
+  },
+  "summary": "Fills the candidate list with one page of the character table: keeps only glyphs whose class byte (+0xc) equals `category`, i.e. one kana/kanji group of the name-entry keyboard, and marks +0x22d only for categories 0xb..0x22.",
+  "confidence": 0.45,
+  "evidence": "`uVar5 = local_1c->f_c; if (uVar5 == arg2)` filter; `*(bool*)((int)arg1+0x22d) = arg2 - 0xb < 0x18;` \u2014 the explicit category compare is the strongest evidence here."
+ },
+ {
+  "address": "0x002C4004",
+  "name": "Text_CharList_Sort",
+  "signature": "void Text_CharList_Sort(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list (u16 array at +10, count at +0x228, sort-order flag at +8)"
+  },
+  "summary": "Sorts the candidate glyph list in place with an insertion sort: with the flag at +8 clear it orders the characters by func_0063C16C (the game's collation compare) and with it set by func_0066C304 (the sort-key compare); uses a 32-entry fast path and bulk word moves.",
+  "confidence": 0.6,
+  "evidence": "Insertion loops using `func_0063C16C(auStack, uVar1, prev)` and `func_0066C304(...)`; bulk moves through func_0071E0D4 / func_0071DA08 / func_00717774; branch on `*(char*)(self+8)`; the 0x21 threshold appears as a literal. Callers: none direct \u2014 it is a vtable/table entry of the input screen."
+ },
+ {
+  "address": "0x002C43C4",
+  "name": "maybe_Text_CharSet_BuildByPredicates",
+  "signature": "void maybe_Text_CharSet_BuildByPredicates(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Fills the candidate list with the glyphs accepted by three predicates (func_0066CCEC, func_0066C978, func_0066C950 \u2014 'is kanji used in names' style tests) and marks the result as a category list (+0x22d = 1).",
+  "confidence": 0.35,
+  "evidence": "`((iVar4 = func_0066CCEC(auStack_20), iVar4 != 0) || ((iVar4 = func_0066C978(...)) != 0) || (iVar4 = func_0066C950(...)) != 0)` guard; same append idiom; `+0x22d = 1`."
+ },
+ {
+  "address": "0x002C45B0",
+  "name": "maybe_Text_CharSet_BuildByCategoryRange",
+  "signature": "void maybe_Text_CharSet_BuildByCategoryRange(TextCharSet* self, u32 category)",
+  "params": {
+   "self": "character-candidate list",
+   "category": "character-class id to keep"
+  },
+  "summary": "Fills the candidate list with a category page restricted to a code range: keeps the glyphs whose record byte at +0x29 equals `category` and whose code is inside 0xa4..(+0x220) or 0xb19..0xb1c, i.e. one kana page of the input screen.",
+  "confidence": 0.42,
+  "evidence": "`((local_28[0] - 0xa4 < uVar2 || (local_28[0] - 0xb19 < 4)) && local_24->f_29 == arg2)` where `uVar2 = g_002c4780` (page size); loop bound `g_002c4780 + 0x220`; `+0x22d = 1`."
+ },
+ {
+  "address": "0x002C4784",
+  "name": "maybe_Text_CharSet_BuildByPredicatesAlt",
+  "signature": "void maybe_Text_CharSet_BuildByPredicatesAlt(TextCharSet* self)",
+  "params": {
+   "self": "character-candidate list"
+  },
+  "summary": "Fills the candidate list with the glyphs accepted by the two alternate predicates func_0066C5A8 and func_0066C5CC (a second 'allowed in names' pair, e.g. hiragana and prolonged-sound marks).",
+  "confidence": 0.35,
+  "evidence": "`((iVar4 = func_0066C5A8(auStack_20), iVar4 != 0) || (iVar4 = func_0066C5CC(auStack_20), iVar4 != 0))` guard; identical surrounding code to 0x002C43C4; `+0x22d = 1`."
+ },
+ {
+  "address": "0x002C6250",
+  "name": "Ui_IconList_BindIcon",
+  "signature": "void Ui_IconList_BindIcon(IconListModel* self, u32 iconId, u32 state)",
+  "params": {
+   "self": "icon list model (root/table at f_160, texture set at f_48)",
+   "iconId": "icon/record id",
+   "state": "0..3 selects which of the four icon variants is shown"
+  },
+  "summary": "Binds one icon of the icon grid: resolves `iconId` to a model/texture entry, builds a 0x58-byte sprite descriptor whose size fields are overwritten with `state`, applies it and frees the temporary descriptor.",
+  "confidence": 0.5,
+  "evidence": "`iVar2 = func_00641738(self->f_160->f_11c, func_006F0BD0(...,&g_002c6324,arg2) + 4)` \u2192 entry; `func_0055E2A8(&local_58, self->f_48, entry->f_20, f1c)` = Gfx_BindIndexedResourceSet; `local_50/local_4c = (float)arg3` (the two size components are overwritten by the state value); `func_007122E4(&local_58,f1c)`; then `func_0055E3BC(&local_58)` frees it. Called by 0x002C7D54 for every changed icon."
+ },
+ {
+  "address": "0x002C7584",
+  "name": "maybe_Ui_IconList_UpdateState",
+  "signature": "void maybe_Ui_IconList_UpdateState(IconListModel* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "icon list model (entry flags at +0x58, 0x71 = 113 entries, page state at f_189)",
+   "arg2": "unused mode/table selector"
+  },
+  "summary": "Refreshes the icon grid: reads the player's progress value, compares it with the stored page/threshold, tears down and rebuilds the grid when they differ (or when the forced mode 1/2/3 changes), and finally stores the scan-out time.",
+  "confidence": 0.42,
+  "evidence": "`iVar4 = self->f_1d0` (cached page object); mode character at `*(char*)(self+4)` maps 0\u21921, 1\u219210, 2\u2192100 (digit count); `self->f_189` caches the previous value; `if (iVar4 || (self->f_189 == 0 && uVar7 != uVar12))` triggers `func_002C6190/0x2C6214`, `func_002C7D54(self)` (icon refresh) and `func_002C8A1C/0x2C8BEC` (rebuild); loop `uVar12 < 0x71` clearing `*(char*)(self+uVar12+0x58)` and hiding pane `uVar12` via `func_0030D674`. Uses the same pool of UI widget offsets (f_11c, f_5a4, f_3058, f_3330) as 0x002C7F9C/0x002C8714."
+ },
+ {
+  "address": "0x002C7D54",
+  "name": "Ui_IconList_RefreshIcons",
+  "signature": "void Ui_IconList_RefreshIcons(IconListModel* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "icon list model (visible flags +0x58, per-icon state cache at +0x18a, 0x1c = 28 slots)"
+  },
+  "summary": "Recomputes the 28 icon slots that are currently visible: each visible entry's 32-bit mask is folded into a 1/2/4 priority byte, and every slot whose priority changed is re-bound through func_002C6250 (which picks the icon variant).",
+  "confidence": 0.55,
+  "evidence": "`local_38[32]` accumulator filled from `*(char*)(arg1+uVar6+0x58)` entries and `*puVar3 & 1 << bit` with priority `bVar7 = 1/2/4` chosen from `(u8)puVar3[1] < 9 / < 0x1b / else`; then `for (i = 0; i < 0x1c; i++) if (*(u8*)(arg1+i+0x18a) != local_38[i]) { func_002C6250(iVar4,i,state); *(u8*)(arg1+i+0x18a) = local_38[i]; }`."
+ },
+ {
+  "address": "0x002C7F9C",
+  "name": "maybe_Ui_IconList_ApplyChange",
+  "signature": "void maybe_Ui_IconList_ApplyChange(IconListModel* self)",
+  "params": {
+   "self": "icon list model"
+  },
+  "summary": "Applies a pending icon/state change: clears the last-changed id on the owning widget, asks the list for its current index, informs the window manager and rebuilds the scroll position for the new index.",
+  "confidence": 0.35,
+  "evidence": "`if (self->f_44) func_0046C014(&self->f_44->f_3330);` then `if (0 < self->f_e4) func_00601B44();` `iVar1 = func_0063C390(self)` (current index), `func_0061251C(root+0x24a98,iVar1)`, `func_00405FFC(&self->f_44->f_11c, iVar4+iVar1, iVar1, min(iVar1,10))`, then stores `g_002c807c->f_98/f_9c` as the next step time."
+ },
+ {
+  "address": "0x002C8714",
+  "name": "maybe_Ui_IconList_Tick",
+  "signature": "void maybe_Ui_IconList_Tick(IconListModel* self)",
+  "params": {
+   "self": "icon list model"
+  },
+  "summary": "Per-frame tick of the icon grid: when the list owns a window it refreshes the visible-child draw list and the scroll widget, then stores the frame budget from a shared timer entry.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_44 != 0) { func_0030DB68(); func_0046C014(&self->f_44->f_3330); }` then `self->f_50/f_54 = g_002c874c->f_80/f_84` (next update time). 0x0030DB68 is the visible-child collector of the UI root."
+ },
+ {
+  "address": "0x002C89DC",
+  "name": "maybe_Ui_IconList_TickOnAnimationEnd",
+  "signature": "void maybe_Ui_IconList_TickOnAnimationEnd(IconListModel* self)",
+  "params": {
+   "self": "icon list model"
+  },
+  "summary": "Tick variant that only refreshes the icon grid once the current open animation has finished (func_00641BA4), then stores the frame budget.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_44) { iVar1 = func_00641BA4(); if (iVar1 == 0) return; func_0030DB68(); } self->f_50/f_54 = g_002c8a18->f_80/f_84;` \u2014 the early return on a running animation is the difference to 0x002C8714."
+ },
+ {
+  "address": "0x002CB154",
+  "name": "maybe_Ui_ThumbStub_2CB154",
+  "signature": "void maybe_Ui_ThumbStub_2CB154(u32 arg1, int arg2, u32 arg3, u32 arg4, int* arg5)",
+  "params": {
+   "arg1": "unused/recovered",
+   "arg2": "function-pointer table base",
+   "arg3": "offset added to a store",
+   "arg5": "reference-counted object"
+  },
+  "summary": "Body is Thumb code that Ghidra mis-decoded (bad instruction data, register-relative stores): recognisable only as a refcounted teardown that decrements `[obj+4]` and calls the virtual dtor at slot +8 for up to four objects. Kept as a placeholder.",
+  "confidence": 0.12,
+  "evidence": "`/* WARNING: Control flow encountered bad instruction data */` and `halt_baddata()`; the pattern `iVar1 = obj[1]; obj[1] = iVar1-1; if (iVar1-1 == 0) (**(code**)(*obj+8))();` repeats four times, with `throw`-style refcount masks 0x8000000."
+ },
+ {
+  "address": "0x002CC714",
+  "name": "maybe_Ui_ThumbStub_2CC714",
+  "signature": "void maybe_Ui_ThumbStub_2CC714(u32 arg1, u32 arg2, int* arg3, u32 arg4, u32 arg5, int* arg6)",
+  "params": {
+   "arg1": "unused/recovered",
+   "arg3": "loop-count/limit pointer",
+   "arg6": "refcounted object"
+  },
+  "summary": "Second Thumb function that Ghidra could not decode (control flow hits bad instruction data and a `halt_baddata()` arm): it iterates a 0x14-byte record array writing a byte and copying two 8-byte halves, and releases up to six refcounted temporaries on the way out. Placeholder only.",
+  "confidence": 0.12,
+  "evidence": "`/* WARNING: Control flow encountered bad instruction data */`; `puVar2 = (u8*)(piVar5[0x14] + unaff_r11*0x14); ... func_001BF7D8(...)` inside a loop bounded by `in_stack_00000040`; repeated refcount release `obj[1] -= 1; if (0) (**(code**)(*obj+8))();`."
+ },
+ {
+  "address": "0x002CCC00",
+  "name": "maybe_Ui_DataPanel_OpenDefault",
+  "signature": "void maybe_Ui_DataPanel_OpenDefault(DataPanel* self, u8 mode, u32 unused, u32 unused2)",
+  "params": {
+   "self": "large state object (state word f_e110, mode byte f_e0f4)",
+   "mode": "mode/id stored in f_e0f4"
+  },
+  "summary": "Opens a data panel in its default state: clears the busy byte, resets the internal buffer, stores the mode byte and switches the panel state machine to state 3.",
+  "confidence": 0.32,
+  "evidence": "`self->f_e3c4 = 0; func_0035F814(root); func_0010F3E0(self); self->f_e0f4 = arg2; self->f_e110 = 3; self->f_e3c5 = 0; func_00111D50(&self->f_e118);` \u2014 the same f_e3c4 / f_e110 / f_e3c5 / f_e118 quartet opens every other function in this family (states 3,5,6,9,10)."
+ },
+ {
+  "address": "0x002CD2A0",
+  "name": "maybe_Ui_DataPanel_OpenWithStrings",
+  "signature": "void maybe_Ui_DataPanel_OpenWithStrings(DataPanel* self, u32 mode, char* flags)",
+  "params": {
+   "self": "large state object (31 x 0x200-byte text buffer at +0x1830)",
+   "mode": "mode/id stored in f_e0f4",
+   "flags": "pointer to the option block (byte 0 = force reload, ...)"
+  },
+  "summary": "Opens the panel with its 31 text strings: copies the 31 message strings into the 0x200-byte buffer block, stamps the computed time hash, then binds the two label panes and switches to state 5.",
+  "confidence": 0.35,
+  "evidence": "`for (uVar7 = 0; uVar7 < 0x1f; uVar7++) { func_0035EB98(root,uVar7); uVar2 = func_001902B4(); func_00116C10(self + uVar7*0x200 + 0x1830, uVar2, 0x200); }`; `if (*arg3) { uVar8 = func_002CDC44(self,arg2); self->f_dfb0 = uVar8; }`; `uVar2 = func_0051BB08(&self->f_1830, g_002cd48c, 0xffffffff); self->f_e0dc = uVar2; self->f_e0d8 = 0x5e;` ... `self->f_e110 = 5;`."
+ },
+ {
+  "address": "0x002CD498",
+  "name": "maybe_Ui_DataPanel_OpenWithFlags",
+  "signature": "void maybe_Ui_DataPanel_OpenWithFlags(DataPanel* self, u32 mode, char* flags)",
+  "params": {
+   "self": "large state object",
+   "mode": "mode/id stored in f_e0f4",
+   "flags": "option block (byte 0/1/5/6 = reload, refresh, index, byte value)"
+  },
+  "summary": "Variant of the data-panel open that also honours the option block: optionally refreshes the root, applies the two index bytes, stores the time hash into the global state block and then rebuilds the 31 strings and switches to state 5.",
+  "confidence": 0.35,
+  "evidence": "`if ((char)arg3[1]) func_0035F814(root); if (*arg3) { func_00100A50(func_0035EB98(root,0), *arg3); } if (cVar1 = *((char*)arg3+5)) func_00612B90(root+0x24a98,cVar1); if (*((char*)arg3+6)) *(u8*)(root+0x2d412) = ...;` then the same 31-string loop and `self->f_e110 = 5;`. Writes the 64-bit hash to root+0x2d418 and +0x2faf8."
+ },
+ {
+  "address": "0x002CD85C",
+  "name": "maybe_Ui_DataPanel_Reset",
+  "signature": "void maybe_Ui_DataPanel_Reset(DataPanel* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "large state object"
+  },
+  "summary": "Resets the data panel to an empty state: clears the mode/secondary words, zeroes the 0x24-byte header and the small 0xe-byte field, then binds the label pane and switches to state 6.",
+  "confidence": 0.4,
+  "evidence": "`self->f_e3c4 = 0; self->f_1828 = 0; self->f_182c = 0; func_00105534(self+8); self->f_17f0..f_1812 = 0; func_00116AE0(&self->f_1814,0xe); ... func_0051BB08(self+8,g_002cd944,0xffffffff); self->f_1828 = 0x5e; self->f_182c = uVar2; self->f_e0f4 = 0xff; self->f_e110 = 6;`"
+ },
+ {
+  "address": "0x002CDC44",
+  "name": "Os_CalcTimeBasedHash",
+  "signature": "u64 maybe_Os_CalcTimeBasedHash(u32 salt, u32 value)",
+  "params": {
+   "salt": "object/salt value folded into the result",
+   "value": "32-bit value added to the hash"
+  },
+  "summary": "Builds a 64-bit hash from the console's real-time clock: converts the current date/time with six calendar helpers (year, month, day, hour, minute, second) and mixes them with fixed multipliers into one 64-bit value. Used as a cheap tamper/version fingerprint for stored blocks.",
+  "confidence": 0.55,
+  "evidence": "`func_0050EFA4(&local_90)` (RTC \u2192 8-byte value) then func_00658EB8 / 0x6590E8 / 0x65907C / 0x658F64 / 0x658F0C / 0x659024 / 0x658FCC each extract one field (year/month/day/...); the result is the sum `local_50*10 + uVar4*g + uVar5*g + ... + arg2` with the multipliers from the literal pool at 0x002cde50..0x002cde68. Callers 0x002CD2A0 and 0x002CD498 store it at +0xd418 and +0x2faf8."
+ },
+ {
+  "address": "0x002CE3E0",
+  "name": "maybe_Ui_DataPanel_OpenSimple",
+  "signature": "void maybe_Ui_DataPanel_OpenSimple(DataPanel* self, u8 mode, u32 unused, u32 unused2)",
+  "params": {
+   "self": "large state object",
+   "mode": "mode/id stored in f_e0f4"
+  },
+  "summary": "Minimal data-panel open: rewinds the secondary pane buffer, re-reads the three pane words from the root object, rebinds the pane and switches to state 9.",
+  "confidence": 0.35,
+  "evidence": "`self->f_e3c4 = 0; func_0010F300(&self->f_e0e0); self->f_e0ec = 0; self->f_e0f0 = 0;` then copies `root->f_2fb18/f_2fb1c/f_2fb20` into f_e0e0..f_e0e8, `func_0051BB08(&self->f_e0e0,0xc,0xffffffff)`, `self->f_e0ec = 0x5e; self->f_e0f4 = arg2; self->f_e110 = 9;`"
+ },
+ {
+  "address": "0x002CE5B4",
+  "name": "Save_VerifyBlock",
+  "signature": "void maybe_Save_VerifyBlock(DataPanel* self, u8 mode, int buffer, u32 size)",
+  "params": {
+   "self": "large state object",
+   "mode": "mode/id stored in f_e0f4",
+   "buffer": "candidate block to verify",
+   "size": "expected block size (0xc8b0)"
+  },
+  "summary": "Verifies a stored 0xc8b0-byte block: recomputes the time-based hash over the block and compares it with the 64-bit stamp stored in the global state block; on a match the data is copied into the panel's 0x200-byte string block and the state machine advances to 10, otherwise the panel reports error 3.",
+  "confidence": 0.5,
+  "evidence": "`if ((arg4 == 0xc8b0) && (iVar2 = func_0051BB08(arg3,g_002ce658,0xffffffff), *(int*)(g_002ce65c+arg3) == iVar2)) { func_00116C10(&self->f_1830,arg3,0xc8b0); self->f_e110 = 10; ... } self->f_e3c4 = 3;` \u2014 the explicit 51376-byte size and the hash compare with the same accessors used by 0x002CDC44 make this a load/verify path; the failure value 3 is the shared error code."
+ },
+ {
+  "address": "0x002CE694",
+  "name": "maybe_Ui_DataPanel_Restore",
+  "signature": "void maybe_Ui_DataPanel_Restore(DataPanel* self)",
+  "params": {
+   "self": "large state object"
+  },
+  "summary": "Writes the panel's current mode and cached strings back to the root object and re-binds the two panes \u2014 the 'restore after the block was accepted' half of the verify path.",
+  "confidence": 0.35,
+  "evidence": "`*(u8*)(root+0x2d544) = self->f_e0f4;` then `for (uVar6 = 0; uVar6 < 0x1f; uVar6++) { func_0035EB98(root,uVar6); func_001902B4(); func_00116C10(...,self+uVar6*0x200+0x1830,0x200); }` (note: copies in the opposite direction to 0x002CD2A0) and finally `root->f_2faf8/f_2fafc = self->f_dfb0/f_dfb4; root->f_2fb18..f_2fb20 = self->f_e0e0..f_e0e8;` before `func_00612950/0x612624` refresh the panes."
+ },
+ {
+  "address": "0x002CFB04",
+  "name": "maybe_Ui_Window_UpdateChildLayout",
+  "signature": "void maybe_Ui_Window_UpdateChildLayout(WindowAdapter* self)",
+  "params": {
+   "self": "adapter object (window pointer at +4)"
+  },
+  "summary": "Lays the window's children out again: advances the active child page, re-runs the layout solver for the pane pair at +0x13c/+0xbfc and finally applies the resulting rect to the child at +0xb5c.",
+  "confidence": 0.4,
+  "evidence": "`func_00294378(window+0x748)` (maybe_Ui_Window_AdvanceActiveChild), `func_006D7A90(window+0x13c, window+0xbfc, g_002cfb68[0], g_002cfb68[1])` (layout solve), `uVar1 = func_00628E34(window+0x748)`, `func_0022A0C8(window+0xb5c, uVar1, window, 1)` (apply rect)."
+ },
+ {
+  "address": "0x002CFB6C",
+  "name": "maybe_Ui_Text_FitLineWidth",
+  "signature": "void maybe_Ui_Text_FitLineWidth(TextLineOwner* self, u32 glyphId)",
+  "params": {
+   "self": "text line owner (glyph id byte at +0xa, colour ids at +8/+9)",
+   "glyphId": "glyph to measure against the line's spare width"
+  },
+  "summary": "Measures an inline glyph against the line's remaining width and, if it still fits (the glyph record's +0xec width is smaller than the available space in f_12), shrinks the available width and applies the two text colours; otherwise falls through to the generic text-layout step with ids 0x45/0x47.",
+  "confidence": 0.42,
+  "evidence": "`iVar4 = func_0035EB98(root,*(u8*)(arg1+10)); iVar5 = func_0035EB98(root,arg2); ... sVar1 = iVar4->f_16 - (u16)local_1c->f_2ec; if (sVar1 < sVar3) { iVar4->f_16 = sVar3; func_00229CC4(...,*(u8*)(arg1+10),*(u8*)(arg1+8)); func_00229C48(...,*(u8*)(arg1+10),*(u8*)(arg1+9)); }` else `func_001C3128(arg1,0x45,0x47)` (the text-layout step)."
+ },
+ {
+  "address": "0x002D01AC",
+  "name": "Ui_NumberRoll_Update",
+  "signature": "void Ui_NumberRoll_Update(NumberRoll* self)",
+  "params": {
+   "self": "digit-roll widget (six display digits in a 12-byte stack block, pane index +0x28/+0x14)"
+  },
+  "summary": "Drives a slot-machine style digit roll: waits until the digit strings have been laid out, then increments the counter byte group by group with decimal carry (a '9' becomes '0' and carries into the next group), switches between the two panes depending on func_0062A2FC and finally loads the two digit glyph pairs (0x0c/0x0e) into the panes.",
+  "confidence": 0.5,
+  "evidence": "Loop `(**(*arg1+0x34))(arg1,&local_38,digit|page<<16,0)` and `(+0x38)` for the label, then explicit decimal carry code over three 4-byte digit groups (local_34/local_32, local_28/local_2c) on the bytes at local_34/local_32 and local_28 (`'9'` \u2192 `'0'` + carry); after `uVar5 > 2` it binds `func_003E00CC(arg1+0x28, ..., s_select3_002d04a8,0)` / `s_select2_002d04b0`, tests `func_0062A2FC(root+0x24a98,1)` and finishes with `func_006406D0(uVar2,0xc)` / `(...,0xe)` passed to `func_001A6680` (set text)."
+ },
+ {
+  "address": "0x002D0FC4",
+  "name": "Anim_ClipSet_PlayById",
+  "signature": "u32 Anim_ClipSet_PlayById(AnimClipSet* self, u32 clipId)",
+  "params": {
+   "self": "animation clip set (array at *(self+8), count at f_10, active index at f_c)",
+   "clipId": "clip id to activate"
+  },
+  "summary": "Starts the animation clip with the given id: walks the clip array from the end, and on a match makes it the active clip, copies its settings, starts it, applies the blend offset and mode, and finally stops every other clip in the set.",
+  "confidence": 0.62,
+  "evidence": "`for (iVar1 = self->f_10 - 1; iVar1 >= 0; iVar1--) { iVar2 = func_0029E59C(*(int*)(self+8) + iVar1*0x7c, arg2); if (iVar2) { self->f_c = ...; ->f_68 = self->f_1c; func_0029E74C(...); func_0029E388(...,(int)self->f_32); func_0029EC8C(...); for (all j != i) { func_0029E388(clip,0); func_0029E6CC(clip); } return 1; } }` \u2014 0x7c-byte clips, 0x29E74C = maybe_Anim_Clip_SpawnAndApply. Callers 0x002D11F4/0x002D1264/0x002D15B4."
+ },
+ {
+  "address": "0x002D11F4",
+  "name": "Anim_PlayByIdForActor",
+  "signature": "u32 Anim_PlayByIdForActor(Actor* self, int clipId, int force)",
+  "params": {
+   "self": "actor (animation owner at f_b8, model at f_108)",
+   "clipId": "clip id",
+   "force": "non-zero to play even if the clip is already current"
+  },
+  "summary": "Plays a named animation clip on an actor after checking that its model is ready and not hidden; also updates the actor's animation-blend target so the transition is smooth.",
+  "confidence": 0.62,
+  "evidence": "`self->f_b8` virtual +0xc must return non-zero, `f_b8->f_f8 != 0` and `f_b8->f_138 == 0`; if the clip already matches (`func_0010540C(func_0063C774(), arg2) == 0 && arg3 == 0`) it returns 0; otherwise `func_002D0FC4(&iVar1->f_fc,arg2)` and `func_00460138(&iVar1->f_158, iVar1->f_108->f_44)`. Called by Actor2DChangeAnim (0x00153E6C) plus ten other actor/effect initialisers."
+ },
+ {
+  "address": "0x002D1264",
+  "name": "Anim_PlayById",
+  "signature": "u32 Anim_PlayById(AnimOwner* self, u32 clipId, int force)",
+  "params": {
+   "self": "animation owner (model at f_108)",
+   "clipId": "clip id",
+   "force": "non-zero to replay the current clip"
+  },
+  "summary": "Play helper without the actor-state checks: skips the request when the clip is already current and `force` is 0, otherwise activates it through the clip set and retargets the blend.",
+  "confidence": 0.6,
+  "evidence": "Identical core to 0x002D11F4 (`func_002D0FC4(&self->f_fc,arg2)` + `func_00460138(&self->f_158,self->f_108->f_44)`) but without the `self->f_b8` virtual/`f_f8`/`f_138` guards; the current-clip early-out uses the same `func_0010540C(func_0063C774(),arg2)`."
+ },
+ {
+  "address": "0x002D214C",
+  "name": "maybe_Ui_Pane_StartAnimFrame15",
+  "signature": "void maybe_Ui_Pane_StartAnimFrame15(PaneAnimTarget* self)",
+  "params": {
+   "self": "object holding a pane at f_18 and a frame number at f_10"
+  },
+  "summary": "Starts animation track 15 on the pane referenced by f_18, using the frame number stored in f_10 as the start argument.",
+  "confidence": 0.4,
+  "evidence": "`uVar1 = func_00648B7C(&self->f_18->f_11c,0xf); func_00382A80(self,(u32)self->f_10 << 0x10,uVar1);` \u2014 the 0xf track id and the `frame << 16` packing match 0x00307380's call `func_00648B7C(&self->f_11c,9)`."
+ },
+ {
+  "address": "0x002D5B58",
+  "name": "Ui_Pane_ShowWithSpriteSizeEx",
+  "signature": "void Ui_Pane_ShowWithSpriteSizeEx(UiPane* self)",
+  "params": {
+   "self": "pane whose sprite data is at f_78"
+  },
+  "summary": "Shows the pane, copies the sprite's 16-bit width/height into the pane size and sets the 'transform dirty' bit while clearing the 'size dirty' bit \u2014 the variant used when the pane must be re-laid out.",
+  "confidence": 0.55,
+  "evidence": "`self->f_44 = self->f_44 & 0xfe | 1;` first, then the same `func_0065D448(self)` sprite read at f_78+4/+6 into f_3c/f_40, ending with `self->f_44 = self->f_44 & 0xef | 0x10;` (the one-bit difference to 0x002B7D5C)."
+ },
+ {
+  "address": "0x002D5F54",
+  "name": "Ui_ListData_BuildEntries",
+  "signature": "void Ui_ListData_BuildEntries(UiListData* list, int mode, int limit, int unused)",
+  "params": {
+   "list": "display list (begin/end/capacity at +0/+4/+8, 16-byte entries)",
+   "mode": "0..5 selects which tables are collected",
+   "limit": "maximum number of entries for the second table"
+  },
+  "summary": "Builds the entry list shown by the multi-purpose list window: mode 0 collects the character/actor rows (0x8c-byte records at root+0x24a98), mode 1 the item rows (0x98-byte records at root+0x6b8), 2 both, 3 the third table (f_7bb6/f_7bc0), 4 the fourth and 5 a mixed set; each entry is four words (index, packed id/size, packed flags, kind).",
+  "confidence": 0.55,
+  "evidence": "`func_0066B11C(root+0x24a98)` gives the row count, records at `root+0x24a98 + i*0x8c` with fields f_605e/f_6068/f_6069/f_606c and `func_0066AD94/0x66AF34` for the two sub-ids; the item table is `root+0x6b8` with 0x98-byte records (f_7a, f_90) bounded by `func_006290A8`; entries are appended either in place (`arg1[1] = piVar3+4`) or through `func_0070E494` (vector grow). Called by Ui_DiveManager_Ctor, 0x002FEBB0, 0x00307380, 0x00308A40 and 0x0029AF80."
+ },
+ {
+  "address": "0x002D8580",
+  "name": "Ui_SpriteList_LoadPage",
+  "signature": "void Ui_SpriteList_LoadPage(SpriteListWindow* self, int page)",
+  "params": {
+   "self": "list window with 14 sprite rows (0xc bytes each at +0x70)",
+   "page": "zero-based page index"
+  },
+  "summary": "Loads one page of 14 sprite rows: for every slot it takes the record at `page*14 + i` from the row table and binds its text, or blanks the slot when the page is short; then recomputes the scrollbar position.",
+  "confidence": 0.55,
+  "evidence": "`iVar5 = arg2*0xe + i` compared with `self->f_4c`; rows at `self + i*0xc` with fields f_70/f_74/f_78; `func_006308EC(iVar1->f_34 + iVar5*0x10)` fetches the text, `func_001A6680(row->f_70,row->f_74)` binds it, `*(int*)(...+0x78) = iVar5` (or -1); `self->f_50 = rows % 14` via a reciprocal multiply by g_002e3b94; then `func_001D809C(self->f_38, pos-1 | self->f_28<<16)`."
+ },
+ {
+  "address": "0x002D88EC",
+  "name": "Ui_ListView_SetItemCount",
+  "signature": "void Ui_ListView_SetItemCount(UiListView* self, Range* range)",
+  "params": {
+   "self": "list view (item count at +0x4c, header at +0x54)",
+   "range": "begin/end pointer pair; count = (end-begin)/16"
+  },
+  "summary": "Recomputes the list view's item count from a begin/end range, resizes the child list accordingly, refreshes the selection and enables/disables the empty-list indicator.",
+  "confidence": 0.55,
+  "evidence": "`iVar1 = arg2[1] - *arg2 >> 4; arg1[0x13] = iVar1; func_00622038(arg1+0x15,iVar1,0); (**(code**)(*arg1+0x6c))(arg1,arg1[0x19]); *(u8*)(arg1[0x1fc]+0x44) = arg1[0x13] < 1 | ... & 0xfe; (**(code**)(*arg1+0x40))(arg1, 0 < arg1[0x13]);` \u2014 the 16-byte stride and the +0x44 visible flag match 0x002E3B98, which is the same function without the visibility update."
+ },
+ {
+  "address": "0x002D89EC",
+  "name": "Ui_ListView_BindDataSource",
+  "signature": "void Ui_ListView_BindDataSource(UiListView* self, Range* range)",
+  "params": {
+   "self": "list view",
+   "range": "begin/end pointer pair; count = (end-begin)/16"
+  },
+  "summary": "Binds the list view to a new source range: sets the item count, resizes the child list, refreshes the selection and toggles the empty indicator, but leaves the pane visibility untouched.",
+  "confidence": 0.55,
+  "evidence": "Byte-identical to 0x002D88EC except that the final `*(u8*)(arg1[0x1fc]+0x44)` write is missing; same `(arg2[1]-*arg2)>>4` count, `func_00622038(arg1+0x15,count,0)` resize and `vtable+0x6c` / `vtable+0x40` calls."
+ },
+ {
+  "address": "0x002D9894",
+  "name": "maybe_Ui_Object_Dtor1",
+  "signature": "void maybe_Ui_Object_Dtor1(UiObject* self, u32 unused)",
+  "params": {
+   "self": "UI object with a child handle at f_74 and a sub-object at f_58"
+  },
+  "summary": "Destroys a small UI object: releases the handle/list pair at +0x58 and then frees the object through the global UI allocator.",
+  "confidence": 0.4,
+  "evidence": "`func_003C225C(&arg1->f_58,arg1->f_74); func_006E5900(arg1);` \u2014 0x003C225C is the release helper also used by 0x002D98B4's constructor, 0x006E5900 frees. Called by Ui_CasinoWin_UpdateFukuroWindow and Ui_CasinoWin_PopWindowStack."
+ },
+ {
+  "address": "0x002D98B4",
+  "name": "Ui_ScrollBarObject_Create",
+  "signature": "u32* Ui_ScrollBarObject_Create(void)",
+  "params": {
+   "returns": "new 0x6c-byte scrollbar object"
+  },
+  "summary": "Allocates and initialises the scrollbar object used by the shop and casino windows: zeroes the counters, installs the vtable from the literal pool, sets the initial scroll value (0x11), the 'not visible yet' byte and the step size.",
+  "confidence": 0.55,
+  "evidence": "`result = func_001A66A0()` (allocator), then `result[0x13]=0; result->f_14=0; +0x51/0x52/0x53=0; result[0x15]=0; *result = g_002d9924; result[0x16] = g_002d9928; result[0x1a] = 0xffffffff; result->f_1b = 0x11; func_003C225C(&result->f_16,0x11); result->f_1d = 0x11;`. Callers Ui_ShopWindow_CreateSubObjects and Ui_CasinoWindow_Ctor."
+ },
+ {
+  "address": "0x002DB298",
+  "name": "maybe_Ui_Object_SetMode",
+  "signature": "void maybe_Ui_Object_SetMode(UiObject* self, u8 mode)",
+  "params": {
+   "self": "UI object (mode byte at +0x53, cached rect at +0x4c/+0x4e)",
+   "mode": "new mode byte"
+  },
+  "summary": "Sets the object's mode byte, clears the two sub-mode bytes and copies the current 2D scale/rect from the global cursor/UI record at g_002db2f0.",
+  "confidence": 0.35,
+  "evidence": "`self->f_53 = arg2; self->f_54 = 0; self->f_55 = 0; func_0018C184(auStack_10); if (local_c) { self->f_4c = local_c->f_2b6; self->f_4e = local_c->f_2b8; }` \u2014 the same `func_0018C184` lookup and f_2b6/f_2b8 fields as 0x002DB298's sibling callers (0x003CAD78)."
+ },
+ {
+  "address": "0x002DE668",
+  "name": "maybe_Battle_ComposeMessageText",
+  "signature": "bool maybe_Battle_ComposeMessageText(u32 unused, BattleTextContext* ctx)",
+  "params": {
+   "unused": "unused first argument",
+   "ctx": "battle text context (vtable at +0, message kind at +0xb105/+0xb106, arg at +0x1da)"
+  },
+  "summary": "Builds one formatted string for the given battle context and reports whether it produced anything usable: the 0x45BF38/0x45A5C8/0x459FE0 chain fills a 0x3c0-byte result block and the function returns whether the short at result+0x2a is non-zero. Whether the result is a message, a name or a damage figure is not certain.",
+  "confidence": 0.35,
+  "evidence": "`iVar1 = (**(code**)(*arg2+0x18))(arg2);` then `func_0045BF38(auStack_fd0)` (init 4012-byte builder), `func_0045A5C8(auStack_fd0, name_entry)` (set speaker), `uVar3 = func_00459FE0(auStack_fd0, entry[200], ctx[0xb105], ctx[0xb106])`, `func_00116C10(auStack_1390,uVar3,0x3c0)`, `result = local_1372 != 0`. Eight callers all in the 0x002DD958..0x002DFA1C battle-message helpers."
+ },
+ {
+  "address": "0x002DF358",
+  "name": "maybe_Ui_CloseChildIfFinished",
+  "signature": "int maybe_Ui_CloseChildIfFinished(UiObject* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "object owning a child at f_1b4 and its handle at f_74",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Closes the object's child window if the child reports that it has finished: calls the child's virtual +8 (tick) and if +0xc (is-finished) is true it notifies the global UI manager (func_00612550, id 0x12) and returns 0.",
+  "confidence": 0.4,
+  "evidence": "`iVar1 = self->f_1b4; piVar2 = iVar1->f_74; (**(code**)(*piVar2+8))(); iVar1 = (**(code**)(*self->f_1b4->f_74+0xc))(); if (iVar1) { func_00612550(root+0x24a98,0x12); result = self; }`."
+ },
+ {
+  "address": "0x002E3A80",
+  "name": "Ui_SpriteList_LoadPageEx",
+  "signature": "void Ui_SpriteList_LoadPageEx(SpriteListWindow* self, int page)",
+  "params": {
+   "self": "list window with 14 sprite rows",
+   "page": "zero-based page index"
+  },
+  "summary": "Second page loader for the 14-row sprite list: binds each row's text from `page*14 + i` (marking out-of-range slots with -1) and then updates the scrollbar; unlike 0x002D8580 it does not use the animated text accessor.",
+  "confidence": 0.55,
+  "evidence": "`iVar5 = arg2*0xe + i; if (iVar5 < self->f_4c) { func_006308EC(iVar1->f_34 + iVar5*0x10); func_001A6680(iVar3->f_70,iVar3->f_74); iVar3->f_78 = iVar5; } else { func_001A6680(...); iVar3->f_78 = -1; }`, then the same `self->f_50 = rows % 0xe` reciprocal and `func_001D809C` scrollbar call as 0x002D8580."
+ },
+ {
+  "address": "0x002E3B98",
+  "name": "Ui_ListView_SetItemCountEx",
+  "signature": "void Ui_ListView_SetItemCountEx(UiListView* self, Range* range)",
+  "params": {
+   "self": "list view (item count at +0x4c)",
+   "range": "begin/end pointer pair; count = (end-begin)/16"
+  },
+  "summary": "Same as 0x002D88EC but without the empty-list visibility update: recomputes the item count from a 16-byte-stride range, resizes the child list, refreshes the selection and toggles the selection state from the new count.",
+  "confidence": 0.55,
+  "evidence": "`iVar1 = arg2[1] - *arg2 >> 4; arg1[0x13] = iVar1; func_00622038(arg1+0x15,iVar1,0); (**(code**)(*arg1+0x6c))(arg1,arg1[0x19]); (**(code**)(*arg1+0x40))(arg1, 0 < arg1[0x13]);` \u2014 byte-identical to 0x002D88EC minus the `arg1[0x1fc]->f_44` store, and to 0x002E3B98 plus the vtable +0x6c refresh."
+ },
+ {
+  "address": "0x002E3BF8",
+  "name": "maybe_Actor_BindSubObjects",
+  "signature": "void maybe_Actor_BindSubObjects(Actor* self, GameObject* owner, u32 unused, u32 unused2)",
+  "params": {
+   "self": "actor/entity object (sub-objects at +0x204, +0x288, +0xab8, +0xce0)",
+   "owner": "the shared game object that owns all sub-objects"
+  },
+  "summary": "Binds an actor/entity to its four helper sub-objects after the owner has been created: stores the owner pointer, then attaches the 0x204 handle, the 0x288 animation set, the 0xab8 effect set and a fourth (0xce0) handle pair.",
+  "confidence": 0.4,
+  "evidence": "`self->f_3570 = arg2; func_00258418(&self->f_204); func_002D89EC(&self->f_288,arg2); func_00454250(&self->f_ab8,arg2); self->f_ce0 = arg2;` then the optional 0x4a8 list binding with `func_001235A4(arg2+0x4a8,arg2+0x4a8,&self->f_ce8,...)`. 0x002D89EC is the sibling that binds the 0x7f4/0x7f8 lists for the same object."
+ },
+ {
+  "address": "0x002E4DD0",
+  "name": "Ui_Message_SetNameArg",
+  "signature": "u32 Ui_Message_SetNameArg(MessageArgs* self, u32 arg2)",
+  "params": {
+   "self": "message argument block (name id at f_208, format id at f_20a)",
+   "arg2": "return value passed through"
+  },
+  "summary": "Binds the object's display name to message arguments 2 and 5 so a message like \"%s obtained\" can be shown.",
+  "confidence": 0.55,
+  "evidence": "`func_0061BD4C(auStack_18,self->f_20a); iVar2 = func_0035EB98(root,self->f_208); func_006D3EA0(2,g_002e4e3c,iVar2+0xca); func_006D3EA0(5,g_002e4e3c,func_0066C99C(str,1));`. The +0xca offset is the name-string field of the name-table entry, used identically by 0x002AF9AC/0x00306A9C."
+ },
+ {
+  "address": "0x002E4E50",
+  "name": "Ui_Message_SetNameAndNumberArgs",
+  "signature": "u32 Ui_Message_SetNameAndNumberArgs(MessageArgs* self, u32 arg2)",
+  "params": {
+   "self": "message argument block (f_208 id, f_20c number, f_210 format, f_214 formatted flag, f_218/f_219 variants)",
+   "arg2": "return value passed through"
+  },
+  "summary": "Binds both a name and a number to one message: argument 5 gets the name (or the formatted number when the name flag is clear) and arguments 2/3 get the two numbers, with the formatted/name variants selected by f_218/f_219.",
+  "confidence": 0.5,
+  "evidence": "`if (self->f_218 == 0) { func_005E5B98(&buf, self->f_20c & 0xffff, self->f_214); iVar5 = func_0063FD24(root, self->f_208 & 0xffff); ... }` else name path with `func_00707C1C(&buf,&g_002e4fd4,entry+0xca)`; then `func_006D3EA0(5,g_002e4fe0,iVar4)` plus the second block `func_006D3EA0(2,...,local_234)` and `(3,...,local_130)`."
+ },
+ {
+  "address": "0x002E4FF4",
+  "name": "Ui_Message_SetNameAndCodeArgs",
+  "signature": "u32 Ui_Message_SetNameAndCodeArgs(MessageArgs* self, u32 arg2)",
+  "params": {
+   "self": "message argument block",
+   "arg2": "return value passed through"
+  },
+  "summary": "Binds a name (argument 2) and a code/level value (argument 5) to a message, resolving the code through func_00629034 and falling back to the default pool value when it is not found.",
+  "confidence": 0.5,
+  "evidence": "`func_0018C1B8(auStack_20,self->f_208); iVar1 = func_00629034(auStack_20);` then the same formatted-vs-name split as 0x002AF9AC, `func_006D3EA0(2,g_002e50ac,...)` and `func_006D3EA0(5,g_002e50ac,iVar1 == 0 ? g_002e50b0 : iVar1)`."
+ },
+ {
+  "address": "0x002E5198",
+  "name": "maybe_Ui_CreateSpriteByName",
+  "signature": "void maybe_Ui_CreateSpriteByName(u32 unused, u8* name)",
+  "params": {
+   "unused": "unused first argument",
+   "name": "pointer to the sprite/animation name id"
+  },
+  "summary": "Creates the singleton sprite/effect object (lazily allocated from the UI heap) and applies the name in `*name` to it, i.e. a one-shot 'create the named UI sprite' helper.",
+  "confidence": 0.35,
+  "evidence": "Lazy singleton pattern `if (*g_002e524c == '\\0') { ... func_0011CFAC(g_002e5254+0xf,0x10); ... puVar2 = func_00293A00(); *puVar2 = g_002e5258; }` (identical idiom to 0x002C7584/0x0030F258's pools) followed by `func_0023BA70(*(u32*)(puVar2[2]+0x48),*arg2)` = apply name to the object's sprite list."
+ },
+ {
+  "address": "0x002E9CD0",
+  "name": "maybe_Actor_ActionSeq_RunChoice2",
+  "signature": "u32 maybe_Actor_ActionSeq_RunChoice2(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner (flags at f_4fcc)"
+  },
+  "summary": "Action-sequence step for a longer branch node: it reads the current step result (func_0064DF08) and either retries with action 0 (when the step reported failure), or marks the runner done (f_4fd4) and requests action 0, storing the new step id.",
+  "confidence": 0.4,
+  "evidence": "`f4fcc = self->f_4fcc; if ((f4fcc & 0x142)==0) { if (f4fcc & 4) iVar2 = -1; else { ... iVar2 = func_0064DF08(&self->f_2ac); bVar5 = (iVar2 == 0) || (self->f_4fd8 == iVar2); if (bVar5) return 1; } } else { self->f_4fd4 = 1; iVar2 = -1; } self->f_4fd8 = iVar2; func_00257AA4(self->f_4fdc); ... (**(code**)(*piVar3+0x14))(piVar3,0); self->f_4fd2 = 1;`"
+ },
+ {
+  "address": "0x002F73A8",
+  "name": "Ui_Message_SetNameAndCountArg",
+  "signature": "u32 Ui_Message_SetNameAndCountArg(MessageArgs* self, u32 arg2)",
+  "params": {
+   "self": "message argument block (f_208 name id, f_20c format, f_210 count, f_214 formatted flag)",
+   "arg2": "return value passed through"
+  },
+  "summary": "Binds a name plus an optional count to a message: argument 2 always gets the name/number, and when `f_210` is at least 1 argument 8 additionally receives the count (used for the \"%s x%d\" pickup message).",
+  "confidence": 0.55,
+  "evidence": "`if (self->f_210 < 1) { ... func_006D3EA0(2,g_002f74d0,...) } else if (self->f_214 == '\\0') { ... func_006D3EA0(2,g_002f74d0,local_10c); func_006D3EDC(8,g_002f74d4,self->f_210); }` else the name path with `func_0035EB98(root,self->f_208)+0xca`; note the plain-value setter is func_006D3EDC where the string setter is func_006D3EA0."
+ },
+ {
+  "address": "0x002F7C50",
+  "name": "Gfx_SpriteActor_InitFromParams",
+  "signature": "void Gfx_SpriteActor_InitFromParams(SpriteActor* self, SpriteActorParams* p, u32 animId)",
+  "params": {
+   "self": "2D sprite actor",
+   "p": "parameter block (screen pos f_10/f_12, size f_18, anim set f_1a/f_1c, colour id f_19, depth f_20)",
+   "animId": "initial animation resource id"
+  },
+  "summary": "Initialises a 2D sprite actor from a compact parameter block: copies the position, size, depth and colour, creates the animation instance, uploads the transform and stores the initial animation id.",
+  "confidence": 0.55,
+  "evidence": "`self->f_238/f_23c = p->f_10/f_12; self->f_244 = p->f_18; self->f_78/f_7c/f_80 = same; iVar3 = func_00319848(p->f_1c,p->f_1a); self->f_ac = iVar3->f_2e; func_0018057C(self,p+8); func_0018031C(self,p+8,p); ... func_00290A08(&self->f_2b8,arg3);` \u2014 0x00319848 creates the animation, 0x18031C applies the transform."
+ },
+ {
+  "address": "0x002F7D4C",
+  "name": "Gfx_SpriteActor_InitFromParamsEx",
+  "signature": "void Gfx_SpriteActor_InitFromParamsEx(SpriteActor* self, SpriteActorParamsEx* p, u32 unused, u32 unused2)",
+  "params": {
+   "self": "2D sprite actor",
+   "p": "extended parameter block (anim table pointer at f_14, frame list at f_18, colour/tint ids at f_2b/f_30/f_33/f_38, anim ids f_34/f_36)"
+  },
+  "summary": "Extended 2D sprite actor initialiser: also selects the animation frame entry whose id matches the actor's variant byte (0x18-byte entries of the frame table at p+0x14 with the sort key at +0x17 checked against the save's per-id byte table at root+0x27508) and applies the chosen offset.",
+  "confidence": 0.5,
+  "evidence": "`self->f_248 = p + 0x14 + p->f_14; f248 = self->f_248; iVar13 = *f248; ... iVar11->f_17 <= *(u8*)(root + f14 + 0x27508)` scan over 0x18-byte entries, then `self->f_240 = entry[8] + self->f_238; self->f_242 = self->f_23c + entry[10]; ... self->f_2a8 = iVar6;`; also reads `func_001C7EA4(self->f_36)` \u2192 `self->f_2c0` (variant) and `func_00290A08(&self->f_2b8, variant)`. Siblings 0x002F8328/0x002F8574 repeat the same block."
+ },
+ {
+  "address": "0x002F8030",
+  "name": "Gfx_SpriteActor_InitFromFixedEntry",
+  "signature": "void Gfx_SpriteActor_InitFromFixedEntry(SpriteActor* self, u8* p)",
+  "params": {
+   "self": "2D sprite actor",
+   "p": "parameter block (position +2/+4, size +6, anim id +0xc, anim set +0xa, palette variant +7)"
+  },
+  "summary": "Initialises a 2D sprite actor from a fixed-layout entry (no dynamic frame table): copies the packed 16-bit position/size, creates the animation instance and either applies an explicit palette variant (func_00290AA8) or stores the variant id for later (func_00290A08).",
+  "confidence": 0.5,
+  "evidence": "`self->f_234 = 1; self->f_230 = p->f_10; self->f_238 = *(short*)(p+2); self->f_23c = *(short*)(p+4); self->f_240 = *(u16*)(p+2); self->f_244 = *(u8*)(p+6); iVar3 = func_00319848(p->f_c,*(u16*)(p+10)); ... func_001C7EA4(self->f_36) \u2192 f_2c0; if (*(char*)(p+7) != -1) func_00290AA8(); else func_00290A08(&self->f_2b8,iVar3);`. The f_234 = 1 flag distinguishes this 'fixed entry' mode from the 0 in 0x002F7C50."
+ },
+ {
+  "address": "0x002F8274",
+  "name": "Gfx_SpriteActor_ReleaseOnAnimEnd",
+  "signature": "void Gfx_SpriteActor_ReleaseOnAnimEnd(SpriteActor* self)",
+  "params": {
+   "self": "2D sprite actor (done flag at +0xaf, current anim id at +0xae)"
+  },
+  "summary": "Releases a 2D sprite actor once its animation has finished: if the actor is not already done and the animation id resolves to nothing, it marks itself done, signals both vtable handlers with code 4, releases the effect nodes and the shared resource, and sets the 'released' flag.",
+  "confidence": 0.55,
+  "evidence": "`func_005F2E24(); if ((char)self[0xaf] == '\\0') { local_18 = self[0xae]; iVar2 = func_0066AE3C(root+0x24a98,&local_18); if (iVar2 == 0) { self->f_af = 1; (**(code**)(*self+0x40))(self,4); (**(code**)(*self+0x58))(self,4); func_00335A18(self); func_005E74A0(self,0,1); self->f_14 |= 4; } }` \u2014 0x00335A18 = maybe_Gfx_ReleaseEffectNodes."
+ },
+ {
+  "address": "0x002F8328",
+  "name": "Gfx_SpriteActor_InitFromParamsB",
+  "signature": "void Gfx_SpriteActor_InitFromParamsB(SpriteActor* self, SpriteActorParamsB* p, u32* extra)",
+  "params": {
+   "self": "2D sprite actor",
+   "p": "parameter block (anim table at +0x14, frame list at +0x18, anim ids +0x26/+0x28, colour ids +0x25/+0x2c)",
+   "extra": "pointer to an additional resource id stored at +0x2b8"
+  },
+  "summary": "Third 2D sprite actor initialiser: same frame-table selection as 0x002F7D4C but the animation ids sit at p+0x26/p+0x28 and the extra resource id comes from `*extra`, which is stored at +0x2b8 and marked 'not started'.",
+  "confidence": 0.5,
+  "evidence": "`self->f_238 = p->f_20; self->f_23c = p->f_22; self->f_244 = p->f_24; iVar5 = func_00319848(p->f_28,p->f_26); self->f_b4 = p->f_2a;` plus the identical `f_248`/`self->f_2a8` frame lookup; ends with `self->f_2b8 = *arg3; *(u8*)(self + 700) = 0;` (700 = 0x2bc, the 'not started' byte)."
+ },
+ {
+  "address": "0x002F8574",
+  "name": "maybe_Gfx_SpriteActor_InitFromParamsC",
+  "signature": "void maybe_Gfx_SpriteActor_InitFromParamsC(SpriteActor* self, SpriteActorParamsB* p, u32* extra)",
+  "params": {
+   "self": "2D sprite actor",
+   "p": "parameter block (same layout as 0x002F8328)",
+   "extra": "pointer to an additional resource id stored at +0x2b8"
+  },
+  "summary": "Fourth 2D sprite actor initialiser: identical frame-table logic, but the animation instance is created from p+0x26/p+0x28 in the opposite argument order and it does not force `f_234` to 0.",
+  "confidence": 0.45,
+  "evidence": "Same body as 0x002F8328 with `iVar5 = func_00319848(arg2->f_28,arg2->f_26)` (note the swapped order for 0x00319848) and without the `self->f_234 = 0` store; frame-table scan and tail identical."
+ },
+ {
+  "address": "0x002FA450",
+  "name": "Gfx_SpriteActor_ReleaseWithChildren",
+  "signature": "void Gfx_SpriteActor_ReleaseWithChildren(SpriteActor* self)",
+  "params": {
+   "self": "2D sprite actor (done flag at +0xe4, anim id at +0xe3, child flag at +0x35d)"
+  },
+  "summary": "Heavier release path for a 2D sprite actor: when the animation has ended it marks itself done, signals both vtable handlers, releases the model/effect nodes and the child resources, and \u2014 if the actor owns a child \u2014 also frees the associated 0x98-byte resource block.",
+  "confidence": 0.5,
+  "evidence": "`func_005F5520(); if ((char)self[0xe4] == '\\0') { local_2c = self[0xe3]; if (func_0066AE3C(root+0x24a98,&local_2c) == 0) { (**(code**)(*self+0x40))(self,4); (**(code**)(*self+0x58))(self,4); func_00335EB0(self); func_005E74A0(self,0,1); if (*(char*)((int)self+0x35d) != '\\0') { ... func_00627308(size) (alloc header 0x98) ... func_005EB3A0 / func_006282D0 / func_0017C8C4 } self->f_14 |= 4; self->f_e4 = 1; } }` \u2014 0x00335EB0 = maybe_Gfx_ReleaseModelNodes."
+ },
+ {
+  "address": "0x002FCFD4",
+  "name": "Text_LayoutLine_AutoSize",
+  "signature": "void Text_LayoutLine_AutoSize(PageBuilder* self, int tableIdx, char* line, int* widthOut, int flags, int seeded)",
+  "params": {
+   "self": "page builder (text block at +0x43e0)",
+   "tableIdx": "row table to read the line from",
+   "line": "line descriptor (id + extra bytes)",
+   "widthOut": "measured width / flags of the line",
+   "flags": "0 = freshly measured line, non-zero = pre-seeded line"
+  },
+  "summary": "Appends one already-wrapped line to the page: it tries the six font sizes from 1 upward with the measured width, picks the first (largest) size that fits, and then hands the line to the text renderer with that size.",
+  "confidence": 0.55,
+  "evidence": "`for (uVar8 = 1; uVar8 < 6; uVar8++) { func_0063F194(puVar3,uVar8); if (*pbVar6 > uVar9) break; }` (uVar9 = measured width); `func_0018D24C(arg2,arg4,*arg5,arg5[1],uVar7,arg6)` (add line with size uVar7); the `0x580` capacity check `*(int*)(arg2+8) - *(int*)(arg2+4) < 0x580` guards the grow path via func_00100B74. Called by 0x002FD45C."
+ },
+ {
+  "address": "0x002FD158",
+  "name": "maybe_Text_Block_DtorA",
+  "signature": "void maybe_Text_Block_DtorA(TextBlock* self)",
+  "params": {
+   "self": "text block (list at +0x344c, child list at +0xab8)"
+  },
+  "summary": "Destructor of a text block: drains its children, releases the +0x344c list, releases the child container and then frees the block at +0xab8.",
+  "confidence": 0.45,
+  "evidence": "`while (func_0062F070(arg1) > 0) func_0010EBD8(arg1); func_003BD148(arg1); func_00123594(arg1,arg1+0x344c); func_003BDB94(arg1); func_0029126C(arg1+0xab8,1);` (last call 'does not return' \u2192 free). The +0x344c list is the same one 0x002FD384/0x00307B70 release."
+ },
+ {
+  "address": "0x002FD384",
+  "name": "maybe_Text_Block_HasTwoFontFlags",
+  "signature": "bool maybe_Text_Block_HasTwoFontFlags(TextBlock* self)",
+  "params": {
+   "self": "text block whose font-state word is at +0x68"
+  },
+  "summary": "Returns true when both low font-state bits are set on the block's shared font object, and sets bit 1 in that object's flag word as a side effect; used to decide whether a text page must be rebuilt.",
+  "confidence": 0.4,
+  "evidence": "`func_00123594(arg1,arg1+0x34d8); func_003BDB94(arg1);` then the lazily-created 0x80-byte object from g_002fd450 (same pool idiom) and `result = (~puVar3[0x1a] & 3) == 0; if (result) puVar3[0x1b] |= 2;`."
+ },
+ {
+  "address": "0x002FD45C",
+  "name": "Text_LayoutPage_BuildLines",
+  "signature": "u32 Text_LayoutPage_BuildLines(TextBlock* self)",
+  "params": {
+   "self": "text block (line list at +0x3774..+0x3778, max lines at +0x376c, used lines at +0x3768)"
+  },
+  "summary": "Builds one page of text: measures the available line count (max 20), walks the record table and for every record adds its (up to two) text halves as lines through the auto-size layout helper, then fills the remaining slots from the reservation table; finally starts the layout animation.",
+  "confidence": 0.55,
+  "evidence": "`aiStack_40[0] = 0x14 - func_006290A8()` (max 20 lines); `for (i = 0; i < aiStack_50[0]; i++) { j = func_00383D3C(uVar10,i); ... iVar7 = func_0018D5A0(j, j+0x108); iVar8 = func_0018D5A0(j+0x84, j+0x108); if (iVar8+iVar7) { ... func_002FCFD4(self,iStack_58,iStack_5c,j,iVar11); ... func_002FCFD4(self,...,j+0x84,iVar11); } }` then `func_00629F80(root+0x24a98,j)` fills the rest; `self->f_376c = i` and `(**(code**)(*piVar9+0x14))(piVar9,1)` ends the step."
+ },
+ {
+  "address": "0x002FD81C",
+  "name": "maybe_Text_Block_DtorB",
+  "signature": "void maybe_Text_Block_DtorB(TextBlock* self)",
+  "params": {
+   "self": "text block (lists at +0x344c and +0x34d8)"
+  },
+  "summary": "Destructor variant that releases both the +0x344c and the +0x34d8 lists before freeing the block at +0xab8.",
+  "confidence": 0.45,
+  "evidence": "Identical to 0x002FD158 except that it also calls `func_00123594(arg1,arg1+0x34d8)`; tail `func_0029126C(arg1+0xab8,1)` does not return."
+ },
+ {
+  "address": "0x002FD918",
+  "name": "maybe_Text_Block_DtorC",
+  "signature": "void maybe_Text_Block_DtorC(TextBlock* self)",
+  "params": {
+   "self": "text block (child list at f_1f8, flag at f_188)"
+  },
+  "summary": "Destructor variant used by a text block that owns visible child objects: it makes every child visible again (clears bit 0 of each child's f_44 flag), sets f_188 and then frees the block at +0x288.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_1f8 != 0) { piVar2 = &self->f_1f8->f_10; for (piVar3 = *piVar2; piVar3 != piVar2; piVar3 = *piVar3) *(u8*)(piVar3[2]+0x44) &= 0xfe |= 1; } self->f_188 = 1; func_0029126C(&self->f_288,1);` \u2014 the same child-visibility loop appears in 0x00307B70/0x00307C54/0x00308110."
+ },
+ {
+  "address": "0x002FDA70",
+  "name": "maybe_Actor_ActionSeq_RunCommon2",
+  "signature": "u32 maybe_Actor_ActionSeq_RunCommon2(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Second 'common' action-sequence step: for the waiting node it toggles the node's work byte or requests actions 7/8, and for the busy node it requests action 9 or 10 depending on how many entries remain in the sequence (threshold 0x33), then stores the next blend target.",
+  "confidence": 0.45,
+  "evidence": "`iVar4 = self->f_3570->f_38; f34 = self->f_3570->f_34; iVar2 = func_0063C8BC(); if ((iVar4 - f34 >> 4) - iVar2 < 0x33) (...,10) else (...,9)`; other arms request 7/8; ends with `uVar3 = func_0063CB64(&self->f_3570->f_34); func_004603F8(&self->f_184,uVar3); self->f_356c = 1;` (0x004603F8 is also used by 0x002FEBB0 as 'set list count')."
+ },
+ {
+  "address": "0x002FDD50",
+  "name": "maybe_Text_Block_DtorD",
+  "signature": "void maybe_Text_Block_DtorD(TextBlock* self)",
+  "params": {
+   "self": "text block (flag at f_1c4, child list at f_1f8)"
+  },
+  "summary": "Destructor variant with three side effects: sets the 'closing' flag, re-shows every child (clears bit 0 of their f_44), and frees the block at +0xab8.",
+  "confidence": 0.45,
+  "evidence": "`self->f_1c4 = 1;` before the child loop; tail `func_0029126C(&self->f_ab8,1)`. Differs from 0x002FD918 only by the flag field (f_1c4 vs f_188) and the free offset."
+ },
+ {
+  "address": "0x002FDEC8",
+  "name": "maybe_Text_MeasureOverflow",
+  "signature": "bool maybe_Text_MeasureOverflow(u32 unused, u32 textId, u32 unused2, u32 unused3)",
+  "params": {
+   "unused": "unused first argument",
+   "textId": "text/font id to measure"
+  },
+  "summary": "Measures the width of a text and reports whether it overflows the page: clears the shared line buffer for the text, then checks the two low bits of the layout object's state word and, if both are set, marks the overflow bits 0x48 in the block's flag word.",
+  "confidence": 0.42,
+  "evidence": "`func_0018CBB0(root+0x2e2f8, arg1+0x43e0)` = maybe_Text_ClearLineBuffer; same lazily-created 0x80-byte layout object as 0x002FD384; `result = (~puVar3[0x1a] & 3) == 0; if (result) puVar3[0x1b] |= 0x48;`."
+ },
+ {
+  "address": "0x002FE050",
+  "name": "maybe_Actor_ActionSeq_RunWait",
+  "signature": "u32 maybe_Actor_ActionSeq_RunWait(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Minimal action-sequence step: while the sequence is still running it just requests actor action 0x12 (or commits), and when the sequence ended it sets f_356c = 1 without requesting anything.",
+  "confidence": 0.4,
+  "evidence": "`if ((f3534 & 0x142)==0) { if ((f3534 & 4)==0) { ... func_0x0064e31c(piVar5) ... func_0x003bd8a4(self,uVar3) ... } else { iVar2 = (**(code**)(*piVar4+0x14))(piVar4,0x12); ... } } else { iVar2 = func_0x0064e2f4(piVar5); if (iVar2 && (...,4)) ...; self->f_356c = 1; }` \u2014 the only sequence step in this batch that uses the 0x64E31C/0x64E2F4 predicate pair."
+ },
+ {
+  "address": "0x002FE298",
+  "name": "maybe_Actor_ActionSeq_RunEnd",
+  "signature": "u32 maybe_Actor_ActionSeq_RunEnd(ActorActionSeq* self, int seqDesc, u32 unused3, u32 unused4)",
+  "params": {
+   "self": "action-sequence runner",
+   "seqDesc": "sequence descriptor (its +0x520 sub-block is bound)"
+  },
+  "summary": "Finishes an action sequence: binds the descriptor's +0x520 block into +0x34d8, and unless the sequence has already completed, requests action 0x11 or 0x12 depending on whether the sequence still has pending nodes.",
+  "confidence": 0.45,
+  "evidence": "`func_001DAD58(&self->f_34d8,arg2+0x520); ... iVar3 = func_00383A58(...); if (iVar3 != 1) { func_003BDE2C(self,*(u32*)(g_002fe3f4+self)); root->f_2d658 = 0; root->f_2d659 = 0; if (self->f_43dc == 0 || self->f_404c == self->f_4050) (...,0x12) else (...,0x11); }`."
+ },
+ {
+  "address": "0x002FE428",
+  "name": "maybe_Actor_SubObject_ReleaseWithCode",
+  "signature": "void maybe_Actor_SubObject_ReleaseWithCode(void* self)",
+  "params": {
+   "self": "actor sub-object (list at +0xd36)"
+  },
+  "summary": "Releases the sub-object's +0xd36 list and then runs the owning actor's command 0x20 with -1 as argument \u2014 the 'finish and free' path of a sequence sub-object.",
+  "confidence": 0.42,
+  "evidence": "`func_00123594(arg1,arg1+0xd36); func_003BDB94(arg1); (**(code**)(*arg1+0x54))(arg1,0x20,0xffffffff);` \u2014 0x20 is the highest command id seen in this family (others use 0x08/0x0e/0x1b/0x23/0x24)."
+ },
+ {
+  "address": "0x002FE61C",
+  "name": "maybe_Actor_ActionSeq_RunWait2",
+  "signature": "u32 maybe_Actor_ActionSeq_RunWait2(u32 self, int seqDesc, u32 unused3, u32 unused4)",
+  "params": {
+   "self": "action-sequence runner",
+   "seqDesc": "sequence descriptor"
+  },
+  "summary": "Variant of the sequence-end step: after binding the descriptor it requests action 3 when the sequence has not completed, or 0x0f when the remaining-node count is still below 0x33.",
+  "confidence": 0.42,
+  "evidence": "`func_001DAD58(arg1+0x34d8,arg2+0x520); iVar2 = func_0062F680(iVar1); if (iVar2) { iVar1 = func_0062F694(iVar1); if (iVar1 == 1) { iVar1 = *(...g_002fe70c + arg1); iVar4 = *(...+0x38); iVar2 = func_0066B11C(root+0x24a98); if (iVar2 + (iVar4-iVar1 >> 4) < 0x33) (...,0xf) else (...,5); } else (...,3); }`"
+ },
+ {
+  "address": "0x002FE9B0",
+  "name": "Text_GlyphSet_CollectFromTable",
+  "signature": "void Text_GlyphSet_CollectFromTable(TextBlock* self)",
+  "params": {
+   "self": "text block (glyph set at +0xf42, entry free-list at +0xf49)"
+  },
+  "summary": "Rebuilds the block's glyph set from the current page: frees the old nodes, resets the set and the two cursors, then walks the record table adding every glyph in the 0xaa3..0xb3a range to the set (up to the page limit), and finally advances to the next page or finishes the step (0x23/0x24).",
+  "confidence": 0.55,
+  "evidence": "`while (piVar2 != 0) { func_0070E0B0(&self->f_f43,*piVar2); ... self[0xf49] = piVar2; }` (node recycling); `f734 = iVar3->f_734; func_0061BD4C(auStack_28,f734); if (auStack_28[0] - 0xaa3 < 0x98) { func_00613168(root,f734,1); func_00305BB8(&self->f_f42,f734); }` then `func_006121B4(root,iVar7,iVar3->f_748,1)` / `func_0018D380(iVar7,0)`; ends with `(**(code**)(*self+0x54))(self,0x23|0x24,0xffffffff)`. Called back from 0x00305BB8."
+ },
+ {
+  "address": "0x002FEBB0",
+  "name": "Ui_ListData_BindEntries",
+  "signature": "void Ui_ListData_BindEntries(TextBlock* self)",
+  "params": {
+   "self": "text block whose list data is at +0xd50 (vector at +0xd50+0x34)"
+  },
+  "summary": "Fills the block's list data with the combined character+item entry set (mode 2 of the list builder) and stores the resulting entry count, then advances the page step to command 0x1b.",
+  "confidence": 0.5,
+  "evidence": "`iVar1 = arg1[0xd5c]; iVar1->f_30 = 1; func_002D5F54((int*)&iVar1->f_34,2,arg1[0xdda],0); func_004603F8(arg1+0x61, iVar1->f_38 - iVar1->f_34 >> 4); (**(code**)(*arg1+0x54))(arg1,0x1b,0xffffffff);` \u2014 exactly the vector/count shape of 0x002D5F54."
+ },
+ {
+  "address": "0x003042F4",
+  "name": "Ui_Poker_SetCardSprite",
+  "signature": "void Ui_Poker_SetCardSprite(PokerWindow* self, u32 slot, int* cardTable)",
+  "params": {
+   "self": "poker/card window (sprite handles at f_50/f_54/f_58)",
+   "slot": "card slot index (0..2)",
+   "cardTable": "table of card sprite objects (entries at +0x20c)"
+  },
+  "summary": "Puts the card sprite for `slot` on screen: hides the joker/number placeholders, shows the card sprite and, if the slot holds a valid card, copies the card's 0x38-byte transform into the sprite.",
+  "confidence": 0.6,
+  "evidence": "String constants `s_null_card_joker_003043fc` and `s_null_card_num_0030440c` passed to func_00304240 (hide sprite by name); `func_00648080(arg3,self->f_54)` / `(arg3,self->f_58)` bind the two sprites; `if ((*arg3 != 0 && iVar2 != 0) && arg2 < 3) { iVar1 = *(int*)(*arg3 + arg2*4 + 0x20c); if (iVar1) { func_0065DBC8(iVar1,&local_28); func_0053E220(sprite->f_78,&local_28); sprite->f_7c &= 0xf7; } }`."
+ },
+ {
+  "address": "0x0030441C",
+  "name": "Ui_Poker_SetCardSpritePair",
+  "signature": "void Ui_Poker_SetCardSpritePair(PokerWindow* self, u32 packedSlot, int* cardTable)",
+  "params": {
+   "self": "poker/card window",
+   "packedSlot": "low byte = slot, second byte = 'card present' flag",
+   "cardTable": "table of card sprite objects (entries at +0x1fc)"
+  },
+  "summary": "Variant used for the two-hand layout: only shows a card when the packed slot's presence byte is non-zero, otherwise only the two placeholders are reset; slots 0..3 map to the sprite table at +0x1fc.",
+  "confidence": 0.58,
+  "evidence": "`func_00304240(self,s_null_card_joker_00304514,(arg2 & 0xffff) >> 8 == 0); func_00304240(self,s_null_card_num_00304524); if ((arg2 & 0xffff) >> 8 != 0) { func_00648080(arg3,self->f_54,arg2); ... if ((arg2 & 0xff) < 4) { iVar1 = *(int*)(*arg3 + (arg2 & 0xff)*4 + 0x1fc); ... } }`."
+ },
+ {
+  "address": "0x00305BB8",
+  "name": "Container_GlyphSet_Insert",
+  "signature": "void Container_GlyphSet_Insert(GlyphSet* self, u32 glyphId)",
+  "params": {
+   "self": "balanced glyph set (root at +8, node pool at +0x1c, count at +0x18, max 0x1f)",
+   "glyphId": "glyph to add"
+  },
+  "summary": "Inserts a glyph id into the block's balanced set: ignores ids outside 0xaa3..0xb3a, ignores ids the font object already reports as known, then inserts (or, if already present, increments the reference count of) a 6-word node and bumps the set's size.",
+  "confidence": 0.55,
+  "evidence": "`func_0061BD4C(auStack_58); if (0x97 < auStack_58[0] - 0xaa3) return; iVar3 = func_0066B308(root+0x24a98,arg2); if (iVar3 != 0) return; if (self->f_18 > 0x1f) return;` then the red-black style search over `*(u16*)(node+4)`, node allocation from `self->f_1c`/`self->f_20` or `func_005E937C`, `func_005E9100(node,parent,self+8)` (tree link) and `piVar5[5] += 1` (refcount) at the end."
+ },
+ {
+  "address": "0x00306134",
+  "name": "Container_RingBuffer_Pop",
+  "signature": "u32 Container_RingBuffer_Pop(Container* self)",
+  "params": {
+   "self": "ring buffer (begin f_344, end f_348, 0x1c-byte elements)"
+  },
+  "summary": "Pops the oldest 28-byte element from the ring buffer: copies its three 16-bit ids into the three animation slots, then compacts the ring by moving `(end-begin)/0x1c/2` element pairs down by one and shrinking the end pointer by one element.",
+  "confidence": 0.55,
+  "evidence": "`puVar3 = self->f_344; if (puVar3 != self->f_348) { result = *puVar3; uVar1 = *(u16*)(puVar3+3); ... func_0014A8FC(id, val, 2, 8); func_0014A8FC(id2, val2, 3, 9); func_0014A8FC(id3, val3, 4, 10); ... memmove-style loop moving 7-word blocks; self->f_348 -= 0x1c; }` \u2014 the (2,8)/(3,9)/(4,10) id pairs are animation channel pairs."
+ },
+ {
+  "address": "0x00306A9C",
+  "name": "Ui_Message_SetNameArgs3",
+  "signature": "void Ui_Message_SetNameArgs3(MessageArgs* self)",
+  "params": {
+   "self": "message argument block (three ids at +8, +0xa, +0xc)"
+  },
+  "summary": "Binds three name-table strings to message arguments 5, 6 and 7 (used by the 'who/what/where' style messages), skipping any id that does not resolve.",
+  "confidence": 0.55,
+  "evidence": "`func_0061BD4C(auStack_10,g_00306b58); func_0061BD4C(auStack_10,*(u16*)(arg1+8)); if (local_c) { func_001F076C(5, func_0066C99C(...), 1); }` repeated for `*(u16*)(arg1+0xa)` \u2192 argument 6 and `arg1->f_c` \u2192 argument 7. func_001F076C is Message_SetArg (named in N_002)."
+ },
+ {
+  "address": "0x00307380",
+  "name": "maybe_Actor_ActionSeq_RunList4",
+  "signature": "void maybe_Actor_ActionSeq_RunList4(u32 self, u32 unused2, u32 unused3, u32 unused4)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step that fills the sequence's list with mode 4 (the fourth record table), starts track 9 on the pane, resets the window state and then requests action 0 or 2 depending on the global quest/save flag.",
+  "confidence": 0.42,
+  "evidence": "`uVar1 = func_00648B7C(&self->f_11c,9); func_00479414(&self->f_148,uVar1); func_0047BD04(&self->f_d00); func_00622038(&self->f_2dc,self->f_2d4,1); iVar2->f_10 = 1; iVar2->f_11 = 0; iVar2->f_30 = 1; func_002D5F54(&iVar2->f_34,4,0xffffffff,0); ... if (func_0062A64C(root+0x24a98) == 0) (...,0) else (...,2);`"
+ },
+ {
+  "address": "0x00307624",
+  "name": "maybe_Actor_ActionSeq_RunMessageE",
+  "signature": "void maybe_Actor_ActionSeq_RunMessageE(u32 self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step that starts a message: it checks/creates the global message object (func_0062A480/0x62A320), applies the text style, and requests action 0x0e (show message).",
+  "confidence": 0.45,
+  "evidence": "`iVar5 = root+0x24a98; if (func_0062A480(iVar5) == 0) func_00193248(iVar5); if (func_0062A320(iVar5)) { if (func_00383A80(*puVar4)) func_00383AB8(*p, root+0x2d0c8); } (**(code**)(*arg1+0x54))(arg1,0xe,0xffffffff);` \u2014 byte-for-byte the same prelude as 0x002A69A0/0x00308970, which are the message-showing steps."
+ },
+ {
+  "address": "0x003076EC",
+  "name": "maybe_Actor_ActionSeq_RunFlagStep",
+  "signature": "void maybe_Actor_ActionSeq_RunFlagStep(u32 self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step that picks action 0x0f or 0x10 from a single flag test (func_00383A80 on the global data block), i.e. a two-branch conditional node.",
+  "confidence": 0.45,
+  "evidence": "`uVar3 = 0x10; func_006F2224(&uStack_10); if (func_00383A80(*puVar1) != 0) uVar3 = 0xf; (**(code**)(*arg1+0x54))(arg1,uVar3,0xffffffff);` \u2014 0x0f/0x10 are also the two ids used by 0x00308B9C/0x003095D0 for the same flag test."
+ },
+ {
+  "address": "0x00307A28",
+  "name": "maybe_Actor_SubObject_ReleaseSimple",
+  "signature": "void maybe_Actor_SubObject_ReleaseSimple(u32 self, int parent)",
+  "params": {
+   "self": "actor sub-object",
+   "parent": "parent object whose +0x4a0 list is released"
+  },
+  "summary": "Very small teardown: releases a list on the sub-object, releases the parent's +0x4a0 list and then frees the object at +0x31b8.",
+  "confidence": 0.4,
+  "evidence": "`func_00123594(); func_003BD148(arg1,arg2+0x4a0); func_0029126C(arg1+0x31b8,1);` (last call does not return). The +0x4a0 list offset also appears in 0x002E3BF8 (`arg2+0x4a8`)."
+ },
+ {
+  "address": "0x00307B70",
+  "name": "maybe_Actor_SubObject_ReleaseWithAnim",
+  "signature": "void maybe_Actor_SubObject_ReleaseWithAnim(TextBlock* self)",
+  "params": {
+   "self": "text/actor sub-object (lists at +0x344c/+0x34d8, child list f_1f8)"
+  },
+  "summary": "Teardown that also stops an animation: releases both lists, re-shows the children, sets f_1a8, cancels the animation track via func_002D214C and frees the object at +0x288.",
+  "confidence": 0.42,
+  "evidence": "`func_00123594(self,&self->f_344c); func_00123594(self,&self->f_34d8); func_003BDB94(self); <child visible loop> self->f_1a8 = 1; func_002D214C(&self->f_1a4); func_0029126C(&self->f_288,1);` \u2014 the two list offsets match 0x002FD81C."
+ },
+ {
+  "address": "0x00307C54",
+  "name": "maybe_Actor_SubObject_ReleaseWithFlag",
+  "signature": "void maybe_Actor_SubObject_ReleaseWithFlag(TextBlock* self)",
+  "params": {
+   "self": "text/actor sub-object (lists at +0x344c)"
+  },
+  "summary": "Teardown that sets an extra completion flag (f_208) besides releasing the list, re-showing the children and cancelling the animation.",
+  "confidence": 0.42,
+  "evidence": "Same body as 0x00307B70 with `func_002D2094(&self->f_1a4)` instead of `func_002D214C` and the additional `self->f_208 = 1;` before the free at +0x288."
+ },
+ {
+  "address": "0x00307DA8",
+  "name": "maybe_Actor_ActionSeq_RunChoiceFlag",
+  "signature": "u32 maybe_Actor_ActionSeq_RunChoiceFlag(ActorActionSeq* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Action-sequence step for the 'choose by stored value' node: reads the stored choice from the runner (func_0063AD10/0x63ACB4) and requests action 3 or 9, while the waiting state requests action 3; also commits the choice through func_003BDF1C.",
+  "confidence": 0.42,
+  "evidence": "`iVar2 = func_0x0063ad10(piVar5); if ((iVar2 == 0) && (iVar7 = func_0063ACB4(piVar5), (iVar7 == 0xffff || iVar7 == 0))) return 1; ... func_0x003bdf1c(self,*puVar6,iVar7); self->f_356c = 1; func_003BD908(...); if (iVar2->f_524 == '\\0') (...,3) else { func_003BD874(self,puVar6); if (func_00383A80(...) == 0) (...,3) else (...,9); }`"
+ },
+ {
+  "address": "0x00307F88",
+  "name": "maybe_Actor_SubObject_ReleaseWithAnim2",
+  "signature": "void maybe_Actor_SubObject_ReleaseWithAnim2(u32 self, int kind, u32 unused3, u32 unused4)",
+  "params": {
+   "self": "actor sub-object (child list at f_f3c)",
+   "kind": "only kind 3 performs the extra teardown"
+  },
+  "summary": "Teardown used by the 'cutscene/actor part' sub-object: when `kind == 3` it closes the child (vtable +0x10 with 1), clears f_f38 and hides the f_df8 widget; the list drain and the +0x3484 list release happen unconditionally.",
+  "confidence": 0.4,
+  "evidence": "`while (func_0062F070(self) > 2) func_0010EBD8(self); func_00123594(self); func_003BD148(self,&self->f_3484); if (arg2 == 3) { func_001D7A40(); (**(code**)(*self->f_f3c+0x10))(self->f_f3c,1,...); self->f_f38 = 0; (*self->f_df8->f_18)(&self->f_df8,1); }`"
+ },
+ {
+  "address": "0x00308110",
+  "name": "maybe_Actor_SubObject_ReleaseWithAnim3",
+  "signature": "void maybe_Actor_SubObject_ReleaseWithAnim3(TextBlock* self)",
+  "params": {
+   "self": "text/actor sub-object (lists at +0x344c, child list f_1f8)"
+  },
+  "summary": "Teardown that re-shows the children, cancels animation track 15, sets f_208 and frees the object \u2014 the last of the four 0x00307xxx/0x00308110 variants.",
+  "confidence": 0.42,
+  "evidence": "`func_003BD148(self); func_00123594(self,&self->f_344c); func_003BDB94(self); <child visible loop> self->f_1a8 = 1; func_002D214C(&self->f_1a4); self->f_208 = 1; func_0029126C(&self->f_288,1);` \u2014 distinguishes from 0x00307C54 only by calling func_003BD148 first and by the (identical) f_208 store."
+ },
+ {
+  "address": "0x00308264",
+  "name": "maybe_Actor_ActionSeq_RunCommon3",
+  "signature": "u32 maybe_Actor_ActionSeq_RunCommon3(ActorActionSeq* self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Another 'common' step: waiting nodes request 0x0e, terminated nodes set the 'finished' flag and, when a sub-sequence value is present, commit it and request action 0x0d.",
+  "confidence": 0.42,
+  "evidence": "`if ((f3534 & 0x142)==0) { ... (...,0xe) ... } else if ((self->f_2d4 != 0) && (iVar2 = func_0x006402ac(&self->f_288), iVar2 != 0)) { f18 = iVar2->f_18; if (f18 != -1) func_003BD908(self,f18,0); if (iVar2->f_14 != '\\0') { func_0x003bdd90(self,f18); (...,0xd); self->f_356c = 1; } }`"
+ },
+ {
+  "address": "0x003087B8",
+  "name": "maybe_Actor_ActionSeq_ShowPage9",
+  "signature": "void maybe_Actor_ActionSeq_ShowPage9(u32 self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Sequence step that drains the child list down to one entry, releases the +0xd36 list, requests action 8 and then switches the widget to page 9 (f_de0) after checking the global page state.",
+  "confidence": 0.42,
+  "evidence": "`while (func_0062F070(self) > 1) func_0010EBD8(self); func_00123594(self,&self->f_d36); (**(code**)(*self+0x54))(self,8,0xffffffff); self->f_de0 = 0xff; ... iVar3 = func_0062A3CC(*piVar2+0x24a98); if (iVar3 == 0) { func_00100B74(iVar1+0x2d14c); } self->f_de0 = 9; (**(code**)(*self+0x58))(self,(char)self[0xde0]);`"
+ },
+ {
+  "address": "0x00308970",
+  "name": "maybe_Actor_ActionSeq_StartCommonB",
+  "signature": "void maybe_Actor_ActionSeq_StartCommonB(u32 self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Second 'start' step: same message-object prelude and list reset as 0x002A69A0, then requests action 0x0e \u2014 used when the sequence begins with a message node.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same body as 0x002A69A0 (`func_0062A480/0x62A320` on root+0x24a98, list splice at self+0xd37, `func_00123594(self,self+0xd36)`, `(**(code**)(*self+0x54))(self,0xe,0xffffffff)`) \u2014 only the surrounding entry differs, so this is the twin entry of the same routine."
+ },
+ {
+  "address": "0x00308A40",
+  "name": "maybe_Actor_ActionSeq_RunList5",
+  "signature": "u32 maybe_Actor_ActionSeq_RunList5(u32 self, int seqDesc, u32 unused3, u32 unused4)",
+  "params": {
+   "self": "action-sequence runner",
+   "seqDesc": "sequence descriptor (its +0x520 block is bound)"
+  },
+  "summary": "Sequence step that fills the list with mode 5 and, for the 'page 9' variant, requests action 0x0c; otherwise it requests 0x11/0x10 depending on the data flag.",
+  "confidence": 0.42,
+  "evidence": "`func_001DAD58(iVar1,arg2+0x520); if (func_0062F680(iVar1) == 0) return 1; if (self->f_3780 == '\\t') { ... func_002D5F54(&iVar1->f_34,5,0xffffffff,0); uVar4 = 0xc; } else if ((self->f_3780 == '\\n') && (func_0062F694(iVar1) != 1)) func_00612FB8(root+0x24a98); ... uVar4 = (func_00383A80(*puVar3) == 0) ? 0x11 : 0x10; (...,uVar4);`"
+ },
+ {
+  "address": "0x00308B9C",
+  "name": "maybe_Actor_ActionSeq_RunTextStep",
+  "signature": "u32 maybe_Actor_ActionSeq_RunTextStep(u32 self)",
+  "params": {
+   "self": "action-sequence runner (text buffer at +0x3520)"
+  },
+  "summary": "Sequence step that formats a text line into the 0x84-byte scratch buffer and shows it, then requests action 0x0f or 0x0c depending on whether the text fit.",
+  "confidence": 0.42,
+  "evidence": "`func_001DAD58(arg1+0x34d8,arg1+0x3520); iVar2 = func_0062F680(iVar1); if (iVar2 != 0) { if (func_0062F694(iVar1) == 1) { iVar1 = *(...g_00308d0c + arg1); func_00116AE0(auStack_a0,0x84); uVar4 = func_006308EC(iVar1+0x51c); func_00116C10(auStack_a0,uVar4,0x84); func_0x00308f1c(arg1,auStack_a0); func_00612430(root+0x24a98,auStack_a0, func_0035EB98(root,0)+0xca); (...,0xf); } else (...,0xc); }`"
+ },
+ {
+  "address": "0x00308D10",
+  "name": "maybe_Actor_SubObject_ReleaseFinal",
+  "signature": "void maybe_Actor_SubObject_ReleaseFinal(u32 self)",
+  "params": {
+   "self": "actor sub-object (child list at +0x3468)"
+  },
+  "summary": "Final teardown of the sequence sub-object: drains the children, releases the +0x3468 list and frees the object at +0xd00.",
+  "confidence": 0.42,
+  "evidence": "`while (func_0062F070(arg1) > 1) func_0010EBD8(arg1); func_00123594(arg1); func_003BD148(arg1,arg1+0x3468); func_0029126C(arg1+0xd00,1);` \u2014 same free offset as 0x002A6B08."
+ },
+ {
+  "address": "0x003095D0",
+  "name": "maybe_Actor_ActionSeq_RunTextStep2",
+  "signature": "u32 maybe_Actor_ActionSeq_RunTextStep2(u32 self)",
+  "params": {
+   "self": "action-sequence runner"
+  },
+  "summary": "Second text step: hides the text (func_00612FB8) and then requests action 0x11 or 0x10 from the data flag, used when no new line has to be formatted.",
+  "confidence": 0.42,
+  "evidence": "`func_001DAD58(arg1+0x34d8,arg1+0x3520); if (func_0062F680(iVar1) != 0) { if (func_0062F694(iVar1) == 1) { func_00612FB8(root+0x24a98); ... (func_00383A80(*puVar4) == 0) ? 0x11 : 0x10; } else (...,0xc); }`"
+ },
+ {
+  "address": "0x0030CDC4",
+  "name": "maybe_Ui_ArrangeEightChildPanes",
+  "signature": "void maybe_Ui_ArrangeEightChildPanes(UiObject* self, u32 frame)",
+  "params": {
+   "self": "object with eight sprite pairs at +0x124/+0x128 plus a ninth at +0x120",
+   "frame": "rotation/step index (0 = default layout)"
+  },
+  "summary": "Copies the transforms of eight child sprites into a temporary rectangle and lays them out around a ring: with `frame` non-zero it rotates the rectangle by `frame` steps of 3, applying the scale factors from the shared layout constants; finally it forces all the sprites visible.",
+  "confidence": 0.4,
+  "evidence": "Loop `for (iVar5 = 7; iVar5 > 0; iVar5--)` over `self + iVar5*4` reading `f_128`/`f_124` and calling `func_0065DF08(src,0,&local_38)` + `func_0053E9A4(dst,0,&local_38)` (copy transform), then merging the low bit of f_44; the `arg2 != 0` branch computes `iVar3 = 3 - ((arg2 * g) % 3)` and scales by g_0030cff0/g_0030cff4 before a final `func_0053E9A4`; ends with `f_44 & 0xfe | 1` on the nine sprites."
+ },
+ {
+  "address": "0x0030D404",
+  "name": "Ui_DrawList_Append",
+  "signature": "void Ui_DrawList_Append(DrawList* dst, UiChild* child)",
+  "params": {
+   "dst": "five-slot draw list (0x8c bytes, 7 words per slot)",
+   "child": "child object (position at +0x1c/+0x20/+0x24)"
+  },
+  "summary": "Appends a child to the UI root's five-entry draw list: finds the first free slot by testing each 7-word slot with the comparator in g_0030d468 and, if one is free, stores the child plus its three position words and the two default depth words.",
+  "confidence": 0.55,
+  "evidence": "`while (piVar6 != arg1+0x8c && (iVar3 = (*pcVar1)(piVar6), iVar3 == 0)) piVar6 += 7; if (piVar6 < arg1+0x8c) { *piVar6 = arg2; piVar6[1] = arg2->f_1c; piVar6[2] = arg2->f_20; piVar6[3] = arg2->f_24; piVar6[4] = g_0030d46c; piVar6[5] = g_0030d470; piVar6[6] = g_0030d46c; }` \u2014 0x8c/7*4 = 5 slots. Called by 0x0030DB68."
+ },
+ {
+  "address": "0x0030D67C",
+  "name": "Ui_ChildSlot_SetVisibleIndex",
+  "signature": "void Ui_ChildSlot_SetVisibleIndex(UiObject* self, int slot, int index)",
+  "params": {
+   "self": "UI root object (children at +0x664, one per 4 bytes)",
+   "slot": "child slot (0..112)",
+   "index": "value to display (-1/0 hides)"
+  },
+  "summary": "Shows or hides one child slot of the UI root and points it at a table entry: sets the child's visible bit from `index > 0`, binds the icon/texture found at (index-1)/2 in the table at +0x2f00 and clears the 'no texture' bit.",
+  "confidence": 0.5,
+  "evidence": "`iVar2 = *(int*)(arg1 + arg2*4 + 0x664); if (iVar2 == 0) return; iVar2->f_44 = 0 < arg3 | iVar2->f_44 & 0xfe; if (0 < arg3) { iVar1 = func_003EAF08(arg1+0x2f00,(arg3-1)/2); if (iVar1) { iVar2 = func_0065D448(iVar2); func_0053E220(iVar2->f_78,iVar1); iVar2->f_7c &= 0xf7; } } func_004DC5B4(arg1+0x2f14,arg3);`"
+ },
+ {
+  "address": "0x0030DB68",
+  "name": "Ui_DrawList_CollectVisible",
+  "signature": "void Ui_DrawList_CollectVisible(UiObject* self)",
+  "params": {
+   "self": "UI root object (113 children at +0x664, five-slot draw list at +0x30fc)"
+  },
+  "summary": "Rebuilds the root's draw list: walks all 113 child slots, appends every child whose visible bit is set to the draw list and, when there are more visible children than slots, renders them into the overflow list.",
+  "confidence": 0.55,
+  "evidence": "`func_0030D48C(); for (i = 0; i < 0x71; i++) { f664 = (arg1 + i*4)->f_664; if (f664 && (f664->f_44 & 1)) func_0030D404(arg1+0x30fc); }` \u2014 0x71 = 113 slots, called by 0x002C8714/0x002C89DC before refreshing the icon grid."
+ },
+ {
+  "address": "0x0030E39C",
+  "name": "Ui_Root_SetFlagBits",
+  "signature": "void Ui_Root_SetFlagBits(u32 unused, u8 bits, u32 unused3, u32 unused4)",
+  "params": {
+   "unused": "unused first argument",
+   "bits": "bits to OR into the root's per-frame flag byte"
+  },
+  "summary": "Sets bits in the UI root's per-frame flag byte at +0x2d390 (the same block that carries the other per-save state bytes).",
+  "confidence": 0.5,
+  "evidence": "`piVar1 = (int*)func_006F20C0(&uStack_10); *(u8*)(*piVar1 + 0x2d390) |= arg2;` \u2014 root offsets 0x2d390/0x2d412/0x2d418/0x2d544 are all in the same global state block."
+ },
+ {
+  "address": "0x0030E4B8",
+  "name": "Ui_Root_ReleaseAll",
+  "signature": "void Ui_Root_ReleaseAll(UiObject* self)",
+  "params": {
+   "self": "UI root object (113 children at +0x664, lists at +0xd1c/+0x1614, panes at f_cc0/f_d14)"
+  },
+  "summary": "Shuts the UI root down: destroys every child object, releases the two registered lists, hides the two manager panes through their vtable slot +0x18 and frees the root at +0x158.",
+  "confidence": 0.55,
+  "evidence": "`while (iVar1 = func_0062F070(self), 0 < iVar1) func_0010EBD8(self); func_00123594(self,&self->f_d1c); func_00123594(self,&self->f_1614); (**(code**)(*self->f_cc0+0x18))(self->f_cc0,1); (**(code**)(*self->f_d14+0x18))(self->f_d14,0); func_0029126C(&self->f_158,0);` (last call 'does not return'). Eleven callers are the window close paths."
+ },
+ {
+  "address": "0x0030E8E8",
+  "name": "maybe_Ui_Root_ReleaseWithCode",
+  "signature": "void maybe_Ui_Root_ReleaseWithCode(UiObject* self)",
+  "params": {
+   "self": "UI root/manager object"
+  },
+  "summary": "Release path that first frees the children, then hands the root's code word to the window manager and frees the root \u2014 the variant used when a window must post a result before dying.",
+  "confidence": 0.45,
+  "evidence": "`func_0030E4B8(arg1,0); uStack_17 = 0xff; if (arg1->f_124 == 1) uStack_18 = 0x2c; else uStack_18 = 0xd; func_0030F258(arg1,&uStack_18,0);` \u2014 i.e. it destroys the children and then feeds message control code 0x2c/0x0d through the interpreter before the caller frees the object."
+ },
+ {
+  "address": "0x0030F258",
+  "name": "Ui_MessageWindow_ExecControlCode",
+  "signature": "void Ui_MessageWindow_ExecControlCode(UiMessageWindow* self, u8* code, int moreFollows)",
+  "params": {
+   "self": "message window (tag table offset at +0x1930, table selector at f_1942/f_1943)",
+   "code": "4-byte tag: [0]=tag id <0x43, [1]=name id or 0xff, [4]/[8]=optional args",
+   "moreFollows": "non-zero when more tags follow (affects the 'break' flag)"
+  },
+  "summary": "Executes one message control tag: looks the tag id (0..0x42) up in the window's tag table (0x28-byte rows, up to 8 parameter slots), resolves the referenced name id to a string, optionally fills the two sprintf buffers with the %u/%l arguments, then starts the text block with the tag's style/align/break flags and the selected parameter slot.",
+  "confidence": 0.6,
+  "evidence": "`iVar6 = *(int*)(g_0030f538 + self)` where the pool word 0x0030f538 = 0x1930, so the table pointer lives at self+0x1930; `if ((int)uVar1 < iVar6->f_60)` (max 0x43 tags); row = `iVar6->f_58->f_24 + id*0x28`; slot = row[0..7] via `switch(self->f_1942)`; `func_0035EB98(root,code[1])` \u2192 `func_001F076C(5, entry+0xca, 0)` (Message_SetArg); `func_00707C1C(ptr+0x848, g_0030f540)` with pool words 0x00750025/0x006C0025 = L\"%u\"/L\"%l\" (sprintf into the message buffer); `func_0018C5...`/`func_001C5BD8(local_54,uVar7)` picks the align; `func_001C5924(local_54,&local_48)` starts the text block with the flags from row[8]/row[9] and the `local_40 = row[0x23] || moreFollows` break flag. 22 callers (all the message step functions in this batch)."
+ },
+ {
+  "address": "0x00310844",
+  "name": "maybe_Text_LineFillChars",
+  "signature": "int maybe_Text_LineFillChars(u32* lineState, int fontId, u32 value, u8 mode, int count)",
+  "params": {
+   "lineState": "text-line state (current char count at +0x18/+0x1c, buffer cursor)",
+   "fontId": "font/text id (0xff = default)",
+   "value": "character/value to insert",
+   "mode": "flag word forwarded to the insert helper",
+   "count": "number of characters to append"
+  },
+  "summary": "Appends `count` copies of a character to the current text line: measures the line, advances the glyph cursor, skips the two 'space' special cases (0xcd/0xce) for font id 0x139 and returns the new character count.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_00310c64; *(char*)(arg1+5) = (arg2 == 0xff) ? 0x45 : arg2;` then `func_00629890/0x6292A4/0x191DE4` measure and reset, `func_001902CC` appends mode-dependent data, `func_001905E4(font, idx, char, 1)`, loop `arg1 = (u32*)((int)arg1 - 1); if ((int)arg1 < 1) ...; iVar7 = func_00191DA4(...)` with the `unaff_r6 == 0x139` special case calling the root vtable with 0xcd/0xce."
+ },
+ {
+  "address": "0x00310900",
+  "name": "maybe_Text_LineFillCharsEx",
+  "signature": "void maybe_Text_LineFillCharsEx(u32 lineState, u32 count)",
+  "params": {
+   "lineState": "text-line state",
+   "count": "number of characters to append"
+  },
+  "summary": "Register-level Twin of 0x00310844 (Thumb/ARM boundary lost by the decompiler): same measure/append loop and the same 0x139 / 0xcd / 0xce special case, but all the intermediate values stay in registers so the parameters cannot be recovered. Kept as the companion entry.",
+  "confidence": 0.3,
+  "evidence": "Body is the untyped remainder of 0x00310844: `func_00629890(); func_006292A4(); func_00191DE4(); ... do { unaff_r4 = unaff_r4 - 1; if (unaff_r4 < 1) goto LAB; iVar3 = func_00191DA4(); } while (-1 < iVar3);`, identical `unaff_r6 == 0x139` block."
+ },
+ {
+  "address": "0x00310D78",
+  "name": "Ui_TextScroll_IsFinished",
+  "signature": "u32 Ui_TextScroll_IsFinished(u32* owner)",
+  "params": {
+   "owner": "window adapter (window pointer at +0, its +0x30 child holds the scroll state at +0x1e18)"
+  },
+  "summary": "Reports whether a text scroll/animation has finished: true only when the window has a scroll object and that object's state machine is in step 1.",
+  "confidence": 0.55,
+  "evidence": "`if ((*(int*)(*arg1+0x30) != 0) && (iVar1 = func_0062F694(*(int*)(*arg1+0x30) + 0x1e18), result = 1, iVar1 != 1)) result = 0;` \u2014 func_0062F694 is the 'current step id' accessor used by all the sequence steps in this batch."
+ },
+ {
+  "address": "0x00310DA4",
+  "name": "Ui_TextScroll_End",
+  "signature": "void Ui_TextScroll_End(u32* owner, u32 arg2, u32 step)",
+  "params": {
+   "owner": "window adapter",
+   "arg2": "forwarded to the text helpers",
+   "step": "current scroll step; < 0x1f means 'still scrolling'"
+  },
+  "summary": "Ends the current text scroll: finishes the scroll object and then either stops or leaves the text animation running depending on whether the step counter is below 0x1f.",
+  "confidence": 0.5,
+  "evidence": "`func_00311704(); if (arg3 < 0x1f) { func_0029126C(*(int*)(*arg1+0x28)+0x2294,1); } func_0029126C(*(int*)(*arg1+0x28)+0x2294,0);` \u2014 both calls are marked 'does not return' by Ghidra (tail call), the 0x1f threshold matches the text-page step budget used by 0x00311134."
+ },
+ {
+  "address": "0x003110C4",
+  "name": "Text_LineGetMaxInsertCount",
+  "signature": "int Text_LineGetMaxInsertCount(void)",
+  "params": {
+   "returns": "maximum number of characters that can still be inserted (capped at 9)"
+  },
+  "summary": "Returns how many characters still fit in the current text line, capped at 9, by dividing the remaining pixel width of the line by the measured character advance.",
+  "confidence": 0.5,
+  "evidence": "`func_0061BD4C(auStack_18)` \u2192 `local_14->f_18`; `local_28[0] = 9; local_20[0] = func_0011CFAC(*(u32*)(root+0x24ac0), f18); result = min(local_28[0], local_20[0]);` \u2014 0x24ac0 is the same 'remaining width' field 0x00311134/0x0031119C compare against."
+ },
+ {
+  "address": "0x00311134",
+  "name": "Text_LineCanInsert",
+  "signature": "u32 Text_LineCanInsert(u32 unused, u32 unused2, int count)",
+  "params": {
+   "unused": "unused",
+   "unused2": "unused",
+   "count": "characters requested"
+  },
+  "summary": "Reports whether `count` more characters fit in the current line: compares `count * charAdvance` with the remaining width stored at root+0x24ac0.",
+  "confidence": 0.55,
+  "evidence": "`func_0061BD4C(auStack_18); if ((local_14 != 0) && (-1 < arg3)) { iVar2 = local_14->f_18; if ((u32)(iVar2 * arg3) <= *(u32*)(root+0x24ac0)) return 1; } return 0;`"
+ },
+ {
+  "address": "0x0031119C",
+  "name": "Text_LineWouldOverflow",
+  "signature": "u32 Text_LineWouldOverflow(u32 unused, u32 unused2, int count)",
+  "params": {
+   "unused": "unused",
+   "unused2": "unused",
+   "count": "characters requested"
+  },
+  "summary": "Inverse of 0x00311134: reports whether adding `count` characters would push the line past the width limit, using the line-height field f_1c and the limit constant g_00311208.",
+  "confidence": 0.5,
+  "evidence": "`iVar2 = local_14->f_1c; if (g_00311208 < (u32)(iVar2 * arg3 + *(int*)(root+0x24ac0))) return 1;` \u2014 uses f_1c where 0x00311134 uses f_18, and a strict '>' against a pool constant."
+ },
+ {
+  "address": "0x0031120C",
+  "name": "Text_LineInsertChars",
+  "signature": "int Text_LineInsertChars(u32* lineState, int fontId, int count, u32 value, int lineIndex)",
+  "params": {
+   "lineState": "text-line state",
+   "fontId": "text/font id (0..0x1e valid)",
+   "count": "characters to insert",
+   "value": "character to insert",
+   "lineIndex": "line slot (< 0x1f)"
+  },
+  "summary": "Inserts `count` copies of a character into a specific text line: measures the line width first, appends the character through the glyph buffer (or, for line slots >= 0x1f, through the per-line append helper), then advances the cursor by `lineHeight * count`.",
+  "confidence": 0.5,
+  "evidence": "`result = local_3c->f_18 * arg3; func_00613FC0(root+0x24a98, -result); if (arg4 < 0x1f) { func_0035EB98(root,arg4); func_00191DA4/0x191DE4/0x1902CC/0x1905E4 ... }` else `func_00191DA4(...)`; then the same `unaff_r6 == 0x139` cd/ce block and `func_00311704(arg1,arg2,arg4,uVar5)`; returns the measured width or -1 when the arguments are invalid."
+ },
+ {
+  "address": "0x00311450",
+  "name": "Text_LineInsertGlyph",
+  "signature": "u32 Text_LineInsertGlyph(u32 unused, u32 arg2, int count, u32 value, u32 lineIndex)",
+  "params": {
+   "unused": "unused",
+   "arg2": "line index forwarded to the per-line helper",
+   "count": "number of glyphs (must be >= 1)",
+   "value": "glyph/character to insert",
+   "lineIndex": "text line slot (< 0x1f)"
+  },
+  "summary": "Inserts one glyph (or `count` glyphs) into a text line: for line slots below 0x1f it uses the per-glyph insert helper (Text_InsertLineChar) with the line object resolved from the font id, otherwise it appends through the bulk helper; then advances the cursor and returns 1 on success.",
+  "confidence": 0.55,
+  "evidence": "`if (arg3 < 1) result = 0; else { if (arg5 < 0x1f) { result = func_0035EB98(root,arg5); func_001901F4(result,arg4); } else { func_006115BC(root+0x24acc,arg2,arg3); } iVar4 = local_1c->f_1c; func_00613FC0(root+0x24a98, iVar4*arg3); result = 1; }` \u2014 0x001901F4 is named Text_InsertLineChar in N_002's output."
+ },
+ {
+  "address": "0x00311580",
+  "name": "maybe_Ui_DebugLabel_ShowGlyphInfo",
+  "signature": "void maybe_Ui_DebugLabel_ShowGlyphInfo(u32* owner, u32 glyphId)",
+  "params": {
+   "owner": "window adapter (debug label at *(*owner+0x28)+0x1da0, pane at +0x1c80)",
+   "glyphId": "glyph id to display"
+  },
+  "summary": "Shows the debug label for a glyph id and toggles the debug pane: formats the glyph, sets the label text, and shows or hides the pane at +0x1c80 depending on whether the glyph is in the regular kana range (0xa4..) rather than the icon block (0xb19..).",
+  "confidence": 0.45,
+  "evidence": "`func_002F6B0C(*(u32*)(*arg1+0x2c)); func_0061BD4C(local_18,arg2); if (local_14 == 0) return; func_003EB568(*(int*)(*arg1+0x28)+0x1da0,arg2);` (maybe_Ui_DebugLabel_SetTextEx) then `if ((g_00311700 <= local_18[0] - 0xa4) && (3 < local_18[0] - 0xb19)) func_0029126C(root+0x1c80,0); func_0029126C(root+0x1c80,1);`. The 0xa4/0xb19 ranges are the same glyph blocks used by 0x002B90F0."
+ }
+]

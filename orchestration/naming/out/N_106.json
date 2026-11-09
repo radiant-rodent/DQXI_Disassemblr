@@ -1,0 +1,1748 @@
+[
+ {
+  "address": "0x002C321C",
+  "name": "maybe_Ui_Widget_DeletingDtorA",
+  "signature": "void maybe_Ui_Widget_DeletingDtorA(void* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Stores the vtable word handed in by the caller at self+0x00, runs the shared scene-node/widget base destructor and then deletes the object through its own vtable. One of the many generated deleting-destructor thunks of the Ui widget hierarchy.",
+  "confidence": 0.4,
+  "evidence": "Body: str r1,[r0]; bl 0x1D8C2C (inner entry of 0x1D8BD4 maybe_Field_DestroyNode = base destructor that installs vtable 0x0075A3F4 and unlinks the node lists); b 0x10F6CC (delete object through vtable, used by every deleting dtor in this range). No callers: reached only through a vtable."
+ },
+ {
+  "address": "0x002C3244",
+  "name": "maybe_Container_InlineVector_PushRecord",
+  "signature": "void maybe_Container_InlineVector_PushRecord(InlineVector* self, const TextSlotSource* src, int len, void* unused, u8 flag)",
+  "params": {
+   "param_1": "self",
+   "param_2": "src",
+   "param_3": "len",
+   "param_4": "unused",
+   "param_5": "flag"
+  },
+  "summary": "Appends one 44-byte record (two short wide strings plus a flag byte) to a vector that keeps its elements inline: begin/end/capacity at +4/+8/+0xC, inline buffer at +0x14. Builds the strings from src+0 and src+0x3C with wcslen/wcsncpy (SSO, 6 chars max) and reallocates through the object's own allocator when end == capacity.",
+  "confidence": 0.5,
+  "evidence": "Entry guard compares end-begin with 0x580 and checks begin == self+0x14 (inline storage); element size 0x2C recovered from the growth code (magic 0x2E8BA2E9 = /0x2C); callees std_wcsncpy, 0x00100B74 (wcslen) and std_memcpy; the source strings are at arg2 and arg2+0x3C and the tail byte comes from the 5th stack argument."
+ },
+ {
+  "address": "0x002C6194",
+  "name": "maybe_Container_HashBucket_FindByType",
+  "signature": "void* maybe_Container_HashBucket_FindByType(u32 key, u32 hashMask)",
+  "params": {
+   "param_1": "key",
+   "param_2": "hashMask"
+  },
+  "summary": "Looks a key up in the global bucket table at 0x007B80C0: index = key & (hashMask>>10), bucket must carry the same key>>11, then each chained object is asked for its type tag through vtbl[0] and compared with the static descriptor 0x007C5078; follows +0xC while it does not match. Returns the matching object or NULL.",
+  "confidence": 0.3,
+  "evidence": "Body reads g_007B80C0 + (idx<<3), compares the second bucket word with r0>>11, then calls (*(*obj))() and compares against the address of the bss descriptor 0x007C5078; chain walk through [obj+0xC]. Same bucket table and same key>>11 trick as 0x00245BC0 (maybe_Ui_Toggle_FreeHandle), so the table is the engine's global handle registry; the 'find by type' reading is inferred from the type-tag compare."
+ },
+ {
+  "address": "0x002C6B90",
+  "name": "maybe_Container_InlineSlot_PopFront",
+  "signature": "u32 maybe_Container_InlineSlot_PopFront(InlineSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Removes the first element of a small inline slot container: returns the old key from +4, logs the new head through the engine trace formatter, slides the 0x20-byte payload from +0xC down to +4 with memmove and clears the counter at +0x24.",
+  "confidence": 0.35,
+  "evidence": "Body: returns [self+4]; if the global trace object 0x007AC834 is set it calls 0x707C1C (varargs formatter) with the inline format at 0x2C6BF4 and self+8; then 0x11CD00 (= memmove) copies 0x20 bytes from self+0xC to self+4; self+0x24 = 0. Appears in the pointer table at 0x0078059C next to 0x1A5EE0 (list-empty test), so it is a container operation, not a game action."
+ },
+ {
+  "address": "0x002C89A0",
+  "name": "maybe_Ui_JackpotScreen_SetNextStepUpdateReels",
+  "signature": "void maybe_Ui_JackpotScreen_SetNextStepUpdateReels(UiJackpotScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the jackpot screen one step by copying table entry 7 of the screen's step table (0x0072AA0C, whose entry 7 is maybe_Ui_JackpotScreen_UpdateReels) into the current-step pair at self+0x50, unless the reel animation attached through self+0x44 is still running.",
+  "confidence": 0.55,
+  "evidence": "Loads 0x0072AA0C and stores ldrd [table+0x38] (= entry 7 = 0x002C7EEC maybe_Ui_JackpotScreen_UpdateReels, 0) into self+0x50 (the {func,arg} step pair used by every step function in this table). Guard: 0x64E948(self->f_44+0x30AC) returns 1 while the anim is still running (it tests a float at +0x24 against a constant). This function is itself entry 51 of the same table (maybe_Ui_IconList_UpdateState neighbour)."
+ },
+ {
+  "address": "0x002C8EA2",
+  "name": "maybe_Ui_JackpotScreen_HandleCursorMove",
+  "signature": "void maybe_Ui_JackpotScreen_HandleCursorMove(UiJackpotScreen* self, u32 inputFlags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "inputFlags"
+  },
+  "summary": "Input block of the icon-list/jackpot screen: on left/right it advances the highlighted column, on up/down it moves the slider value, plays cursor SEs 3749/3750 (0x0EA5/0x0EA6) when the value actually changes, refreshes the icon list, then pushes the new cursor and value into the reel window and the status panel before running the next screen callback.",
+  "confidence": 0.45,
+  "evidence": "Not a real entry point: 0x2C8EA2 is 2 bytes into an ARM instruction of FUN_002C8D22, the rest (0x2C8EC0-0x2C90CC) is a coherent block reachable only by branches. Contents: tst r5,#0x10 / #0x280 / ldrb [r4,#0x3C]&4, Sound_PlaySeById(0xEA5/0xEA6), Ui_IconList_RefreshIcons(0x2C7D54), 0x30DC18/0x30D674 on self+0x44 (the reel window), 0x405D90/0x405E00 (seven-digit number formatting into the panel at +0x11C), 0x4DC4F0, then Ui_Screen_InvokeNextCallback."
+ },
+ {
+  "address": "0x002CC284",
+  "name": "maybe_Container_ReleaseRefHandleArrays",
+  "signature": "void maybe_Container_ReleaseRefHandleArrays(RefHandleContainer* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a container that owns six dynamic arrays of reference-counted handles (count/pointer pairs at +0x34/0x38, +0x3C/0x40, +0x44/0x48, +0x4C/0x50 for 0x14-byte records, +0x24/0x28, plus the small table at +0x28). For every handle it decrements the object's refcount at obj+4 and calls vtable[2] when it reaches zero, then runs the container's own vtable destructor and frees the block with its computed byte size.",
+  "confidence": 0.5,
+  "evidence": "Six repetitions of the same refcount-release sequence: tst handle,#0x8000000, ldr ptr,[handle+4], ldr ref,[ptr+4], subs/str, blx [vtable+8] on zero - the engine's reference-counted handle convention (same as 0x002CC598 / 0x002CC614 in this batch). Tail computes (counts*8 + records*0x14 + 0x60) and tail-calls 0x147AEC (sized free through the heap vtable at 0x007AEABC)."
+ },
+ {
+  "address": "0x002CC598",
+  "name": "maybe_Container_RefPair_DeletingDtor",
+  "signature": "void maybe_Container_RefPair_DeletingDtor(RefPair* self, u32 tag)",
+  "params": {
+   "param_1": "self",
+   "param_2": "tag"
+  },
+  "summary": "Deleting destructor for an object holding two reference-counted handles: stores the new tag word at +0, releases the handles at +0x14 and +0xC (refcount decrement, vtable[2] on zero) and then destroys/frees the object through 0x1E912C.",
+  "confidence": 0.45,
+  "evidence": "Two copies of the release sequence on self+0x14 and self+0xC, then sub r0,r4,#0xC (back to the object base) and b 0x1E912C, which installs vtable 0x0075A728 and resets the child pointer at +8 - i.e. a base destructor/delete. Tag stored at +0 is a refcounted handle word test target (0x8000000 flag)."
+ },
+ {
+  "address": "0x002CC614",
+  "name": "maybe_Container_NotifyAllAndRegister",
+  "signature": "void maybe_Container_NotifyAllAndRegister(RefHandleContainer* self, void* value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "One-shot initialiser guarded by bit 31 of self+4: it sets the flag, forwards the given value to every element of the array at self+0x28 (count at +0x2C), then links itself into the listener list of the object at self+0x14 (+0x48) and finally registers into that object with 0x245C1C.",
+  "confidence": 0.4,
+  "evidence": "Guard: tst [r0+4],#0x80000000 / bne return, then orr 0x80000000 and store => 'already done' bit. Loop over [self+0x28] with stride 8 calls 0x245C80 (0x245BC0+0xC0). Then 0x245C40(self->f_14+0x48, self) is an intrusive-list unlink/relink, and the tail call 0x245C1C(value, self) inserts into a list at +0xC/+0x10."
+ },
+ {
+  "address": "0x002CC688",
+  "name": "maybe_Ui_Object_DeleteDtor48",
+  "signature": "void maybe_Ui_Object_DeleteDtor48(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a 0x48-byte object: calls the object's own first virtual function (the class destructor chain) and frees the 0x48-byte block through 0x147AEC.",
+  "confidence": 0.4,
+  "evidence": "Body: (*(*self))(self); then mov r1,#0x48 and tail-call 0x147AEC (sized free). Entered from the pointer table at 0x0076029C; 0x2CC6B0 right after it is a separate 0x28-byte function (it uses Sq_Stack_Resize on self+0x28), so only the first 0x28 bytes belong to this function."
+ },
+ {
+  "address": "0x002CC800",
+  "name": "maybe_Fs_FormatDataPath",
+  "signature": "int maybe_Fs_FormatDataPath(char* dst, int dstSize, const char* root, int index, ...)",
+  "params": {
+   "param_1": "self",
+   "param_2": "dst",
+   "param_3": "dstSize",
+   "param_4": "root",
+   "param_5": "index"
+  },
+  "summary": "Formats a resource path of the form \"<root>/Data<index>\" into the caller's buffer. Used by the model/asset loader when it has to name the per-variant sub-file ('Data0', 'Data1', ...) below a model directory.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51BA9C, which is a thin wrapper around std_vsnprintf (push {r0-r3}; add r3,sp,#0x14; ldr r2,[sp,#0x10]; bl 0x708BE4 std_vsnprintf). Arguments: r0=dst(arg2), r1=size(arg3), r2=inline format \"%s/Data%d\" at 0x002CC828, r3=pointer to the string \"data:\" at 0x0072D780, stack=arg4. Sits in the handler table at 0x0072D788 next to the \"%s/mini_%d\" variant."
+ },
+ {
+  "address": "0x002CE660",
+  "name": "maybe_Fs_FormatMiniPath",
+  "signature": "int maybe_Fs_FormatMiniPath(char* dst, int dstSize, const char* root, int index, ...)",
+  "params": {
+   "param_1": "self",
+   "param_2": "dst",
+   "param_3": "dstSize",
+   "param_4": "root",
+   "param_5": "index"
+  },
+  "summary": "Same as maybe_Fs_FormatDataPath but formats \"<root>/mini_<index>\", the 'mini' variant sub-file of a model directory.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x002CC800 except the inline format string at 0x002CE688 is \"%s/mini_%d\"; both entries alternate in the handler table at 0x0072D788 (the third programmer-visible name is \"data:\" at 0x0072D780)."
+ },
+ {
+  "address": "0x002CF838",
+  "name": "maybe_Ui_PageList_StepCounterDown",
+  "signature": "void maybe_Ui_PageList_StepCounterDown(UiPageList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Steps the paged list's split counter one unit down, refreshes the two numeric labels from it, and then notifies the owner window through vtbl[0x6C] with the new value.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x6221D0(self+0x54, 0). 0x6221D0 splits a value into quotient/remainder (magic 0x66666667 = /10 for the per-digit display), stores the quotient at +0x10 and formats both halves with the UTF-16 \"%d\" literal at 0x006221C8 into the two text widgets at +4/+8. Then (*vtable)[0x6C](self, self->f_64) dispatches to the owner. Lives in the same vtable as Ui_RowListWindow_LoadPage and maybe_Ui_PageList_ShowPage, so it is a pager operation; 'counter' rather than 'page' because two numbers are refreshed."
+ },
+ {
+  "address": "0x002CF878",
+  "name": "maybe_Ui_PageList_StepCounterUp",
+  "signature": "void maybe_Ui_PageList_StepCounterUp(UiPageList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Upward twin of 0x002CF838: steps the paged list's split counter one unit up, refreshes the two numeric labels and notifies the owner through vtbl[0x6C].",
+  "confidence": 0.45,
+  "evidence": "Only difference from 0x002CF838 is the flag handed to 0x6221D0 (self+0x54, 1 instead of 0), which selects the +1 branch inside that helper. Same vtable rows at 0x0075E990 / 0x007603B4 / 0x0076E974 / 0x00771C14 next to Ui_RowListWindow_LoadPage and maybe_Ui_PageList_ShowPage."
+ },
+ {
+  "address": "0x002CFF9C",
+  "name": "maybe_Ui_Widget_RelocateRecordPointerA",
+  "signature": "void maybe_Ui_Widget_RelocateRecordPointerA(UiWidget* self, void* record, void* loader)",
+  "params": {
+   "param_1": "self",
+   "param_2": "record",
+   "param_3": "loader"
+  },
+  "summary": "Layout-load fix-up: marks the loader's 'relocating' field (+0x60C) with the address of the pointer being patched, converts the stored offset through the widget's relocation table (self+0xA8) and writes the resolved pointer back into the record, then clears the marker.",
+  "confidence": 0.5,
+  "evidence": "Body: str r4=arg2+4 into arg3+0x60C; ip = [arg1+0xA8] (relocation table); if non-zero call 0x53CD1C(loader, rawValue, table) - 0x0053CB2C is the engine's pointer relocation helper that resolves a stored offset against a section table - then store the result back and zero +0x60C. Second identical copy at 0x002D00AC. Both are vtable rows of the Ui widget/layout object at 0x00760498/0x0076049C next to maybe_Ui_Widget_ApplyScreenTransform."
+ },
+ {
+  "address": "0x002CFFDC",
+  "name": "maybe_Ui_SmithMenu_PlayOutcomeText",
+  "signature": "void* maybe_Ui_SmithMenu_PlayOutcomeText(UiSmithMenu* self, int outcome)",
+  "params": {
+   "param_1": "self",
+   "param_2": "outcome"
+  },
+  "summary": "Plays the smith mini-game outcome animation: maps outcome 0..3 to one of the four layout pane names \"txt_charge\", \"txt_seikou\", \"txt_daiseikou\", \"txt_shippai\", stops the previous animation at self+0x11C, starts the new one with Ui_PlayAnimByName(self+0x98, name, 0, 1), stores the handle and finally applies the animation speed constant through the handle's vtbl[0x54].",
+  "confidence": 0.55,
+  "evidence": "Four-way switch loads the inline pane names at 0x002D0064/0x0074/0x0080/0x008C/0x009C; Ui_PlayAnimByName (0x53D604) called with (self+0x98, name, 0, 1); handle kept at self+0x11C and its vtbl[0x54] called with a float from the pool. The pane names exist in game_assets/layouts/arcs/ui/smith_3d/.../menu_kaji2_text_3d_txt_seikou.bflan.json, i.e. the blacksmith (kaji) UI."
+ },
+ {
+  "address": "0x002D004C",
+  "name": "maybe_Ui_SmithMenu_UpdateChargeSlotList",
+  "signature": "void maybe_Ui_SmithMenu_UpdateChargeSlotList(TimerList* list, int first, ...)",
+  "params": {
+   "param_1": "list",
+   "param_2": "first"
+  },
+  "summary": "Walks the charge-slot list and calls the per-slot timer/effect updater (0x001EE8B4) for every entry, stepping through the entries at stride 0xB (eleven 8-byte sub-slots per record).",
+  "confidence": 0.3,
+  "evidence": "Not a real entry point: 0x002D004C is inside the Thumb function that starts at 0x002CFFDC (the ARM disassembly at that address is a bogus 4-byte decode). Recovered C: loop 'for i < list->f_10 { func_001EE8B4(list->f_4 + i*0xB*8) }'. 0x001EE8B4 is the per-object timer/effect update (reads a float timer at +0x44 and a count at [r0]+0)."
+ },
+ {
+  "address": "0x002D00AC",
+  "name": "maybe_Ui_Widget_RelocateRecordPointerB",
+  "signature": "void maybe_Ui_Widget_RelocateRecordPointerB(UiWidget* self, void* record, void* loader)",
+  "params": {
+   "param_1": "self",
+   "param_2": "record",
+   "param_3": "loader"
+  },
+  "summary": "Byte-for-byte twin of 0x002CFF9C: second relocation call site emitted for the next member pointer of the same layout widget.",
+  "confidence": 0.5,
+  "evidence": "Identical instruction stream to 0x002CFF9C (offset +0x60C marker, self+0xA8 relocation table, 0x53CD1C, clear marker); listed as a separate vtable row at 0x00760498, directly before 0x002CFF9C, in the Ui widget vtable that also holds maybe_Ui_Widget_ApplyScreenTransform."
+ },
+ {
+  "address": "0x002D010C",
+  "name": "maybe_Ui_DigitRoll_DeletingDtor",
+  "signature": "void maybe_Ui_DigitRoll_DeletingDtor(UiDigitRoll* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the number-rolling widget: runs the shared scene-node/widget base destructor and deletes the object through its vtable.",
+  "confidence": 0.45,
+  "evidence": "Body: bl 0x001D8C2C (shared base destructor) then b 0x0010F6CC (delete through vtable) - the standard two-instruction deleting dtor of this engine. Vtable row 0x00760484 sits next to maybe_Ui_DigitRoll_Update (0x002CFE5C)."
+ },
+ {
+  "address": "0x002D1588",
+  "name": "maybe_Anim_StateDispatch_ThunkA",
+  "signature": "void maybe_Anim_StateDispatch_ThunkA(void* self, int group, int slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "group",
+   "param_3": "slot"
+  },
+  "summary": "One-instruction thunk that forwards all three arguments unchanged to 0x006C8108, the 3x4 animation/event dispatcher (group at [self+4] 0..2, slot 0..3). Used as a vtable slot so that a class can expose the dispatcher without its own code.",
+  "confidence": 0.35,
+  "evidence": "push {r4,lr}; bl 0x006C8108; pop {r4,pc} with r0/r1/r2 untouched. 0x006C8108 selects handler [ (self->f_4)*3 + slot ] from a 16-byte-stride table at self+0x30+slot*8 and tail-calls it; r4 is pushed but unused, the classic signature of a generated vtable thunk."
+ },
+ {
+  "address": "0x002D1804",
+  "name": "maybe_Anim_StateDispatch_ThunkB",
+  "signature": "void maybe_Anim_StateDispatch_ThunkB(void* self, int group, int slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "group",
+   "param_3": "slot"
+  },
+  "summary": "Second generated thunk for the same 0x006C8108 animation/event dispatcher (identical to 0x002D1588); the code at 0x002D1810 that follows it is a separate state-normalisation helper (7/5->6, 3/1->2) and not part of this function.",
+  "confidence": 0.35,
+  "evidence": "Byte-identical body to 0x002D1588 (bl 0x006C8108). The trailing 0x24 bytes belong to the next function because the batch size 0x38 includes them; that tail is a pure value mapper (cmp r0,#7 / #5 => 6, #3 / #1 => 2)."
+ },
+ {
+  "address": "0x002D1D24",
+  "name": "maybe_Ui_Screen_UpdateAndReportDone",
+  "signature": "int maybe_Ui_Screen_UpdateAndReportDone(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Runs the timeline dispatch on the object (0x0046011C, which kicks 0x0046015C when the entry count at +0xC is non-zero) and unconditionally reports 1, i.e. 'handled'.",
+  "confidence": 0.3,
+  "evidence": "Body: bl 0x0046011C; mov r0,#1; pop. 0x0046011C belongs to the Ui_ComplexWindow destructor family (0x00460108 is Ui_ComplexWindow_PartDeletingDtor per N_062) and forwards to maybe_Event_TimelineDispatchRange; the constant 1 return is all this wrapper does."
+ },
+ {
+  "address": "0x002D1E40",
+  "name": "maybe_Anim_Clip_UpdateTimerAndDispatch",
+  "signature": "void maybe_Anim_Clip_UpdateTimerAndDispatch(AnimClipSet* self, float dt)",
+  "params": {
+   "param_1": "self",
+   "param_2": "dt"
+  },
+  "summary": "Advances the inner clip object at self+0x3C: if it is not finished yet it adds the frame delta to its time, bumps its frame counter and then dispatches the next event through 0x006C8108(self+0x3C, 1, 0).",
+  "confidence": 0.45,
+  "evidence": "Shape is identical to 0x006C80BC (the engine's clip timer): (*(*[r4]))(...) via vtbl[0x10] = is-finished test, then [r4+8] += s16, [r4+0xC] += 1, then bl 0x006C8108 with (self+0x3C, 1, 0). Vtable row 0x00760590 in the Anim_Clip/ClipSet table that also holds Anim_ClipSet_Refresh."
+ },
+ {
+  "address": "0x002D1F1C",
+  "name": "maybe_Anim_Clip_DispatchThunk",
+  "signature": "void maybe_Anim_Clip_DispatchThunk(void* self, int group, int slot)",
+  "params": {
+   "param_1": "self",
+   "param_2": "group",
+   "param_3": "slot"
+  },
+  "summary": "Generated thunk that forwards its arguments to the 0x006C8108 animation/event dispatcher; one of the three identical dispatcher thunks in this batch.",
+  "confidence": 0.35,
+  "evidence": "push {r4,lr}; bl 0x006C8108; pop {r4,pc}, no argument setup. Same pattern as 0x002D1588 and 0x002D1804."
+ },
+ {
+  "address": "0x002D3E06",
+  "name": "maybe_Ui_LayoutAnim_SwitchCaseBlock",
+  "signature": "void maybe_Ui_LayoutAnim_SwitchCaseBlock(void)",
+  "params": {},
+  "summary": "Case block of a Thumb switch inside the layout/animation code: it tests the argument and jumps back into the common tails at 0x002D3936 / 0x002D44BC. Not a standalone function - it is a jump-table target inside FUN_002D3E1A.",
+  "confidence": 0.2,
+  "evidence": "Address is even-aligned Thumb code that starts with push {r4,r7,lr} but the following bytes are case bodies (cbz r1 / b 0x2D3936, b 0x2D44BC) that fall back into FUN_002D3E1A (0x4000-0x4422). functions_merged gives it a 0x14 size while the real containing function is FUN_002D3E1A, so this is a phantom entry."
+ },
+ {
+  "address": "0x002D5984",
+  "name": "maybe_Ui_Window_BumpSpawnCounter",
+  "signature": "void maybe_Ui_Window_BumpSpawnCounter(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Increments the small spawn/step counter at self+0xC, saturating at 10 instead of wrapping.",
+  "confidence": 0.3,
+  "evidence": "Body: r1=[self+0xC]; if (r1 < 0xA) [self+0xC] = r1+1. Vtable row 0x00760630 in the window table that also holds 0x002D5B00 and 0x00633BD8; the rest of the declared 0x16 bytes belongs to the next function."
+ },
+ {
+  "address": "0x002D599A",
+  "name": "maybe_Ui_Window_AttachChildToFreeSlot",
+  "signature": "void maybe_Ui_Window_AttachChildToFreeSlot(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Finds a free child slot through 0x00649050; if none is free (0xFF) it raises the 'list full' flag at +0xC, otherwise it marks the chosen child (+0x94), hands the index to 0x3192C8 and 0x319264, and resets the bookkeeping fields at +0 and +8.",
+  "confidence": 0.4,
+  "evidence": "Callees 0x00649050 (slot allocator, returns 0xFF on failure), 0x3192C8 (maybe_Ui_Window_ResetSubObjectLists) and 0x319264. Recovered C at 0x002D599A shows the 0xFF compare and the strb r1,[r0,#0x94] on the child at self+4."
+ },
+ {
+  "address": "0x002D5DF8",
+  "name": "maybe_Ui_Widget_DelegateTrampolines",
+  "signature": "void maybe_Ui_Widget_DelegateTrampolines(void)",
+  "params": {},
+  "summary": "A block of eight tiny vtable trampolines (0x2D5E28..0x2D5EB4) that all load a 64-bit value from their object and forward it either to the callback binder 0x7230BC with one of three fixed callbacks (0x00154BE8 / 0x00150FB8 / 0x001492BC) or to the state setter 0x722EDC with a constant 0..5. Ghidra merged them into one entry that begins with a jump table.",
+  "confidence": 0.3,
+  "evidence": "Disassembly starts with 'ldrlo pc,[pc,r1,lsl#2]' (a jump table) followed by 8 stubs: ldrd r0,r1,[r0]; bl 0x7230BC with r2 = 0x154BE8/0x150FB8/0x1492BC, then six stubs ldrd; bl 0x722EDC with r2 = 0..5. 0x7230BC is an entry inside FUN_00722FD4 and 0x722EDC inside FUN_00722A50, both part of the Gfx/Ui render command module."
+ },
+ {
+  "address": "0x002D88D4",
+  "name": "maybe_Ui_List_GetPendingCode",
+  "signature": "int maybe_Ui_List_GetPendingCode(UiList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns 14 when the signed byte flag at self+0x1C is set, otherwise -1; a small status/result selector used by the caller to decide between 'has pending work' and 'nothing to do'.",
+  "confidence": 0.3,
+  "evidence": "Body: ldrsb r0,[r0,#0x1C]; if (r0) r0 = 0xE else r0 = -1. No callers and no data references, so only the shape is known; the 0xE/-1 pair looks like a request id / error code."
+ },
+ {
+  "address": "0x002D99DC",
+  "name": "maybe_Ui_Widget_BeginSubTweenIn",
+  "signature": "void maybe_Ui_Widget_BeginSubTweenIn(UiWidget* self, int src)",
+  "params": {
+   "param_1": "self",
+   "param_2": "src"
+  },
+  "summary": "Starts the widget's sub-tween state: asks the controller at self+0x14 for its current value (vtbl[0x14]), then initialises the tween block at self+0x120 with duration 10, progress 0 and the active byte set.",
+  "confidence": 0.4,
+  "evidence": "First half calls (*(self->f_14))->vtbl[0x14](self+0x14) to fetch the value; the tail at 0x002D9A04 writes [self+0x120+4]=float const, +8=0, +9=0xA, +1=1. Vtable row 0x00780900 directly next to maybe_Ui_Widget_StartSubTween / maybe_Ui_Widget_StopSubTween and 0x002D9A2C."
+ },
+ {
+  "address": "0x002D9A2C",
+  "name": "maybe_Ui_Widget_BeginSubTweenOut",
+  "signature": "void maybe_Ui_Widget_BeginSubTweenOut(UiWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts the opposite sub-tween: marks the target object (self->f_14->vtbl[0x14] result) with byte +0x6D = 1, sets the running flag at self+0x120 and clears the 'reverse' flag.",
+  "confidence": 0.4,
+  "evidence": "Same prologue as 0x002D99DC, but writes strb r2=1,[r1+0x6D], strb [r0]=1, strb [r0+1]=0. The code at 0x002D9A6C that follows is the per-frame updater of the same block (it computes 1 - progress/duration, clamps it, stores the float at target+0x74 and clears the flags when done); listed separately here only because the batch range covers it."
+ },
+ {
+  "address": "0x002D9D00",
+  "name": "maybe_FieldParty_DeletingDtorA",
+  "signature": "void maybe_FieldParty_DeletingDtorA(FieldParty* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor for a FieldParty-derived object: runs the FieldParty base destructor (0x00200220) and deletes the object through its vtable.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00200220 then b 0x0010F6CC. Vtable row 0x0076089C sits next to maybe_FieldParty_InitFromParams, FUN_001F96D4 and FieldParty_ResetMemberSlot, so the base destructor belongs to the FieldParty class."
+ },
+ {
+  "address": "0x002DA840",
+  "name": "maybe_FieldParty_DeletingDtorB",
+  "signature": "void maybe_FieldParty_DeletingDtorB(FieldParty* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second deleting destructor of the same FieldParty family (identical body, different vtable/class).",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x002D9D00 (bl 0x00200220; b 0x0010F6CC); vtable row 0x007609B0 with maybe_Battle_Ui_DismissLeaderBalloon, maybe_FieldParty_InitFromParams and FieldParty_ResetMemberSlot as neighbours."
+ },
+ {
+  "address": "0x002DAE4C",
+  "name": "maybe_Battle_UnitDisplay_DeletingDtor",
+  "signature": "void maybe_Battle_UnitDisplay_DeletingDtor(BattleUnitDisplay* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the battle unit display object: runs the unit-display base destructor at 0x00322D14 and deletes the object.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00322D14 (inner entry of FUN_00322D00, the shared base dtor used by all the battle unit/row dtors in this batch) then b 0x0010F6CC. Vtable row 0x00760D68 next to maybe_Battle_Unit_GetDisplayId and maybe_Battle_UnitDisplay_UpdateModelAnim."
+ },
+ {
+  "address": "0x002DB00C",
+  "name": "maybe_Battle_ActionSubObject_DeletingDtor",
+  "signature": "void maybe_Battle_ActionSubObject_DeletingDtor(BattleActionSubObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the battle action sub-object that owns the damage layout widget.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00322D14; b 0x0010F6CC. Vtable row 0x00760D9C next to maybe_Battle_ActionSubObject_ApplyDamageLayout and maybe_Battle_UnitDisplay_PlayAnim."
+ },
+ {
+  "address": "0x002DB140",
+  "name": "maybe_Battle_Unit_DeletingDtor",
+  "signature": "void maybe_Battle_Unit_DeletingDtor(BattleUnit* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the battle unit widget (the object that plays named animations such as the default idle).",
+  "confidence": 0.45,
+  "evidence": "bl 0x00322D14; b 0x0010F6CC. Vtable row 0x00760DD0 next to maybe_Battle_Unit_ApplyDefaultAnim and maybe_Battle_Unit_PlayAnimByName; the bytes after 0x002DB150 are the next function (a small vtbl[0x84] dispatcher)."
+ },
+ {
+  "address": "0x002DB168",
+  "name": "maybe_Battle_Unit_SelectFirstAnimEntry",
+  "signature": "void maybe_Battle_Unit_SelectFirstAnimEntry(BattleUnit* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "If the unit's model/animation list at self+0x28 has any entries (0x00669DD4), commits selection of entry 0 in its keyed list - i.e. resets the unit to its first/default animation entry.",
+  "confidence": 0.4,
+  "evidence": "Body: if (sub_669DD4(self->f_28)) tail-call 0x005E7848(self->f_28, 0, 0). Per N_105, 0x005E7828/0x005E7848 is the Container_KeyedList 'select entry' inner entry, and 0x00669DD4 is the list-length/validity test used by the anim-clip code."
+ },
+ {
+  "address": "0x002DB19C",
+  "name": "maybe_Battle_Unit_DeletingDtorB",
+  "signature": "void maybe_Battle_Unit_DeletingDtorB(BattleUnit* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second deleting destructor of the battle unit family (same body, different vtable row); the trailing 0x18 bytes are a setter for the two halfwords at +0x4C/+0x4E.",
+  "confidence": 0.45,
+  "evidence": "bl 0x00322D14; b 0x0010F6CC. Vtable row 0x00760E04 next to maybe_Battle_Unit_PlayAnimByName/ApplyDefaultAnim. Function 0x002DB1AC at +0x10 is separate (strh r1,[r0,#0x4C]; strb 0,[r0,#0x54]; strh r2,[r0,#0x4E])."
+ },
+ {
+  "address": "0x002DB98C",
+  "name": "maybe_Battle_UiRow_DeletingDtorA",
+  "signature": "void maybe_Battle_UiRow_DeletingDtorA(BattleUiRow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a battle UI row (damage/number row): runs the shared row base destructor at 0x0038AD34 and deletes the object.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0038AD34 (inner entry of FUN_0038AD24, the base dtor shared by all the 0x2DBxxx/0x2DB9xx row dtors) then b 0x0010F6CC. Vtable row 0x00760E38 next to maybe_Actor_UpdateIfModelReady and 0x002DB968."
+ },
+ {
+  "address": "0x002DBBFC",
+  "name": "maybe_Battle_DamageExtWindow_DeletingDtor",
+  "signature": "void maybe_Battle_DamageExtWindow_DeletingDtor(BattleDamageExtWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the extended damage window (the second, larger damage-number widget).",
+  "confidence": 0.45,
+  "evidence": "bl 0x0038AD34; b 0x0010F6CC. Vtable row 0x00760E6C next to Battle_DamageExtWindow_ApplyLayout and Battle_DamageExtWindow_UpdateModelNodes."
+ },
+ {
+  "address": "0x002DBD88",
+  "name": "maybe_Battle_UiRow_DeletingDtorB",
+  "signature": "void maybe_Battle_UiRow_DeletingDtorB(BattleUiRow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a battle UI row variant; the following 0x20 bytes (vtbl[0x84] call) belong to the next function.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0038AD34; b 0x0010F6CC. Vtable row 0x00760EA0 next to maybe_Battle_UiRow_UpdateEntryState and maybe_Battle_UiRow_ClearEntryState."
+ },
+ {
+  "address": "0x002DBDD8",
+  "name": "maybe_Battle_UiRow_DeletingDtorC",
+  "signature": "void maybe_Battle_UiRow_DeletingDtorC(BattleUiRow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Third deleting destructor of the battle UI row family.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0038AD34; b 0x0010F6CC. Vtable row 0x00760ED4 between 0x002DBD98 and 0x002DBDB4 (both vtbl[0x84] forwarders)."
+ },
+ {
+  "address": "0x002DBE2C",
+  "name": "maybe_Battle_UiRow_DeletingDtorD",
+  "signature": "void maybe_Battle_UiRow_DeletingDtorD(BattleUiRow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fourth deleting destructor of the battle UI row family.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0038AD34; b 0x0010F6CC. Vtable row 0x00760F08 in the same row table as the three above."
+ },
+ {
+  "address": "0x002DD8B4",
+  "name": "maybe_Battle_Ui_CreateEffectObject",
+  "signature": "void* maybe_Battle_Ui_CreateEffectObject(int heapIndex, u16 kind, int mode)",
+  "params": {
+   "param_1": "heapIndex",
+   "param_2": "kind",
+   "param_3": "mode"
+  },
+  "summary": "Allocates a 0x214-byte battle UI effect/number object from the render heap (gfx context +0x354), installs the two vtables 0x00782608/0x0076DCD8, stores the kind halfword at +8 and registers the object with the battle window manager (0x0027BD68) so it gets drawn and updated.",
+  "confidence": 0.35,
+  "evidence": "Thumb code: bl 0x0010AF00 (maybe_Gfx_GetRenderContextB), [ctx]+0x354 as heap, Mem_AllocAligned(0x214, heap, 4); strh r5,[r0+8]; str 0x00782608,[r0+4]; str 0x0076DCD8,[r0+0x208]; then Os_GetGameWork -> [+8]+0x5C+0x4320 and 0x0027BD68(obj, 0x3A, mode, 0, obj) which is the same 'invoke window callback' helper used by other battle UI objects."
+ },
+ {
+  "address": "0x002DDA38",
+  "name": "maybe_Battle_Ui_CreateEffectObjectB",
+  "signature": "void* maybe_Battle_Ui_CreateEffectObjectB(int heapIndex, u16 kind, void* ownerA, void* ownerB)",
+  "params": {
+   "param_1": "heapIndex",
+   "param_2": "kind",
+   "param_3": "ownerA",
+   "param_4": "ownerB"
+  },
+  "summary": "Second factory of the same 0x214-byte battle UI effect/number object: allocates from the render heap, installs vtables 0x00782608 / 0x0076D824, stores the kind halfword at +8, the two owner pointers at +0x208/+0x20C and finally registers the object with the battle window manager.",
+  "confidence": 0.35,
+  "evidence": "Same skeleton as 0x002DD8B4 (Mem_AllocAligned(0x214, gfxCtx+0x354, 4), strh kind,[r0+8], two vtable stores, 0x0027BD68 registration with kind 0x3A-ish callback). Differences: stm r0,{r1,r2} installs both vtable words, stores r6 at +0x208 and the pair {r5,r7} at +0x20C, so this variant carries two extra owner pointers."
+ },
+ {
+  "address": "0x002DF856",
+  "name": "maybe_Ui_Window_ThumbCaseBlock",
+  "signature": "void maybe_Ui_Window_ThumbCaseBlock(void)",
+  "params": {},
+  "summary": "Not a function: a Thumb jump-table case block inside FUN_002DFDE8, consisting only of 'strh' stores followed by branches back into the common tails at 0x002DFF68/0x002DFF6E/0x002DFF74/0x002DFFAA.",
+  "confidence": 0.2,
+  "evidence": "Address is 2-mod-4; the first decoded word is literal data (0x93A8E98C), then a run of 'strh r0,[r0,#4]; strh r3,[r4,#6]; b 0x2DFFxx' blocks. functions_merged gives size 0x32 but every branch leaves the range, so the real owner is FUN_002DFDE8."
+ },
+ {
+  "address": "0x002E0E18",
+  "name": "maybe_Text_LayoutEntryContainsNewline",
+  "signature": "int maybe_Text_LayoutEntryContainsNewline(UiListData* self, int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Looks up the text of list entry <index> through the list-data object at self+0x1D0 (offset table at [+0x58]+0x24), copies at most 63 wide chars into a stack buffer and reports whether the string contains a line break (L\"\\n\") within that window. Used by the layout code to decide whether an entry needs an extra line.",
+  "confidence": 0.55,
+  "evidence": "Inline L\"\\n\" literal at 0x002E0F08 is passed as the second argument of Str_WcsStr (0x00100B32); the copy uses wcslen (0x00100B74) + std_wcsncpy with a 0x3F limit; result = (found - buffer)/2 < 0x40. Entry lookup: self+0x1D0 -> [+0x58] -> [+0x24] offset table, the same shape as FUN_0063C230."
+ },
+ {
+  "address": "0x002E3C48",
+  "name": "maybe_Event_RegisterTimelineListener",
+  "signature": "void maybe_Event_RegisterTimelineListener(EventTimeline* self, void* owner, void* entry)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "entry"
+  },
+  "summary": "Registers a timeline step: stores the owning object at self+0x118, splices the intrusive list node built from entry+0x18 into the list at owner+0x4A8 and records the step id/callback at self+0x12C..0x130.",
+  "confidence": 0.3,
+  "evidence": "str r1,[r0,#0x118]; ldrd from entry+0x18/+0x1C; bl 0x1235A4 (Container_IntrusiveList_Splice, per N_105); then str r6,[self+0x130] and stm {owner, node} at self+0x12C. The 'timeline' reading comes from the neighbouring 0x0046015C maybe_Event_TimelineDispatchRange used by the same object family."
+ },
+ {
+  "address": "0x002E4288",
+  "name": "maybe_Anim_Interp_Init",
+  "signature": "void maybe_Anim_Interp_Init(AnimInterp* self, void* source)",
+  "params": {
+   "param_1": "self",
+   "param_2": "source"
+  },
+  "summary": "Initialises an interpolation/anim state: resets the controller at self+0x10, stores the frame constant at self+0x1C, copies the 64-bit start value from self->f_c+0x48 into self+0x20 and, when a source is given, copies the 64-bit end value from source+0x28 into self+4 (otherwise the current value is used as the end value).",
+  "confidence": 0.45,
+  "evidence": "vtable row 0x007610B8 sits next to Ui_SpriteList_LoadPageEx, FUN_002E3FE4+0xD0 and Anim_Interp_Update; body calls FUN_002ACE20+0xE8 (reset), writes the float constant at +0x1C, ldrd [self->f_c+0x48] -> self+0x20, ldrd [source+0x28] -> self+4, and on the null path self+0x1C = self+0x10."
+ },
+ {
+  "address": "0x002E50B8",
+  "name": "maybe_Ui_ShopWindow_EncodeSelectionCode",
+  "signature": "void maybe_Ui_ShopWindow_EncodeSelectionCode(int self, u8* out, int kind)",
+  "params": {
+   "param_1": "self",
+   "param_2": "out",
+   "param_3": "kind"
+  },
+  "summary": "Eight-way dispatcher used by the shop/equipment window: depending on the kind (0..7) it writes a 2-byte selection/slot code (kind byte 0x15, 0x16, 0x1F or 0x27 plus a copied value) or returns one of the small constants 3 / 24 / 31 / 39; one case also rounds (value*value + 20) down to a multiple of ten.",
+  "confidence": 0.3,
+  "evidence": "Starts with a jump table 'cmp r2,#8; ldrlo pc,[pc,r2,lsl#2]' whose eight targets (0x2E50C8..0x2E5164) each store a byte constant and pop; the last helper at 0x2E5170 computes (b*b+0x14)/10*10 using magic 0xCCCCCCCD. Vtable row 0x007611E0 is the Ui_ShopWindow table (neighbours maybe_Ui_ShopWindow_ResetToIdle, maybe_Ui_CreateSpriteByName), so the codes are shop-window selection codes."
+ },
+ {
+  "address": "0x002E5270",
+  "name": "maybe_Fs_GetResourceById",
+  "signature": "void* maybe_Fs_GetResourceById(ResourceTable* self, u16 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Looks up the resource/handle with the given 16-bit id in the table at self+0x50 and returns the entry's sub-object at +0x18, or NULL.",
+  "confidence": 0.4,
+  "evidence": "Body: r0=[self+0x50]; if null return 0; 0x7141A8(table, id & 0xFFFF) returns an entry pointer; the result is biased by +0x18. 0x7141A8 belongs to FUN_00714008, the same module as Sq_Stack_Resize/immediate-value helpers; the id masking and 'return entry+const' shape recurs in five functions of this batch (0x2E5270, 0x2E5A38, 0x2E6160, 0x2E6194, 0x2E6868)."
+ },
+ {
+  "address": "0x002E5A38",
+  "name": "maybe_Fs_GetResourceEntryById",
+  "signature": "void* maybe_Fs_GetResourceEntryById(ResourceTable* self, u32 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Variant of the id lookup that first uses the sub-table at self+0x58 (returning entry+0x0C) and falls back to the main table at self+0x50 (returning entry+0x18) when the id carries no 0x0F0000 tag bits.",
+  "confidence": 0.35,
+  "evidence": "Body: if (id & 0x0F0000)==0 look up 0x714160([self+0x58], id&0xFFFF) and return +0x0C, else 0x7141A8([self+0x50], id&0xFFFF) and return +0x18. Same two helpers and +const biases as 0x2E5270/0x2E6160."
+ },
+ {
+  "address": "0x002E5DB4",
+  "name": "maybe_Fs_GetResourceChild",
+  "signature": "void* maybe_Fs_GetResourceChild(ResourceTable* self, u32 id, int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id",
+   "param_3": "index"
+  },
+  "summary": "Resolves the resource entry for id and then walks <index> links down its child chain (entry+8 -> node[0]), returning the address of the child's payload word (+4). Rejects ids tagged with bit 0x01000000 or without 0x0F0000.",
+  "confidence": 0.35,
+  "evidence": "Body: tst id,#0x01000000 -> return 0; tst id,#0x0F0000 else return 0; 0x7141A8(table, id&0xFFFF); r0=[entry+8]; loop 'r1++' while r0 && r1<index; return r0+4."
+ },
+ {
+  "address": "0x002E6160",
+  "name": "maybe_Fs_GetResourceByIdB",
+  "signature": "void* maybe_Fs_GetResourceByIdB(ResourceTable* self, u16 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Same lookup as 0x002E5270 but against the sub-table at self+0x58, returning entry+0x18; the trailing code is the next function (an id-tag test).",
+  "confidence": 0.4,
+  "evidence": "Body: r0=[self+0x58]; 0x714160(table, id&0xFFFF); return +0x18. The instruction at 0x002E6184 ('and r2,r1,#0xF0000; cmp #0x10000') belongs to the following function."
+ },
+ {
+  "address": "0x002E6194",
+  "name": "maybe_Fs_GetResourceByIdC",
+  "signature": "void* maybe_Fs_GetResourceByIdC(ResourceTable* self, u16 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Byte-identical copy of 0x002E5270 - a third emitted call site of the same id -> entry+0x18 lookup.",
+  "confidence": 0.4,
+  "evidence": "Identical instruction stream to 0x002E5270 (ldr [r0,#0x50]; 0x7141A8; addne r0,#0x18)."
+ },
+ {
+  "address": "0x002E6868",
+  "name": "maybe_Fs_CountResourceChildren",
+  "signature": "int maybe_Fs_CountResourceChildren(ResourceTable* self, u32 id)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Resolves the resource entry for id and counts the nodes of its child chain (entry+8 -> node[0]), returning 0 when the id is untagged or the entry is missing.",
+  "confidence": 0.4,
+  "evidence": "Body: tst id,#0x0F0000; 0x7141A8; r1=[entry+8]; loop 'r0++' while r1=[r1]; returns the loop count. Mirror of 0x002E5DB4 which walks the same chain to a given index."
+ },
+ {
+  "address": "0x002E8CE4",
+  "name": "maybe_Battle_Popup3D_DeletingDtor",
+  "signature": "void maybe_Battle_Popup3D_DeletingDtor(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of the 3D battle popup object: releases the eight popup widgets at self+0x11C (vtable[2] then vtable[1] then clear), installs the destructor vtable 0x00759388 on self+0x13C, unlinks the three intrusive lists at self+0x150/0x158/0x164, runs the shared node base destructor and deletes the object.",
+  "confidence": 0.5,
+  "evidence": "Loop 'for i<8 { p=[self+0x11C+i*4]; if (p) { p->vtbl[2](p); p->vtbl[1](p); [self+0x11C+i*4]=0 } }'; str 0x00759388,[self+0x13C]; three unlink pairs (str r1,[r2+4]; str r2,[r1+8]); bl 0x001D8C2C + b 0x0010F6CC. Vtable row 0x007612F4 sits in the Battle_Popup3D table (Battle_Popup3D_InitPopups, Battle_Popup3D_UpdateRoot, Ui_Window_LayoutRows)."
+ },
+ {
+  "address": "0x002E8D94",
+  "name": "maybe_Battle_Popup3D_PlayAttackAnim",
+  "signature": "void maybe_Battle_Popup3D_PlayAttackAnim(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the \"atk1\" animation on the popup's model and, if the model's current animation time is past the threshold, applies the follow-up rate through 0x005F7564.",
+  "confidence": 0.45,
+  "evidence": "Inline anim name \"atk1\" at 0x002E8DDC is passed to model->vtbl[0x84](name); 0x0066A244(model) returns the current time compared with a float constant; on 'time > c' it tail-calls 0x005F7564(model, const) which is the same call pair used by 0x002E8E5C. Vtable rows 0x0076134C next to FUN_002E8E4C/0x002E8DEC in the popup 3D table."
+ },
+ {
+  "address": "0x002E8DEC",
+  "name": "maybe_Battle_Popup3D_SelectFirstAnimEntry",
+  "signature": "void maybe_Battle_Popup3D_SelectFirstAnimEntry(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "If the popup's model has animation entries, selects entry 0 with loop enabled - i.e. resets it to the default animation.",
+  "confidence": 0.4,
+  "evidence": "Body: if (0x00669DD4(self->f_28)) tail-call 0x005E7848(self->f_28, 0, 1); 0x005E7828/48 is the Container_KeyedList select-entry helper (N_105), 0x00669DD4 the anim-list validity test. Same shape as 0x002DB168 and 0x002E8EB0."
+ },
+ {
+  "address": "0x002E8E4C",
+  "name": "maybe_Battle_Popup3D_DeletingDtorB",
+  "signature": "void maybe_Battle_Popup3D_DeletingDtorB(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a second 3D popup class: runs the base destructor at 0x002B0A04 and deletes the object.",
+  "confidence": 0.45,
+  "evidence": "bl 0x002B0A04 (inner entry of FUN_002B09F4, the shared base dtor of this widget family - also used by 0x002E8F10 and 0x002E8F3C) then b 0x0010F6CC. Vtable row 0x00761348."
+ },
+ {
+  "address": "0x002E8E5C",
+  "name": "maybe_Battle_Popup3D_PlayDamageAnim",
+  "signature": "void maybe_Battle_Popup3D_PlayDamageAnim(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the \"dmg\" animation on the popup's model and applies the follow-up rate when the model's animation time has passed the threshold; twin of 0x002E8D94 with the damage clip.",
+  "confidence": 0.45,
+  "evidence": "Inline anim name \"dmg\" at 0x002E8EA4 is handed to model->vtbl[0x84]; 0x0066A244 time compare against a float constant; conditional tail call 0x005F7564. Vtable row 0x00761380."
+ },
+ {
+  "address": "0x002E8EB0",
+  "name": "maybe_Battle_Popup3D_SelectFirstAnimEntryB",
+  "signature": "void maybe_Battle_Popup3D_SelectFirstAnimEntryB(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Second copy of the 'reset to animation entry 0' helper, used by the sibling popup class.",
+  "confidence": 0.4,
+  "evidence": "Byte-identical to 0x002E8DEC (0x00669DD4 test + tail call 0x005E7848(model,0,1)); vtable rows 0x00761388 and 0x00777ECC (the latter next to maybe_Field_Actor_UpdateAttachedEffect, i.e. the field-side twin of the popup class)."
+ },
+ {
+  "address": "0x002E8F10",
+  "name": "maybe_Battle_Popup3D_DeletingDtorC",
+  "signature": "void maybe_Battle_Popup3D_DeletingDtorC(BattlePopup3D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Third deleting destructor of the popup family (same body, sibling vtable).",
+  "confidence": 0.45,
+  "evidence": "bl 0x002B0A04; b 0x0010F6CC. Vtable row 0x0076137C."
+ },
+ {
+  "address": "0x002E9A24",
+  "name": "maybe_Ui_Widget_DispatchInputToChildren",
+  "signature": "int maybe_Ui_Widget_DispatchInputToChildren(UiWidget* self, UiInputEvent* event)",
+  "params": {
+   "param_1": "self",
+   "param_2": "event"
+  },
+  "summary": "Ui input handler: classifies the event (bits 0xFDBD of event+0x14), marks the screen as dirty through the global byte table at 0x00004FD4, notifies the child controller at self+0x120 (vtbl[0x14] with the event kind, then vtbl[0x10]) and, for plain movement events (bit 0), forwards the three signed axes at event+0x16..0x18 to self+0x980 vtbl[0x3C].",
+  "confidence": 0.35,
+  "evidence": "Body: bic/bics masks 0xFE00|0xBD on ldrh [r1+0x14]; strb 1,[0x4FD4 + self]; child = [self+0x120]; child->vtbl[0x14](child, kind) then vtbl[0x10](child); tail: (*(*[self+0x980]))[0x3C](self+0x980, s8 [r1+0x16], s8 [r1+0x17], s8 [r1+0x18]). Always returns 1."
+ },
+ {
+  "address": "0x002E9ADC",
+  "name": "maybe_Ui_Widget_DispatchInputByState",
+  "signature": "int maybe_Ui_Widget_DispatchInputByState(UiWidget* self, UiInputEvent* event)",
+  "params": {
+   "param_1": "self",
+   "param_2": "event"
+  },
+  "summary": "Variant of 0x002E9A24 for a widget with a 3-state controller: 0x00642630(self+0x260, event) returns 0/1/2 and selects which of the three child actions is invoked (flags 1/2/3) before falling through to the same 'mark dirty + notify' tail.",
+  "confidence": 0.35,
+  "evidence": "Same event mask (0xFDBD on [r1+0x14]) and same global dirty-byte store (0x4FD4+self); switch on 0x00642630([self+0x260],event) with cases 1/2/3 calling child->vtbl[0x14](child, n) and then vtbl[0x10]; bit-0 path still forwards the three signed bytes at event+0x16..0x18 to self+0x260 vtbl[0x3C]. Returns 1."
+ },
+ {
+  "address": "0x002EA25C",
+  "name": "maybe_Ui_DungeonWindow_DeletingDtor",
+  "signature": "void maybe_Ui_DungeonWindow_DeletingDtor(UiDungeonWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the dungeon (map) window.",
+  "confidence": 0.5,
+  "evidence": "bl 0x002EA26C (own dtor body) then b 0x0010F6CC. Vtable row 0x00761478 is the Ui_DungeonWindow table: ToD, maybe_Ui_Widget_ApplyScreenTransform neighbours plus Ui_DungeonWindow_InitPanes and FUN_002E9614."
+ },
+ {
+  "address": "0x002EA468",
+  "name": "maybe_Ui_Panel_DeletingDtor",
+  "signature": "void maybe_Ui_Panel_DeletingDtor(UiPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a Ui panel/widget: runs the shared widget base destructor (0x00193E44) and deletes the object through its vtable.",
+  "confidence": 0.4,
+  "evidence": "bl 0x00193E44 (FUN_00193D84+0xC0, the Ui widget base destructor used by dozens of dtors in N_105) then b 0x0010F6CC. Vtable row 0x007614C8 flanked by FUN_002EA270+0x1B4/0x1B8/0x1BC, i.e. one of the panel classes built on top of the dungeon-window code."
+ },
+ {
+  "address": "0x002EA480",
+  "name": "maybe_Ui_Panel_BindIconAndTextPanes",
+  "signature": "void maybe_Ui_Panel_BindIconAndTextPanes(UiPanel* self, int index, void* layout, int kind, int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index",
+   "param_3": "layout",
+   "param_4": "kind",
+   "param_5": "flags"
+  },
+  "summary": "Binds a list-panel row to its named child panes: builds the four pane names \"icon_dummy_<n>\", \"txt_<n>_1\", \"txt_<n>_2\", \"txt_<n>_3\" with 0x006F0B50, asks the layout for each pane through vtbl[0x2C] and stores the three text panes plus the icon at self+0xC/+0x10/+0x14, validating the icon against the type descriptor 0x007AE8A4.",
+  "confidence": 0.5,
+  "evidence": "Inline names at 0x002EA564 (\"icon_dummy_%s\"), 0x002EA578 (\"txt_%s_1\"), 0x002EA588 (\"txt_%s_3\") and the next one (\"txt_%s_2\"); four calls layout->vtbl[0x2C](name, buf, 1) with results stored at +0xC, +0x10, +0x14; the first result is checked with a vtbl[8] type-tag chain against 0x007AE8A4 (the Ui sprite class descriptor used elsewhere in this code) and NULL is stored on mismatch."
+ },
+ {
+  "address": "0x002EAAB4",
+  "name": "maybe_Ui_Window_ApplyValueToChildren",
+  "signature": "void maybe_Ui_Window_ApplyValueToChildren(UiWindow* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "value"
+  },
+  "summary": "Mid-function block that walks the child container(s) of a Ui window (two objects, four children each) and writes the same value into each child's +0x70 field.",
+  "confidence": 0.25,
+  "evidence": "Address is 2-mod-4 (Thumb/misaligned entry, the ARM listing starts with 'mvns r0,r7'); the coherent part loops 'for (i<4) { child = obj->vtbl[0x24](obj,i); child->f_70 = value; }' twice, once for [r7+0x14] and once for [r7+0xA0]. Only caller is 0x002EAA00 (FUN_002EA9F2), itself a big switch dispatcher."
+ },
+ {
+  "address": "0x002EBB2C",
+  "name": "maybe_Container_UnlinkAndReleaseHandles",
+  "signature": "void maybe_Container_UnlinkAndReleaseHandles(HandleList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Empties a handle list: for every registered entry it resolves the handle's type through the global table at 0x007B5D70, asks 0x0063AD38 whether the object is still alive, unlinks the node with 0x0010EBE4 and rewrites the handle word so the reference is dropped.",
+  "confidence": 0.35,
+  "evidence": "Loop over the intrusive list at self+0xB4 while [self+0xB8] != [self+0xB4]; per node: reads [node+0x14], masks with 0x003FFFFF, indexes the bucket table 0x007B5D70 by >>10 and compares the stored key; calls 0x0063ACB4+0x84 (liveness/valid test); then clears bits, sets byte -1 and calls 0x0010EAB0+0x134 (list unlink). Same handle-registry scheme as 0x00245BC0 but a different table base, so list teardown - not a game action."
+ },
+ {
+  "address": "0x002EBE38",
+  "name": "maybe_Anim_ClipSlot_DeletingDtorArc",
+  "signature": "void maybe_Anim_ClipSlot_DeletingDtorArc(AnimClipSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor for the clip-slot variant that drives an arc motion.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028B708 (inner entry of FUN_0028B6F8, the shared clip-slot base destructor also used by 0x002EBEEC/0x002EBF3C) then b 0x0010F6CC. Vtable row 0x007615A8 next to Anim_ClipSlot_InitArcMotion and Anim_ClipSlot_UpdateArcMotion."
+ },
+ {
+  "address": "0x002EBEEC",
+  "name": "maybe_Anim_ClipSlot_DeletingDtorLinear",
+  "signature": "void maybe_Anim_ClipSlot_DeletingDtorLinear(AnimClipSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor for the clip-slot variant that drives a linear motion.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028B708; b 0x0010F6CC. Vtable row 0x007615DC next to maybe_Anim_ClipSlot_InitLinearMotion and maybe_Anim_ClipSlot_UpdateLinearMotion."
+ },
+ {
+  "address": "0x002EBF3C",
+  "name": "maybe_Anim_ClipSlot_DeletingDtorBase",
+  "signature": "void maybe_Anim_ClipSlot_DeletingDtorBase(AnimClipSlot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the base clip-slot class (no motion driver of its own).",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028B708; b 0x0010F6CC. Vtable row 0x00761610 next to FUN_0028B39C+0x10 and +0x38 (the plain clip-slot vtable)."
+ },
+ {
+  "address": "0x002EC4B4",
+  "name": "maybe_Gfx_Node_DrawWithParentTransform",
+  "signature": "void maybe_Gfx_Node_DrawWithParentTransform(GfxNode* self, float a, float b, int c, int d)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c",
+   "param_5": "d"
+  },
+  "summary": "Render helper: asks the node for its parent/source object with vtbl[0x7C] and then tail-calls vtbl[0x70] on itself with that result plus the caller's two floats and two integers - the standard 'draw this node in the parent's transform' forwarding pair.",
+  "confidence": 0.4,
+  "evidence": "Body: ip=[*self+0x7C]; blx ip (getter); then ip=[*self+0x70]; bx ip with (self, getterResult, r6, r5, s0, s1). Appears at 0x007616B4 / 0x0077B020 / 0x0077EA04 / 0x0077EF08, i.e. in the four Field/Gfx scene-object vtables that also hold Field_SceneObject_Show, Field_SceneObject_Hide and Gfx_Node_ApplyTransformMatrix."
+ },
+ {
+  "address": "0x002F2004",
+  "name": "maybe_Field_SceneNode_NotifyAndReturnSelf",
+  "signature": "void* maybe_Field_SceneNode_NotifyAndReturnSelf(FieldSceneNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Calls 0x00335E28 (a scene-node notify/refresh helper) and returns the node itself, so the caller can chain.",
+  "confidence": 0.3,
+  "evidence": "Body: bl 0x00335E28; mov r0,r4 (saved self); pop. Vtable row 0x007617C0 sits directly after Field_SceneNode_CreateMapInstance, maybe_Trail_UpdateFromOwnerNode and maybe_Battle_CameraRangeBlend_Update, so the object is a scene node; the callee 0x00335DAC+0x7C is unnamed but called with the node only."
+ },
+ {
+  "address": "0x002F2020",
+  "name": "maybe_Field_NpcAction_NotifyChildrenState",
+  "signature": "void maybe_Field_NpcAction_NotifyChildrenState(NpcAction* self, void* param)",
+  "params": {
+   "param_1": "self",
+   "param_2": "param"
+  },
+  "summary": "Notifies the two child objects referenced by the slot bytes at self+0x339/self+0x33A: when the action is active and both flags (param+0x20 and self+0x338) are set it calls child->vtbl[8], otherwise child->vtbl[0xC] to cancel; each child lives in the pointer array at self+0x230.",
+  "confidence": 0.35,
+  "evidence": "Body indexes self+0x230 + kind*4 with the byte at +0x339 / +0x33A (0xFF = none) and dispatches through [child+0x3C]->vtbl[8] or vtbl[0xC]. Vtable row 0x00761714 sits in the NPC-action table next to Field_SetupNpcActionScript and maybe_Field_NpcFinishAction."
+ },
+ {
+  "address": "0x002F2134",
+  "name": "maybe_Field_NpcAction_DeletingDtor",
+  "signature": "void maybe_Field_NpcAction_DeletingDtor(NpcAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the Field NPC action object: runs its base destructor at 0x0017AF0C and frees the object.",
+  "confidence": 0.5,
+  "evidence": "bl 0x0017AF0C (inner entry of FUN_0017AEE4, the NPC-action base dtor that installs vtable 0x00761710) then b 0x0010F6CC. Vtable row 0x00761714 next to Field_SetupNpcActionScript and maybe_Field_NpcFinishAction. The code at 0x002F2144 is a separate 'reset 0xD state entries' initialiser."
+ },
+ {
+  "address": "0x002F234C",
+  "name": "maybe_Field_Actor_SetFlagsOnTwoObjects",
+  "signature": "int maybe_Field_Actor_SetFlagsOnTwoObjects(void* a, void* b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Fragment that asks 0x003DF8BC for a flag word and ORs it into two objects (a+8 and b+0x24), returning 1.",
+  "confidence": 0.25,
+  "evidence": "Address 0x002F234C is inside a Thumb function (first ARM line 'bl 0x3DF8BC' is a misdecode); the visible part is 'orr [r4+8],r0; orr [r5+0x24],r0; return 1' with r4/r5 coming from the caller, so it is a case block of the enclosing function."
+ },
+ {
+  "address": "0x002F309C",
+  "name": "maybe_Field_Marker_Ctor",
+  "signature": "void maybe_Field_Marker_Ctor(FieldMarker* self, void* a, void* b, int c)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Constructor of a Field marker/scene-node object: runs the base constructor 0x0044C654 with the inherited arguments, installs vtable 0x007617EC plus its secondary vtable at self+0x22C, sets the id halfword at +0x2B8 to -1, clears +0x2BA and resets the flag word at +0x2BC.",
+  "confidence": 0.4,
+  "evidence": "bl 0x0044C654 with two stack arguments (r3, [r1+4]); str vtable,[r0]; str (vtable+0x98),[r0+0x22C]; strh -1,[r0+0x2B8]; strb 0,[r0+0x2BA]; ldr/and/orr/str on [r0+0x2BC] with (~0x3FF). Vtable 0x007617EC is used by the Field_Marker family (0x002F3100's row at 0x007617F4 holds Field_Marker_UpdateChild / Field_Marker_ApplyTransform)."
+ },
+ {
+  "address": "0x002F3100",
+  "name": "maybe_Field_Marker_DeletingDtor",
+  "signature": "void maybe_Field_Marker_DeletingDtor(FieldMarker* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the Field marker object.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028E6C4 (inner entry of FUN_0028E6B4, the base dtor used by this family) then b 0x0010F6CC. Vtable row 0x007617F4 next to Field_Marker_UpdateChild, Field_Marker_ApplyTransform and Container_IntrusiveList_NotifyAll."
+ },
+ {
+  "address": "0x002F3AB4",
+  "name": "maybe_Field_Marker_CtorB",
+  "signature": "void maybe_Field_Marker_CtorB(FieldMarker* self, void* a, void* b, int c)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Second constructor of the same Field marker/scene-node family: base construct at 0x0044CAB4, install vtable 0x00761A60 plus the secondary vtable at self+0x258, id halfword -1 at +0x2EC and cleared flag bytes at +0x2EE/+0x2EF/+0x2F0.",
+  "confidence": 0.4,
+  "evidence": "bl 0x0044CAB4 (the sibling of 0x0044C654 used by 0x002F309C); str (vtable+0xD8),[r0+0x258]; strh -1 at [r0+0x2EC]; strb 0 at +0x2EE/+0x2EF; and/orr mask on [r0+0x2F0]. Vtable 0x00761A60 is the base of the table whose dtor row is 0x00761A68 (0x002F47CC)."
+ },
+ {
+  "address": "0x002F3B1C",
+  "name": "maybe_Field_Marker_DeletingDtorB",
+  "signature": "void maybe_Field_Marker_DeletingDtorB(FieldMarker* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the Field marker variant created by 0x002F309C.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028EFB4 (inner entry of FUN_0028EFA4, base dtor of this family) then b 0x0010F6CC. Vtable row 0x007618B0 next to maybe_Gfx_MeshNode_InitFlag and maybe_Field_Marker_OnDestroy."
+ },
+ {
+  "address": "0x002F4768",
+  "name": "maybe_Field_Marker_CtorC",
+  "signature": "void maybe_Field_Marker_CtorC(FieldMarker* self, void* a, void* b, int c)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "c"
+  },
+  "summary": "Third constructor of the Field marker family: base construct at 0x0028EE8C, install vtable 0x00761A60 (+0x258 = vtable+0xD4), clear +0x2C8/+0x2C9, set +0x2CA to 0xFF, id halfword -1 at +0x2CC and mode byte 4 at +0x274.",
+  "confidence": 0.35,
+  "evidence": "bl 0x0028EE8C (FUN_0028EE3C+0x50, the actor2D/field base ctor used with this vtable); same vtable 0x00761A60 as 0x002F3AB4; stores strb 0xFF at +0x2CA and strb 4 at +0x274."
+ },
+ {
+  "address": "0x002F47CC",
+  "name": "maybe_Actor2D_DeletingDtor",
+  "signature": "void maybe_Actor2D_DeletingDtor(Actor2D* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of an Actor2D-derived scene node.",
+  "confidence": 0.45,
+  "evidence": "bl 0x0028EFB4; b 0x0010F6CC. Vtable row 0x00761A68 next to maybe_Gfx_SceneNode_InitChildB and maybe_Actor2D_NotifyObjectHandle, and paired with the constructor at 0x002F4768 (vtable 0x00761A60)."
+ },
+ {
+  "address": "0x002F5038",
+  "name": "maybe_Gfx_MeshNode_DeletingDtor",
+  "signature": "void maybe_Gfx_MeshNode_DeletingDtor(GfxMeshNode* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a Gfx mesh node.",
+  "confidence": 0.45,
+  "evidence": "bl 0x002B6270 (inner entry of FUN_002B6260, the mesh/sprite node base dtor) then b 0x0010F6CC. Vtable row 0x00761D14 next to maybe_Gfx_MeshNode_InitChildren."
+ },
+ {
+  "address": "0x002F50E8",
+  "name": "maybe_Ui_HopeSelect_UpdateChildren",
+  "signature": "void maybe_Ui_HopeSelect_UpdateChildren(UiHopeSelect* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of the 'hope select' (wish/party-choice) window: applies the layout's vtbl[0x2C] with a float, then - when the input object at self+0x370 has its 'active' bit - forwards the three signed cursor values at input+0x16..0x18 to the child widget at self+0x138 and, when the mode byte self+0x338 is set, also to the one at self+0x324.",
+  "confidence": 0.45,
+  "evidence": "Body: (*(self->f_98))->vtbl[0x2C](self+0x98, s0); if ([self+0x370] && (byte[+0x14]&1)) { if (self->f_14C) FUN_001A6068+0x38(self+0x138, s8+0x16, s8+0x17, s8+0x18); if (self->f_338) tail-call FUN_001A6068+0x38(self+0x324, ...) }. Vtable row 0x00761E1C sits in the Ui_HopeSelect table (Ui_HopeSelect_LoadLayout, Ui_Window_LayoutRows, Ui_Widget_UpdateAnimatedChildren)."
+ },
+ {
+  "address": "0x002F60B0",
+  "name": "maybe_Ui_JockeyPanel_SetState5",
+  "signature": "int maybe_Ui_JockeyPanel_SetState5(UiJockeyPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Jockey (horse-race) panel step: if the panel's 'ready' byte at self+0x140 is set, moves the child window at self+0x13C to state 5 through vtbl[0x18], then reports 1 (step finished).",
+  "confidence": 0.4,
+  "evidence": "Body: if (self->f_140) (*(self->f_13C))->vtbl[0x18](self->f_13C, 5); return 1. Table entry 4 of the jockey-panel step table at 0x00728470, whose other rows are maybe_Ui_JockeyPanel_OnConfirm / _Close / _UpdateCursor / _OnOpen."
+ },
+ {
+  "address": "0x002F66BC",
+  "name": "maybe_Ui_JockeyPanel_SetState4",
+  "signature": "int maybe_Ui_JockeyPanel_SetState4(UiJockeyPanel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Jockey panel step twin of 0x002F60B0 that moves the child window to state 4.",
+  "confidence": 0.4,
+  "evidence": "Identical body to 0x002F60B0 with immediate 4 instead of 5; table entry 8 of the jockey-panel step table at 0x00728470 next to FUN_002F664C and FUN_002F6670."
+ },
+ {
+  "address": "0x002F6A64",
+  "name": "maybe_Ui_ItemInfoWindow_OnEvent",
+  "signature": "void maybe_Ui_ItemInfoWindow_OnEvent(UiItemInfoWindow* self, UiEvent* event)",
+  "params": {
+   "param_1": "self",
+   "param_2": "event"
+  },
+  "summary": "Event handler of the item-info window: for event kind 1 it marks the window open (bytes +0x94/+0x135), binds the message window to the event's id, applies the icon styles and finally forwards the event's four payload words to the message window object at self+0x138; for any other kind it hides the window and lets the base handler run.",
+  "confidence": 0.45,
+  "evidence": "Kind byte at event+1; on the non-1 path: strb 0,[self+0x94] then tail-call FUN_002F6950+0xEC(self, 0). On the 1 path: strb 1,[self+0x94]/[self+0x135]; bl 0x002F6B0C (self+0x138 -> maybe_Ui_MessageWindow_ApplyIconStyles) with ldrh [event+2]; then tail-call 0x002B90D4(self+0x138, event+8, event+9, event+4). Vtable row 0x00729CB0 is the Ui_ItemInfoWindow table (neighbours maybe_Ui_ItemInfoWindow_Open, Ui_ItemMenu_Create, Ui_TsuyosaWindow_Create)."
+ },
+ {
+  "address": "0x002F6AD4",
+  "name": "maybe_Ui_Widget_ResolveChildPointerByName",
+  "signature": "void maybe_Ui_Widget_ResolveChildPointerByName(UiWidget* self, void** slot, void* loader)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot",
+   "param_3": "loader"
+  },
+  "summary": "Second member-pointer relocation helper: marks loader+0x60C with the target slot, resolves the stored name/inline value through the layout object's vtbl[0x24] and writes the resolved object pointer back into the slot.",
+  "confidence": 0.45,
+  "evidence": "str (slot+4),[loader+0x60C]; loader->vtbl[0x24](loader, rawValue, self+0x98); str result,[slot]; str 0,[loader+0x60C]. Same 'marker at +0x60C' protocol as 0x002CFF9C/0x002D00AC; the vtbl[0x24] call is the same 'get child by name' entry used by 0x002EA480. Three vtable rows: 0x00761E84, 0x00771444, 0x0077B57C, all in Ui_ItemInfoWindow tables."
+ },
+ {
+  "address": "0x002F6B48",
+  "name": "maybe_Ui_ItemInfoWindow_DeletingDtor",
+  "signature": "void maybe_Ui_ItemInfoWindow_DeletingDtor(UiItemInfoWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor that walks the composed chain of the item-info window: stores the incoming tag at self+0x138, calls 0x002BB778 and 0x0036B514 to tear down the two embedded sub-objects (each returning its base pointer), then runs the shared widget base destructor and deletes the whole block.",
+  "confidence": 0.4,
+  "evidence": "str r1,[r0],#0x138; bl 0x002BB778 then sub r0,#0x1C; bl 0x0036B514 then sub r0,#0x11C; bl 0x001D8C2C (base dtor); b 0x0010F6CC (delete). The -0x1C/-0x11C biases are the 'base pointer from member' idiom used everywhere in this engine."
+ },
+ {
+  "address": "0x002F6B74",
+  "name": "maybe_Ui_ItemInfoWindow_Dtor",
+  "signature": "void maybe_Ui_ItemInfoWindow_Dtor(UiItemInfoWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Non-deleting twin of 0x002F6B48: same sub-object teardown, but it ends in the base destructor instead of freeing the object.",
+  "confidence": 0.4,
+  "evidence": "Identical prologue and the same two biased sub-object destructor calls, ending with 'b 0x001D8C2C' (base dtor) rather than 0x0010F6CC (delete)."
+ },
+ {
+  "address": "0x002F6CA8",
+  "name": "maybe_Ui_Pager_ClearAllPages",
+  "signature": "void maybe_Ui_Pager_ClearAllPages(UiPager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Empties a pager: while the pager reports a positive page/entry count (vtbl[0x84]) it asks for the current entry to be removed (vtbl[0x74]), then clears the dirty byte at self+0x50.",
+  "confidence": 0.45,
+  "evidence": "Loop 'while (self->vtbl[0x84](self) > 0) self->vtbl[0x74](self);' followed by strb 0,[self+0x50]. Three vtable rows (0x0075A27C, 0x0075A36C, 0x00761F50) all directly after Ui_Pager_SetPage."
+ },
+ {
+  "address": "0x002F76D4",
+  "name": "maybe_Ui_ModeWindow_UpdateChildren",
+  "signature": "void maybe_Ui_ModeWindow_UpdateChildren(UiModeWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame update of the mode window: applies the layout's vtbl[0x2C] with a float, mirrors the mode byte +0x14C into +0x1A1, refreshes the animated child list at self+0x138 and, when the input object at self+0x19C is active, passes its three signed cursor values to that child list.",
+  "confidence": 0.45,
+  "evidence": "Same shape as 0x002F50E8 (Ui_HopeSelect): vtbl[0x2C](self+0x98, s0); strb [self+0x14C] -> [self+0x1A1]; bl 0x0018FCF0(self+0x138); then if (self+0x14C && (*(u8*)(self+0x19C)&1)) tail-call 0x001A609C(self+0x138, s8 [self+0x188+0x16..0x18]). Vtable row 0x00762180 next to Ui_ModeWindow_Setup."
+ },
+ {
+  "address": "0x002F7814",
+  "name": "maybe_Ui_SpriteCache_LookupOrLoad",
+  "signature": "void* maybe_Ui_SpriteCache_LookupOrLoad(UiSpriteCache* self, const char* name)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name"
+  },
+  "summary": "Returns the sprite/texture registered under <name> in the cache at self+4, loading it with 0x00536728 first if it is not cached; a freshly loaded sprite is announced to the owner through vtbl[0x18].",
+  "confidence": 0.45,
+  "evidence": "bl 0x0065D3D0(self+4) (lookup); on miss bl 0x00536728(self+4, name) (load), then self->vtbl[0x18](self, sprite, name); returns the sprite or NULL. Vtable row 0x007621D0 sits next to maybe_Gfx_LoadTextureByName and Font_LoadResource, so the cache holds textures/fonts."
+ },
+ {
+  "address": "0x002F787C",
+  "name": "maybe_Ui_SpriteList_LoadSlotTextures",
+  "signature": "int maybe_Ui_SpriteList_LoadSlotTextures(UiSpriteList* self, u32 packedNames, const char* a, const char* b, int* outSize)",
+  "params": {
+   "param_1": "self",
+   "param_2": "packedNames",
+   "param_3": "a",
+   "param_4": "b",
+   "param_5": "outSize"
+  },
+  "summary": "Loads the (up to eight) slot sprites of a list: for every used slot at self+0x10+i*0x20 it builds a resource path with the inline formats \"%s/%s/%s\" (or \"%s/%s\" when the slot already carries a '.' suffix) into a 0x100-byte buffer, loads it through 0x00535FA4 and stores the resulting size.",
+  "confidence": 0.45,
+  "evidence": "Inline formats \"%s/%s/%s\" at 0x002F7994 and \"%s/%s\" at 0x002F79A0; loop over 8 slots with stride 0x20 and an 'in use' byte at +0x2C; 0x0051D03C formats (snprintf-like), 0x00535FA4 loads, 0x00535DE0 queries size, and the result is written to *arg5 when non-NULL. The neighbour at vtable 0x007610A4 is Ui_SpriteList_LoadPageEx, so the slots belong to a sprite list."
+ },
+ {
+  "address": "0x002F79C0",
+  "name": "maybe_Ui_SpriteList_AllocFreeSlot",
+  "signature": "void* maybe_Ui_SpriteList_AllocFreeSlot(UiSpriteList* self, void* unused, u8* value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused",
+   "param_3": "value"
+  },
+  "summary": "Finds the first free slot (in-use byte +0x2C == 0) among the eight list slots, initialises the sprite at self+0x10+i*0x20 through 0x00535E50 and stores *value in the slot's payload byte +0x1D.",
+  "confidence": 0.4,
+  "evidence": "Loop i<8 looking for ldrb [self+0x2C+i*0x20]==0; then 0x00535E50(self+0x10+i*0x20) and strb [r5],[r4+0x1D], 0 at +0x1E, 1 at +0x1C. Same eight-slot layout as 0x002F787C."
+ },
+ {
+  "address": "0x002F7A24",
+  "name": "maybe_Ui_ResourceCache_GetOrCreate",
+  "signature": "void* maybe_Ui_ResourceCache_GetOrCreate(UiResourceCache* self, const char* name)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name"
+  },
+  "summary": "Two-level resource cache: first asks the global map at 0x007C6E58 for <name>; on a miss it creates the object through the owner's vtbl[0x1C] and registers it with 0x00536150 (map insert, replace flag 1).",
+  "confidence": 0.4,
+  "evidence": "bl 0x0053623C(0x007C6E58) then, if NULL, self->vtbl[0x1C](self, name) and bl 0x00536150(0x007C6E58, name, obj, 1). Vtable rows 0x007621C8 / 0x007621CC / 0x007621D0 next to maybe_Gfx_LoadTextureByName and Font_LoadResource, so the cached objects are texture/font resources."
+ },
+ {
+  "address": "0x002FB480",
+  "name": "maybe_Field_Gimmick_DeletingDtor",
+  "signature": "void maybe_Field_Gimmick_DeletingDtor(FieldGimmick* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a Field gimmick widget (the object that can play emote states).",
+  "confidence": 0.45,
+  "evidence": "bl 0x00193E44 (Ui widget base dtor) then b 0x0010F6CC. Vtable row 0x007625D8 next to Field_Gimmick_SetEmoteState and maybe_Field_Object_GetTypeParam."
+ },
+ {
+  "address": "0x002FB490",
+  "name": "maybe_Field_HorseMesh_ApplyAnimEntry",
+  "signature": "void maybe_Field_HorseMesh_ApplyAnimEntry(FieldHorseMesh* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Selects (and clamps) one of the animation entries of the horse mesh: calls 0x00366910 to refresh the clip source, clamps the requested index against the record count at [+0x368], copies the 0x18-byte record (four words, two bytes and one word) into self+0x374..0x388 and then commits the selection with the keyed-list helper 0x005E7848(self, 1, 1).",
+  "confidence": 0.4,
+  "evidence": "Body: bl 0x00366910; index = min([self+0x270], [table]-1) where table=[self+0x368]; record = table + 0x10*index + 4; copies record[0..3] to self+0x374..0x380, bytes +0x10/+0x11 to +0x384/+0x385, record[0x14] to +0x388; tail-call 0x005E7848(self,1,1). Vtable row 0x007626CC in the Field horse-mesh table (Field_HorseMesh_Init, maybe_Trail_UpdateFromOwnerNode). The following code at 0x002FB568 is the 'step to next entry' sibling."
+ },
+ {
+  "address": "0x002FB710",
+  "name": "maybe_Field_ActionList_FillSlotsWithTimers",
+  "signature": "void maybe_Field_ActionList_FillSlotsWithTimers(ActionList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the first entry of a Field action list: creates a Battle_ActionAnimEntry, sets its priority to 4 through vtbl[0x38], inserts it with the priority sort helper and then, for slot 0 (and the remaining slots up to the created count), allocates a 0x2C-byte timer action through 0x002FB460 and calls Container_SlotReplace.",
+  "confidence": 0.3,
+  "evidence": "Thumb code: bl 0x002A8BFC (Battle_ActionAnimEntry_Create); entry->vtbl[0x38](entry,4); bl 0x005E75CC (maybe_Actor_ActionList_SortByPriority); then Mem_AllocAligned(0x2C, heap, 4) and 0x002FB460 (maybe_Field_GetTimer) with a pc-relative table; results merged with 0x002A8BA4 (Container_SlotReplace)."
+ },
+ {
+  "address": "0x002FB790",
+  "name": "maybe_Field_ActionList_FillSlotsWithHorseActions",
+  "signature": "void maybe_Field_ActionList_FillSlotsWithHorseActions(ActionList* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fills slots 0..3 of a Field action list with freshly allocated horse-action objects (sizes 0x2C/0x2C/0x34/0x48, each with its own constructor), dropping the previous slot content through Container_SlotReplace and destroying it when the replace failed.",
+  "confidence": 0.35,
+  "evidence": "Four repetitions of: if (list->f_40 > slot) { Mem_AllocAligned(size, heap, 4); ctor(...); } then Container_SlotReplace(list, slot, obj); if replace returned non-zero and obj != NULL -> obj->vtbl[1](obj) (release). Constructors: maybe_Field_HorseAction_CtorVariantB (0x36CE64, 0x2C), Field_HorseAction_Ctor (0x36C54C, 0x34), maybe_Field_HorseAction_CtorVariantA (0x36CC08, 0x48)."
+ },
+ {
+  "address": "0x002FBA04",
+  "name": "maybe_Field_CollisionObject_DeletingDtor",
+  "signature": "void maybe_Field_CollisionObject_DeletingDtor(FieldCollisionObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of a Field collision object.",
+  "confidence": 0.45,
+  "evidence": "bl 0x003680CC (inner entry of FUN_003680B4, base dtor of the collision family) then b 0x0010F6CC. Vtable row 0x00762614 next to Field_CollisionObject_Init, FUN_00367C10+0x44 and maybe_Gfx_Node_TickChildren."
+ },
+ {
+  "address": "0x002FCEAC",
+  "name": "maybe_Ui_BaseWindow_UpdateStep",
+  "signature": "void maybe_Ui_BaseWindow_UpdateStep(UiBaseWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Step driver of a Ui base window: advances the window timer at self+0x34174 (time += dt, frame++ when the clip is not finished), then dispatches the current step by indexing a 24-byte-stride step table at timer+0x34 with the step id at timer+4 (bounded by 0x13) and tail-calls the step handler with the object base taken from timer+0x20.",
+  "confidence": 0.45,
+  "evidence": "Body: r4 = self+0x34174; clip->vtbl[0x10]() finish test; [r4+8] += s16, [r4+0xC] += 1; idx=[r4+4]; if (idx<0x13) { e = r4 + idx*24 + 0x34; if (e->f0) { obj = [r4+0x20]; off = e->f4; target = obj + (off>>1) + (off&1? *obj : 0); bx e->f0 } }. Vtable row 0x00762810 in the Ui_BaseWindow table (maybe_Ui_BaseWindow_Close, maybe_Ui_Window_InitDataBinding, maybe_Ui_DiveForm_BindControl)."
+ },
+ {
+  "address": "0x002FDCB4",
+  "name": "maybe_Text_Block_ClearChildren",
+  "signature": "void maybe_Text_Block_ClearChildren(TextBlock* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Flushes a text block: pops children while the block reports more than one active entry (0x0062F070 count, 0x0010EBD8 remove), re-initialises the intrusive list at self+0x34D8, logs the emptied count through the trace formatter (inline L\"%d\") and finally asks the owner to drop entry 0x25.",
+  "confidence": 0.35,
+  "evidence": "Loop 'while (0x0062F070(self) > 1) 0x0010EBD8(self);'; bl 0x00123594(self, self+0x34D8) (intrusive-list init); the 0x007AC834 trace object + 0x707C1C with the inline L\"%d\" at 0x002FDD44 and length 0x32; tail: self->vtbl[0x54](self, 0x25, -1). Vtable row 0x0072C14C is the Text_Block table (Text_GlyphSet_CollectFromTable, maybe_Text_Block_DtorC)."
+ },
+ {
+  "address": "0x002FDE8C",
+  "name": "maybe_Text_Block_BindSourceList",
+  "signature": "void maybe_Text_Block_BindSourceList(TextBlock* self, void* source)",
+  "params": {
+   "param_1": "self",
+   "param_2": "source"
+  },
+  "summary": "Binds a text block to a source list: initialises the intrusive list at source+0xD8, hands the block's internal work area at self+0x3770 to the owner through vtbl[0x5C] and marks the sub-widget at self+0x33E4 busy.",
+  "confidence": 0.3,
+  "evidence": "bl 0x00123594(self, arg2+0xD8); self->vtbl[0x5C](self, self+0x3770); tail-call 0x0029126C(self+0x33E4, 1) = Ui_Widget_ReleaseSub inner entry per N_105. Same +0x33E4/+0x3770 fields as 0x002FE24C, so both belong to the Text_Block class."
+ },
+ {
+  "address": "0x002FE024",
+  "name": "maybe_Text_Block_RemoveEntry1F",
+  "signature": "void maybe_Text_Block_RemoveEntry1F(TextBlock* self, void* source)",
+  "params": {
+   "param_1": "self",
+   "param_2": "source"
+  },
+  "summary": "Binds the block to a source list (list at source+0xD8) and then removes text entry 0x1F through the owner's vtbl[0x54].",
+  "confidence": 0.3,
+  "evidence": "bl 0x00123594(self, arg2+0xD8); then self->vtbl[0x54](self, 0x1F, -1). One row of the Text_Block vtable group at 0x0072C0E4; the 0x1E/0x1F/0x22 constants are entry ids in the same 'remove entry N' family."
+ },
+ {
+  "address": "0x002FE24C",
+  "name": "maybe_Text_Block_CloseAndSetCoreState5",
+  "signature": "void maybe_Text_Block_CloseAndSetCoreState5(TextBlock* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Closes a text block: hands its work area at self+0x3D08 to the owner through vtbl[0x5C], marks the sub-widget at self+0x33E4 busy (0x0029126C) and finally sets the global Ui core state halfword (Ui_GetCore()->f_94) to 5.",
+  "confidence": 0.35,
+  "evidence": "self->vtbl[0x5C](self, self+0x3D08); bl 0x0029126C(self+0x33E4, 1); call Ui_GetCore (0x006F229C) then strh 5,[[r0]+0x94]. Vtable row 0x0072C1FC in the Text_Block table next to maybe_Text_MeasureOverflow."
+ },
+ {
+  "address": "0x002FE3FC",
+  "name": "maybe_Text_Block_RemoveEntry22",
+  "signature": "void maybe_Text_Block_RemoveEntry22(TextBlock* self, void* source)",
+  "params": {
+   "param_1": "self",
+   "param_2": "source"
+  },
+  "summary": "Binds the block to a source list and removes text entry 0x22 through the owner's vtbl[0x54].",
+  "confidence": 0.3,
+  "evidence": "bl 0x00123594(self, arg2+0xD8); self->vtbl[0x54](self, 0x22, -1). Identical to 0x002FE024 except the entry id 0x22."
+ },
+ {
+  "address": "0x002FE494",
+  "name": "maybe_Text_Block_RemoveEntry1E",
+  "signature": "void maybe_Text_Block_RemoveEntry1E(TextBlock* self, void* source)",
+  "params": {
+   "param_1": "self",
+   "param_2": "source"
+  },
+  "summary": "Binds the block to a source list and removes text entry 0x1E through the owner's vtbl[0x54].",
+  "confidence": 0.3,
+  "evidence": "bl 0x00123594(self, arg2+0xD8); self->vtbl[0x54](self, 0x1E, -1). Identical to 0x002FE024 except the entry id 0x1E."
+ },
+ {
+  "address": "0x002FE5BC",
+  "name": "Ui_Window_StartAction26",
+  "signature": "void Ui_Window_StartAction26(UiWindow* self, UiWindow* child)",
+  "params": {
+   "param_1": "self",
+   "param_2": "child"
+  },
+  "summary": "Flushes the window's pending text entries down to one, moves the child window's pending entry list (child+0xD8) into the window's own entry list, then starts window action 0x26 with no extra argument through the virtual call at vtable+0x54.",
+  "confidence": 0.5,
+  "evidence": "Asm: while (0x0062F070(self) > 1) 0x0010EBD8(self)  (list size / pop-front of the intrusive list at self+0x110); 0x00123594(self, self+0x34D8) moves the list at self+0x34DC into self+0x110; (*(*self+0x54))(self,0x26,-1). Identical body to the N_105 window action starters 0x002A5B20 StartAction14 / 0x002A65B8 StartAction18 / 0x002A6974 StartAction1F, and the function sits in the same {fn,0} window-step table (entry 0x0072C1BC, next to 0x002FEBB0 Ui_ListData_BindEntries)."
+ },
+ {
+  "address": "0x002FE7F4",
+  "name": "maybe_Ui_Window_StartAction27",
+  "signature": "void maybe_Ui_Window_StartAction27(UiWindow* self, UiWindow* child)",
+  "params": {
+   "param_1": "self",
+   "param_2": "child"
+  },
+  "summary": "Moves the child window's pending entry list into the window, then refreshes a shared debug counter label with (all entries - used entries - 50) formatted as a decimal number, and finally starts window action 0x27.",
+  "confidence": 0.45,
+  "evidence": "0x00123594(self, child+0xD8); sub = *(self+0x3570); count = ((sub->0x38 - sub->0x34) >> 4) - 0x0063C8BC(sub+0x34) - 0x32; if (*0x007AC834) wide-snprintf 0x00707C1C into (*0x007AC834)+0x848 with the UTF-16 format L\"%d\" at 0x002FE87C and set +0x844 = +0x84C (pointer to the inline buffer); (*(*self+0x54))(self,0x27,-1). Same list-attach + action-call shape as 0x002FE5BC StartAction26."
+ },
+ {
+  "address": "0x002FECF0",
+  "name": "maybe_Ui_Window_StartAction19WithCount",
+  "signature": "void maybe_Ui_Window_StartAction19WithCount(UiWindow* self, UiWindow* child)",
+  "params": {
+   "param_1": "self",
+   "param_2": "child"
+  },
+  "summary": "Moves the child window's pending entry list into the window, counts the used entries of the window's text block (self+0x3570) and starts window action 0x19 passing that count instead of the usual -1.",
+  "confidence": 0.45,
+  "evidence": "0x00123594(self, child+0xD8); uVar = 0x0063C8BC(*(self+0x3570)+0x34) (count of entries whose flag byte at +9 is set); (*(*self+0x54))(self,0x19,uVar). Sibling of 0x002FE5BC/0x002FE7F4, differs only in the action id and in passing the counted value as the third virtual argument."
+ },
+ {
+  "address": "0x002FFA14",
+  "name": "maybe_Ui_Window_DeletingDtorRingBuffer",
+  "signature": "void maybe_Ui_Window_DeletingDtorRingBuffer(UiWindow* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Deleting destructor of a very large Ui window (over 0x404C bytes): installs the incoming vtable, returns every node of the window's node pool (list head at +0x3D18, free-list at +0x3D24) through 0x0070E0B0, installs the second (sub-object) vtable at +0x3770, runs the window base destructor and frees the object.",
+  "confidence": 0.45,
+  "evidence": "*self = arg2; literal 0x762D2C is stored at self+0x3D08 (vtable of the class that owns 0x00306134 Container_RingBuffer_Pop and 0x002FEDF4); loop 0x0070E0B0(self+0x3D0C, *node) over the list at self+0x3D18 while pushing each node onto the free list at self+0x3D24; *(self+0x3770) = 0x7600D4; 0x003BE544(self) = Ui window base destructor; tail 0x0010F6CC = operator delete. The identical pool-teardown prologue appears in 0x002FE9B0, so both belong to the same window class."
+ },
+ {
+  "address": "0x0030069C",
+  "name": "Field_Action_SyncTransformFromActor",
+  "signature": "void Field_Action_SyncTransformFromActor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Caches the owning actor's position, facing and 'movement blocked' flag inside the action object, so the action's own steps can interpolate towards it. This is the default start step of the base field-action class.",
+  "confidence": 0.55,
+  "evidence": "self->f_28 is the actor: self+0x2C = actor+0x2C8, +0x30 = actor+0x2CC, +0x34 = actor+0x2C4 (the x/y/z triple), +0x38/+0x3C = actor+0x98/+0x9C (facing), +0x40 = (actor+0x2D0 == 0). Vtable 0x00762854 slot 1; the same class's 0x003007BC consumes f_38/f_3C as its target and f_40 as the play-SE latch."
+ },
+ {
+  "address": "0x0030074C",
+  "name": "Ui_Text_MeasureLineBreak",
+  "signature": "int Ui_Text_MeasureLineBreak(const u16* text, int start, int* outBreak)",
+  "params": {
+   "param_1": "text",
+   "param_2": "start",
+   "param_3": "outBreak"
+  },
+  "summary": "Thumb text-layout helper: asks the metrics routine 0x00300710 how much of the UTF-16 run starting at <start> fits, reports start+consumed as the break position, and re-measures once when the measurement consumed the run but rejected it, so the caller always gets a break that fits.",
+  "confidence": 0.5,
+  "evidence": "Thumb code; 0x00300710(local,&range,text) is called with range = [start,end] and its consumed count in local; *outBreak = start+consumed (or start when nothing was consumed); the second call is made when consumed != 0 && (result < 1 || range != start+consumed). Referenced from the text layout code at 0x00673DAC."
+ },
+ {
+  "address": "0x003009C4",
+  "name": "Field_Action_Base_DeletingDtor",
+  "signature": "void Field_Action_Base_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the base field-action class - the one whose start step only copies the actor transform (0x0030069C) and whose end step moves the actor to a point and plays a sound (0x003007BC).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00762854 slot 0; body is bl 0x00294C24 (which is a bare `b 0x00193E44`, the root action-object destructor) followed by tail 0x0010F6CC = operator delete. Every sibling below has the same two-instruction shape with a different base destructor."
+ },
+ {
+  "address": "0x00300A9C",
+  "name": "Field_Action_CheckAny_DeletingDtor",
+  "signature": "void Field_Action_CheckAny_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the 'CheckAny' field action, whose start step is 0x003009D4 Field_Action_StartCheckAny and whose finish step is 0x00300A44 Field_Action_FinishIfDone.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00762888 slot 0; bl 0x00294C88 (subclass destructor that tail-branches to the root 0x00193E44) + tail 0x0010F6CC operator delete. The vtable also holds 0x003009D4 Field_Action_StartCheckAny and 0x00300A44 Field_Action_FinishIfDone."
+ },
+ {
+  "address": "0x003013A8",
+  "name": "Field_Action_Walk_DeletingDtor",
+  "signature": "void Field_Action_Walk_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the walk action (start 0x00300AAC WalkStartToTarget, update 0x00300E40 WalkUpdate, end 0x003012A4 WalkEnd).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x007628BC slot 0; bl 0x00294C88 + tail 0x0010F6CC. Neighbouring slots in the same vtable are 0x00300AAC maybe_Field_Action_WalkStartToTarget, 0x003012A4 maybe_Field_Action_WalkEnd and 0x00300E40 maybe_Field_Action_WalkUpdate (N_051)."
+ },
+ {
+  "address": "0x003017D0",
+  "name": "Field_Action_Move_DeletingDtor",
+  "signature": "void Field_Action_Move_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the collision-aware move action (start 0x001E1248 InitDirection, cancel 0x001E1534, per-frame 0x003013B8 MoveCollide).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x007628F0 slot 0; bl 0x001E1624 which installs vtable 0x007628F0's parent and tail branches to 0x00294C88, then 0x0010F6CC. Same vtable: 0x001E1248 maybe_Field_ActorMove_InitDirection, 0x001E1534 maybe_Field_ActorMove_Cancel, 0x003013B8 maybe_Field_Action_MoveCollide."
+ },
+ {
+  "address": "0x00301A94",
+  "name": "Field_Action_Step_DeletingDtor",
+  "signature": "void Field_Action_Step_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the footstep action (play/stop footstep sound, stop the move).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00762924 slot 0; body bl 0x001E1B88 + tail 0x0010F6CC. Same vtable: 0x003017E0 StopMove, 0x003019DC StopStepSound and 0x00301838 Field_Action_PlayStepSound (N_051)."
+ },
+ {
+  "address": "0x00301AA4",
+  "name": "Field_Action_StepBehaviour_DeletingDtor",
+  "signature": "void Field_Action_StepBehaviour_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the walking-behaviour action (start 0x001E1634 BeginStep, update 0x001E18F4, end 0x001E1A7C EndBehaviour); it also owns the direction helpers 0x001E18C8/0x001E189C/0x001E16D4/0x001E181C.",
+  "confidence": 0.5,
+  "evidence": "vtable 0x0076296C slot 0; body bl 0x001E1B88 + tail 0x0010F6CC. The vtable's slot 1..3 are 0x001E1634 maybe_Field_Actor_BeginStep, 0x001E1A7C maybe_Field_Actor_EndBehaviour, 0x001E18F4 maybe_Field_Actor_UpdateBehaviour."
+ },
+ {
+  "address": "0x00301E04",
+  "name": "Field_Action_MoveDir_DeletingDtor",
+  "signature": "void Field_Action_MoveDir_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the directional-movement action (0x00301AB4 SelectDirAnim, 0x00301B4C MoveDir, 0x00301D8C StopEffect).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x007629B4 slot 0; body bl 0x00294C88 + tail 0x0010F6CC. Same vtable: 0x00301AB4 Field_Action_SelectDirAnim, 0x00301B4C maybe_Field_Action_MoveDir, 0x00301D8C maybe_Field_Action_StopEffect."
+ },
+ {
+  "address": "0x00301E34",
+  "name": "maybe_Field_Action_Nut_DeletingDtor",
+  "signature": "void maybe_Field_Action_Nut_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the third ('Nut') field action: start 0x001BA510 StartNut, update 0x001BAA04 UpdateAnim, state handler 0x001BA5D0.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x007629E8 slot 0; body bl 0x00193E44 (root action dtor) + tail 0x0010F6CC. Same vtable: 0x001BA510 maybe_Field_Action_StartNut, 0x001BAA04 maybe_Field_Action_UpdateAnim, 0x001BA5D0 maybe_Field_Action_UpdateNutState (N_040)."
+ },
+ {
+  "address": "0x00301E44",
+  "name": "maybe_Field_ActorAction_DeletingDtor",
+  "signature": "void maybe_Field_ActorAction_DeletingDtor(FieldActorAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the actor-action class that plays the animation belonging to the action's current state (0x003735D4 Field_ActorAction_PlayStateAnim).",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00762A1C slot 0; body bl 0x00294C84 (alignment nop immediately followed by the 0x00294C88 subclass destructor) + tail 0x0010F6CC. Same vtable: 0x003735D4 Field_ActorAction_PlayStateAnim (N_088), 0x001BAADC, 0x001BAA04 UpdateAnim, and the shared base entries 0x00193C6C/0x00193CD8."
+ },
+ {
+  "address": "0x00301FA8",
+  "name": "Field_Action_AttachNamedEffect_DeletingDtor",
+  "signature": "void Field_Action_AttachNamedEffect_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the effect action (0x00301E58 AttachNamedEffect, 0x00301F4C ResetActor).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00762A54 slot 0; body bl 0x00294C88 + tail 0x0010F6CC. Same vtable: 0x00301E58 maybe_Field_Action_AttachNamedEffect, 0x00301F4C maybe_Field_Action_ResetActor (N_051)."
+ },
+ {
+  "address": "0x003021DC",
+  "name": "Field_Action_OpenDoor_DeletingDtor",
+  "signature": "void Field_Action_OpenDoor_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the door-opening action (0x00301FB8 OpenDoor, 0x00302184 FinishIfDoneEx).",
+  "confidence": 0.55,
+  "evidence": "vtable 0x00762A88 slot 0; body bl 0x00294C88 + tail 0x0010F6CC. Same vtable: 0x00301FB8 Field_Action_OpenDoor and 0x00302184 maybe_Field_Action_FinishIfDoneEx (N_051)."
+ },
+ {
+  "address": "0x0030246C",
+  "name": "maybe_Field_Action_HorseInput_DeletingDtor",
+  "signature": "void maybe_Field_Action_HorseInput_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the mounted-movement action that turns stick input into horse velocity (start 0x00303768 InitHorseParams, per-frame 0x00302254 MoveInput, camera follow 0x003021EC).",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00762ABC slot 0; body bl 0x00193E44 + tail 0x0010F6CC. Same vtable: 0x00303768 maybe_Field_Action_InitHorseParams, 0x00302254 maybe_Field_Action_MoveInput, 0x003021EC maybe_Field_Action_TrackCamera, 0x004143FC Field_ActorAction_UpdateTurnDirection."
+ },
+ {
+  "address": "0x0030271C",
+  "name": "maybe_Field_Action_Run_CheckCanContinue",
+  "signature": "int maybe_Field_Action_Run_CheckCanContinue(FieldAction* self, void* input)",
+  "params": {
+   "param_1": "self",
+   "param_2": "input"
+  },
+  "summary": "Continuation test for the run action: returns -1 when the actor must keep moving, 3 when it may still run, and 1 otherwise. It rejects the action when both 'move requested' bits of the actor are clear, or when the input object reports no direction while the actor has no auto-move distance left.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00762B00 slot 13 (0x34); reads actor (self->f_28) bytes 0x28C/0x290, flags 0x2CC (bits 2/3), byte 0x276, floats 0x278/0x27C against g_003027B0; calls input vtbl+0x14; returns 0xFFFFFFFF / 3 / 1. Companion of 0x0030247C ToggleRun and 0x003028C0 UpdateMove in the same vtable."
+ },
+ {
+  "address": "0x00302C90",
+  "name": "maybe_Field_Action_Run_DeletingDtor",
+  "signature": "void maybe_Field_Action_Run_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the run/move action (vtable 0x00762B00: 0x0030247C ToggleRun, 0x003028C0 UpdateMove, 0x00302AE0 StopMoveEffect). The real entry point is 4 bytes earlier at 0x00302C8C, which loads the vtable literal and falls into this body.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00762B00 slot 0 holds 0x00302C8C; that instruction is `ldr r1,[pc,#0x18]` and falls through into 0x00302C90, which stores the vtable at self+0x50, then bl 0x001CF7F8 (base of the embedded sub-object) -> bl 0x00193E44 -> tail 0x0010F6CC."
+ },
+ {
+  "address": "0x003033DC",
+  "name": "maybe_Field_Action_HorseStart_End",
+  "signature": "void maybe_Field_Action_HorseStart_End(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Ends horse riding: clears the action's local flag at +0x44, tells the actor to leave state 4 through actor vtable+0x54 and then runs the actor's vtable+0x88 (drop the rider animation link).",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00762B44 slot 2; `self->f_44 = 0; (*(*self->f_28 + 0x54))(self->f_28, 4); (*(*self->f_28 + 0x88))()`. The same vtable's slot 0 is 0x00303470 (deleting dtor), slot 1 is 0x00302CB0 maybe_Field_Action_HorseStart and slot 3 is 0x00302FFC Field_Action_HorseUpdate."
+ },
+ {
+  "address": "0x00303470",
+  "name": "Field_Action_HorseStart_DeletingDtor",
+  "signature": "void Field_Action_HorseStart_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the horse-riding action (start 0x00302CB0 HorseStart, end 0x003033DC, update 0x00302FFC HorseUpdate).",
+  "confidence": 0.5,
+  "evidence": "vtable 0x00762B44 slot 0; body bl 0x00193E44 + tail 0x0010F6CC."
+ },
+ {
+  "address": "0x00303858",
+  "name": "maybe_Field_Action_Horse_CheckCanContinue",
+  "signature": "int maybe_Field_Action_Horse_CheckCanContinue(FieldAction* self, void* input)",
+  "params": {
+   "param_1": "self",
+   "param_2": "input"
+  },
+  "summary": "Continuation test shared by both horse actions (registered in the vtables at 0x00762ABC and 0x00762B78): returns 2 while the rider is still steering/accelerating, 3 when the actor may run on, and -1 when the action is finished.",
+  "confidence": 0.4,
+  "evidence": "Reads actor (self->f_28) byte 0x276, int 0x280, byte 0x2D4 and flags 0x2CC bit 3; calls input vtbl+0xC; returns 0xFFFFFFFF / 3 / 2. Appears as slot 13 (offset 0x34) of the vtables 0x00762ABC and 0x00762B78, i.e. the same slot 0x0030271C occupies in the run action."
+ },
+ {
+  "address": "0x00304058",
+  "name": "maybe_Field_Action_MoveStep_DeletingDtor",
+  "signature": "void maybe_Field_Action_MoveStep_DeletingDtor(FieldAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Deleting destructor of the second horse movement action, the one whose per-frame step is 0x00303C50 MoveStep (no blocked-move reaction) and which shares InitHorseParams with 0x0030246C.",
+  "confidence": 0.45,
+  "evidence": "vtable 0x00762B78 slot 0; body bl 0x00193E44 + tail 0x0010F6CC. Same vtable: 0x00303768 maybe_Field_Action_InitHorseParams, 0x00303DDC, 0x00303C50 maybe_Field_Action_MoveStep, 0x003038C0, 0x00303480 maybe_Anim_EvaluateAimPose, 0x00303858 (the continuation test above)."
+ },
+ {
+  "address": "0x00304804",
+  "name": "maybe_Ui_WindowStateSlot_DispatchPending",
+  "signature": "void maybe_Ui_WindowStateSlot_DispatchPending(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Runs the pending entry of the window's small state queue: asks the first slot for its state and, when it reports work, dispatches the slot's second virtual (vtable+0x10) with no argument.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00762C4C slot 7; slot base = self+0x35C; `(*slot->vtbl[0x14])(slot,0)` then `(*slot->vtbl[0x10])(slot)`. Companion 0x00304840 (slot 6 of the same vtable) steps the same queue, and 0x0030746C is the 0x14-slot version of the pattern."
+ },
+ {
+  "address": "0x00304840",
+  "name": "maybe_Ui_WindowStateSlot_Step",
+  "signature": "void maybe_Ui_WindowStateSlot_Step(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Advances the window's small (two-entry) state queue: when the current slot is idle it adds 0.5 to the slot timer and bumps its frame counter, then dispatches the callback of the slot selected by self+0x360.",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00762C4C slot 6; `(*slot->vtbl[0x10] & slot)` idle test; timer += g_003048F0 (0.5f) into +0x364 and ++ at +0x368; entry = self+0x35C+self->f_360*0x18, callback at entry+0xC / member-pointer word at entry+0x10, invoked with (entry,0)."
+ },
+ {
+  "address": "0x00304900",
+  "name": "maybe_Ui_TextLinePool_Init",
+  "signature": "void maybe_Ui_TextLinePool_Init(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Window step that (re)builds the shared pool of 0x1C-byte line records: fetches the UI singleton, and when the cached 'pool needed' flag is set allocates count*stride bytes, zeroes the seven words of every record and installs the record vtable; afterwards it reads the window/layout configuration and queues the next window sub-state (6 or 0x0B) on the state vector at self+0x3B8.",
+  "confidence": 0.4,
+  "evidence": "Entry 0 of the window step table at 0x00729398 (entries 0x00304900, 0x00304DC8, 0x00304D70 maybe_Ui_SmallWindow_InputToState1, 0x003048F4/0x003048F8 which are `return 1` stubs). Body: r0/r1 zeroed, 0x006F20C0 fetches the singleton, global block at *singleton+0x24A98 is checked; 0x0011CFAC (alignment) + 0x00116AE0 (allocator) create the pool, seven words zeroed per 0x1C-byte record, vtable 0x006293A00 installed; 0x0062AC60/0x00629C78/0x00629FDC read the layout; 0x00295664 (std_InlinedVector16_PushByte) pushes 6 or 0x0B into self+0x3B8. No direct callers - reached only from the table."
+ },
+ {
+  "address": "0x00304974",
+  "name": "maybe_Ui_TextLinePool_InitBody",
+  "signature": "void maybe_Ui_TextLinePool_InitBody(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Continuing body of the text-log initialiser started at 0x00304900 (Ghidra and the batch generator see a second entry here because a code pointer inside this function was recovered): allocates the line-record pool, reads the window configuration flags, refreshes the record table and queues the next window state.",
+  "confidence": 0.35,
+  "evidence": "Starts with `bl 0x006F20C0` and consumes the r0/r4/r6 registers set up by 0x00304900, so it is not a callable entry point. Uses 0x0011CFAC (size align), 0x00116AE0 (allocator), 0x0062AC60/0x00629C78/0x00629FDC (layout lookups) and 0x00295664 (push state byte). Falls through into 0x00304C14."
+ },
+ {
+  "address": "0x00304C14",
+  "name": "maybe_Ui_TextLinePool_InitBody2",
+  "signature": "void maybe_Ui_TextLinePool_InitBody2(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Third slice of the same text-log initialiser: interior ARM code of the function that starts at 0x00304900. The batch lists it as Thumb because a misdetected entry point sits on an instruction boundary; the bytes decode cleanly as ARM (`bl 0x006F20C0`, `blx` through the layout object) and control always arrives here by fall-through.",
+  "confidence": 0.25,
+  "evidence": "Disassembly from 0x00304C00 in ARM mode is coherent (`bl 0x00295664`, `bl 0x006F20C0`, `add r1,r2,#0x28C`, `blx r3`), while Thumb decoding at 0x00304C14 is nonsense. No branch or literal anywhere in the image targets 0x00304C14 (checked with an ARM/Thumb BL scanner), so it is not a real function entry."
+ },
+ {
+  "address": "0x00304F34",
+  "name": "Ui_DiveStartWindow_DeletingDtor",
+  "signature": "void Ui_DiveStartWindow_DeletingDtor(UiDiveStartWindow* self, void* vtable)",
+  "params": {
+   "param_1": "self",
+   "param_2": "vtable"
+  },
+  "summary": "Deleting destructor of the dive-start window: installs the window vtable at +0, then the second (pane/animation) vtable at +0x3B8, walks the vector that hangs off +0x3C8, runs the Ui_DiveStartWindow base destructor and frees the object.",
+  "confidence": 0.5,
+  "evidence": "`str r1,[r0],#0x3B8` then a second vtable literal stored at self+0x3B8 (that pair is exactly the layout used by 0x00304900's state vector at self+0x3B8); then bl 0x0032C1AC, which other batches named Ui_DiveStartWindow_Dtor, followed by tail 0x0010F6CC (operator delete). vtable 0x00762C20 slot 0 = 0x00304F30, with 0x0032BCB8 Ui_DiveStartWindow_InitPanes and 0x0032BD28 Ui_DiveStartWindow_Close as its siblings."
+ },
+ {
+  "address": "0x00304F88",
+  "name": "maybe_Ui_DiveStartWindow_GetPaletteEntry",
+  "signature": "u8 maybe_Ui_DiveStartWindow_GetPaletteEntry(UiDiveStartWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns one of four bytes from a 4-byte table selected by the flag at self+0x6C, indexed by the u16 id of the element hanging off self+0x38 (index 0 when there is no element). Used to colour/label the window's rows.",
+  "confidence": 0.3,
+  "evidence": "`r1 = self->f_38; r4 = r1 ? (u16)r1->f_c : 0;` then the byte at self+0x50+0x1C = self+0x6C selects the table pointer: non-zero takes the word at the literal pool slot 0x00304FC4 (= 0x007294C8, a rodata table), zero takes the following word, which is the first instruction of 0x00304FC8 - i.e. the 'flag clear' branch is unreachable/debug-only. Finally returns ((u8*)table)[r4]. Called from 0x002C21D0."
+ },
+ {
+  "address": "0x0030535C",
+  "name": "maybe_Ui_NumberDisplay_RollDigits",
+  "signature": "void maybe_Ui_NumberDisplay_RollDigits(UiNumberDisplay* self, int unused, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "unused",
+   "param_3": "arg3"
+  },
+  "summary": "Rolling numeric display: generates up to four successive decimal strings from the base id at self+0x28 (carrying '9' back to '1' like an odometer) and pushes each into the four sub-slots through the window virtuals at +0x34 and +0x38, then rewrites the two labels at self+0x50 and self+0xA0 and refreshes the backing buffer.",
+  "confidence": 0.3,
+  "evidence": "vtable 0x00762C78 slot 7. Stack buffers hold 2- and 3-digit ASCII strings; the digit loops use 0x30 ('0'), 0x39 ('9'), 0x31 ('1') and stop after 4 slots (`cmp r5,#4; blt`). Virtual calls `(*self->vtbl[0x34])(self, id<<16 | slot, buf, 0, ...)` and `(*self->vtbl[0x38])(...)` per slot (id = u16 at self+0x28); then 0x003E00CC(self+0x50,...,str), 0x003E00CC(self+0xA0,...,str) and 0x00304FFC (record-buffer reallocation). Neighbour 0x00305534 was named maybe_Menu_Item_UseConfirm by N_051, and the class destructor is 0x00305508."
+ },
+ {
+  "address": "0x003058FC",
+  "name": "maybe_Ui_TextPage_RefreshThreeEntryCache",
+  "signature": "void maybe_Ui_TextPage_RefreshThreeEntryCache(u32* out, UiWindow* self, TextPageCache* cache)",
+  "params": {
+   "param_1": "out",
+   "param_2": "self",
+   "param_3": "cache"
+  },
+  "summary": "Builds the 7-word entry descriptor used by the text log: for each of up to three slots it looks row 0x28/0x29/0x2A up in the record table at self+0x6D4, pairs the row with the u16 id and u32 payload read from the source object at cache+8, and reconciles the ordered cache at cache+4 (erase/reinsert keyed by the u16, decrement the count, push the detached node onto the free list at cache+0x18).",
+  "confidence": 0.3,
+  "evidence": "Called from 0x003062C0 inside 0x0030624C. 0x00644BE4(self+0x6D4, 0x28/0x29/0x2A) returns a row pointer (bounded table lookup: count at +0x60, data at +0x58+0x24, 8-byte elements); the key/payload are read from *(cache+8)+0x10 (u16) and +0x14 (u32); the tree helpers 0x005E93F0 and 0x005E8C30 work on the container at cache+4; cache->f_14 is the remaining count; node recycling uses cache+0x18; seven words per filled slot are written to <out>."
+ },
+ {
+  "address": "0x0030624C",
+  "name": "maybe_Ui_TextPage_AppendPendingRecords",
+  "signature": "void maybe_Ui_TextPage_AppendPendingRecords(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Drains the window's pending line list into the window's 0x1C-byte record vector: while the list is non-empty, fewer than 0x380 bytes are queued and the list head is still self+0x354, it builds a record with 0x003058FC, appends it (growing the vector by 1.5x when full) and stops when the list is exhausted.",
+  "confidence": 0.4,
+  "evidence": "Called from 0x002FEB1C (a reset routine of the same window class that frees the pool at self+0x3D18). Vector at self+0x344/+0x348/+0x34C with 0x1C-byte elements; capacity growth uses the reciprocal constant at 0x003064E4; guard `self->f_344 == self+0x354`; limit 0x380. Never called directly from decompiled C - reached from the window step table."
+ },
+ {
+  "address": "0x003064E8",
+  "name": "maybe_Ui_TextPage_Ctor",
+  "signature": "TextPage* maybe_Ui_TextPage_Ctor(TextPage* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructor of the text-page container: installs its vtable, initialises the record vector at +0x344 (head sentinel +0x354, inline storage at +0x6D4), clears the free lists and returns self. Called by the Ui_DiveForm constructor.",
+  "confidence": 0.45,
+  "evidence": "Called from 0x002FEE8C (maybe_Ui_DiveForm_CtorB). `*self = uRam0030664C` plus 0x0011CFAC-size allocation through 0x00116AE0; `self[0xD1] = self[0xD2] = self+0xD5` (i.e. +0x344/+0x348 = +0x354: empty intrusive list with inline sentinel) and `self[0xD3] = self+0x1B5` (i.e. +0x34C = +0x6D4: the vector's end pointer starts at the inline buffer, so this is a small-vector with inline storage); free list drained through 0x0070E0B0. The same +0x6D4 block is the record table read by 0x003058FC/0x0030624C."
+ },
+ {
+  "address": "0x0030746C",
+  "name": "maybe_Ui_DiveForm_StepStateSlots",
+  "signature": "void maybe_Ui_DiveForm_StepStateSlots(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Twenty-slot variant of the window state-queue step: when the current slot is idle it adds the step time at g_00307518 to the slot timer and bumps the frame counter, then dispatches the callback of slot self+0x3578 (0..0x13).",
+  "confidence": 0.4,
+  "evidence": "vtable 0x00762DF8 slot 7 (that vtable also holds 0x003BE00C Ui_BaseWindow_Close and 0x0029FA00 Ui_DiveForm_LayoutRows, so the class is the DiveForm window). Same code shape as 0x00304840 but with the limit 0x14 and 0x18-byte entries at self+0x3574; callback at entry+0xC / member-pointer at entry+0x10, adjustor table at self+0x3594."
+ },
+ {
+  "address": "0x003076C0",
+  "name": "Ui_Window_StartAction06",
+  "signature": "void Ui_Window_StartAction06(UiWindow* self, UiWindow* child)",
+  "params": {
+   "param_1": "self",
+   "param_2": "child"
+  },
+  "summary": "Moves the child window's pending entry list (child+0xD8) into this window and starts window action 6 with no extra argument.",
+  "confidence": 0.5,
+  "evidence": "0x00123594(self, arg2+0xD8) then (*(*self+0x54))(self,6,-1). Exact body shape of 0x002A5B20 Ui_Window_StartAction14 and the other N_105 window-action starters; the function is registered in the same {fn,0} window-step table."
+ },
+ {
+  "address": "0x003077BC",
+  "name": "maybe_Text_ScanControlTags",
+  "signature": "int maybe_Text_ScanControlTags(u32 unused, const u16* text)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "text"
+  },
+  "summary": "Walks a compiled message stream as u16 pairs and picks out the control code 4 with operands 2..0x0F (page/line control), remembering the last operand seen and comparing runs with the wide-string helpers. Used by the message printer to decide where a page ends.",
+  "confidence": 0.35,
+  "evidence": "Scans `text[i*2]` (opcode) / `text[i*2+1]` (operand): `if (opcode == 4 && (operand-2) < 0x0E) last = operand & 0xFF;`, and calls the UTF-16 run comparison at 0x00100B74 (Thumb) with text+4. Called from 0x00309050 inside 0x00308F1C. Neighbouring entries in the same table are 0x00308F1C..0x003095A4 which other batches named Ui_DiveForm_ActivateChildState*."
+ },
+ {
+  "address": "0x00307AC8",
+  "name": "maybe_Ui_Window_CompareNameWithSlot",
+  "signature": "int maybe_Ui_Window_CompareNameWithSlot(UiWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Compares the window's own name string at +0x353C with the string held by the object in the slot at +0xDF8 and returns the wide-string comparison result.",
+  "confidence": 0.4,
+  "evidence": "`r0 = self+0xDF8; bl 0x0062F038` (resolve the object stored in the slot) -> `r1 = result; r0 = self+0x353C; b 0x001B7DDC` (UTF-16 string compare). Byte-identical in shape to 0x002A6140 maybe_Ui_Window_CompareNameWithSlot (N_105); this is the second copy, registered in the window step table at 0x0072C2A0."
+ },
+ {
+  "address": "0x003083E4",
+  "name": "Ui_Window_StartAction0D",
+  "signature": "void Ui_Window_StartAction0D(UiWindow* self, UiWindow* child)",
+  "params": {
+   "param_1": "self",
+   "param_2": "child"
+  },
+  "summary": "Flushes the window's pending text entries down to one, moves the pending list at self+0x34D8 into the window and starts window action 0x0D with no extra argument.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x002FE5BC Ui_Window_StartAction26 apart from the action id: while (0x0062F070(self) > 1) 0x0010EBD8(self); 0x00123594(self, self+0x34D8); (*(*self+0x54))(self,0x0D,-1). Registered in the window step table at 0x0072C340."
+ }
+]

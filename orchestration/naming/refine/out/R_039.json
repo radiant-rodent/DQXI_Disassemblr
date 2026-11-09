@@ -1,0 +1,2132 @@
+[
+ {
+  "address": "0x00107EC4",
+  "name": "maybe_Gfx_HandleVBlank",
+  "signature": "void maybe_Gfx_HandleVBlank(void)",
+  "params": {},
+  "summary": "Vblank/display event handler: with the screen enabled it takes the display bookkeeping lock, and when the frame-done bit 0x20 is clear it re-arms the display state and submits a 0x1000-byte command block. The body is decompiler-damaged (a bogus in_ZR precondition), so the entry condition is not trustworthy.",
+  "confidence": 0.42,
+  "evidence": "No named caller and the conditional at the top is recovered as an undefined register (in_ZR); the callee set (Svc_SendRequestWord, Os_UnlockScheduler) only places it in the display interrupt family. Kept honest as maybe_.",
+  "previous_name": "maybe_Gfx_HandleVBlank",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001092A0",
+  "name": "Gfx_ReleaseDisplayChannel",
+  "signature": "void Gfx_ReleaseDisplayChannel(GfxDisplayChannel* self)",
+  "params": {
+   "self": "display channel"
+  },
+  "summary": "Closes a display/GPU channel: waits for the pending close (svc 0x24), marks both liveness bytes, signals the event flag, clears the channel handle with svc 0x23 and releases the embedded command buffer.",
+  "confidence": 0.5,
+  "evidence": "Named callees Gfx_CommandBuffer_Release and Os_InitEventFlag plus the svc 0x23/0x24 handle close sequence make the channel-teardown role explicit; the previous evidence already identified the (self->f_344 == handle) test.",
+  "previous_name": "maybe_Gfx_ReleaseDisplayChannel",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0010D40C",
+  "name": "maybe_Gfx_IpcLockedQuery",
+  "signature": "u32 maybe_Gfx_IpcLockedQuery(u32 cmdArg)",
+  "params": {
+   "cmdArg": "IPC command argument"
+  },
+  "summary": "Takes the display driver lock, issues IPC command 0x1010000 with one argument and releases the lock, returning the reply word. Not a thread-info query: the callee is the GPU IPC command stub.",
+  "confidence": 0.4,
+  "evidence": "The only callee is now named Gfx_IpcCmd1010000, so the 'QueryThreadInfoEx' wording was unsupported; the body is a pure lock/call/unlock wrapper. Lock pair func_00119BA8/Os_UnlockScheduler is shared with the other Gfx IPC wrappers.",
+  "previous_name": "maybe_Svc_QueryThreadInfoEx",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010D884",
+  "name": "maybe_Gfx_WaitForDisplayStateE",
+  "signature": "void maybe_Gfx_WaitForDisplayStateE(void)",
+  "params": {},
+  "summary": "Selects display state 0xE and polls the GPU IPC status until it is no longer one of the three transient codes, sleeping 10 ms between polls.",
+  "confidence": 0.42,
+  "evidence": "The polled getter is the named Gfx_IpcCmd2B0000; the constant 0xE argument to func_001139F0 is the state selector, so the function waits for a specific display state rather than any generic 'state E'. No named caller yet.",
+  "previous_name": "maybe_Svc_WaitStateE",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010D920",
+  "name": "maybe_Gfx_WaitForDisplayState5",
+  "signature": "int maybe_Gfx_WaitForDisplayState5(u32 arg1)",
+  "params": {
+   "arg1": "state query argument"
+  },
+  "summary": "Waits for display state 5 to complete: disables the display if it was enabled, polls Gfx_IpcCmd190040 until the status leaves the transient codes, re-syncs the enable bit and maps 0xC8A0CFFC to success.",
+  "confidence": 0.4,
+  "evidence": "Callees are named GPU IPC getters; the 0xC8A0CFFC 'already in requested state' code matches the sound-driver convention. The former Svc_ prefix hid that this is a display-state wait.",
+  "previous_name": "maybe_Svc_WaitState5",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010DA38",
+  "name": "maybe_Gfx_IpcLockedSend2",
+  "signature": "u32 maybe_Gfx_IpcLockedSend2(u32 arg1, u32 arg2)",
+  "params": {},
+  "summary": "Sends a two-word request on the GPU IPC channel with the scheduler lock held and returns the reply.",
+  "confidence": 0.4,
+  "evidence": "Callee renamed to Gfx_IpcCmd4F0080 confirms the IPC role; the old Svc_SendRequestLocked name suggested an SDK service request instead of a locked GPU IPC send.",
+  "previous_name": "maybe_Svc_SendRequestLocked",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010EFC4",
+  "name": "Os_QueueHasNewData",
+  "signature": "bool Os_QueueHasNewData(void* queue, u32 arg2)",
+  "params": {
+   "queue": "producer/consumer queue"
+  },
+  "summary": "Returns whether a producer/consumer queue has unread data: enters the kernel critical section and compares the two 16-bit indices f_6c/f_6e, with the usual fault path on a failed enter.",
+  "confidence": 0.5,
+  "evidence": "Named callers (Snd_StreamSlot_UpdateAll, Ui_SceneFlow_AdvanceState) use it as a queue-empty test; the body is the standard CTR critical-section index compare and the early-out checks the kernel result.",
+  "previous_name": "maybe_Os_QueueHasNewData",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0010F0C8",
+  "name": "Os_QueueHasNewDataAlt",
+  "signature": "bool Os_QueueHasNewDataAlt(void* queue)",
+  "params": {
+   "queue": "producer/consumer queue"
+  },
+  "summary": "Variant of Os_QueueHasNewData that reads both indices inside the critical section and compares f_6a with f_6e. The same three callers use both functions to test two different queues.",
+  "confidence": 0.5,
+  "evidence": "Same caller set as 0x0010EFC4 and the identical critical-section guard; only the compared fields differ.",
+  "previous_name": "maybe_Os_QueueHasNewDataAlt",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0010F790",
+  "name": "Gfx_InitRegisterTables",
+  "signature": "void Gfx_InitRegisterTables(GfxState* state, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "state": "GPU state block"
+  },
+  "summary": "Builds the GPU's static register tables inside the state block: copies the global register table, expands the 0xbd-terminated id lists into bitsets and fills the per-format value/valid arrays with 0x3c00 / 0x3f000 / 0x800 / 1 / 0.",
+  "confidence": 0.6,
+  "evidence": "Only caller is the now-named Gfx_InitializeContext; the body writes state+0x1300..0x176c (value array plus the parallel valid-byte array at +0x16b1) and the four bitset expansions all terminate on 0xbd.",
+  "previous_name": "maybe_Gfx_InitRegisterTables",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00110C70",
+  "name": "Gfx_QueueFrameCommand",
+  "signature": "void Gfx_QueueFrameCommand(u32 opcode, u32 arg2, u32 arg3, u32 arg4, u32 arg5, u32 arg6, u32 arg7)",
+  "params": {
+   "opcode": "command word"
+  },
+  "summary": "Thunk that forwards seven words to Gfx_QueueCommand, appending one command record to the renderer's command ring. Called once per frame by the display update at 0x10AD60.",
+  "confidence": 0.55,
+  "evidence": "Readable body is now literally a call to the named Gfx_QueueCommand; 'Submit' overstated it because the record is only queued, not submitted to the GPU.",
+  "previous_name": "maybe_Gfx_SubmitFrameCommand",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001114A4",
+  "name": "Buffer_ResetDoubleBuffer",
+  "signature": "void Buffer_ResetDoubleBuffer(BufferPair* pair)",
+  "params": {
+   "pair": "double buffer"
+  },
+  "summary": "Resets a double-buffered object cache: zeroes both 0x84-byte halves, clears the two counters and marks the third slot empty (-1).",
+  "confidence": 0.5,
+  "evidence": "Two unrelated named users (Gfx_DisplayBuffer_InitState, Ui_Balloon_ResetState) confirm it is a generic template reset; the body is two 0x84-byte bzero calls plus the -1 sentinel.",
+  "previous_name": "maybe_Buffer_ResetDoubleBuffer",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001118D4",
+  "name": "Gfx_GetCommandSlot",
+  "signature": "unsigned int Gfx_GetCommandSlot(void)",
+  "params": {},
+  "summary": "Allocates the next command slot: asserts the slot table is marked ready (deliberately trapping), publishes the slot pointer into the global Gfx state, allocates a node from the command queue and releases the monitor.",
+  "confidence": 0.5,
+  "evidence": "Callee is the named Os_QueueAllocNode and the lock is Os_LockMonitor; the trapping assert on the ready bit at +0xC is the same pattern used by the other renderer submit paths (0x10B830).",
+  "previous_name": "maybe_Gfx_GetCommandSlot",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051BF2C",
+  "name": "Sound_Driver_BuildTwoEvents",
+  "signature": "void Sound_Driver_BuildTwoEvents(void* dst)",
+  "params": {
+   "dst": "stack buffer for two events"
+  },
+  "summary": "Constructs two 0x10-byte completion events on the caller's stack (element constructor 0x119838), used by the sound driver start/shutdown sequence.",
+  "confidence": 0.5,
+  "evidence": "Body is a single std_ConstructArray(dst, event-ctor 0x119838, 0x10, 2); the sole caller is now named Sound_Driver_Shutdown.",
+  "previous_name": "maybe_Sound_Driver_BuildTwoEvents",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00113814",
+  "name": "maybe_Os_SignalAndClose",
+  "signature": "void maybe_Os_SignalAndClose(void)",
+  "params": {},
+  "summary": "If the runtime object exists, wakes its waiting thread and then sends the close/notify request (svc 0x32 wrapper); part of the service-call bracketing shared with 0x10CDE0/0x10D430.",
+  "confidence": 0.4,
+  "evidence": "The svc-0x32 stub is now named maybe_Svc_SendRequest190000 but the caller/callee names still do not say what object is being closed, so the name stays a hypothesis.",
+  "previous_name": "maybe_Os_SignalAndClose",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0051CC68",
+  "name": "maybe_Sound_Driver_Reconfigure",
+  "signature": "void maybe_Sound_Driver_Reconfigure(unsigned char* outState, unsigned int arg2)",
+  "params": {
+   "outState": "receives the negotiated mode byte"
+  },
+  "summary": "Queries the driver state (0x51C900), tolerates 'already configured' 0xC8A0CFFC, then runs the sound driver start/shutdown helper with size 0xF80 and the current display timing word and stores the negotiated mode.",
+  "confidence": 0.45,
+  "evidence": "The helper it calls is now named Sound_Driver_Shutdown, which makes 'Reconfigure' questionable: the sequence is a state query followed by a driver reset. Neither start nor reconfigure is proven.",
+  "previous_name": "maybe_Sound_Driver_Reconfigure",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00114DD0",
+  "name": "Fs_ArcHeader_Parse",
+  "signature": "int* Fs_ArcHeader_Parse(u32* out3, int* header)",
+  "params": {
+   "out3": "three payload pointers",
+   "header": "archive header"
+  },
+  "summary": "Parses a three-section archive header: checks the 'CGRP' magic and a size field in 0x01000000..0x01000100, resolves the three sub-blobs and returns pointers to their payloads (+8 past each header word).",
+  "confidence": 0.55,
+  "evidence": "Magic 0x50524743 ('CGRP'), three named section locators and two named callers (Container_ForEachPair, Sound_WaveArchive_LoadAndCache) all agree on an archive header parser.",
+  "previous_name": "maybe_Fs_ArcHeader_Parse",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001153B4",
+  "name": "maybe_Save_BuildSectionList",
+  "signature": "u32 maybe_Save_BuildSectionList(SaveSnapshot* self)",
+  "params": {
+   "self": "save snapshot"
+  },
+  "summary": "Walks the 0x274C-byte handler-slot table at self+0x34, invokes each handler, chains the returned blocks into a tagged list with a running id and pushes it through Os_QueueTryPush. Part of save-snapshot construction.",
+  "confidence": 0.4,
+  "evidence": "The dispatch table g_00115928 and the Os_QueueTryPush callee confirm list construction, but the handlers themselves are still unidentified, so 'section list' remains a description rather than a proven format.",
+  "previous_name": "maybe_Save_BuildSectionList",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001160AC",
+  "name": "Mem_CommitAllocation",
+  "signature": "void Mem_CommitAllocation(MemHeap* heap, MemBlock* block)",
+  "params": {
+   "heap": "heap",
+   "block": "block being allocated"
+  },
+  "summary": "Allocator slow path after a free block was split: stores the remainder size in the block trailer, returns the unused tail through 0x1193AC, sets the allocated flag 4 and clears the heap scratch begin/end words.",
+  "confidence": 0.5,
+  "evidence": "Both callers (0x110A28, 0x6BA234) are the two identical heap allocator instances and the body writes the 8-byte-unit trailer plus flag 4; the operation is the commit half of the split.",
+  "previous_name": "maybe_Mem_CommitAllocation",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00122650",
+  "name": "maybe_Fs_ReadRecordWithRetry",
+  "signature": "int maybe_Fs_ReadRecordWithRetry(u32 dst, u32* outLen, u32 arg3, u32 arg4)",
+  "params": {
+   "dst": "destination buffer",
+   "outLen": "received length"
+  },
+  "summary": "Reads one SDK record with up to three attempts: queries the record provider for command 0x45, accepts only a reply whose tag byte is 0x11, copies the payload to dst and returns its length (0 on any error).",
+  "confidence": 0.45,
+  "evidence": "The body calls the named Fs_ReadRecordBlock and the provider query 0x123BAC; this is file/record I/O, not an OS record read, so the subsystem was corrected. The retry/reply framing is still partly damaged.",
+  "previous_name": "maybe_Os_RecordReadWithRetry",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001179C0",
+  "name": "maybe_Os_LookupParamEntry",
+  "signature": "u32 maybe_Os_LookupParamEntry(u32* out)",
+  "params": {
+   "out": "four-word result: two 12-bit fields, payload word, scale"
+  },
+  "summary": "Reads a 0x40-byte parameter header through the chunked table reader, searches its four 0x10-byte entries for type byte 0 and unpacks the two 12-bit fields and payload word; falls back to the 0x400-offset scan and finally to the fixed 0x800/0x800/1.0 defaults.",
+  "confidence": 0.35,
+  "evidence": "Structure matches a calibration/parameter lookup (centre 0x800, scale 1.0f), but no named consumer exists; the 'Param' wording is deliberately generic.",
+  "previous_name": "maybe_Os_LookupParamEntry",
+  "previous_confidence": 0.32,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011E0DC",
+  "name": "maybe_Os_ScanParamBlocks",
+  "signature": "int maybe_Os_ScanParamBlocks(u32* out)",
+  "params": {
+   "out": "four-word calibration result"
+  },
+  "summary": "Fallback scan for the parameter table: reads sixteen 0x40-byte blocks from offset 0x400, looks for an entry with type byte 0xFE and unpacks the same two 12-bit fields and payload words; returns 0xC8810FEF when nothing matches.",
+  "confidence": 0.32,
+  "evidence": "Same unpacking code as 0x001179C0 and the same windowed reader, but the record's owner is still unnamed. Return constant is the SDK error code, not 0xE7E3FFFF.",
+  "previous_name": "maybe_Os_ScanParamBlocks",
+  "previous_confidence": 0.32,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118814",
+  "name": "Os_InvokeCallbacks",
+  "signature": "void Os_InvokeCallbacks(void)",
+  "params": {},
+  "summary": "When a pending-event bit is set, invokes up to eight registered callback slots and, if the pending byte is still set, waits for the runtime event to drain, sends the close request and clears the pending flags.",
+  "confidence": 0.5,
+  "evidence": "Shared with 0x0050DCB0 and its callers are the service wrappers 0x10CDE0/0x10D430/0x119AF4; the eight-slot table plus pending/handled mask is an explicit callback dispatch loop.",
+  "previous_name": "maybe_Os_InvokeCallbacks",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050DCB0",
+  "name": "maybe_Os_InvokeCallbacksVariant",
+  "signature": "void maybe_Os_InvokeCallbacksVariant(void)",
+  "params": {},
+  "summary": "Near-identical copy of Os_InvokeCallbacks (0x118814) working on the same pending/handled bytes and the same eight-slot callback table; it additionally returns the handled flag in the block's first byte. Not an icon cache.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same callback loop and event waits as 0x00118814 with only the final store extra, so the previous 'Ui_IconCache' subsystem was an invention from the caller neighbourhood.",
+  "previous_name": "maybe_Ui_IconCache_FlushCallbacks",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118BAC",
+  "name": "maybe_Snd_SetChannelHalfword",
+  "signature": "unsigned int maybe_Snd_SetChannelHalfword(ChannelBuffer* buf, int index, unsigned short value)",
+  "params": {
+   "buf": "sound driver channel bank",
+   "index": "0 or 1 selects the halfword",
+   "value": "halfword value"
+  },
+  "summary": "Writes one of the two halfwords at channel+0x28+index*2 and sets the matching dirty bit (0x100 for index 0, 0x200 for index 1), returning 0 if the driver lock is not taken.",
+  "confidence": 0.4,
+  "evidence": "The bank/channel lookup (offset 0x1322 selects one of two 24-entry pointer banks at +0x10A4) is clear, but the field's meaning is not: 'AdpcmWord' was a guess. The neutral halfword name states only what the code does.",
+  "previous_name": "maybe_Snd_SetUnitAdpcmWord",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00516618",
+  "name": "maybe_Sound_Channel_ClearParamRamp",
+  "signature": "void maybe_Sound_Channel_ClearParamRamp(SoundChannel* self)",
+  "params": {
+   "self": "sound channel"
+  },
+  "summary": "Stops a channel's parameter block: submits a zero-mask block, releases the driver slot with 0x516EEC, marks the owner byte 0xFF and clears the four channel words.",
+  "confidence": 0.45,
+  "evidence": "The mask-0 write and the driver-slot release are explicit, but 'ClearParamRamp' still assumes the block holds a ramp; the release half is certain, the ramp half is not.",
+  "previous_name": "maybe_Sound_Channel_ClearParamRamp",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118E58",
+  "name": "maybe_Snd_SetChannelMaskedFields",
+  "signature": "unsigned int maybe_Snd_SetChannelMaskedFields(ChannelBuffer* buf, int index, unsigned short* info)",
+  "params": {
+   "buf": "sound driver channel bank",
+   "index": "channel index",
+   "info": "masked field descriptor"
+  },
+  "summary": "Copies a mask-selected set of fields from a descriptor into one 0x14-byte channel record (bit0 one halfword, bit1 one word, bit2 five halfwords) and sets the dirty bit 0x400/0x800.",
+  "confidence": 0.4,
+  "evidence": "The mask-driven copy is certain, but the descriptor is not proven to be a filter: the previous name guessed 'FilterInfo' from the field count. Neutral wording avoids that claim.",
+  "previous_name": "maybe_Snd_SetChannelFilterInfo",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005164FC",
+  "name": "maybe_Sound_Channel_ApplyMaskedWord",
+  "signature": "int maybe_Sound_Channel_ApplyMaskedWord(SoundChannel* self, u32 slot)",
+  "params": {
+   "self": "sound channel",
+   "slot": "driver slot 0/1"
+  },
+  "summary": "When the channel block is initialised and no slot is owned, acquires the driver slot, submits a one-word masked block carrying the byte-swapped word from self+4 and records the slot in the owner byte.",
+  "confidence": 0.4,
+  "evidence": "No ramp or flag state is involved: the descriptor is {mask 1, one word} and the accepted mask is the return code. The previous 'FlagRamp' name was unsupported.",
+  "previous_name": "maybe_Sound_Channel_ApplyFlagRamp",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051658C",
+  "name": "Sound_Channel_ApplyMaskedParam",
+  "signature": "u32 Sound_Channel_ApplyMaskedParam(SoundChannel* self, u32 value)",
+  "params": {
+   "self": "sound channel",
+   "value": "mask of parameters to apply"
+  },
+  "summary": "Applies a single 16-bit channel parameter with the driver's masked write, stores the accepted mask in +0xE and falls back to the driver's default value in +0xF when nothing was accepted; returns the accepted mask.",
+  "confidence": 0.5,
+  "evidence": "The named Sound_Channel_WriteParamBlock callee plus the 0x7F0714 default byte make the masked-parameter role explicit; only the exact parameter identity is unknown.",
+  "previous_name": "maybe_Sound_Channel_ApplyMaskedParam",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005166E4",
+  "name": "Sound_Channel_ApplyFade",
+  "signature": "u32 Sound_Channel_ApplyFade(SoundChannel* self, float* fade, u32 avail, u32 buf_size)",
+  "params": {
+   "self": "sound channel",
+   "fade": "four floats: duration, volume, fade level, stereo flag"
+  },
+  "summary": "Converts a fade request into the driver's 16-bit channel block: clamps the two volumes to 0..1, converts the duration to milliseconds, requires 2 or 4 channels * duration * 0x280 bytes to fit the remaining buffer, then submits a five-word masked block.",
+  "confidence": 0.55,
+  "evidence": "The 1.0f clamps, the 1000 ms multiply, the stereo flag choosing 2 vs 4 channels and the 0x280 DSP frame stride all match a hardware fade; named callee Sound_Channel_WriteParamBlock completes the picture.",
+  "previous_name": "maybe_Sound_Channel_ApplyFade",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051698C",
+  "name": "Sound_Channel_ClearWideParamRamp",
+  "signature": "void Sound_Channel_ClearWideParamRamp(SoundChannel* self)",
+  "params": {
+   "self": "sound channel"
+  },
+  "summary": "Wide-block variant of 0x516618: submits a zero-mask block through the 0x34-byte channel writer (0x518368), releases driver slot bank 1 with 0x516EEC and clears the channel words.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x516618 but with the wide writer and bank 1; both are one half of the same channel parameter release path.",
+  "previous_name": "maybe_Sound_Channel_ClearWideParamRamp",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00118FD4",
+  "name": "maybe_Snd_SetChannelDescriptor",
+  "signature": "unsigned int maybe_Snd_SetChannelDescriptor(ChannelBuffer* buf, int index, unsigned short* info)",
+  "params": {
+   "buf": "sound driver channel bank",
+   "index": "channel index",
+   "info": "masked 13-halfword descriptor"
+  },
+  "summary": "Copies a mask-selected descriptor (bit0 one halfword, bit1 five words, bit2 twelve halfwords) into one 0x34-byte channel record and sets the dirty bit 0x1000/0x2000.",
+  "confidence": 0.4,
+  "evidence": "Largest of the channel field writers; the mask semantics are certain but 'FilterCoefficients' guessed the content. The neutral name keeps the copy-only claim.",
+  "previous_name": "maybe_Snd_SetChannelFilterCoefficients",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00541F10",
+  "name": "maybe_Sound_StreamBuffer_Ctor",
+  "signature": "u32* maybe_Sound_StreamBuffer_Ctor(u32* self, u32 arg2, int count)",
+  "params": {
+   "self": "stream buffer",
+   "count": "number of extra entries to destroy"
+  },
+  "summary": "Thumb constructor fragment of the sound stream buffer at 0x541F1C: installs vtable 0x7816D8, initialises the four sub-buffers and the VFP state once, then destroys count*2 entries of the 0x10-byte array.",
+  "confidence": 0.4,
+  "evidence": "The vtable store at entry plus the one-shot init flag is constructor shape, not a reset; it duplicates 0x541F1C with an extra destroy count, so the name says fragment.",
+  "previous_name": "maybe_Sound_StreamBuffer_ResetThumb",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011ADAC",
+  "name": "Mem_PoolInit",
+  "signature": "void Mem_PoolInit(Pool* pool)",
+  "params": {
+   "pool": "pool of four sub-buffers"
+  },
+  "summary": "Initialises a pool descriptor once: initialises its four sub-buffer entries, sets the initialised flag, clears the count and installs the sentinel begin/end pointers.",
+  "confidence": 0.5,
+  "evidence": "Sole caller 0x114C58 is now the teardown of the same layout; the body is the one-shot init with the f_59 flag and four Mem_Pool_DestroyAllEntries calls.",
+  "previous_name": "maybe_Mem_PoolInit",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011B22A",
+  "name": "maybe_Mem_PoolInitFragment",
+  "signature": "void maybe_Mem_PoolInitFragment(void)",
+  "params": {},
+  "summary": "Mis-seeded Thumb entry that Ghidra decoded inside the pool-initialiser routine: the body is character-for-character the Mem_PoolInit prologue (four sub-buffer inits, f_59 flag, sentinel pointers). The old 'Hid_CalibrationWorker' role is wrong.",
+  "confidence": 0.4,
+  "evidence": "The decoded body matches Mem_PoolInit 0x0011ADAC, including the LAB_0011ae14 sentinel, so this is a duplicate/fragment of that function rather than a HID calibration routine; the entry address itself is still suspect.",
+  "previous_name": "maybe_Hid_CalibrationWorker",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011B048",
+  "name": "maybe_Snd_CalcVolumePan",
+  "signature": "unsigned int maybe_Snd_CalcVolumePan(SndChannel* channel, unsigned int left, unsigned int distance, int distance2)",
+  "params": {
+   "channel": "channel interface"
+  },
+  "summary": "Reconstructed 3D attenuation: computes the listener-to-source distance, applies the channel's roll-off/distance fields and writes a left/right volume pair through two out pointers. The decompilation is badly damaged (bad instructions and unaff_ registers).",
+  "confidence": 0.25,
+  "evidence": "The surviving arithmetic is a squared-distance comparison plus two square-root calls and two out-pointer stores through the channel vtable; the prototype and the pan/volume split remain a reconstruction.",
+  "previous_name": "maybe_Snd_CalcVolumePan",
+  "previous_confidence": 0.2,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123E18",
+  "name": "Os_TranslateMainRamAddress",
+  "signature": "int Os_TranslateMainRamAddress(u32 address, int size)",
+  "params": {
+   "address": "virtual address",
+   "size": "range length"
+  },
+  "summary": "Returns the physical address corresponding to a range that overlaps the main-RAM window, or 0 when the range lies completely outside it.",
+  "confidence": 0.5,
+  "evidence": "Named callee Os_VirtualToPhysical (0x12345C family) and the main-RAM base/size getters; three of the callers are sound-buffer setup paths that must convert ARM pointers to DSP addresses.",
+  "previous_name": "maybe_Os_TranslateMainRamAddress",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00508BF0",
+  "name": "Gfx_CommandBuffer_InitPair",
+  "signature": "unsigned int* Gfx_CommandBuffer_InitPair(GfxCommandBuffer* buf, unsigned int** out, int address, int arg4)",
+  "params": {
+   "buf": "command buffer",
+   "out": "receives payload pointer"
+  },
+  "summary": "Initialises a two-address GPU descriptor: stores the caller's words, translates the source address and the following record to physical addresses, shifts them right by 3 (PICA200 address encoding) and marks the pair valid.",
+  "confidence": 0.5,
+  "evidence": "Two Os_VirtualToPhysical calls followed by >>3 stores at +0xC/+0x10 is the standard PICA200 command encoding; no direct callers because it is invoked through a function table.",
+  "previous_name": "maybe_Gfx_CommandBuffer_InitPair",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00147A4C",
+  "name": "Script_CallFunction2",
+  "signature": "int Script_CallFunction2(ScriptVm* vm)",
+  "params": {
+   "vm": "script VM"
+  },
+  "summary": "Calls a script closure with two arguments and, if the VM exposes the result hook at f_8c->f_a8, hands the return value back to it.",
+  "confidence": 0.5,
+  "evidence": "Named callees Script_Vm_ToString (sets argument count 2) and Script_Vm_GetString (performs the call with -1) plus the VM result hook; reached through the binding table, hence no direct callers.",
+  "previous_name": "maybe_Script_CallFunction2",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0014C3EC",
+  "name": "maybe_Gfx_Sprite_SetupPattern",
+  "signature": "uint32_t Gfx_Sprite_SetupPattern(Sprite* sprite, const uint8_t* patternTable)",
+  "params": {
+   "sprite": "sprite/effect node",
+   "patternTable": "compact pattern node table"
+  },
+  "summary": "Parses a compact 2D pattern table (node tags 0x82/0x85/0x8E carry a size pair, a flip bit and a pattern id), maps the id through the 14-entry flip permutation and applies the frame descriptor to the sprite's renderer. The decompilation keeps an unaff_ register, so the walk is only partly recovered.",
+  "confidence": 0.3,
+  "evidence": "The tag tests and the 14-entry permutation switch (9,6,7,5,8,3,4,0,1,2,0xC,0xD,0xA,0xB,0xE) are visible, but the node walk uses unaff_r7 after Ghidra lost the entry register, so the pattern-table semantics cannot be fully trusted from the C; demoted to maybe_ 0.3 (a disassembly check is the follow-up).",
+  "previous_name": "maybe_Gfx_Sprite_SetupPattern",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0014EF14",
+  "name": "Script_ArrayPrepare",
+  "signature": "int Script_ArrayPrepare(ScriptVm* vm)",
+  "params": {
+   "vm": "script VM"
+  },
+  "summary": "Prepares a result array sized from the array passed in (2*n+2, minimum 12) and stores it into stack slot -2 so the following helper can fill it element by element.",
+  "confidence": 0.5,
+  "evidence": "Named Script_Vm_PushStackFrame/Script_Vm_PushStackSlot calls with slot 0xFFFFFFFE and the clamp to 0xC make the array-preparation role explicit; the filling helper at 0x14EF80 follows it.",
+  "previous_name": "maybe_Script_ArrayPrepare",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001E90D0",
+  "name": "maybe_Script_LazyCreateHelperObject",
+  "signature": "void* maybe_Script_LazyCreateHelperObject(Owner* self, u32 value)",
+  "params": {
+   "self": "owning object",
+   "value": "stored value"
+  },
+  "summary": "Lazily creates a 0x14-byte helper object owned by self (vtable 0x780278), stores value at +0xC and the back-pointer at +0x10, and returns the cached object.",
+  "confidence": 0.4,
+  "evidence": "Both callers (0x6BAA68, 0x6BDE24) are script-VM helpers, not UI code, so the Ui_Helper tag was wrong; the lazy-create-once shape is certain.",
+  "previous_name": "maybe_Ui_Helper_CreateOnce",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00150998",
+  "name": "maybe_Script_BindEnvOk",
+  "signature": "u32 maybe_Script_BindEnvOk(void)",
+  "params": {},
+  "summary": "Thin script-native status wrapper: calls Script_Closure_BindEnv and returns 1 for a non-negative result, 0xFFFFFFFF otherwise.",
+  "confidence": 0.4,
+  "evidence": "The only callee is now named Script_Closure_BindEnv; the 1/-1 convention matches neighbouring native wrappers, but what the native exposes to scripts is still unknown.",
+  "previous_name": "maybe_Script_ApiResultOk",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00155E40",
+  "name": "maybe_Sound_PlayActorSeByIndex",
+  "signature": "void maybe_Sound_PlayActorSe(int actorIndex, int seId)",
+  "params": {
+   "actorIndex": "index into the actor array",
+   "seId": "id passed to the sound object"
+  },
+  "summary": "Resolves an actor by index through the game work's actor manager, gets its sound object and calls 0x5F5B94(obj, id); a script-facing sound wrapper.",
+  "confidence": 0.45,
+  "evidence": "The previous name collided with the existing maybe_Sound_PlayActorSe at 0x147BB4; this variant additionally resolves the actor by index, which the new name states.",
+  "previous_name": "maybe_Sound_PlayActorSeFixed",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0018F48C",
+  "name": "maybe_Gfx_ReleaseTrackedHandles",
+  "signature": "void maybe_Gfx_ReleaseTrackedHandles(TrackedHandleTable* self)",
+  "params": {
+   "self": "tracked handle table"
+  },
+  "summary": "Walks the tracked-handle list and, for every entry whose generation still matches the global registry and whose object exists, calls 0x5F5B94(handle, 3) and marks the slot released.",
+  "confidence": 0.4,
+  "evidence": "The registry/generation check and the per-slot released flag are clear; whether 0x5F5B94 is a release or a play action depends on a callee that is not proven.",
+  "previous_name": "maybe_Gfx_ReleaseTrackedHandles",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00463324",
+  "name": "Ui_ProfileWindow_SetEntry",
+  "signature": "void Ui_ProfileWindow_SetEntry(UiProfileWindow* self, u32 entry)",
+  "params": {
+   "self": "profile window",
+   "entry": "character/text entry id"
+  },
+  "summary": "Switches the profile window to a character entry: refreshes the detail sub-window, looks up the text-table record for the entry and then hits a truncated debug/print tail.",
+  "confidence": 0.5,
+  "evidence": "Named callees Ui_ProfileWindow_UpdateDetails and Ui_TextTable_FindRecordFromBox (0x4613EC) plus a named caller agree; the trailing 0x100B74 call is truncated by the decompiler.",
+  "previous_name": "maybe_Ui_ProfileWindow_SetEntry",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001585F8",
+  "name": "maybe_Table_LookupScaledValue",
+  "signature": "u32 maybe_Table_LookupScaledValue(int* multiplierTable, int* dataTable, u32 key)",
+  "params": {
+   "multiplierTable": "table holding a float array at f_58",
+   "dataTable": "relocatable table",
+   "key": "16-bit row key"
+  },
+  "summary": "Looks up key in a relocatable data table, reads the row's byte f_29, uses it to index a float multiplier array and returns multiplier * row value f_2a.",
+  "confidence": 0.4,
+  "evidence": "The row lookup (func_0063CDD8) and the float-array scaling are explicit, but the previous 'Battle_GetTableMultiplier' tag is contradicted: the named caller of 0x461B28 is Ui_ProfileWindow_UpdateDetails, not battle action code.",
+  "previous_name": "maybe_Battle_GetTableMultiplier",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00500ABC",
+  "name": "Gfx_Movie_ReadThread",
+  "signature": "void Gfx_Movie_ReadThread(GfxMovieReader* self)",
+  "params": {
+   "self": "movie streamer"
+  },
+  "summary": "Worker thread that streams the movie file: waits on the two synchronisation handles and, whenever the 0x80000-byte ring has room, reads up to 0x40000 bytes through the file object's read slot and advances the 64-bit position; exits when the stop handle is signalled.",
+  "confidence": 0.55,
+  "evidence": "Named Gfx_Movie_SubmitReadRequest wait, the 0x80000/0x40000 ring arithmetic and the 0x1D6CEC caller (movie open path) make the reader-thread role explicit.",
+  "previous_name": "maybe_Gfx_Movie_ReadThread",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00159F54",
+  "name": "Fs_ReadStreamWrapped",
+  "signature": "unsigned int Fs_ReadStreamWrapped(Stream* stream, unsigned int* bufferOut)",
+  "params": {
+   "stream": "ring-buffer stream",
+   "bufferOut": "receives the chunk pointer"
+  },
+  "summary": "Returns a contiguous chunk of the stream's 0x80000-byte ring, copying through a growable scratch buffer when the requested range wraps past the end of the ring.",
+  "confidence": 0.5,
+  "evidence": "The 0x80000 ring size, the wrap split into two copies and the constants shared with Gfx_Movie_ReadThread make this a stream read helper; the name matches the proven behaviour.",
+  "previous_name": "maybe_Fs_ReadStreamWrapped",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001B7340",
+  "name": "Gfx_Movie_StartPlayback",
+  "signature": "int maybe_Gfx_Movie_StartPlayback(MoviePlayer* player)",
+  "params": {
+   "player": "movie player state"
+  },
+  "summary": "One-shot movie playback setup: selects the video/audio tracks, creates the movie surface and buffer objects, computes the frame duration (1,000,000 * frames / rate) and starts the movie thread. Not a battle reward calculation.",
+  "confidence": 0.5,
+  "evidence": "Every callee is a named Gfx_Movie_* API (SelectVideoTrack, SelectAudioTrack, MovieSurface_Ctor, MovieBuffer_Ctor, MovieThread_Start) and the fields are the movie player state at +0xAB0..+0x1056, so the previous Battle_ComputeRewardShare name was completely wrong. The name drops maybe_ because the callee set alone determines the role.",
+  "previous_name": "maybe_Battle_ComputeRewardShare",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x006BE448",
+  "name": "maybe_Sq_RegisterTableMembers",
+  "signature": "void maybe_Sq_RegisterTableMembers(SqVM* vm)",
+  "params": {
+   "vm": "Squirrel VM"
+  },
+  "summary": "Finishes a table-style native registration: opens the member group with the descriptor at 0x15C720, builds the member array from the stack and closes the registration.",
+  "confidence": 0.45,
+  "evidence": "Sole caller sits in the class-registration block next to the class driver, and the three calls are the begin/push/end steps of the table registration; the descriptor at 0x15C720 is not decoded.",
+  "previous_name": "maybe_Sq_RegisterTableMembers",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0015ACA0",
+  "name": "maybe_Script_ReturnZeroStub2",
+  "signature": "u32 maybe_Script_ReturnZeroStub2(void)",
+  "params": {},
+  "summary": "Placeholder script native: performs the VM's stack-slot bookkeeping (0x6BD430) and returns 0.",
+  "confidence": 0.35,
+  "evidence": "Only callee is the VM helper Script_SetSlotFromStackAlt; no caller and no distinguishable behaviour, so it stays an honest stub name.",
+  "previous_name": "maybe_Script_ReturnZeroStub2",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002D7C20",
+  "name": "maybe_Map_FindCellInArea",
+  "signature": "unsigned int maybe_Map_FindCellInArea(unsigned int x, unsigned int y, unsigned int* pos)",
+  "params": {
+   "x": "cell x",
+   "y": "cell y",
+   "pos": "in/out position"
+  },
+  "summary": "Searches the map cells around (x,y) for a matching record and returns the first hit; returns 0/-1 when no cell or record matches.",
+  "confidence": 0.4,
+  "evidence": "The cell lookup (0x62F0E0/0x62C388/0x62C3B0) and record search (0x2D82D4) are named, but the final hit-test path is shared with UI code (Ui_HitTestRows), so the 'Map' tag is not fully proven.",
+  "previous_name": "maybe_Map_FindCellInArea",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005AF088",
+  "name": "Field_Scene_IsCurrentSceneId",
+  "signature": "u32 Field_Scene_IsCurrentSceneId(int sceneId)",
+  "params": {
+   "sceneId": "scene id to test"
+  },
+  "summary": "Returns 1 when sceneId equals the id of the lazily-created field scene singleton's current scene, 0 otherwise.",
+  "confidence": 0.55,
+  "evidence": "Callee func_0062AB3C is now identified as the current-scene-id getter and the singleton is built once behind the f_2FC flag; two named callers (Ui_HitTestRows family) pass a scene id.",
+  "previous_name": "maybe_Field_Scene_IsCurrentSceneId",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005E6784",
+  "name": "Ui_List_FindRowIdAtPoint",
+  "signature": "u32 Ui_List_FindRowIdAtPoint(u32 ui, u8 rowKind)",
+  "params": {
+   "ui": "list widget",
+   "rowKind": "row descriptor kind"
+  },
+  "summary": "Returns the id of the list row under the current point (or 0xFFFFFFFF): lazily builds the shared 0xDC-byte row descriptor table, resolves the row kind and hit-tests the list.",
+  "confidence": 0.5,
+  "evidence": "The one-time descriptor table, the kind lookup and the named Ui_HitTestRows/row-lookup callees match a list row hit test; the previous guess needed no change.",
+  "previous_name": "maybe_Ui_List_FindRowIdAtPoint",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0015FA00",
+  "name": "maybe_Ui_UpdateTouchFocus",
+  "signature": "void maybe_Ui_UpdateTouchFocus(TouchEvent* ev)",
+  "params": {
+   "ev": "touch point"
+  },
+  "summary": "Hit-tests a touch point against the global UI window list and updates the focus flag of the hit window.",
+  "confidence": 0.45,
+  "evidence": "The hit-test and focus calls are recognisable, but the Thumb entry is a false positive inside the ARM routine at 0x15F988 and the decoded arguments are unaff_ registers, so the whole prototype stays a hypothesis.",
+  "previous_name": "maybe_Ui_UpdateTouchFocus",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0047B844",
+  "name": "Text_FindGlyphAtPoint",
+  "signature": "void Text_FindGlyphAtPoint(TextHit* out, u32 layout, u32 line, int* point)",
+  "params": {
+   "out": "hit result",
+   "layout": "text layout",
+   "line": "line index",
+   "point": "x/y point"
+  },
+  "summary": "Hit-tests a text layout: resolves the font, finds the glyph line containing the point, tests glyphs along it and writes the glyph index and line width, or an all -1/zero miss.",
+  "confidence": 0.5,
+  "evidence": "Font handle lookup, line/glyph lookup and the two-pass exact/recovered flag in out[2] are visible, and the name only states the hit-test job.",
+  "previous_name": "maybe_Text_FindGlyphAtPoint",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0016068C",
+  "name": "maybe_Actor_ShowEquipPartA",
+  "signature": "void maybe_Actor_ShowEquipPartA(Actor* actor)",
+  "params": {
+   "actor": "actor"
+  },
+  "summary": "For actors of the expected runtime type, looks up the equipped item recorded in the component's f_4C and, if the item row is valid, enables the grip node via Model_Equip_SetGripNode(comp,1,0) and sets flag +0x61.",
+  "confidence": 0.45,
+  "evidence": "The item lookup and grip-node call show this is equipment-part visibility, not a generic 'part A'; the type-id check is still an unlabelled literal, so the name stays maybe_.",
+  "previous_name": "maybe_Actor_ShowPartA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00160EB4",
+  "name": "maybe_Actor_HideEquipPartA",
+  "signature": "void maybe_Actor_HideEquipPartA(Actor* actor)",
+  "params": {
+   "actor": "actor"
+  },
+  "summary": "Inverse of 0x16068C: for the same actor type and valid equipped item, disables the grip node with Model_Equip_SetGripNode(comp,0,0) and clears flag +0x61.",
+  "confidence": 0.45,
+  "evidence": "Identical item/grip-node path as 0x16068C with the visibility argument 0, confirming the equip-part pair; the type constant remains unidentified.",
+  "previous_name": "maybe_Actor_HidePartA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00160F14",
+  "name": "maybe_Actor_ShowEquipPartB",
+  "signature": "void maybe_Actor_ShowEquipPartB(Actor* actor, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "actor": "actor",
+   "arg4": "forwarded to the grip-node setter"
+  },
+  "summary": "Variant of the equip-part enabler: sets the grip node with Model_Equip_SetGripNode(comp,1,1,arg4,...) and sets flag +0x60.",
+  "confidence": 0.45,
+  "evidence": "Same type check and component fetch as 0x16068C but the second visibility pair (1,1) and flag +0x60; extra arguments are passed through and not decoded.",
+  "previous_name": "maybe_Actor_ShowPartB",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00161918",
+  "name": "maybe_Actor_HideEquipPartB",
+  "signature": "void maybe_Actor_HideEquipPartB(Actor* actor, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "actor": "actor",
+   "arg4": "forwarded to the grip-node setter"
+  },
+  "summary": "Inverse of 0x160F14: calls Model_Equip_SetGripNode(comp,0,1,arg4,...) and clears flag +0x60.",
+  "confidence": 0.45,
+  "evidence": "Same body as 0x160F14 with visibility 0 and the flag cleared; the extra arguments stay undecoded.",
+  "previous_name": "maybe_Actor_HidePartB",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001607D4",
+  "name": "maybe_Field_ResetLocatorDefaults",
+  "signature": "void maybe_Field_ResetLocatorDefaults(void)",
+  "params": {},
+  "summary": "Restores the field object's default transform block: copies the current node's +0x1E0 vector into +0x74, copies the default 8-word and 0x20-word blocks into +0x17C..+0x19C and +0x1A0.., and clears the pending-node pointer.",
+  "confidence": 0.4,
+  "evidence": "The default-struct copies and the clearing of f_174 are clear, but the source blocks are unnamed globals and the object's identity is only known from the level-view getter, so it stays maybe_.",
+  "previous_name": "maybe_Field_ResetLocatorDefaults",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0028AD50",
+  "name": "Anim_Sequence_AdvanceList",
+  "signature": "int Anim_Sequence_AdvanceList(UiAnimSequence* seq, UiWindowFrame* frame)",
+  "params": {
+   "seq": "animation sequence",
+   "frame": "owner window frame"
+  },
+  "summary": "Drives a list of animation entries: starts and ticks each entry, unlinks finished ones, and when the clip is finished spawns the next clip at the frame's position.",
+  "confidence": 0.55,
+  "evidence": "Entry vtable slots +8/+0xC/+0x10 and the named Anim_Clip_IsFinished plus the spawn helpers 0x29E740/0x29E388 make the list-advance role explicit.",
+  "previous_name": "maybe_Anim_Sequence_AdvanceList",
+  "previous_confidence": 0.49,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00295DC8",
+  "name": "maybe_Field_SceneObject_DetachChildAndSelectEntry2",
+  "signature": "void maybe_Field_SceneObject_DetachChildAndSelectEntry2(FieldSceneObject* self, void* child)",
+  "params": {
+   "self": "field scene object",
+   "child": "child to detach"
+  },
+  "summary": "Vtable slot that removes a child from the object's child list and then commits selection of keyed-list entry 2 (via the 0x5E74A0 tail call with (2,1)).",
+  "confidence": 0.45,
+  "evidence": "Body is only two calls; the child argument is implicit in the register state, so only the call-site evidence identifies the detach. Kept maybe_.",
+  "previous_name": "maybe_Field_SceneObject_DetachChildAndSelectEntry2",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0016216C",
+  "name": "maybe_Actor_SetHandleEnabledBoth",
+  "signature": "void maybe_Actor_SetHandleEnabledBoth(int actorIndex, int enable)",
+  "params": {
+   "actorIndex": "index into the actor array",
+   "enable": "enable flag"
+  },
+  "summary": "Resolves an actor by index and applies the enable flag to its two handle objects, depending on the current field mode: mode 1/2 updates the +8 handle, mode 0/2 applies the model size on the +0xC handle.",
+  "confidence": 0.4,
+  "evidence": "The index->handle path and both handle-table checks are clear, but the two callees do different things (motion update vs model size), so 'SetEnabledBoth' is only a description of the call sites, not a proven single operation.",
+  "previous_name": "maybe_Actor_SetEnabledBoth",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0016911C",
+  "name": "Ui_CmdQueue_PushWidgetCommand",
+  "signature": "void Ui_CmdQueue_PushWidgetCommand(UiQueue* self, UiWidget* widget, u32 command, code* callback)",
+  "params": {
+   "self": "UI command queue",
+   "widget": "target widget",
+   "command": "command id",
+   "callback": "optional handler"
+  },
+  "summary": "Queues a command against one widget: checks the widget is active, computes the scaled parameter, appends the command record and either invokes the callback immediately or stores the result in the widget's per-state byte.",
+  "confidence": 0.5,
+  "evidence": "Named callees Ui_GetScaledValue and Battle_CommandQueue_PushEntry (the shared queue push) plus the three per-state result bytes make the queue-command role explicit.",
+  "previous_name": "maybe_Ui_CmdQueue_PushWidgetCommand",
+  "previous_confidence": 0.5,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0020A560",
+  "name": "Menu_Slot_StoreActorId",
+  "signature": "void Menu_Slot_StoreActorId(MenuState* self, unsigned actorId, unsigned arg3, unsigned stack)",
+  "params": {
+   "self": "menu state",
+   "actorId": "character id to store"
+  },
+  "summary": "Stores a character id into the first free of the five 0x40-byte slot records (or keeps an existing match) and notifies the item-icon layer when the battle flag is set.",
+  "confidence": 0.5,
+  "evidence": "The five-record scan, the f_4C/f_4D sentinel pair and the five f_4D/f_8D/f_CD/f_10D/f_14D comparisons are explicit; the notification path goes through the battle work flag at +0x4244.",
+  "previous_name": "maybe_Menu_Slot_StoreActorId",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00170A0C",
+  "name": "Battle_CheckUnitsCondition",
+  "signature": "int Battle_CheckUnitsCondition(BattleManager* self, uint32_t mode, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "self": "battle manager",
+   "mode": "condition id 4..8"
+  },
+  "summary": "Battle-condition query used by the state machine: mode 4 compares the two values, mode 5 asks the world, mode 6/7 require every unit in the four groups to pass a state test, mode 8 returns the world flag at +0x4252.",
+  "confidence": 0.55,
+  "evidence": "The switch over modes 4..8, the four 0x1C-stride unit lists at world+0x428C and the unit-state callees match the documented battle work layout; one named caller passes four stored command ids.",
+  "previous_name": "maybe_Battle_CheckUnitsCondition",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0016925C",
+  "name": "maybe_Ui_Widget_PopAnimStep",
+  "signature": "u32 maybe_Ui_Widget_PopAnimStep(UiWidget* self)",
+  "params": {
+   "self": "UI widget"
+  },
+  "summary": "Tries to step one widget animation back: for each of four counters at +0xFD/+0x100/+0x103/+0x106 equal to 5 it decrements the paired value, then verifies the step and restores the counters on failure.",
+  "confidence": 0.42,
+  "evidence": "The counter pairs and the verify/restore pattern are clear, but the verification call 0x1745E8 carries a battle-flavoured name and the widget fields are unnamed, so 'PopAnimStep' remains a description.",
+  "previous_name": "maybe_Ui_Widget_PopAnimStep",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0016A5BC",
+  "name": "maybe_Battle_CheckPartyStates",
+  "signature": "u32 maybe_Battle_CheckPartyStates(BattleManager* self)",
+  "params": {
+   "self": "battle manager"
+  },
+  "summary": "Consistency check over the battle party list at world+0x4260: counts active members and verifies each against the manager's vtable+0x190 predicate, returning 0 on the first mismatch.",
+  "confidence": 0.4,
+  "evidence": "The iterated list is the party list at battle+0x4260 (not a UI window list) and the loop calls member vtable slots +0x24/+0x18/+0x10, so the old Ui_ tag was wrong; the exact predicate is still unnamed.",
+  "previous_name": "maybe_Ui_CheckWidgetStates",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0016C3AC",
+  "name": "maybe_Battle_ValidateQueuedCommands",
+  "signature": "uint32_t maybe_Battle_ValidateQueuedCommands(BattleManager* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "self": "battle manager"
+  },
+  "summary": "Checks whether the queued command objects in the battle party list are valid for the current unit: all must pass their vtable+0x10 validation, then each valid one is offered to the manager's vtable+0x190.",
+  "confidence": 0.45,
+  "evidence": "Two-pass validation over the party list and the vtable+0x30 command setter are visible, but the list is the party list and the exact command semantics are unnamed.",
+  "previous_name": "maybe_Battle_ValidateQueuedCommands",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0016C128",
+  "name": "maybe_Battle_UpdateUnitCommandPhase",
+  "signature": "uint32_t maybe_Battle_UpdateUnitCommandPhase(BattleUnit* unit)",
+  "params": {
+   "unit": "battle unit"
+  },
+  "summary": "Checks a battle unit's command byte (+0x2F0): recognises the idle/done and ready-for-input states, optionally notifies the target subsystem, and finally calls the unit's vtable+0x198; returns 0 for unknown states.",
+  "confidence": 0.4,
+  "evidence": "The state comparisons and the vtable+0x198 tail call are clear, but the state constants are raw fields and the notify path is only identified by the battle flag at +0x4244.",
+  "previous_name": "maybe_Battle_UpdateUnitCommandPhase",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0016D438",
+  "name": "maybe_Battle_SpawnUnitEntryEffects",
+  "signature": "void maybe_Battle_SpawnUnitEntryEffects(BattleManager* self)",
+  "params": {
+   "self": "battle manager"
+  },
+  "summary": "Counts the present battle units, collects their data ids into a lineup descriptor and hands it to 0x3FE054, which spawns the per-monster entry effect objects.",
+  "confidence": 0.4,
+  "evidence": "The four unit lists, the per-slot counter and the 0x3FE054 call (which allocates 0x20C-byte effect instances) support the entry-effect spawn, but 0x3FE054 itself is only described from its body.",
+  "previous_name": "maybe_Battle_SpawnUnitEntryEffects",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001714D4",
+  "name": "Battle_FinishBattleScene",
+  "signature": "void Battle_FinishBattleScene(void)",
+  "params": {},
+  "summary": "Shuts down the battle presentation: tells the battle scene object to hide/animate out, creates its closing popup, calls the scene vtable+0x2C and closes the battle target window.",
+  "confidence": 0.5,
+  "evidence": "Named callees Battle_PopupEntry_Create and Ui_BattleTargetWindow_CloseIfNotEnemyTurn plus the scene vtable calls make the teardown explicit; the scene pointer is world+0x4320 as documented.",
+  "previous_name": "maybe_Battle_FinishBattleScene",
+  "previous_confidence": 0.38,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00176AD8",
+  "name": "maybe_Ui_UpdateWindowOpen",
+  "signature": "void maybe_Ui_UpdateWindowOpen(UiWindow* self, uint32_t arg2, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "self": "layout window"
+  },
+  "summary": "Per-frame open/tick step of a layout window: updates the layout animation, advances the window command queue and, unless the object is flagged, pushes pane animation 99 or 100 depending on the object variant.",
+  "confidence": 0.42,
+  "evidence": "The mode-1 vs else choice between animations 99/100 and the Ui_CampMenu_PushPane/Ui_CommandQueue_Advance callees are clear, but 'open' is inferred from the pane animation, not proven.",
+  "previous_name": "maybe_Ui_UpdateWindowOpen",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00177610",
+  "name": "Field_NpcUpdateMoveState",
+  "signature": "void Field_NpcUpdateMoveState(NpcBehavior* self)",
+  "params": {
+   "self": "NPC behaviour"
+  },
+  "summary": "NPC movement-state update: once the actor has waited long enough it evaluates the tile under its position and sets movement state 0 (walk), 2 (blocked), 3 (slow) or 9 (turn).",
+  "confidence": 0.5,
+  "evidence": "The wait test (f_24->f_44 vs f_2C), the tile check via maybe_Field_NpcAction_MoveTick and the four state values passed to 0x5E7848 are all explicit.",
+  "previous_name": "maybe_Field_NpcUpdateMoveState",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0017A6EC",
+  "name": "Field_NpcApplyActionResult",
+  "signature": "void Field_NpcApplyActionResult(NpcBehavior* self)",
+  "params": {
+   "self": "NPC behaviour"
+  },
+  "summary": "Applies the result code at +0x325 of a finished NPC action: result 1 runs the finish virtuals and sets movement state 2, result 2 runs the alternate finish and sets state 2 with the alternate flag.",
+  "confidence": 0.5,
+  "evidence": "The switch and the vtable slots match the companion 0x17A8AC; both named callers are NPC action code.",
+  "previous_name": "maybe_Field_NpcApplyActionResult",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00184CB4",
+  "name": "maybe_Field_Object_DtorWithHandle",
+  "signature": "void maybe_Field_Object_DtorWithHandle(uint32_t* self)",
+  "params": {
+   "self": "field object"
+  },
+  "summary": "Deleting destructor of a field object that owns a registered handle: installs vtable 0x7588B4, releases the handle through 0x1C7570, then destroys its embedded sub-objects and the scene object.",
+  "confidence": 0.45,
+  "evidence": "The vtable store at entry and the handle-release + sub-object destruction chain are destructor shape; the old 'DestroyObjectHandles' name hid that the function is the object's destructor.",
+  "previous_name": "maybe_Field_DestroyObjectHandles",
+  "previous_confidence": 0.38,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0017AEE4",
+  "name": "Field_NpcActionDestroy",
+  "signature": "void Field_NpcActionDestroy(NpcBehavior* self)",
+  "params": {
+   "self": "NPC action object"
+  },
+  "summary": "Destructor tail for the NPC action object: unlinks it from its intrusive list, runs the scene-object destructor and frees the block.",
+  "confidence": 0.5,
+  "evidence": "The unlink writes the two neighbour pointers, then Field_SceneObject_Dtor and func_0010F6CC (operator delete) follow; the object offsets 0x260/0x264 match the NPC action layout.",
+  "previous_name": "maybe_Field_NpcActionDestroy",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002F4904",
+  "name": "maybe_Field_Marker_DtorAlt",
+  "signature": "void maybe_Field_Marker_DtorAlt(FieldMarker* self, void* vtable)",
+  "params": {
+   "self": "field marker",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor variant of the field marker: installs the class vtable (and its +0xD4 secondary), unlinks and destroys the embedded sub-node at +0x278 and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The body is the standard vtable store + unlink + Field_SceneObject_Dtor + free sequence; 'AttachToAlt' was wrong because nothing is attached here.",
+  "previous_name": "maybe_Field_Marker_AttachToAlt",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003867E8",
+  "name": "Ui_Object_DtorWithChild",
+  "signature": "void Ui_Object_DtorWithChild(UiObject* self, int** vtable)",
+  "params": {
+   "self": "UI object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor for a UI object with one embedded child: installs the vtable, unlinks the list node, destroys the child and frees the object.",
+  "confidence": 0.5,
+  "evidence": "The vtable store, intrusive-list unlink, Ui_Object_DtorBody on the child and operator delete are all explicit; the second parameter is the vtable, not a list.",
+  "previous_name": "maybe_Ui_Object_DtorWithChild",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003A3840",
+  "name": "Field_ModelObj_Dtor",
+  "signature": "void Field_ModelObj_Dtor(FieldModelObj* self, void* vtable)",
+  "params": {
+   "self": "model object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of the model-carrying field object: installs the vtable, unlinks the node, destroys the embedded scene object at +0x278 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Same body shape as the sibling 0x3A2658 with the +0x278 member and func_00336B3C; no callers because it is a delete-only vtable slot.",
+  "previous_name": "maybe_Field_ModelObj_Dtor",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003DDDFC",
+  "name": "Field_Actor_DtorBase",
+  "signature": "void Field_Actor_DtorBase(FieldActor* self, void* vtable)",
+  "params": {
+   "self": "field actor",
+   "vtable": "class vtable"
+  },
+  "summary": "Base deleting destructor for a field actor: installs the vtable, unlinks the actor's list node, destroys the model/scene sub-object at +0x278 and frees the object.",
+  "confidence": 0.5,
+  "evidence": "The body is the shared vtable+unlink+sub-object-dtor+free template; the second argument is the vtable word, not an owner.",
+  "previous_name": "maybe_Field_Actor_DtorBase",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00471DBC",
+  "name": "Field_SceneObject_DtorVirtual_1DBC",
+  "signature": "void Field_SceneObject_DtorVirtual_1DBC(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of a field scene object that owns an embedded sub-scene at +0x278: restores the vtable, unlinks the intrusive list, destroys the sub-scene and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Body matches the shared destructor template; the address suffix is kept only to distinguish the vtable-literal twins.",
+  "previous_name": "maybe_Field_SceneObject_DtorVirtual_1DBC",
+  "previous_confidence": 0.5,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0047218C",
+  "name": "Field_SceneObject_DtorVirtual_218C",
+  "signature": "void Field_SceneObject_DtorVirtual_218C(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Byte-identical twin of 0x471DBC: destroys the embedded sub-scene at +0x278, unlinks the list node and frees the field scene object.",
+  "confidence": 0.5,
+  "evidence": "Same instruction sequence as 0x471DBC, differing only in the vtable literal, so the address suffix is the only honest distinction.",
+  "previous_name": "maybe_Field_SceneObject_DtorVirtual_218C",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004CC228",
+  "name": "Field_SpriteChainObject_Dtor",
+  "signature": "void Field_SpriteChainObject_Dtor(FieldObject* self, void* vtable)",
+  "params": {
+   "self": "field object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor for the field object that owns the sprite-chain effect: installs both vtables, destroys the embedded container arrays, unlinks the list node, runs the scene-object destructor and frees the allocation.",
+  "confidence": 0.5,
+  "evidence": "The vtable stores at +0/-0x70/-0x2C8, two Container_DtorWithArrays calls and the final Field_SceneObject_Dtor + free are explicit destructor chains.",
+  "previous_name": "maybe_Field_SpriteChainObject_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004F057C",
+  "name": "Ui_MultiBase_DtorDeleting",
+  "signature": "void Ui_MultiBase_DtorDeleting(void* self, void* vtable)",
+  "params": {
+   "self": "multi-base UI object",
+   "vtable": "primary vtable"
+  },
+  "summary": "Deleting destructor of a multiple-inheritance UI object: installs the primary and secondary vtables, destroys the base sub-object at +0x278, unlinks the object and frees it.",
+  "confidence": 0.5,
+  "evidence": "The two vtable constants (0x75D618 and its +0xD4 secondary) and the standard unlink/destroy/free tail; the entry is vtable slot 0x77C2C8.",
+  "previous_name": "maybe_Ui_MultiBase_DtorDeleting",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0017C11C",
+  "name": "maybe_Ui_RegisterActorVariant",
+  "signature": "uint32_t maybe_Ui_RegisterActorVariant(UiActorHolder* holder, UiActor* actor, uint32_t arg3, uint32_t arg4)",
+  "params": {
+   "holder": "actor slot",
+   "actor": "actor to bind",
+   "arg3": "extra word"
+  },
+  "summary": "Registers a single actor in a UI actor slot: packs the actor handle into holder+0xC, fills +0xD/+0xE, increments the use count and binds the slot to the 3D actor manager.",
+  "confidence": 0.4,
+  "evidence": "The packed-handle fields and the named Ui_ActorSlot_BindActor call are clear, but this is the second variant of a pair and the extra words are unnamed.",
+  "previous_name": "maybe_Ui_RegisterActorVariant",
+  "previous_confidence": 0.33,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004E53D8",
+  "name": "maybe_Ui3D_AttachRecordEntries",
+  "signature": "u32 maybe_Ui3D_AttachRecordEntries(Ui3DModelElement* self)",
+  "params": {
+   "self": "3D model element"
+  },
+  "summary": "Walks the element's entry-record block unless the current scene mode is masked out, resolves each entry's object and animation, re-initialises its draw parameters and re-attaches it to the render list.",
+  "confidence": 0.45,
+  "evidence": "The scene-mode mask check, entry object/animation lookups and the bind call are explicit, but the entry record layout is only partially decoded.",
+  "previous_name": "maybe_Ui3D_AttachRecordEntries",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0017FC64",
+  "name": "Ui_ApplyPageHighlight",
+  "signature": "void Ui_ApplyPageHighlight(UiPager* self)",
+  "params": {
+   "self": "pager"
+  },
+  "summary": "Sets the highlight flag on the pager's current page actor, clears it on the other four and updates the parent window's cursor state.",
+  "confidence": 0.5,
+  "evidence": "The five page pointers, the single f_9F4=1 and four =0 stores plus the cursor calls make the highlight update explicit.",
+  "previous_name": "maybe_Ui_ApplyPageHighlight",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00257804",
+  "name": "maybe_Ui_Window_CtorBase",
+  "signature": "UiWindow* maybe_Ui_Window_CtorBase(UiWindow* self)",
+  "params": {
+   "self": "window being constructed"
+  },
+  "summary": "Base constructor of a UI window: allocates the shared 0x98-byte singleton, installs the base vtable, releases the mapped renderer with full alpha, then installs the derived vtable and marks the child state valid/idle.",
+  "confidence": 0.45,
+  "evidence": "Two vtable stores with the singleton creation in between is the base-then-derived constructor pattern, not an 'init from config'; it also returns self.",
+  "previous_name": "maybe_Ui_Window_InitFromConfig",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001811BC",
+  "name": "Field_StartObject",
+  "signature": "void Field_StartObject(MapObject* self)",
+  "params": {
+   "self": "spawned map object"
+  },
+  "summary": "Starts a spawned map object: applies its position/rotation, selects animation 1, clears the pending state and, when a model offset is present, queues it for the scene graph.",
+  "confidence": 0.5,
+  "evidence": "The transform/animation setters and the f_2B5 started flag are explicit; the conditional queue call depends only on the two model offsets.",
+  "previous_name": "maybe_Field_StartObject",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002F4F88",
+  "name": "Field_Marker_DestroyChildren",
+  "signature": "void Field_Marker_DestroyChildren(FieldMarker* self)",
+  "params": {
+   "self": "field marker"
+  },
+  "summary": "Destructor helper for a marker: installs both marker/base vtables, destroys the fixed four-element sub-node array, unlinks the attached sub-node and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Two vtable installs, the std_destroy_range over the 4-element array at +0x298 and the sub-node unlink/free make the destroy-children job explicit.",
+  "previous_name": "maybe_Field_Marker_DestroyChildren",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003A1F6C",
+  "name": "Field_Gadget_DtorC",
+  "signature": "void Field_Gadget_DtorC(FieldGadget* self)",
+  "params": {
+   "self": "field gadget"
+  },
+  "summary": "Destructor of the larger gadget variant: installs the vtables, destroys the 0x48-byte child array, releases the embedded gadget state at +0x24C and frees the object (epilogue lost by Ghidra).",
+  "confidence": 0.5,
+  "evidence": "Two vtable installs plus std_destroy_range on the child array and the base destructor; the halt_baddata tail is a decompiler artefact.",
+  "previous_name": "maybe_Field_Gadget_DtorC",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0018130C",
+  "name": "maybe_Ui_DestroySubObject",
+  "signature": "void maybe_Ui_DestroySubObject(uint32_t* self, void* vtable)",
+  "params": {
+   "self": "owner object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor helper: installs the vtable, runs the embedded object's destructor at self+0x254 and frees the block.",
+  "confidence": 0.4,
+  "evidence": "The 0x181330 twin omits exactly the free call, which pins down both roles, but the class owning +0x254 is not identified.",
+  "previous_name": "maybe_Ui_DestroySubObject",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00181330",
+  "name": "maybe_Ui_DestroySubObjectNoFree",
+  "signature": "void maybe_Ui_DestroySubObjectNoFree(uint32_t* self, void* vtable)",
+  "params": {
+   "self": "owner object",
+   "vtable": "class vtable"
+  },
+  "summary": "Same as 0x18130C without the final free: installs the vtable and destroys the embedded object at self+0x254, for objects embedded in a larger allocation.",
+  "confidence": 0.4,
+  "evidence": "Differs from 0x18130C only by the absent func_0010F6CC call, confirming the no-free variant.",
+  "previous_name": "maybe_Ui_DestroySubObjectNoFree",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0021BC50",
+  "name": "maybe_Actor2D_DtorSpanList",
+  "signature": "void maybe_Actor2D_DtorSpanList(Actor2D* actor, void* vtable)",
+  "params": {
+   "actor": "2D actor",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor half of the eight-span actor: installs the vtable and its +0x98 secondary, unlinks the scene-node list node at +0x24C, destroys it and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The vtable pair, list unlink and the final free call show a destructor; the previous summary wrongly claimed the object was not freed.",
+  "previous_name": "maybe_Actor2D_ReleaseSpanList",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0029016C",
+  "name": "Anim2D_SpriteNodeDtorB",
+  "signature": "void Anim2D_SpriteNodeDtorB(UiSpriteNode* self, void* vtable)",
+  "params": {
+   "self": "2D sprite node",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor variant of the 2D sprite node: installs the vtable, unlinks the node and destroys it, then frees the allocation.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x28E6C8 plus the trailing operator delete, exactly as the 'B' variant implies.",
+  "previous_name": "maybe_Anim2D_SpriteNodeDtorB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002B4FE8",
+  "name": "Field_SceneObject_DtorC_2B4FE8",
+  "signature": "void Field_SceneObject_DtorC(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of a field scene-object variant: installs the vtable, unlinks and destroys the sprite actor at +0x24C and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Renamed with its address suffix because Field_SceneObject_DtorC already names 0x44A4C4; this keeps the four template copies distinguishable.",
+  "previous_name": "maybe_Field_SceneObject_DtorC",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002B5324",
+  "name": "Field_SceneObject_DtorD_2B5324",
+  "signature": "void Field_SceneObject_DtorD(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Second identical deleting destructor of the same field scene-object family (vtable literal differs only).",
+  "confidence": 0.5,
+  "evidence": "Renamed with its address suffix because Field_SceneObject_DtorD already names 0x44AB68; this keeps the four template copies distinguishable.",
+  "previous_name": "maybe_Field_SceneObject_DtorD",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002B6B74",
+  "name": "Field_SceneObject_DtorE_2B6B74",
+  "signature": "void Field_SceneObject_DtorE(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Third identical deleting destructor of the field scene-object family (sprite actor at +0x24C).",
+  "confidence": 0.5,
+  "evidence": "Renamed with its address suffix because Field_SceneObject_DtorE already names 0x44BB24; this keeps the four template copies distinguishable.",
+  "previous_name": "maybe_Field_SceneObject_DtorE",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002B6FC8",
+  "name": "Field_SceneObject_DtorF_2B6FC8",
+  "signature": "void Field_SceneObject_DtorF(FieldSceneObject* self, void* vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "class vtable"
+  },
+  "summary": "Fourth identical deleting destructor of the field scene-object family (sprite actor at +0x24C).",
+  "confidence": 0.5,
+  "evidence": "Renamed with its address suffix because Field_SceneObject_DtorF already names 0x44C3C0; this keeps the four template copies distinguishable.",
+  "previous_name": "maybe_Field_SceneObject_DtorF",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002F8248",
+  "name": "Field_Prop_FreeSubNode",
+  "signature": "void Field_Prop_FreeSubNode(FieldProp* self)",
+  "params": {
+   "self": "field prop"
+  },
+  "summary": "Destroys and frees a prop's attached sub-node: releases the node header at -0x100 from self, runs the sub-node destructor and frees it.",
+  "confidence": 0.5,
+  "evidence": "The func_0017C334 header resolution, the 0x335DAC destructor and the operator delete are the same chain as the prop destructor; identical body to 0x2F880C.",
+  "previous_name": "maybe_Field_Prop_FreeSubNode",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x002F880C",
+  "name": "Field_Prop_FreeSubNodeEx",
+  "signature": "void Field_Prop_FreeSubNodeEx(FieldProp* self, void* vtable)",
+  "params": {
+   "self": "field prop",
+   "vtable": "class vtable"
+  },
+  "summary": "Second destroy-and-free variant for a prop sub-node: installs the vtable, destroys the embedded object at +0x254 and frees it.",
+  "confidence": 0.5,
+  "evidence": "Same three calls as 0x2F8248 with the +0x254 member; the only difference is the member offset and the vtable store.",
+  "previous_name": "maybe_Field_Prop_FreeSubNodeEx",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0031ACE8",
+  "name": "maybe_Ui_DestroySubObjectAt24C",
+  "signature": "void maybe_Ui_SubObject_Dtor(SubObject* self, void* vtable)",
+  "params": {
+   "self": "sub-object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of a UI sub-object: installs the vtable and its +0x98 secondary, unlinks the object at +0x24C, destroys it and frees the block.",
+  "confidence": 0.45,
+  "evidence": "Renamed because maybe_Ui_SubObject_Dtor already names 0x3E05E8; this entry destroys the sub-object at member +0x24C and frees it.",
+  "previous_name": "maybe_Ui_SubObject_Release",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0036334C",
+  "name": "Field_SpriteObject_DtorAlt",
+  "signature": "void Field_SpriteObject_DtorAlt(FieldSpriteObject* self, void* vtable)",
+  "params": {
+   "self": "sprite object",
+   "vtable": "class vtable"
+  },
+  "summary": "Second deleting destructor thunk of the same sprite-object class: installs the vtable, unlinks and destroys the sprite actor at +0x24C and frees the object.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x362848 but with the +0x24C member; the second parameter is the vtable word, not a flags value.",
+  "previous_name": "maybe_Field_SpriteObject_DtorAlt",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003A156C",
+  "name": "Field_Gadget_DtorA",
+  "signature": "void Field_Gadget_DtorA(FieldGadget* self, void* vtable)",
+  "params": {
+   "self": "field gadget",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of the gadget's embedded state at +0x24C: installs the vtable, unlinks the node, destroys the embedded gadget and frees the allocation.",
+  "confidence": 0.5,
+  "evidence": "The vtable store, func_0017C330 list access, 0x335DAC sub-destructor and operator delete are all explicit; same code as 0x3A1BF0.",
+  "previous_name": "maybe_Field_Gadget_DtorA",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003A1BF0",
+  "name": "Field_Gadget_DtorB",
+  "signature": "void Field_Gadget_DtorB(FieldGadget* self, void* vtable)",
+  "params": {
+   "self": "field gadget",
+   "vtable": "class vtable"
+  },
+  "summary": "Second deleting destructor for the gadget's embedded state at +0x24C; byte-identical to 0x3A156C and emitted for a second gadget vtable.",
+  "confidence": 0.5,
+  "evidence": "Byte-identical to 0x3A156C (vtable store, list access, sub-destructor, free).",
+  "previous_name": "maybe_Field_Gadget_DtorB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003BC954",
+  "name": "Gfx_SpriteActor_DtorB",
+  "signature": "void Gfx_SpriteActor_DtorB(GfxSpriteActor* self, void* vtable)",
+  "params": {
+   "self": "sprite actor",
+   "vtable": "class vtable"
+  },
+  "summary": "Second, shorter copy of the sprite-actor deleting destructor: unlinks and destroys the sprite at +0x24C and frees the actor.",
+  "confidence": 0.5,
+  "evidence": "Byte-for-byte the tail of 0x3BC820 (list access at +0x24C, 0x335DAC, free); the pair is the base/deleting destructor split.",
+  "previous_name": "maybe_Gfx_SpriteActor_DtorB",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x003DE3A8",
+  "name": "maybe_Field_ActorSub_Dtor",
+  "signature": "void maybe_Field_ActorSub_Dtor(FieldActorSub* self, void* vtable)",
+  "params": {
+   "self": "actor sub-object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of a field actor sub-object: installs the vtable and its +0x98 secondary, unlinks the node at +0x24C, destroys it and frees the object.",
+  "confidence": 0.45,
+  "evidence": "The body is the shared destructor template, so 'DetachSubObject' was wrong: the object is unlinked, destroyed and freed, not detached.",
+  "previous_name": "maybe_Field_Actor_DetachSubObject",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x003DE42C",
+  "name": "maybe_Field_ActorSub_DtorB",
+  "signature": "void maybe_Field_ActorSub_DtorB(FieldActorSub* self, void* vtable)",
+  "params": {
+   "self": "actor sub-object",
+   "vtable": "class vtable"
+  },
+  "summary": "Identical twin of 0x3DE3A8: second vtable slot with the same unlink-destroy-free body.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same body and callees as 0x3DE3A8.",
+  "previous_name": "maybe_Field_Actor_DetachSubObjectB",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004B1404",
+  "name": "Field_SceneNode_DeleteDtorC",
+  "signature": "void Field_SceneNode_DeleteDtorC(Field_SceneNodeC* self, void* vtable)",
+  "params": {
+   "self": "field scene node",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of the third field scene-node class: reinstalls the vtable, unlinks from the field draw list, runs Field_Object_DtorBase and frees the object.",
+  "confidence": 0.5,
+  "evidence": "The address is the destructor slot 0x4B1400 of vtable 0x776704 and the body is byte-identical to 0x4B0194/0x4B0B8C.",
+  "previous_name": "maybe_Field_SceneNode_DeleteDtorC",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x004D7FC8",
+  "name": "Field_ObjectSprite_Dtor_D7FC8",
+  "signature": "void Field_ObjectSprite_Dtor_D7FC8(FieldObjectSprite* self, void* vtable)",
+  "params": {
+   "self": "field sprite object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of the larger field sprite object: installs the vtable, destroys the embedded sub-object at +0x24C, unlinks the list entry and frees the object.",
+  "confidence": 0.5,
+  "evidence": "func_0017C330 access at +0x24C, the neighbour-pointer unlink, Field_Object_DtorBase and operator delete are explicit; the address suffix keeps it distinct from its twins.",
+  "previous_name": "maybe_Field_ObjectSprite_Dtor_D7FC8",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005AF3B8",
+  "name": "maybe_Field_Object_DtorVariantA",
+  "signature": "void maybe_Field_Object_DtorVariantA(FieldObject* self, void* vtable)",
+  "params": {
+   "self": "field object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor variant of the field object base: installs the vtable, unlinks the object from the scene list, destroys the +0x24C sub-object and frees the block.",
+  "confidence": 0.45,
+  "evidence": "The body is identical to the destructor at 0x5AF878 (vtable store, unlink, Field_Object_DtorBase, free), so 'CtorBase' was wrong: a constructor does not destroy and free.",
+  "previous_name": "maybe_Field_Object_CtorBase",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005AF878",
+  "name": "Field_Object_Dtor",
+  "signature": "void Field_Object_Dtor(FieldObject* self, void* vtable)",
+  "params": {
+   "self": "field object",
+   "vtable": "class vtable"
+  },
+  "summary": "Deleting destructor of the field object base: installs the vtable, unlinks the object from the scene list, destroys the model sub-object and frees the block.",
+  "confidence": 0.5,
+  "evidence": "The vtable store at entry plus the unlink/Field_Object_DtorBase/operator-delete chain is unambiguous.",
+  "previous_name": "maybe_Field_Object_Dtor",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005AFF10",
+  "name": "Field_Object_DtorAlt",
+  "signature": "void Field_Object_DtorAlt(FieldObject* self, void* vtable)",
+  "params": {
+   "self": "field object",
+   "vtable": "class vtable"
+  },
+  "summary": "Alternative deleting destructor of the field object base used by a sibling class; identical to 0x5AF878.",
+  "confidence": 0.5,
+  "evidence": "Identical list unlink, sub-object destructor and free as 0x5AF878.",
+  "previous_name": "maybe_Field_Object_DtorAlt",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0018C544",
+  "name": "Text_BuildFallbackGlyphList",
+  "signature": "TextFallbackList* Text_BuildFallbackGlyphList(TextFallbackList* list)",
+  "params": {
+   "list": "inline fallback code list"
+  },
+  "summary": "Builds and sorts the fallback glyph table: fills the inline array with 118 consecutive character codes 0x0AA3..0x0B19 and sorts them with the shared id comparator.",
+  "confidence": 0.5,
+  "evidence": "The 0x76-iteration loop writing i+0xAA3 into the inline array, the begin/current/end pointers and the Container_SortIdsByName call are all explicit.",
+  "previous_name": "maybe_Text_BuildFallbackGlyphList",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0018C85C",
+  "name": "Text_GlyphCache_Compact",
+  "signature": "void Text_GlyphCache_Compact(TextGlyphCache* cache, int lo, int hi)",
+  "params": {
+   "cache": "glyph cache",
+   "lo": "first index",
+   "hi": "last index"
+  },
+  "summary": "Compacts the 255-entry text glyph cache: removes every entry equal to the current sentinel, shifts survivors down with memcpy and zero-fills the tail.",
+  "confidence": 0.55,
+  "evidence": "0x18-byte entries, the three-word key comparison against the sentinel, the 0x11-byte survivor copy and the 0xFF-entry bound are all visible; the sole caller is the cache lookup.",
+  "previous_name": "maybe_Text_GlyphCache_Compact",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0018DC98",
+  "name": "maybe_Ui_ApplyCharacterLookParamsEx",
+  "signature": "void maybe_Ui_ApplyCharacterLookParamsEx(CharacterLook* self)",
+  "params": {
+   "self": "character look record"
+  },
+  "summary": "Variant of the character-look parameter push for the save/character record layout: sets message arguments 3,7,8,9,10,11,12,13 from the look fields and the 0xD extra value.",
+  "confidence": 0.45,
+  "evidence": "The eight Message_SetArg calls and the Pack_FindRecordByIndex id mapping are explicit, but 'look' is inferred from the field names and the primary variant at 0x18DC74 is not named.",
+  "previous_name": "maybe_Ui_ApplyCharacterLookParamsEx",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00460888",
+  "name": "maybe_Ui_TextTable_FindRecord",
+  "signature": "void maybe_Ui_TextTable_FindRecord(UiTextOwner* self, void** recordPtr)",
+  "params": {
+   "self": "text owner",
+   "recordPtr": "record handle"
+  },
+  "summary": "Resolves one text record from a loaded text table: opens the table through the pack manager on first use, looks the record up by id and calls the fatal-error path when the record or its string is missing.",
+  "confidence": 0.45,
+  "evidence": "The table-open path (vtable 0x460F60) and func_0063E4C4 lookup are explicit, but the miss path also builds a default record, so 'FindRecord' is a simplification.",
+  "previous_name": "maybe_Ui_TextTable_FindRecord",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0018F89C",
+  "name": "maybe_Ui_PollAsyncLoad",
+  "signature": "void maybe_Ui_PollAsyncLoad(AsyncWaitOwner* self)",
+  "params": {
+   "self": "async load token owner"
+  },
+  "summary": "Polls an async load token: tests completion through its vtable +8/+0xC, copies the result bytes out, frees the token and releases the loading child screen.",
+  "confidence": 0.4,
+  "evidence": "The token vtable completion test, the result copies, the vtable+4 free and the Ui_GetCore/release-child-screen tail show UI async loading, not a generic OS wait op.",
+  "previous_name": "maybe_Os_PollAsyncWaitOp",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001F0E64",
+  "name": "maybe_Gfx_Resource_SetModeFlags",
+  "signature": "void maybe_Gfx_Resource_SetModeFlags(GfxResource* self, u8 mode, u8 flags)",
+  "params": {
+   "self": "graphics resource",
+   "mode": "mode byte",
+   "flags": "global flag byte"
+  },
+  "summary": "Stores a resource's mode byte and a global flags byte: writes mode to self+0xC and, after lazily creating the global resource block, writes flags at block+0x2D546.",
+  "confidence": 0.45,
+  "evidence": "Caller is the named Gfx_Resource_Recreate and the two stores are explicit, but the meaning of the two bytes is only inferred from their consumers.",
+  "previous_name": "maybe_Gfx_Resource_SetModeFlags",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00636C94",
+  "name": "maybe_Anim_GetCurrentMotionId",
+  "signature": "u32 maybe_Anim_GetCurrentMotionId(int self)",
+  "params": {
+   "self": "model/anim state"
+  },
+  "summary": "Returns the current motion id when the model is in state 0x37 and the motion lookup finds an entry, otherwise 0xFFFFFFFF.",
+  "confidence": 0.45,
+  "evidence": "The 0x37 state guard and the lookup helper are explicit, but entry+8 is only assumed to be the motion id.",
+  "previous_name": "maybe_Anim_GetCurrentMotionId",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00190980",
+  "name": "Text_CopyLayoutWithOffset",
+  "signature": "void Text_CopyLayoutWithOffset(TextPage* self)",
+  "params": {
+   "self": "text page"
+  },
+  "summary": "Snapshots the current text layout, subtracts the block's own origin from the ten exported 16-bit coordinates and stores the shifted 0xEA-byte copy back over +0x1DC.",
+  "confidence": 0.5,
+  "evidence": "Named Text_Page_ExportLayout/Text_Page_SetContent plus the ten coordinate subtractions and the 0xEA memcpy make the offset-copy explicit; the caller is a script command.",
+  "previous_name": "maybe_Text_CopyLayoutWithOffset",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00190F14",
+  "name": "Text_Page_BuildAtOffset",
+  "signature": "void Text_Page_BuildAtOffset(TextPage* self, int offset, const u16* posDelta)",
+  "params": {
+   "self": "text page",
+   "offset": "pen offset",
+   "posDelta": "optional 10-short delta"
+  },
+  "summary": "Builds the page's 0xEA-byte layout block at an arbitrary pen position: starts from the current coordinates, adds the optional 10-short delta, copies the two glyph arrays and writes the resulting run.",
+  "confidence": 0.5,
+  "evidence": "The pen-origin selection, the five packed coordinate additions, the two glyph array copies and Text_Page_SetContent are all explicit.",
+  "previous_name": "maybe_Text_Page_BuildAtOffset",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00193098",
+  "name": "maybe_Party_ShiftSkillSlots",
+  "signature": "void maybe_Party_ShiftSkillSlots(Actor* self, u32 record)",
+  "params": {
+   "self": "character",
+   "record": "0x44-byte record to insert"
+  },
+  "summary": "Shifts the 0x44-byte skill/ability slot records at +0x92F4..+0x9448 down one entry and inserts the new record, or appends it when the list is full.",
+  "confidence": 0.4,
+  "evidence": "The 0x44 stride and the four 0xFF/-1 sentinel checks are visible, but the shift count is recovered as a nonsense literal (0x78787879), so the exact slot arithmetic is not trustworthy.",
+  "previous_name": "maybe_Party_ShiftSkillSlots",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00365CC8",
+  "name": "Ui_MessageWindow_AdvancePage",
+  "signature": "void Ui_MessageWindow_AdvancePage(MessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Advances the message window to its next page: when the page animation is not running it selects page 6; otherwise it scrolls the text by the current line height and re-applies the status text.",
+  "confidence": 0.5,
+  "evidence": "The page setter, the f_144/f_148 text id/style update, the two scroll calls with f_218*f_14C and the named status-text update are all explicit.",
+  "previous_name": "maybe_Ui_MessageWindow_AdvancePage",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00444CFC",
+  "name": "maybe_Ui_Window_UpdateTransitionState",
+  "signature": "void maybe_Ui_Window_UpdateTransitionState(UiWindow* self)",
+  "params": {
+   "self": "window"
+  },
+  "summary": "Drives the window's open/close transition: depending on the transition object it sets animation state 4 or 7, copies the two-word rectangle from the static descriptor, records the start and notifies the handler.",
+  "confidence": 0.45,
+  "evidence": "The 4/7 state choice, the rectangle copies and the func_00444F44(self,state,0) call are explicit, but one branch scrolls text through the message window, so the class is not fully pinned down.",
+  "previous_name": "maybe_Ui_Window_UpdateTransitionState",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004D9D54",
+  "name": "Ui_UmaWindow_ApplyPurchase",
+  "signature": "u32 Ui_UmaWindow_ApplyPurchase(UmaWindow* self)",
+  "params": {
+   "self": "Uma (horse) window"
+  },
+  "summary": "Applies the purchase of the selected entry: on a confirmed row it subtracts the entry's cost from the saved gold (bag at work+0x24A98), refreshes the status text and opens state 6; otherwise it just opens state 3.",
+  "confidence": 0.6,
+  "evidence": "The cost getter feeds func_00613FC0(work+0x24A98, -cost) on the documented bag pointer, which is a gold debit; the state-6/3 choice is explicit.",
+  "previous_name": "maybe_Ui_UmaWindow_ApplyPurchase",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0019536C",
+  "name": "maybe_Field_DispatchNpcEvent",
+  "signature": "uint32_t maybe_Field_DispatchNpcEvent(FieldNpc* self)",
+  "params": {
+   "self": "field NPC"
+  },
+  "summary": "Event dispatcher for an NPC/party interaction: inspects the pending event flags at +0x3534 (talk/menu/action bits), resolves the selected party member, updates the cursor and status text and advances the NPC action controller.",
+  "confidence": 0.4,
+  "evidence": "The flag tests, the party-selection calls and ActorActionSeq_RunNode are visible, but the function is a vtable callback with no plain callers, so the event type is inferred.",
+  "previous_name": "maybe_Field_DispatchNpcEvent",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001C1028",
+  "name": "maybe_Ui_State_Reset",
+  "signature": "u32 maybe_Ui_State_Reset(UiStateRecord* self)",
+  "params": {
+   "self": "state record"
+  },
+  "summary": "Resets a state record: clears the 0x20-byte block at +4, releases the reference at +0x2C when it was live, zeroes +0x24 and returns the value that was at +4 before the clear.",
+  "confidence": 0.45,
+  "evidence": "The memset of 0x20 bytes and the guarded release are explicit, but the record's owner is unnamed and there are no callers (vtable slot).",
+  "previous_name": "maybe_Ui_State_Reset",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003F35B4",
+  "name": "maybe_Ui_Window_UpdateChildren",
+  "signature": "void maybe_Ui_Window_UpdateChildren(UiWindow* self)",
+  "params": {
+   "self": "window"
+  },
+  "summary": "Per-frame update of a menu window: runs the window's own vtable+0x2C update, updates the list at +0x138 and conditionally forwards the pending input event to the two optional child panes.",
+  "confidence": 0.4,
+  "evidence": "The child-pane flags at fixed member offsets and the optional event forwards are visible, but they are individual byte fields rather than a child list.",
+  "previous_name": "maybe_Ui_Window_UpdateChildren",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00307380",
+  "name": "maybe_Actor_ActionSeq_RunList4",
+  "signature": "void maybe_Actor_ActionSeq_RunList4(u32 self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "actor action sequence state"
+  },
+  "summary": "Action-sequence step that fills the sequence's list with mode 4, starts track 9 on the pane, resets the choice window and requests action 0 or 2 depending on the quest/save flag.",
+  "confidence": 0.42,
+  "evidence": "The list build with mode 4, the track-9 start, the choice reset and the flag-dependent action request are explicit; 'RunList4' only names the literal.",
+  "previous_name": "maybe_Actor_ActionSeq_RunList4",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00308A40",
+  "name": "maybe_Actor_ActionSeq_RunList5",
+  "signature": "u32 maybe_Actor_ActionSeq_RunList5(u32 self, int seqDesc, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "actor action sequence state"
+  },
+  "summary": "Sequence step that fills the list with mode 5 and, for the 'page 9' variant, requests action 0x0C; otherwise it requests 0x11 or 0x10 depending on the data flag.",
+  "confidence": 0.42,
+  "evidence": "The mode-5 list build and the 0x0C/0x11/0x10 action requests are explicit, but the page numbers 9/10 are raw bytes.",
+  "previous_name": "maybe_Actor_ActionSeq_RunList5",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0066B11C",
+  "name": "maybe_Actor_ReleaseTailMember",
+  "signature": "void maybe_Actor_ReleaseTailMember(Actor* actor)",
+  "params": {
+   "actor": "actor"
+  },
+  "summary": "Tail helper that passes actor+0x5FE4 to a non-returning library routine; the routine is used for guard registration and for fatal errors, so the effect of the call is unknown.",
+  "confidence": 0.3,
+  "evidence": "The readable body is a single tail call func_00100B74(actor+0x5FE4) and twelve unrelated callers pass different owners, so neither 'release' nor the member role is proven.",
+  "previous_name": "maybe_Actor_ReleaseTailMember",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00195560",
+  "name": "maybe_Ui_ActionWindow_InitSlots",
+  "signature": "void maybe_Ui_ActionWindow_InitSlots(UiActionWindow* self)",
+  "params": {
+   "self": "action window"
+  },
+  "summary": "Initialises the six action slots and their pane children, building the six-entry list and copying the per-slot icon/style bytes from the five flag lookups.",
+  "confidence": 0.45,
+  "evidence": "The six-iteration loop, the six-entry list build and the five flag lookups are visible, but the loop is decompiled with unaff_ registers, so the slot field addresses are approximate.",
+  "previous_name": "maybe_Ui_ActionWindow_InitSlots",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0066AD94",
+  "name": "maybe_Work_FindLastNamedRow",
+  "signature": "int maybe_Work_FindLastNamedRow(WorkRowTable* table)",
+  "params": {
+   "table": "20-entry row table"
+  },
+  "summary": "Returns the index of the last used entry of the 20-entry 0x8C-byte row table (non-empty wide name shorter than 7 characters and id at +0x88 not -1).",
+  "confidence": 0.3,
+  "evidence": "Only the tail call func_00100B74(table+0x7B3C) survives in the readable body; the loop described in the previous evidence comes from the disassembly, so the behaviour is not verifiable from the C.",
+  "previous_name": "maybe_Work_FindLastNamedRow",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0066AF34",
+  "name": "Party_EntryMatchesSelectedId",
+  "signature": "bool Party_EntryMatchesSelectedId(PartyList* list, u32* idPtr)",
+  "params": {
+   "list": "party list",
+   "idPtr": "id to look up"
+  },
+  "summary": "True when the party entry found for *idPtr carries the same id that the current selection table holds for this list.",
+  "confidence": 0.5,
+  "evidence": "Party_FindEntryById plus the per-list selection word at +0x8740 and the entry id f_88 are all explicit; the only unknown is the identity of the selection table.",
+  "previous_name": "maybe_Party_EntryMatchesSelectedId",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0066B19C",
+  "name": "maybe_Work_CountNamedRows",
+  "signature": "int maybe_Work_CountNamedRows(WorkRowTable* table)",
+  "params": {
+   "table": "20-entry row table"
+  },
+  "summary": "Counts the used entries of the 20-entry 0x8C-byte row table (non-empty wide name shorter than 7 characters and id at +0x88 not -1).",
+  "confidence": 0.3,
+  "evidence": "Only the tail call func_00100B74(table+0x7B3C) survives in the readable body, so the counting loop is known only from the disassembly and cannot be checked here.",
+  "previous_name": "maybe_Work_CountNamedRows",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0019B130",
+  "name": "maybe_Ui_EquipmentWindow_UpdateDetailAnim",
+  "signature": "void maybe_Ui_EquipmentWindow_UpdateDetailAnim(UiEquipmentWindow* self)",
+  "params": {
+   "self": "equipment window"
+  },
+  "summary": "Advances the detail sub-window animation: pops the pane when flag 4 is set, otherwise sets the gauge value and pushes the descriptor-based pane when the 0x102 flags are set.",
+  "confidence": 0.45,
+  "evidence": "The flag tests and Ui_Window_PushPane/Ui_Window_PopPane calls are explicit, but 'equipment' is inferred from the gauges and the surrounding UI code.",
+  "previous_name": "maybe_Ui_EquipmentWindow_UpdateDetailAnim",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00198FF0",
+  "name": "Ui_Window_ClosePaneIfOpen",
+  "signature": "void Ui_Window_ClosePaneIfOpen(UiWindow* self)",
+  "params": {
+   "self": "window"
+  },
+  "summary": "If the window's child pane is currently open, closes it: resolves the pane, checks the open flag, pops the pane, clears the pane-active flag and runs the post-pop fix-up.",
+  "confidence": 0.55,
+  "evidence": "The open test, Ui_Window_PopPane, the f_1BC=0 store and the named post-pop callback make the conditional close explicit.",
+  "previous_name": "maybe_Ui_Window_ClosePaneIfOpen",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00331748",
+  "name": "Monster_EcologyBehaviorCtor",
+  "signature": "MonsterBehavior* Monster_EcologyBehaviorCtor(void)",
+  "params": {},
+  "summary": "Allocates and initialises the monster ecology behaviour object: runs the shared AI-behaviour constructor, installs the ecology vtable 0x764848 and copies the three default parameter words.",
+  "confidence": 0.5,
+  "evidence": "The only caller is the named Monster_SetupEcology, the vtable 0x764848 is installed over the shared AI ctor result and the three constants are copied at +0x34..+0x3C.",
+  "previous_name": "maybe_Monster_EcologyBehaviorCtor",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0019C574",
+  "name": "Monster_SetupEcologyForId",
+  "signature": "u32 Monster_SetupEcologyForId(Actor* self, u32 monsterId)",
+  "params": {
+   "self": "actor handle record",
+   "monsterId": "monster species id"
+  },
+  "summary": "Resolves the actor through the handle table, calls Monster_SetupEcology with the actor's spawn block and applies action 0x0B with the monster id.",
+  "confidence": 0.5,
+  "evidence": "The handle-table generation check, the named Monster_SetupEcology call and the following func_005E7848(obj,0x0B,monsterId) are explicit.",
+  "previous_name": "maybe_Monster_SetupEcologyForId",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0019C7A0",
+  "name": "maybe_Script_ResolveTwoIds",
+  "signature": "void maybe_Script_ResolveTwoIds(ScriptCtx* ctx, u32 id1, u32 id2)",
+  "params": {
+   "ctx": "result context",
+   "id1": "first id",
+   "id2": "second id"
+  },
+  "summary": "Resolves two ids through the shared id table and writes the two objects to ctx+4/+8; the table is created lazily on first use.",
+  "confidence": 0.4,
+  "evidence": "Two identical func_002D71AC lookups and the lazy table creation are clear, but the caller is a script-table initialiser and the result fields have no names.",
+  "previous_name": "maybe_Script_ResolveTwoIds",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003EA25C",
+  "name": "Field_HitBox_Setup",
+  "signature": "void Field_HitBox_Setup(HitBox* self, HitBoxDef* def, ShapeParams* params, u32 arg4)",
+  "params": {
+   "self": "hit box",
+   "def": "hit box definition",
+   "params": "shape parameters"
+  },
+  "summary": "Rebuilds a hit/collision box list from a definition: clears the old nodes, picks the sub-definition by shape type, sets the integer bounds x/y/width/height and the layer byte, and rebuilds the shape list.",
+  "confidence": 0.55,
+  "evidence": "The rect computation (origin + size - 1), the shape-type selection 0/1/2 and the layer byte at def+0x21/22/23 are explicit; two model-rebuild callers pass each part.",
+  "previous_name": "maybe_Field_HitBox_Setup",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0019E2D4",
+  "name": "maybe_Ui_MessageWindow_CloseWithEmote",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithEmote(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Closes a talk session: releases the emote line objects and the emote controller for the window's text handle, then hides the message window through the text manager.",
+  "confidence": 0.45,
+  "evidence": "Text_ReleaseLineObjects and the two other calls take the window's text handle, but the called helpers are only partly named, so the emote role stays inferred.",
+  "previous_name": "maybe_Ui_MessageWindow_CloseWithEmote",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0019EE60",
+  "name": "maybe_BattleActor_ShowStateEffect",
+  "signature": "void maybe_BattleActor_ShowStateEffect(BattleActor* self)",
+  "params": {
+   "self": "battle actor"
+  },
+  "summary": "Shows a state-change effect on a battle actor: fills the billboard sprite record from the actor transform, copies the sound parameters, pushes the effect id and sets the state id 0x10.",
+  "confidence": 0.45,
+  "evidence": "The billboard/sound/effect-id sequence is explicit, but the effect id is chosen from raw fields and the caller only switches on an unnamed action id.",
+  "previous_name": "maybe_BattleActor_ShowStateEffect",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001A188C",
+  "name": "Ui_Scene_AdvanceState",
+  "signature": "unsigned int Ui_Scene_AdvanceState(UiScene* self)",
+  "params": {
+   "self": "UI scene"
+  },
+  "summary": "Runs one tick of a UI scene object: updates the fade timers, and when the key/state conditions allow it closes the current sub-view, saves the previous state and moves to state 0x13 before ticking the scene vtable.",
+  "confidence": 0.5,
+  "evidence": "The state checks 0x12/0x13, the vtable+0x14 call with the old state and the clearing of f_1D/f_20/f_24 are explicit; the function always returns 1.",
+  "previous_name": "maybe_Ui_Scene_AdvanceState",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001A2FB4",
+  "name": "maybe_Ui_Object_SetOwner",
+  "signature": "void maybe_Ui_Object_SetOwner(UiObject* self, UiObject* owner)",
+  "params": {
+   "self": "UI object",
+   "owner": "new owner"
+  },
+  "summary": "Re-parents a UI object: stores the new owner at +0x28, releases the old owner link (vtable+8) and clears the owner's active flag (vtable+0xC with 0).",
+  "confidence": 0.45,
+  "evidence": "The owner store and the two vtable calls match the row/window re-parenting path, but the owner argument itself is recovered from an unaff_ register, so the prototype is uncertain.",
+  "previous_name": "maybe_Ui_Object_SetOwner",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ }
+]

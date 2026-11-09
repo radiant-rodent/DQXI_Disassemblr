@@ -1,0 +1,1785 @@
+[
+ {
+  "address": "0x001BB300",
+  "name": "maybe_Ui_Object_InitListHeads",
+  "signature": "void maybe_Ui_Object_InitListHeads(void* self, int typeInfo)",
+  "params": {
+   "self": "object",
+   "typeInfo": "class/type descriptor id"
+  },
+  "summary": "Base initialiser for a UI object that owns three intrusive circular lists: stores the type descriptor in the header, self-links every list sentinel (offsets +0x174/+0x178/+0x180/+0x184) so the lists start empty, and returns the address of an embedded member of a global singleton.",
+  "confidence": 0.4,
+  "evidence": "No direct callers (only reached through a virtual slot). Writes g_001bb360/g_001bb364 (0x759388/0x76E228, class descriptors) into the object header at +0 and +0x4C and does repeated *(node+4)=prev / *(prev+8)=node pairs, which is the classic std::list node self-link used by the sibling helpers 0x001BBDDC/0x001BBECC/0x001BB8BC in the same module. g_001bb364 is not a vtable (it points into data, not code), so it is a type/class id."
+ },
+ {
+  "address": "0x001BB8BC",
+  "name": "maybe_Ui_Object_ReleaseLists",
+  "signature": "void maybe_Ui_Object_ReleaseLists(void* self)",
+  "params": {
+   "self": "object"
+  },
+  "summary": "Tears down a UI object that holds several intrusive lists: releases four resource handles at +4/+8/+0xC/+0x10, then walks the lists at +0x14, +0x20 and +0x2C calling each element's virtual destructor (slot +4) or releasing its resource handle.",
+  "confidence": 0.45,
+  "evidence": "Called by Ui_CompositeWindow_ReleaseHandles (0x006034BC) and 0x00602C7C, i.e. from the composite window teardown path. Repeats the list-walk pattern of 0x001BBDDC/0x001BBECC for three lists and adds func_005634E0 (handle release) for the first four members."
+ },
+ {
+  "address": "0x001BBDDC",
+  "name": "maybe_Ui_Object_ReleaseList20",
+  "signature": "void maybe_Ui_Object_ReleaseList20(void* self)",
+  "params": {
+   "self": "object"
+  },
+  "summary": "Releases every element of the intrusive list anchored at +0x20 by calling its virtual destructor (vtable slot +4).",
+  "confidence": 0.45,
+  "evidence": "Exact copy of the list walk in 0x001BBECC but with the sentinel at self+0x20 instead of self+0x14; caller 0x00604F50 is in the same UI teardown family as the other list helpers."
+ },
+ {
+  "address": "0x001BBECC",
+  "name": "maybe_Ui_Object_ReleaseList14",
+  "signature": "void maybe_Ui_Object_ReleaseList14(void* self)",
+  "params": {
+   "self": "object"
+  },
+  "summary": "Releases every element of the intrusive list anchored at +0x14 by calling its virtual destructor (vtable slot +4).",
+  "confidence": 0.45,
+  "evidence": "List walk with sentinel self+0x14 calling *(vtable+4) on each element; same shape as 0x001BBDDC (+0x20) and part of the teardown performed by 0x001BB8BC."
+ },
+ {
+  "address": "0x001BC2A8",
+  "name": "Ui_Battle2_OpenResourcePacks",
+  "signature": "void Ui_Battle2_OpenResourcePacks(void* self)",
+  "params": {
+   "self": "battle UI screen"
+  },
+  "summary": "Opens the four packs the 2D battle screen needs: '2d/battle2/common/common.pack', '2d/battle2/bg/bg.pack', '2d/battle2/enemy/enemy.pack' and '2d/battle2/parts/effect/effect.*', storing the resulting handles at +4/+8/+0xC/+0x10.",
+  "confidence": 0.7,
+  "evidence": "Literal strings s_2d_battle2_common_common_pack, s_2d_battle2_bg_bg_pack, s_2d_battle2_enemy_enemy_pack, s_2d_battle2_parts_effect_effect_* passed to the pack-open helper 0x003882F0; each result is kept through 0x00124D48. Only external caller is 0x00602C7C (the composite-window/battle-UI manager)."
+ },
+ {
+  "address": "0x001BC734",
+  "name": "Script_ObjectPtr_Clear",
+  "signature": "void Script_ObjectPtr_Clear(void* self)",
+  "params": {
+   "self": "SQObjectPtr member at +0x18"
+  },
+  "summary": "Drops the reference held in a script object member: decrements the refcount of the value at +0x18 and calls its virtual release when the count reaches zero, then stores null.",
+  "confidence": 0.6,
+  "evidence": "Ghidra signature u32 f(int self); guarded by 'if (self == 0) return 0'; reads f_18, decrements *(ref+4) and calls *(*(f_18)+8) when it hits 0 - the exact refcount-drop sequence of SQObjectPtr::Release, and bit 0x08000000 is Squirrel's SQOBJECT_REF_COUNTED flag used by the sibling 0x001BF7D8."
+ },
+ {
+  "address": "0x001BC750",
+  "name": "Ui_Node_SetParent",
+  "signature": "int maybe_Ui_Node_SetParent(void* self, void* parent)",
+  "params": {
+   "self": "node",
+   "parent": "new parent node"
+  },
+  "summary": "Re-parents a node, refusing assignments that would create a cycle (walks the candidate parent's own parent chain looking for self), then takes a reference on the new parent and releases the old one. Returns 0 when the assignment was rejected, 1 when it was applied.",
+  "confidence": 0.55,
+  "evidence": "Explicit cycle walk 'iVar2 = arg2->f_18; if (iVar2 == self) return 0' up the +0x18 link, followed by refcount++ on the new parent and refcount--/vtable+8 on the old one. Same +0x18 member as 0x001BC734; callers 0x005B3558/0x00600A54 use it to link tree/hierarchy nodes."
+ },
+ {
+  "address": "0x001BCE5C",
+  "name": "Script_IntVector_Push",
+  "signature": "int Script_IntVector_Push(void* fs, int value)",
+  "params": {
+   "fs": "compiler/local-state object",
+   "value": "value to append, -1 = allocate a new local slot"
+  },
+  "summary": "Appends one 32-bit value to the growable int array at +0x10/+0x14/+0x18 (doubling the capacity), using a freshly pushed local-variable slot when the caller passes -1. Returns the stored value.",
+  "confidence": 0.5,
+  "evidence": "Called 12x from the script compiler (0x00185720, 0x00187780 Expression(), 0x0018927C ...) always with -1 or a small int; the -1 default comes from 0x001BDBC4 which raises the Squirrel message 'internal compiler error: too many locals'. Growth pattern data/size/cap with doubling."
+ },
+ {
+  "address": "0x001BCF0C",
+  "name": "maybe_Script_Registry_AddNewTable",
+  "signature": "void maybe_Script_Registry_AddNewTable(void** out, void* owner)",
+  "params": {
+   "out": "receives the new {tag,ptr} script object",
+   "owner": "object whose map at +0x84 is updated"
+  },
+  "summary": "Creates a small script table object (0x2C bytes) and inserts it into the owner's table map at +0x84, returning the new object as a {type-tag, pointer} pair.",
+  "confidence": 0.45,
+  "evidence": "Allocates 0x2C via 0x0014B350, constructs it with 0x006009E8 (table ctor: takes the shared-state pointer from owner+0xDC), bumps the refcount at +4 and stores it with 0x00600768 into owner+0x84. Copies g_001BCFF8/g_001BCFFC which are Squirrel object tags (0x0A000020 = delegable table)."
+ },
+ {
+  "address": "0x001BD000",
+  "name": "Script_Registry_GetOrAddId",
+  "signature": "int* maybe_Script_Registry_GetOrAddId(void* self, void** key)",
+  "params": {
+   "self": "registry",
+   "key": "script object key"
+  },
+  "summary": "Looks a key up in the registry map at +0x7C; when the key is new it inserts it with the registry's next sequence number (+0x98) and bumps that counter. Returns the entry pointer.",
+  "confidence": 0.5,
+  "evidence": "Uses 0x005FFEF4 (table get) and on a miss 0x00600768 (table new slot) with the default value g_001BD1A0 and increments self->f_98. Callers are the compiler (0x00186CB4, 0x00187780) which use the returned value as a table slot id."
+ },
+ {
+  "address": "0x001BD1A4",
+  "name": "maybe_Script_RecordVector_AddUnique",
+  "signature": "void Script_RecordVector_AddUnique(void* self, int id, int enabled, int force)",
+  "params": {
+   "self": "compiler state",
+   "id": "record id",
+   "enabled": "also push the value form",
+   "force": "bypass the duplicate check"
+  },
+  "summary": "Appends a {id, value} record (8 bytes) to the array at +0x9C, skipping the append when the last stored id already equals the new one; the value is the pre-call +100 (0x64) field.",
+  "confidence": 0.45,
+  "evidence": "Guarded by 'if (self->f_d0 != arg2 || arg4 != 0)', writes *dst=arg2 and dst[1]=old value at +0x64, then self->f_d0 = arg2 - a last-value memo used to coalesce repeats. Growth pattern matches the other compiler vectors."
+ },
+ {
+  "address": "0x001BD258",
+  "name": "Script_ObjectVector_Push",
+  "signature": "void Script_ObjectVector_Push(void* self, void** value)",
+  "params": {
+   "self": "compiler state",
+   "value": "script object ({tag,ptr}) to append"
+  },
+  "summary": "Appends a reference-counted script object to the 8-byte-element vector at +0x48, taking an extra reference for the copy and releasing the temporary.",
+  "confidence": 0.55,
+  "evidence": "Calls 0x001BE1E4 first (accounting), copies *arg2/arg2[1] into an 8-byte slot via 0x0014CE14 growth, refcount++ when tag&0x08000000, then refcount--/vtable+8 on the local. Classic vector<SQObjectPtr>::push_back."
+ },
+ {
+  "address": "0x001BD318",
+  "name": "maybe_Script_Registry_AddInstance",
+  "signature": "void maybe_Script_Registry_AddInstance(void** out, void* owner, int key, int arg)",
+  "params": {
+   "out": "receives {tag,ptr}",
+   "owner": "object owning the map at +0x84",
+   "key": "lookup key",
+   "arg": "extra lookup argument"
+  },
+  "summary": "Resolves/creates an object with 0x006111A4(owner->f_dc, key, arg) and registers it in the map at +0x84, returning it as a {type-tag, pointer} pair.",
+  "confidence": 0.45,
+  "evidence": "Same shape as 0x001BCF0C but the object comes from 0x006111A4 (lookup-or-create on the shared state) instead of a fresh table. g_001BD3F4/g_001BD3F8 are Squirrel tags."
+ },
+ {
+  "address": "0x001BD3FC",
+  "name": "maybe_Script_ObjectVector_Trim",
+  "signature": "void maybe_Script_ObjectVector_Trim(void* self, int keep)",
+  "params": {
+   "self": "compiler state",
+   "keep": "number of leading records to keep"
+  },
+  "summary": "Drops records from the end of the 0x14-byte record vector at +4 down to `keep` entries, moving the still-live ones (those not holding the null tag) into the secondary vector at +0x6C.",
+  "confidence": 0.4,
+  "evidence": "Counts down self->f_8 while arg2 < count, copies tag/pointer/3 payload words through 0x001BF7D8 and swaps f_C with (self+100)-1 for the moved copy; the null test 'local_38 != uVar1' uses the tag in g_001BD584. Same record layout as 0x001BE454/0x001BE1E4."
+ },
+ {
+  "address": "0x001BD588",
+  "name": "Script_Compiler_DeclareLocal",
+  "signature": "void maybe_Script_Compiler_DeclareLocal(void* self, void** name)",
+  "params": {
+   "self": "compiler/scope state",
+   "name": "local variable name object"
+  },
+  "summary": "Declares a local variable in the current scope: searches the parent scope chain (self+0xA8) and the current local table for the same name, then appends a record tagged 0 (new), 1 (declared) or 2 (shadowing an outer local).",
+  "confidence": 0.5,
+  "evidence": "Three near-identical append blocks that differ only in the kind byte (*puVar4 = 1 / 2 / local_48), each preceded by a scan comparing record+8 with the name's hash; raises the Squirrel message 'internal compiler error: too many locals' through the same tail as 0x001BDE42. Called from 0x00186CB4 inside the script compiler."
+ },
+ {
+  "address": "0x001BDBC4",
+  "name": "Script_Compiler_PushLocalVar",
+  "signature": "int Script_Compiler_PushLocalVar(void* fs)",
+  "params": {
+   "fs": "compiler/function state"
+  },
+  "summary": "Allocates the next local-variable slot (0x14-byte record with a null name and empty value) and returns its index, raising 'internal compiler error: too many locals' once the function needs more than 255 slots.",
+  "confidence": 0.6,
+  "evidence": "The only function in the programme that references s_internal_compiler_error__too_man_001bdce4 ('internal compiler error: too many locals'); the guard is literally 'if (0xff < self->f_1c)'. Also tracks the maximum stack depth used so far (f_1C = max(f_1C, count)). The 255 limit is Squirrel's MAX_FUNC_STACKSIZE."
+ },
+ {
+  "address": "0x001BDD10",
+  "name": "Script_Compiler_FreeLastFunction",
+  "signature": "void Script_Compiler_FreeLastFunction(void* self)",
+  "params": {
+   "self": "compiler"
+  },
+  "summary": "Destroys and frees the most recently created 0xF4-byte function object at the top of the array at +0xE0 and decrements its count.",
+  "confidence": 0.5,
+  "evidence": "Pops self->f_e0[self->f_e4-1], calls 0x001BE7AC (the full destructor of that 0xF4 object) then 0x00147AEC(ptr, 0xF4) - the matching free size - and decrements f_e4. Paired with 0x001BE0B4 which pushes exactly those objects."
+ },
+ {
+  "address": "0x001BDD50",
+  "name": "maybe_Script_Compiler_PushStackOp",
+  "signature": "void maybe_Script_Compiler_PushStackOp(void* self, void* record, int kind, void* extra)",
+  "params": {
+   "self": "compiler state",
+   "record": "value/descriptor record",
+   "kind": "operation tag (7..0x20)",
+   "extra": "extra object"
+  },
+  "summary": "Emits one stack/assignment operation described by a small record: switches on the record's tag byte (0x13 = assignment, 0x20 = object, ...) and appends the encoded instruction word(s).",
+  "confidence": 0.35,
+  "evidence": "Ghidra could not recover the jump table ('Bad instruction - Truncating control flow'), but the shape is a switch over *(u8*)(arg2+4) with cases 0,1,7,0x0E,0x0F,0x10,0x13,0x14,0x20 and the tail writes four words through *piVar3 - an instruction encoder. Called 15x from the compiler (0x00185720, 0x00187780, 0x0018927C ...)."
+ },
+ {
+  "address": "0x001BDE42",
+  "name": "Script_Compiler_UpdateStackSize",
+  "signature": "void Script_Compiler_UpdateStackSize(void* fs)",
+  "params": {
+   "fs": "compiler/function state"
+  },
+  "summary": "Raises the recorded maximum stack depth to the current slot count and raises 'internal compiler error: too many locals' past 255 slots. Second entry point of the tail of 0x001BDBC4.",
+  "confidence": 0.55,
+  "evidence": "Duplicate of the tail of 0x001BDBC4 (same self offsets f_1c/f_8, same string s_internal_compiler_error__too_man_001bdce4); sits at 0x001BDD50+0xF2, i.e. inside the previous function, so Ghidra produced a second entry point for the shared epilogue."
+ },
+ {
+  "address": "0x001BE0B4",
+  "name": "Script_Compiler_CreateFunction",
+  "signature": "int Script_Compiler_CreateFunction(void* self, int sharedState)",
+  "params": {
+   "self": "compiler",
+   "sharedState": "script shared state"
+  },
+  "summary": "Allocates a 0xF4-byte script function object, initialises it (0x001BE56C) with the compiler as owner, and pushes it on the compiler's function list at +0xE0. Returns the new object.",
+  "confidence": 0.5,
+  "evidence": "func_0014B34C(0xF4) followed by 0x001BE56C(result, sharedState, self, self->f_ec, self->f_f0); the same 0xF4 objects are freed by 0x001BDD10 and destroyed by 0x001BE7AC. Caller 0x00186CB4 is inside the script compiler."
+ },
+ {
+  "address": "0x001BE1E4",
+  "name": "Script_ObjectVector_PushCounted",
+  "signature": "int Script_ObjectVector_PushCounted(void* self, void** value)",
+  "params": {
+   "self": "compiler state",
+   "value": "script object to append"
+  },
+  "summary": "Appends a script object to the 0x14-byte record vector at +4 (tag/pointer/three payload words), taking a reference, and returns the index the record was stored at.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x001BDBC4 but the null name is replaced by the caller's object (0x001BF7D8 copy) and the payload words come from self+0x64 and self+8; it is the 'push with value' variant and is called from 0x001BD258."
+ },
+ {
+  "address": "0x001BE320",
+  "name": "Script_Registry_GetByKey",
+  "signature": "int maybe_Script_Registry_GetByKey(void* self, int* key)",
+  "params": {
+   "self": "registry",
+   "key": "script object key"
+  },
+  "summary": "Thin wrapper for 0x001BD000 that looks up or creates the registry entry for a script object key and returns the entry pointer.",
+  "confidence": 0.5,
+  "evidence": "Sets the key tag from g_001BE380, calls 0x001BD000 with it and releases the temporary through the SQObjectPtr refcount path. Only caller is 0x00187780 (script compiler)."
+ },
+ {
+  "address": "0x001BE454",
+  "name": "Script_ObjectVector_Pop",
+  "signature": "int Script_ObjectVector_Pop(void* self)",
+  "params": {
+   "self": "compiler state"
+  },
+  "summary": "Pops the top record of the 0x14-byte record vector at +4 (the index taken from the int stack at +0x10), releasing the reference it held, and returns the record index.",
+  "confidence": 0.55,
+  "evidence": "Reads the index from *(self->f_10 + f_14*4 - 4), copies that record through 0x001BF7D8, drops the reference (refcount-/vtable+8) and then decrements both f_8 and f_14 - i.e. pop of the local-slot stack. Called from the compiler at 0x00187780/0x00186020."
+ },
+ {
+  "address": "0x001BE56C",
+  "name": "maybe_Script_Function_Init",
+  "signature": "void* maybe_Script_Function_Init(void* obj, int sharedState, void* parent, void* a4, void* a5)",
+  "params": {
+   "obj": "0xF4-byte function object",
+   "sharedState": "script shared state",
+   "parent": "owning compiler/function",
+   "a4": "error callback",
+   "a5": "error context"
+  },
+  "summary": "Initialises a script function/class object: zeroes all members, nulls the eight metamethod slots (tag/pointer pairs at +0x78..+0x94), creates the two member tables and stores the parent, error handler and error context.",
+  "confidence": 0.4,
+  "evidence": "Explicitly writes tag/null pairs with g_001BE7A4 (0x01000001) and creates two 0x2C-byte tables through 0x0014B350+0x006009E8 using the shared state, then stores arg3..arg5. The 0x0A000020 tag written afterwards is Squirrel's delegable-table type, so these are Squirrel table objects."
+ },
+ {
+  "address": "0x001BE7AC",
+  "name": "Script_Function_Destroy",
+  "signature": "void Script_Function_Destroy(void* self)",
+  "params": {
+   "self": "0xF4-byte function object"
+  },
+  "summary": "Full destructor of the script function object: frees every compiler vector it owns (int, 8-byte object, 0x14-byte record and 0x10-byte table vectors) and releases the remaining script object references.",
+  "confidence": 0.55,
+  "evidence": "Walks and frees the exact members used by 0x001BD588/0x001BE0B4 (f_24/f_2C, f_30/f_38, f_3C/f_44, f_48/f_50, f_54/f_5C, f_60/f_68, f_6C/f_74, f_9C/f_A4, f_AC/f_B4, f_B8/f_C0, f_C4/f_CC, f_E0) with 0x00147AEC(ptr, count*elementSize); called by 0x001BDD10 right before the matching free."
+ },
+ {
+  "address": "0x001BED00",
+  "name": "Script_Generator_Yield",
+  "signature": "int Script_Generator_Yield(void* self, void* vm)",
+  "params": {
+   "self": "generator",
+   "vm": "calling script VM"
+  },
+  "summary": "Suspends a script generator: refuses when it is already dead/suspended (Squirrel's 'internal vm error, yielding dead generator'), saves the VM's call-frame header and stack objects into the generator, and marks it suspended.",
+  "confidence": 0.9,
+  "evidence": "References s_internal_vm_error__yielding_dead_001befa4 and s_internal_vm_error__yielding_a_de_001befd0 (verbatim Squirrel SQGenerator::Yield messages), copies the 0x30-byte call info at vm+0x84 word by word, moves vm->f_30-vm->f_34 stack objects into the generator with 0x001BF7D8 and sets the state byte at +0x74 to 1."
+ },
+ {
+  "address": "0x001BF004",
+  "name": "Script_Generator_Create",
+  "signature": "void* Script_Generator_Create(int sharedState, int* owner)",
+  "params": {
+   "sharedState": "script shared state",
+   "owner": "closure/VM that owns the generator"
+  },
+  "summary": "Allocates (0x78 bytes) and initialises a script generator object: installs the type tag, nulls the saved frame and stack, takes a reference on the owning closure and links it into the owner's generator list.",
+  "confidence": 0.7,
+  "evidence": "func_0014B350(0x78), stores g_001BF0FC/g_001BF100 (Squirrel tags) in the header, copies a null script object into +0x18 through 0x001BF7D8, stores arg1 at +0x14 and calls 0x00245C1C(arg1+0x48,result) which is the intrusive-list link. Companion of 0x001BED00/0x001BF108."
+ },
+ {
+  "address": "0x001BF108",
+  "name": "Script_Generator_Resume",
+  "signature": "int Script_Generator_Resume(void* self, void* vm, int raiseError)",
+  "params": {
+   "self": "generator",
+   "vm": "script VM",
+   "raiseError": "whether an error should be raised"
+  },
+  "summary": "Resumes a suspended script generator: refuses when it is dead ('resuming dead generator') or already running ('resuming active generator'), pushes a fresh 0x30-byte call frame onto the VM stack from the generator's saved state and restores its operand stack.",
+  "confidence": 0.9,
+  "evidence": "References s_resuming_dead_generator_001bf52c and s_resuming_active_generator_001bf544 (verbatim Squirrel SQGenerator::Resume messages); grows vm->f_6C (0x30-byte call-info array) and copies the generator's saved frame, i.e. the exact inverse of 0x001BED00."
+ },
+ {
+  "address": "0x001BF614",
+  "name": "Script_Generator_Release",
+  "signature": "void Script_Generator_Release(void* self)",
+  "params": {
+   "self": "generator"
+  },
+  "summary": "Releases a generator's saved operand stack array and drops its closure reference.",
+  "confidence": 0.65,
+  "evidence": "Calls 0x00710938(self+0x20, 0, <null object>) which is the same helper 0x001BED00 uses to build that array, then 0x001BF7D8(self+0x18, null) - the refcounted closure slot filled by 0x001BF004."
+ },
+ {
+  "address": "0x001BF7D8",
+  "name": "Script_ObjectPtr_Assign",
+  "signature": "void** Script_ObjectPtr_Assign(void** dst, void** src)",
+  "params": {
+   "dst": "destination script object",
+   "src": "source script object"
+  },
+  "summary": "Copy-assigns a script object ({type tag, pointer} pair): takes a reference on the new value when its tag is reference counted and releases the old one, calling its virtual release when the count reaches zero. This is Squirrel's SQObjectPtr::operator= and is the single most used helper in the game code.",
+  "confidence": 0.85,
+  "evidence": "Reads tag/pointer pair, tests (tag & 0x08000000) - Squirrel's SQOBJECT_REF_COUNTED - then increments ref+4 and decrements the old one, invoking *(*(old)+8) at zero. 88 callers spread over the script VM (0x005B64CC), the UI and the script-compiler cluster, exactly as SQObjectPtr would be."
+ },
+ {
+  "address": "0x001C11CC",
+  "name": "maybe_Ui_Object_InvokeCallback",
+  "signature": "void maybe_Ui_Object_InvokeCallback(void* self, unsigned int arg)",
+  "params": {
+   "self": "object",
+   "arg": "id or override value"
+  },
+  "summary": "Invokes the object's stored callback (member at +4, optionally fetched through the sub-object at +0x30) after asking the sub-object to resolve the given id; used as a deferred notification hook.",
+  "confidence": 0.35,
+  "evidence": "Reads f_30->f_94 as the argument when the sub-object exists, calls 0x001DAD58(sub+0x1E18, self+0xC) and 0x0062F680(sub+0x1E18) as a validity/lookup test, then tail-calls *(self+4) - a stored callback. Only caller is 0x001C2B40 (same family), so this is an internal notification helper."
+ },
+ {
+  "address": "0x001C1F0C",
+  "name": "maybe_Ui_Object_QuerySubObject",
+  "signature": "void maybe_Ui_Object_QuerySubObject(void* self)",
+  "params": {
+   "self": "object"
+  },
+  "summary": "Asks the object's embedded lookup table (+0xCC0) about the sub-object at +0x120; the decompiler lost the tail of the function after the call.",
+  "confidence": 0.3,
+  "evidence": "Single call 0x001DAD58(arg1+0xCC0, arg1+0x120) followed by 'halt_baddata' (Ghidra control-flow loss). The same table/offset pair appears in 0x001C2B40 and in the script-registry helpers, i.e. a key lookup on a hash table."
+ },
+ {
+  "address": "0x001C2B40",
+  "name": "maybe_Ui_Object_NotifyEvent",
+  "signature": "void maybe_Ui_Object_NotifyEvent(void* self, unsigned int id, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "object",
+   "id": "event id",
+   "a3": "unused",
+   "a4": "event argument"
+  },
+  "summary": "Sends an event id to the sub-object registered for it: resolves the id through the object's table (+0xCC0) and, when found, runs the handler for that entry and puts the owning state machine into state 0x0D.",
+  "confidence": 0.4,
+  "evidence": "0x001DAD58(self+0xCC0, self+0x120) + 0x0062F680 presence test, then 0x0023CDC4 on the entry's handler field and writes 1/0x0D into f_10/f_14 of the entry at f_11C - a state-machine transition. Only caller is 0x001C11CC, so both belong to one notification path."
+ },
+ {
+  "address": "0x001C33EC",
+  "name": "maybe_Ui_Screen_Delete",
+  "signature": "void maybe_Ui_Screen_Delete(void* self)",
+  "params": {
+   "self": "screen system object"
+  },
+  "summary": "Thin delete wrapper: runs the release routine 0x001C33FC and then frees the object with 0x0010F6CC.",
+  "confidence": 0.45,
+  "evidence": "Two calls only: 0x001C33FC (the destructor body that resets all the list heads) and 0x0010F6CC (the same 'free' helper used by 0x001CA304/0x001CA340). Classic scalar-deleting destructor for a class whose real destructor lives in 0x001C33FC."
+ },
+ {
+  "address": "0x001C33FC",
+  "name": "maybe_Ui_Screen_System_Release",
+  "signature": "void maybe_Ui_Screen_System_Release(void* self)",
+  "params": {
+   "self": "screen system object"
+  },
+  "summary": "Destructor body of a large screen/scene manager: runs the stored virtual at +0xD9C, resets the type tag, empties the three intrusive list heads at +0xD88/+0xD98/+0xDAC, then walks down into the embedded sub-systems (party, message, field and UI singletons) resetting their list heads as well.",
+  "confidence": 0.4,
+  "evidence": "Writes g_001C3584/g_001C3588 (type tags, values 0x759724/0x759388 - the same tag family as 0x001BB300) and then repeats the *(node+4)=prev / *(prev+8)=node self-link for each of many embedded structures reached through 0x0029D5F8/0x001DB5D0/0x001A6768/0x0022A984/0x00184EC0/0x0036B514."
+ },
+ {
+  "address": "0x001C35DC",
+  "name": "maybe_Ui_CreateNumberedLabel",
+  "signature": "void maybe_Ui_CreateNumberedLabel(void* self)",
+  "params": {
+   "self": "UI widget owner"
+  },
+  "summary": "Builds a small text label from the literal 'Start' plus a random number 1..10 and creates the UI node (kind 0xB3) that displays it, storing the handle at +4.",
+  "confidence": 0.4,
+  "evidence": "Copies the string at 0x7BFB40 ('Start', also used by the bspa/bg_effect3 resource names nearby) with 0x0011142C, appends the value returned by 0x0011CCA0/length logic, sets the record bytes (0,0,2,9, random 0..10 + 1) and calls 0x003DB478(gameCtx+100, 0xB3, 0, &record). Recovered entry point (Ghidra lost the call frame). There is only one caller, inside this module."
+ },
+ {
+  "address": "0x001C3858",
+  "name": "maybe_Svc_Handle_Release",
+  "signature": "void* maybe_Svc_Handle_Release(void* self)",
+  "params": {
+   "self": "object holding a handle at +4"
+  },
+  "summary": "Releases the 32-bit handle at +4 through the global handle table when its generation still matches, after storing the type tag at +0.",
+  "confidence": 0.45,
+  "evidence": "Handles are encoded as index in the low 10 bits and generation in the upper bits: the code masks with g_001C38BC (0x3FFFFF, >>10 index, >>12 mask) and validates the generation in the table at 0x7B5D70 before calling 0x003DB2BC(ctx, handle, 0). Same encoding as 0x001C824C/0x001C82F4."
+ },
+ {
+  "address": "0x001C63C0",
+  "name": "maybe_Ui_PushCommandSequence",
+  "signature": "void maybe_Ui_PushCommandSequence(void* queue, unsigned char* flags, unsigned int a3, unsigned int a4)",
+  "params": {
+   "queue": "command queue at +4 (16 slots)",
+   "flags": "five flag bytes",
+   "a3": "unused",
+   "a4": "packed argument"
+  },
+  "summary": "Converts a five-flag record into command ids and pushes them (0x104/0x105/0x106, or one of 3/7) onto a 16-entry command queue, refusing to push when the queue is full or already advanced.",
+  "confidence": 0.4,
+  "evidence": "Each branch checks '*(int*)(arg1+8) - *(int*)(arg1+4) < 0x10' (16 free slots) before calling 0x0070EEC4(queue, &value) with a value whose low half is a command id; the flags come from arg2+1..+5. Recovered entry point."
+ },
+ {
+  "address": "0x001C6914",
+  "name": "Ui_RecipeBook_RefreshVisibility",
+  "signature": "void maybe_Ui_RecipeBook_RefreshVisibility(void* self)",
+  "params": {
+   "self": "recipe-book window"
+  },
+  "summary": "Refreshes the recipe book only when it is actually visible: checks the book's sub-object lookup and that at least one of the cursor/selection fields changed, then runs the full update.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x001DAD58(self->f_118 + 0xF84, f_108C)+0x0062F680 as the 'is valid' test, then compares f_C/f_10, f_2C/f_30, f_48/f_4C, f_78 and f_69 (a -1 sentinel) before delegating to 0x001C6A9C. All 19 callers are the recipe-book UI (0x00262AD4 ..., named maybe_Ui_RecipeBook_* in N_023)."
+ },
+ {
+  "address": "0x001C69BC",
+  "name": "maybe_Ui_Handle_WaitAndRelease",
+  "signature": "void maybe_Ui_Handle_WaitAndRelease(void* self)",
+  "params": {
+   "self": "object owning a stream/file handle"
+  },
+  "summary": "Drains a worker/stream until it reports no more work, releases the handle it owns, and then dispatches the final 'done' notification - it never returns normally.",
+  "confidence": 0.4,
+  "evidence": "Loops while 0x0062F070(self) > 0 calling 0x0010EBD8 (yield/sleep), then 0x00123594(self) (release) and finally 0x001A5F9C(self+0xF84, 1) which Ghidra marks as not returning. Only caller is 0x001C6A9C in the same UI module."
+ },
+ {
+  "address": "0x001C70F8",
+  "name": "maybe_Field_NotifyAttached24",
+  "signature": "void maybe_Field_NotifyAttached24(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Broadcasts vtable slot +0x24 to the two primary attached objects and to every object in the ten slot lists whose state is 'finished and idle'.",
+  "confidence": 0.4,
+  "evidence": "Calls *(vtable+0x24) on f_1C and f_20 when f_114 is set, then walks the ten 0xC-byte slots at +0x114/+0x24 lists and calls *(vtable+0x24) on the elements that report 0 from slot +0x44 and have f_14 == 0. Companion of 0x001C7DE8 (slot +0x20) and 0x001C849C (slot +0x1C)."
+ },
+ {
+  "address": "0x001C71B4",
+  "name": "Model_LoadSkeletalParamTable",
+  "signature": "void Model_LoadSkeletalParamTable(void* self, unsigned int a2, unsigned int a3, void* arg4)",
+  "params": {
+   "self": "model owner",
+   "a2": "unused here",
+   "a3": "unused here",
+   "arg4": "handle output"
+  },
+  "summary": "Loads 'chara_skeletal_param.bxon', verifies that the file's root record is the expected 0x37 (skeletal-parameter) type, then stores its handle in +0x18 and releases the previously stored one.",
+  "confidence": 0.6,
+  "evidence": "Loads the literal s_chara_skeletal_param_bxon and checks the node type chain against g_001C7364 with f_20 == 0x37 before committing the handle; the handle at +0x18 is released with 0x001241D0/0x00124DD0 (generation check) and 0x00124F60 takes the new reference."
+ },
+ {
+  "address": "0x001C75FC",
+  "name": "Field_AttachSlotObject",
+  "signature": "int Field_AttachSlotObject(void* self, void* object)",
+  "params": {
+   "self": "field owner with a 10-slot table at +0xD58",
+   "object": "object to attach"
+  },
+  "summary": "Attaches an object to the current slot (index f_D70) of the field owner: calls the object's vtable+0x10 (bind) and copies its transform from +8 into the slot record. Returns 1 on success.",
+  "confidence": 0.5,
+  "evidence": "Writes into self + self->f_D70*0xC + 0xD58 (0xC-byte slots, ten of them, matching the slot loops in 0x001C70F8/0x001C7DE8) after *(*object+0x10)(object) and 0x001235A4(slot, slot, object+8) - the same 'copy transform' helper used for handle resolution. Callers include 0x001D290C/0x001D2B6C and eight UI/model functions."
+ },
+ {
+  "address": "0x001C7694",
+  "name": "maybe_Field_UpdateDrawList",
+  "signature": "void maybe_Field_UpdateDrawList(void* self)",
+  "params": {
+   "self": "field render owner"
+  },
+  "summary": "Per-frame update of the field render list: ticks every object in the list at +0xD74, broadcasts suspend/resume (+0x28/+0x2C) to the two attached objects and to the ten slot lists, then re-sorts the visible camera-facing objects by distance and toggles their visibility.",
+  "confidence": 0.4,
+  "evidence": "Calls *(vtable+0xC) on the f_D78 list, then +0x28/+0x2C on f_1C/f_20 and the slot elements; builds a temporary std::list (self-linked locals) of elements of type g_001C7AC4 whose field +0x594 is compared as a distance and finally calls 0x002227B0(element, visible, 4) per element."
+ },
+ {
+  "address": "0x001C7AE0",
+  "name": "Effect_CreateInstanceWithDefaults",
+  "signature": "int Effect_CreateInstanceWithDefaults(void* self, unsigned int a2, unsigned int a3, int kind)",
+  "params": {
+   "self": "effect owner",
+   "a2": "position/source",
+   "a3": "target/context",
+   "kind": "effect kind 1..4"
+  },
+  "summary": "Creates one effect instance (0x2F4 bytes) with a default configuration block, applies the kind, gives it a unique serial number and stores the instance and its handle in the owner.",
+  "confidence": 0.55,
+  "evidence": "Allocates 0x2F4 via 0x00109DC8, constructs it with 0x0022DE94(obj, &tag, a2, a3), applies the config through *(vtable+0xC)(obj, cfg) where cfg is filled by 0x00617750 (defaults) plus the scene-type byte at game+0x281, stamps a global serial (g_001C7C68) and pushes it through 0x00290AA8 for kinds 1..4. Caller 0x00235E0C is an effect spawn path."
+ },
+ {
+  "address": "0x001C7C6C",
+  "name": "maybe_Effect_CreateFromVariantTable",
+  "signature": "void maybe_Effect_CreateVariant(void* self)",
+  "params": {
+   "self": "effect owner"
+  },
+  "summary": "Second effect-creation path: same idea as 0x001C7AE0 but picks the variant from the current actor/anim tables (0x0063EB94 + 0x0023D078) instead of the effect kind.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x001C82F4 (the sibling release), builds a config with 0x00617750, copies a 16-byte record from 0x0063EB94(table, 0) + 0x0023D078(...)*0x10, then 0x00109DC8(g_001C7DDC, heap, 4). Ghidra lost the tail ('halt_baddata'), so only the setup half is readable. Renamed from maybe_Effect_CreateVariant to stay unique: N_002 already uses that name for 0x001C9DF0."
+ },
+ {
+  "address": "0x001C7DE8",
+  "name": "maybe_Field_NotifyAttached20",
+  "signature": "void maybe_Field_NotifyAttached20(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Broadcasts vtable slot +0x20 to the two primary attached objects and to the finished/idle objects of the ten slot lists.",
+  "confidence": 0.4,
+  "evidence": "Identical structure to 0x001C70F8 but the virtual slot is +0x20; the loop, the ten slots at +0x114 with 0xC stride, and the +0x44/+0x14 idle test are the same, so this is the same broadcast family with another event."
+ },
+ {
+  "address": "0x001C824C",
+  "name": "Field_DetachSlotObjectA",
+  "signature": "void Field_DetachSlotObjectA(void* self)",
+  "params": {
+   "self": "field owner"
+  },
+  "summary": "Detaches the object stored in member f_20: unbinds it through vtable+0x10, copies it back into slot f_D70, and releases the corresponding handle f_124.",
+  "confidence": 0.5,
+  "evidence": "Mirror image of 0x001C75FC: checks the object's +0x42 flag, calls *(*f_20+0x10), writes into self + f_D70*0xC + 0xD58 via 0x001235A4, clears f_20 and invalidates the handle at f_124 after 0x001C7570 (the actual release)."
+ },
+ {
+  "address": "0x001C82F4",
+  "name": "Field_DetachSlotObjectB",
+  "signature": "void Field_DetachSlotObjectB(void* self)",
+  "params": {
+   "self": "field owner"
+  },
+  "summary": "Same detach as 0x001C824C but for the second attached object at f_1C and its handle f_120.",
+  "confidence": 0.5,
+  "evidence": "Byte-for-byte the same body as 0x001C824C with f_1C/f_120 substituted for f_20/f_124 (release through 0x001C7570, generation-checked handle invalidation using g_001C8390/g_001C8394)."
+ },
+ {
+  "address": "0x001C849C",
+  "name": "maybe_Field_NotifyAttached1C",
+  "signature": "void maybe_Field_NotifyAttached1C(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Broadcasts vtable slot +0x1C to the two primary attached objects and the idle objects of the ten slot lists.",
+  "confidence": 0.4,
+  "evidence": "Third member of the broadcast family (0x001C70F8 = +0x24, 0x001C7DE8 = +0x20, this = +0x1C): same two attached members, same ten slots, same +0x44/+0x14 test."
+ },
+ {
+  "address": "0x001C89E4",
+  "name": "maybe_Field_BindAttachedObjects",
+  "signature": "void maybe_Field_BindAttachedObjects(void* self)",
+  "params": {
+   "self": "field owner"
+  },
+  "summary": "Resolves the two stored handles f_120/f_124 through the global handle table and binds the resulting objects into f_1C/f_20, then walks the ten slot lists.",
+  "confidence": 0.45,
+  "evidence": "Generation-checked lookup in the tables at g_001C8B40/g_001C8B44, calls vtable +0x34 (valid?) and +0x30 (acquire) on the results, stores them in f_1C/f_20 and invalidates the handles. The exact inverse of 0x001C824C/0x001C82F4; callers are 0x001A0130..0x001A20CC, the field actor code."
+ },
+ {
+  "address": "0x001C8D28",
+  "name": "maybe_Field_CreateActorObjectModel",
+  "signature": "int maybe_Field_CreateActorObject(void* self, unsigned int actorId, int arg3)",
+  "params": {
+   "self": "field owner",
+   "actorId": "actor/model id",
+   "arg3": "variant"
+  },
+  "summary": "Creates and configures the render object for a field actor: fills the default configuration, takes the animation-set index for the actor id and creates the object through the object factory.",
+  "confidence": 0.45,
+  "evidence": "Uses 0x001C8068 (Field_GetActorAnimSetIndex) and 0x0063EB94/0x0035EB98/0x0023D078 to fill the config, then the same 0x00617750 defaults + 0x00109DC8(g_001C8EDC, heap, 4) creation sequence as 0x001C7AE0/0x001C7C6C. Callers 0x0023D988/0x0023E4A8 are the field render-object code. Named ...ObjectModel (not ...ObjectRenderObject) because N_002 (0x00162758) and N_023 (0x001C9208) already own the ...Object / ...RenderObject names for the sibling creators."
+ },
+ {
+  "address": "0x001C9568",
+  "name": "maybe_Field_NotifyAttachedIdle8",
+  "signature": "void maybe_Field_NotifyAttachedIdle8(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Only while the owner is idle (f_D84 < 1) it broadcasts vtable slot +8 to the list at +0xD74 and slot +0x18 to the attached objects and the ten slot lists.",
+  "confidence": 0.4,
+  "evidence": "Guarded by 'if (self->f_D84 < 1)', then *(vtable+8) over the f_D78 list and *(vtable+0x18) over f_1C/f_20 and the slot elements - another member of the same broadcast family."
+ },
+ {
+  "address": "0x001C967C",
+  "name": "maybe_Field_ShutdownSlots",
+  "signature": "void maybe_Field_ShutdownSlots(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Shuts the field owner down when it is active: detaches both attached objects, destroys the two slot lists at +0xD58 and +0x24 and then the remaining sub-systems.",
+  "confidence": 0.45,
+  "evidence": "Starts with 0x001C82F4 + 0x001C824C (the two detaches) and then repeats the list-drain loop with *(vtable+8) for two slots of 0xC bytes and for the ten +0x24 lists; only called from maybe_Ui_BigView_Dtor (0x001C9AE8) and 0x0019F908, i.e. from the scene teardown."
+ },
+ {
+  "address": "0x001C987C",
+  "name": "maybe_Field_AdvanceSlotTimers",
+  "signature": "void maybe_Field_AdvanceSlotTimers(void* self)",
+  "params": {
+   "self": "field render/actor owner"
+  },
+  "summary": "Advances the owner's slot timers by one: applies the pending rewind request (f_D80), decrements f_D84, re-resolves the attached objects (0x001C8584/0x001C89E4) and broadcasts vtable slot +0x14.",
+  "confidence": 0.45,
+  "evidence": "Handles the -1 request sentinel in f_D80, clamps f_D84, sets the 'changed' byte f_D88, calls 0x001C8584 then 0x001C89E4 (bind) and finally *(vtable+0x14) on the attached objects and slots."
+ },
+ {
+  "address": "0x001C9CD8",
+  "name": "maybe_Object_MarkReleased",
+  "signature": "void maybe_Object_MarkReleased(void* self)",
+  "params": {
+   "self": "object with an owned child at +0x10"
+  },
+  "summary": "Releases the child object at +0x10 when the owner lookup still resolves, then marks the child dead by setting its byte +0x25D.",
+  "confidence": 0.4,
+  "evidence": "Guarded by 'if (self->f_10 != 0)' and 0x0062FA90(self) != 0, calls *(*f_10+8) and writes 1 to f_10->f_25D. Caller 0x006226D8 is in the UI object code, so this is a small object-lifetime helper rather than a whole subsystem."
+ },
+ {
+  "address": "0x001CA304",
+  "name": "maybe_Ui_Object_DeleteArray",
+  "signature": "void maybe_Ui_Object_DeleteArray(void* self)",
+  "params": {
+   "self": "object owning an array of 0x348-byte records at +0x4C"
+  },
+  "summary": "Deleting destructor: releases the array of 0x348-byte records starting at +0x4C, runs the base teardown and frees the object itself.",
+  "confidence": 0.45,
+  "evidence": "Stores g_001CA338 (type tag) at +0, calls 0x00100BE0(self+0x4C, g_001CA33C, 0x348, 2) - element size 0x348 with count 2 - then 0x001A6768(self) (base dtor) and 0x0010F6CC() (free). Its twin 0x001CA340 is the same without the free."
+ },
+ {
+  "address": "0x001CA340",
+  "name": "maybe_Ui_Object_ReleaseArray",
+  "signature": "void maybe_Ui_Object_ReleaseArray(void* self)",
+  "params": {
+   "self": "object owning an array of 0x348-byte records at +0x4C"
+  },
+  "summary": "Destructor body of the same class as 0x001CA304: releases the two 0x348-byte records at +0x4C and runs the base teardown, without freeing the object.",
+  "confidence": 0.45,
+  "evidence": "Same two calls as 0x001CA304 minus the final free; called indirectly from maybe_Ui_Widget_DtorChain (0x001F4368) which is a UI widget destructor chain."
+ },
+ {
+  "address": "0x001CA3A0",
+  "name": "Math_RandomChanceBelow",
+  "signature": "int Math_RandomChanceBelow(void* self, float threshold)",
+  "params": {
+   "self": "object holding the random base at +8",
+   "threshold": "probability threshold"
+  },
+  "summary": "Returns non-zero when a random fraction of the object's random state is at or below the given threshold - a probability roll used to decide whether a random effect occurs.",
+  "confidence": 0.55,
+  "evidence": "Takes a random 31-bit value with 0x0051B1FC(self+8, 0x7FFFFFFF), converts it to float and compares 'random * g_001CA3E0 <= in_s0'. g_001CA3E0 is the 1/0x7FFFFFFF scale, i.e. a 0..1 random roll."
+ },
+ {
+  "address": "0x001CA5DC",
+  "name": "Model_AdvanceAnimFrames",
+  "signature": "int Model_AdvanceAnimFrames(void* self, int frames)",
+  "params": {
+   "self": "character/model instance",
+   "frames": "frames to advance (clamped)"
+  },
+  "summary": "Advances a character's animation by N frames, clamping to the remaining length; when the clip reaches its end it clears the state flags and runs the end-of-animation effects (state reset, callback, sub-system notifications).",
+  "confidence": 0.55,
+  "evidence": "Clamps with min(frames, vtable+0x94 minus vtable+0x90 - end vs current frame), advances the frame counter through the animation object at self+0x20 (vtable+4), then on frame 0 clears f_39D, calls 0x001CAE90/0x001CB084 and four 0x00279xxx helpers and the callback at f_3A6 (vtable+0x174)."
+ },
+ {
+  "address": "0x001CA6BC",
+  "name": "maybe_Model_ApplyAttachPointParam",
+  "signature": "void maybe_Model_ApplyAttachPointParam(void* self, int a2)",
+  "params": {
+   "self": "character instance",
+   "a2": "unused/selector"
+  },
+  "summary": "Scans the character's parameter table for an entry of type 5 and applies its float value to the corresponding attach point when the model has not yet resolved it.",
+  "confidence": 0.4,
+  "evidence": "Requires the model to not report vtable+0xE8(0x5A), loads the parameter block with 0x0058FC38(record from 0x0063E5C8(ctx, self[0x1DA] & 0xFFFF)) and looks for an 8-byte entry whose type byte is 5 (sibling functions test 4 and other kinds), then uses the float payload."
+ },
+ {
+  "address": "0x001CA7A0",
+  "name": "maybe_Model_UpdateAttachPoints",
+  "signature": "void maybe_Model_UpdateAttachPoints(void* self)",
+  "params": {
+   "self": "character instance"
+  },
+  "summary": "Per-frame update of the character's attach points / part parameters. The decompiler lost control flow after the first block, so only the entry is readable.",
+  "confidence": 0.3,
+  "evidence": "Ghidra reports 'control flow encountered bad instruction data' and several unreachable blocks in this and the neighbouring 0x001CAB00 range; the readable fragment manipulates the same 0x58FC38 parameter block as 0x001CA6BC/0x001CBF58."
+ },
+ {
+  "address": "0x001CA91C",
+  "name": "maybe_Model_UpdatePartScale",
+  "signature": "void maybe_Model_UpdatePartScale(void* self, int enabled)",
+  "params": {
+   "self": "character instance",
+   "enabled": "whether the part scale is active"
+  },
+  "summary": "Recomputes a character part's scale/blend factor from the character parameter table and applies it to the part record, optionally re-rolling the random factor.",
+  "confidence": 0.4,
+  "evidence": "Loads the parameter record with 0x0063E5C8(ctx, self+0x76C & 0xFFFF), reads the u16 at +0xE6 and uses 0x001CA474(ctx+0x4218, 0x50, 100, 0) (a clamped random/parameter fetch) before converting to float - the same helpers as the 0x001CA6BC family."
+ },
+ {
+  "address": "0x001CABF4",
+  "name": "maybe_Model_IsSpecialState",
+  "signature": "int maybe_Model_IsSpecialState(void* self)",
+  "params": {
+   "self": "character instance"
+  },
+  "summary": "Returns 1 when the character is in one of the special animation states (state flags 0x56 clear and mode 0x54, or mode letter 'A'/'B'/'C'), 0 otherwise.",
+  "confidence": 0.45,
+  "evidence": "Tests vtable+0x10 (alive/visible), (f_39D & 0x56) == 0, the byte at +0x74A == 0x54 and the mode letter at +0x745 in {'A','B','C'} - a state predicate over the plus-0x740 character header."
+ },
+ {
+  "address": "0x001CAC74",
+  "name": "maybe_Actor_FindAndStartType9A",
+  "signature": "void maybe_Actor_FindAndStartType9A(void)",
+  "params": {
+   "returns": "nothing"
+  },
+  "summary": "Finds the first entity of type 0x9A in the game's actor list, switches it into its running state and starts the component attached to it.",
+  "confidence": 0.4,
+  "evidence": "Walks the intrusive list at *(game+0x5C)+0x4260 testing 0x00639954(entity, 0x9A), then calls *(vtable+0x120)(entity, 0x9A, 1) and 0x00377DE8(component from 0x0027A3BC(entity)); the type-chain walk against g_001CAD4C is the same pattern as 0x001CBA7C/0x001D2F64."
+ },
+ {
+  "address": "0x001CAD50",
+  "name": "maybe_Model_SetupFromTypeId",
+  "signature": "int maybe_Model_SetupFromTypeId(void* self, int typeId)",
+  "params": {
+   "self": "character instance",
+   "typeId": "object type id (0x5A = character)"
+  },
+  "summary": "When the object is a character (type 0x5A) it resolves the character parameter record and stores a derived value in +0x28C; it also updates the shared render state.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x00277E48 first, then for arg2 == 0x5A loads 0x0063E5C8(ctx, self[0x1DA]&0xFFFF) + 0x0058FC38 and 0x001CA474(ctx+0x4218, u16, u16, 0), storing the result in self[0xA3]; type ids are matched with 0x00639954 elsewhere in the same block."
+ },
+ {
+  "address": "0x001CAE90",
+  "name": "maybe_Battle_AddStateFlags",
+  "signature": "void Battle_AddStateFlags(void* self, unsigned int flags, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "battle/actor instance",
+   "flags": "state flag bits",
+   "a3": "unused",
+   "a4": "unused"
+  },
+  "summary": "Adds state flag bits to a battle actor and, for the 'revive/visible' bit (8), also notifies the actor's model and plays the associated effect - unless the global mode says it is paused.",
+  "confidence": 0.45,
+  "evidence": "Tail is 'self[0x39D] |= arg2'; the bit-8 path calls vtable+0x30(0,1), checks the game mode byte at manager+0x4244, resolves the handle in self[0x44] through the handle table and calls 0x005E7848(handle, 8, 0). 22 callers, including Model_CreateActorModel (0x00208960) and 0x004318B4, i.e. actor setup code."
+ },
+ {
+  "address": "0x001CAFE4",
+  "name": "maybe_Actor_SetComponentFlag",
+  "signature": "void* maybe_Actor_SetComponentFlag(void* self, void* arg)",
+  "params": {
+   "self": "actor with 32 components at +0xE9C",
+   "arg": "component selector"
+  },
+  "summary": "Walks the 32 component slots and, for the components that accept the given selector, runs their enable/disable virtuals (slots +0x134/+0x120).",
+  "confidence": 0.4,
+  "evidence": "Loops 0x20 times over self + i*4 -> f_E9C, asks *(vtable+0xE8)(component, arg) and on success calls +0x134 then +0x120; the same 32-component layout is used by 0x001CB084/0x001CB624/0x001CB6C0."
+ },
+ {
+  "address": "0x001CB084",
+  "name": "maybe_Actor_UpdateComponents",
+  "signature": "void maybe_Actor_UpdateComponents(void* self, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "actor with 32 components at +0xE9C",
+   "a2": "unused",
+   "a3": "unused",
+   "a4": "unused"
+  },
+  "summary": "Updates all 32 components: for each active component it queries the two state virtuals (+0x18 / +0x10) and puts the ones that need it into the run state (+0x30), unless the global mode byte forbids it.",
+  "confidence": 0.4,
+  "evidence": "Loops 0x20 over f_E9C calling +0x18/+0x10 and then +0x30(component,0,1) after testing the game mode byte at manager+0x4244; also calls 0x005E7848 and the per-slot side effects."
+ },
+ {
+  "address": "0x001CB230",
+  "name": "maybe_Model_BuildWindowParams",
+  "signature": "void maybe_Model_BuildWindowParams(void* self)",
+  "params": {
+   "self": "character instance"
+  },
+  "summary": "Builds the character's display parameter block (0xFF sentinel id, model id, name bytes and the three lookup flags from vtable+0xE8) for the UI/message layer.",
+  "confidence": 0.4,
+  "evidence": "Fills a small stack record with local_10[0]=0xFF, f_740[4], f_768, f_74A and vtable+0xE8(0xDF/0x7D/0x7C) results, then forwards it; the +0x74A character-name byte and +0x768 model id are the same fields read by 0x001CABF4/0x001CA91C."
+ },
+ {
+  "address": "0x001CB3B0",
+  "name": "maybe_Model_ApplyParameterBlock",
+  "signature": "void maybe_Model_ApplyParameterBlock(void* self, int a2, int a3)",
+  "params": {
+   "self": "character instance",
+   "a2": "unused",
+   "a3": "unused"
+  },
+  "summary": "Applies the character parameter block (type 5.0 entry) to the model, scaling it by the current animation frame; used when the model has not been resolved yet.",
+  "confidence": 0.4,
+  "evidence": "Same prologue as 0x001CA6BC (vtable+0xE8(0x5A) == 0, 0x0058FC38 parameter block) but with 0x0011CB38 + 0x0063E5C8 + 0x0058FC38 and a float frame from vtable+0x90, i.e. the apply half of the scan performed in 0x001CA6BC."
+ },
+ {
+  "address": "0x001CB624",
+  "name": "maybe_Actor_NotifyComponentEvent",
+  "signature": "void maybe_Actor_NotifyComponentEvent(void* self, int eventId)",
+  "params": {
+   "self": "actor with 32 components at +0xE9C",
+   "eventId": "component event id"
+  },
+  "summary": "Sends one event id to every component that handles it and resets the character state when the event is the 'character' event 0x5A.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x00278668 then loops 0x20 over f_E9C: components answering vtable+0xE8(eventId) get +0x134 then +0x120(component, eventId, 1); the 0x5A test also clears self+0xE94."
+ },
+ {
+  "address": "0x001CB6C0",
+  "name": "maybe_Actor_ResetComponents",
+  "signature": "void maybe_Actor_ResetComponents(void* self)",
+  "params": {
+   "self": "actor with 32 components at +0xE9C"
+  },
+  "summary": "Resets every component of the actor: clears the state word at +0xE94 and lets each component that accepts the reset selector run its release virtual (+0x11C).",
+  "confidence": 0.45,
+  "evidence": "Calls 0x00278854, clears f_E94 and loops 0x20 over f_E9C calling vtable+0xF4 and, when it returns 0, vtable+0x11C - the reset twin of 0x001CB624/0x001CAFE4."
+ },
+ {
+  "address": "0x001CBA7C",
+  "name": "maybe_Actor_FindComponentByEvent",
+  "signature": "void maybe_Actor_FindComponentByEvent(void* self, unsigned int eventId, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "actor with 32 components at +0xE9C",
+   "eventId": "component event id"
+  },
+  "summary": "Walks the 32 components looking for the one that handles the event id and resolves the object stored in its handle field +0x110 before forwarding the call.",
+  "confidence": 0.4,
+  "evidence": "Loops 0x20 over self+i*4 -> f_E9C, tests 0x0027A3BC and 0x00639954(component, eventId), then resolves the handle at component+0x110 through the tables g_001CBB64/g_001CBB68 and walks the type chain g_001CBB6C - the same component/handle protocol as its neighbours."
+ },
+ {
+  "address": "0x001CBE54",
+  "name": "maybe_Model_ApplyParamType5",
+  "signature": "void maybe_Model_ApplyParamType5(void* self, unsigned int a2, int a3)",
+  "params": {
+   "self": "character instance",
+   "a2": "table id",
+   "a3": "unused"
+  },
+  "summary": "Variant of the parameter-block applier that first checks the 0x63CFC8 record's +0x303 byte and then applies the character's type-5 parameter entry.",
+  "confidence": 0.4,
+  "evidence": "Prologue 0x0063CFC8(ctx, arg2)->f_303 then 0x0063E5C8(ctx, self[0x1DA]&0xFFFF) and 0x0058FC38; same family as 0x001CA6BC/0x001CBF58."
+ },
+ {
+  "address": "0x001CBF58",
+  "name": "maybe_Model_ApplyParamType4",
+  "signature": "void maybe_Model_ApplyParamType4(void* self, int a2)",
+  "params": {
+   "self": "character instance",
+   "a2": "unused"
+  },
+  "summary": "Scans the character parameter table for an entry of type 4 and applies its float value when the model has not resolved it.",
+  "confidence": 0.4,
+  "evidence": "Identical to 0x001CA6BC but the entry type test is 'local_a4[i*8] == 4' rather than 5, and the same self[0x3A5] guard and 0x0058FC38 block are used."
+ },
+ {
+  "address": "0x001CC038",
+  "name": "maybe_Model_ApplyParamByAnim",
+  "signature": "void maybe_Model_ApplyParamByAnim(void* self, int a2, void* a3)",
+  "params": {
+   "self": "character instance",
+   "a2": "selector (0x18 handled)",
+   "a3": "record with a flag at +0x10"
+  },
+  "summary": "Applies a character parameter entry chosen by the animation/type selector, and for selector 0x18 additionally sets the pending flag at +0xD16.",
+  "confidence": 0.4,
+  "evidence": "Returns early when a3->f_10 is 0; sets *(self+0xD16) = 1 for arg2 == 0x18; otherwise the same 0x0058FC38/0x0063E5C8 parameter scan as 0x001CA6BC/0x001CBF58."
+ },
+ {
+  "address": "0x001CC3EC",
+  "name": "maybe_Actor_CreateStatusBlock",
+  "signature": "int* maybe_Actor_CreateStatusBlock(void)",
+  "params": {
+   "returns": "new status block"
+  },
+  "summary": "Creates and initialises a status block in the actor: clears the state ids (0xFF, -1), zeroes the timers and allocates the 0x80-byte scratch buffer at +0x5AC.",
+  "confidence": 0.4,
+  "evidence": "func_0027A540() returns the actor, 0x00206220(actor+0x23C) the sub-block, then writes sentinels (0xFF, 0xFFFFFFFF), 0x00116AE0(&f_5AC, 0x80) and copies g_001CC498. Callers include maybe_Model_CreateActorModel (0x00208960) and the model/effect factories."
+ },
+ {
+  "address": "0x001CC6D8",
+  "name": "maybe_Actor_QueryInteraction",
+  "signature": "unsigned int maybe_Actor_QueryInteraction(int* self, int id)",
+  "params": {
+   "self": "battle/actor instance",
+   "id": "object/actor id"
+  },
+  "summary": "Resolves an interaction target for the actor: looks the id up (0x0063E05C), validates that it is usable (+0x44 == 2 or +0x34 != -1) and then resolves the actor handle in self[0x44].",
+  "confidence": 0.4,
+  "evidence": "Uses 0x00277CD0, 0x0063E05C(id)->f_44/f_34, vtable+0x24, and the generation-checked handle in self[0x44] against g_001CC924/g_001CC928. Only caller is inside the same actor block."
+ },
+ {
+  "address": "0x001CCB38",
+  "name": "maybe_Actor_GetLinkedObject",
+  "signature": "int maybe_Actor_GetLinkedObject(int* self)",
+  "params": {
+   "self": "actor instance"
+  },
+  "summary": "Resolves the object linked through the actor's handle at +0x110, provided the actor reports the 'not busy' state from its virtual +0x188.",
+  "confidence": 0.4,
+  "evidence": "Tests *(vtable+0x188) == 0 and then resolves self[0x44] through g_001CCBFC/g_001CCC00 with the generation check (>>11 index with 0x7FF mask); same handle protocol as 0x001CBA7C."
+ },
+ {
+  "address": "0x001CCC0C",
+  "name": "maybe_Actor_ClassifyAnimState",
+  "signature": "unsigned int maybe_Actor_ClassifyAnimState(int* self)",
+  "params": {
+   "self": "actor instance"
+  },
+  "summary": "Classifies the actor's animation state: 2 when the state-0x5C timer has expired past a fraction of the total, other values for the 0x5D/0x5E states, 1 for the default.",
+  "confidence": 0.45,
+  "evidence": "Compares vtable+0x90 (current) with vtable+0x94 (total) scaled by g_001CCCB0 and switches on 0x00639954(self, 0x5C/0x5D/0x5E) - the type-query + frame-ratio pattern used across this block."
+ },
+ {
+  "address": "0x001CCE7C",
+  "name": "maybe_Actor_HandleSpecialEvent",
+  "signature": "void maybe_Actor_HandleSpecialEvent(int* self, int eventId, unsigned int arg)",
+  "params": {
+   "self": "actor instance",
+   "eventId": "event id (0x76/0x11B special-cased)",
+   "arg": "event payload"
+  },
+  "summary": "Handles an actor event that needs special preparation: for the 0x76/0x11B events it collects the linked objects and their transforms before running the effect, otherwise it runs the generic path.",
+  "confidence": 0.4,
+  "evidence": "Special-cases arg2 == 0x76 || 0x11B with the u16 at self+0x2C63, resolves self[0x44] through the handle table, and uses 0x005E74A0/0x005F5F38/0x00639B90 plus 0x0035EB98/0x0035FF3C helpers; the object layout (self[0x2C63]) is the large battle-actor instance."
+ },
+ {
+  "address": "0x001CD3DC",
+  "name": "Actor_ReleaseAndFree",
+  "signature": "void maybe_Actor_ReleaseAndFree(void* block)",
+  "params": {
+   "block": "allocated block"
+  },
+  "summary": "Frees a block: runs its release routine (0x001CD93C) and then returns the memory (0x00116B34).",
+  "confidence": 0.5,
+  "evidence": "Two calls: 0x001CD93C (the release body, in-batch neighbour) and 0x00116B34(arg1) which is the same deallocate helper used in 0x001CC3EC's family. Callers 0x002DC4BC/0x0038F1A8/0x00596514 free their own sub-blocks through it."
+ },
+ {
+  "address": "0x001CD53C",
+  "name": "maybe_Actor_ResetSlotTable",
+  "signature": "void maybe_Actor_ResetSlotTable(int* self)",
+  "params": {
+   "self": "actor instance"
+  },
+  "summary": "Clears the actor's 0x20-byte slot records to their 'empty' sentinels (0xFF bytes, -1 ids, 0xFFFF marks).",
+  "confidence": 0.45,
+  "evidence": "Straight-line loop writing 1, -1, -1, 0xFF, 0xFFFF into records based at +0xB108 (0x2C42 words) and +0xB115 with a 0x20 stride - the same slot table later filled by the equipment/status code."
+ },
+ {
+  "address": "0x001CD5E8",
+  "name": "maybe_Actor_SpawnEffectBlock",
+  "signature": "void maybe_Actor_SpawnEffectBlock(void* self, unsigned int effectId, unsigned int arg3)",
+  "params": {
+   "self": "actor instance",
+   "effectId": "effect/action id",
+   "arg3": "extra argument"
+  },
+  "summary": "Builds the 0x34-byte effect/action parameter block from the global defaults, resolves the actor's attached object at +0x110 and spawns the effect for the given id.",
+  "confidence": 0.4,
+  "evidence": "Fills local_84..local_2c from g_001CD760..g_001CD770 (default transform/colour block), resolves self+0x110 through g_001CD774 with the >>11 generation check and the g_001CD778 type chain, then calls 0x00484518(self+0xB18E, block, self, resolved, arg3, table, 0) and 0x0035FF3C(game+0x60, effectId, 0, block, 0)."
+ },
+ {
+  "address": "0x001CDAF0",
+  "name": "maybe_Actor_ShouldSkipUpdate",
+  "signature": "unsigned int maybe_Actor_ShouldSkipUpdate(int* self)",
+  "params": {
+   "self": "actor instance"
+  },
+  "summary": "Decides whether the actor's per-frame update can be skipped, based on the type at g_001CDB88, the state virtual +0x184 and the pending flag at +0x3A.",
+  "confidence": 0.4,
+  "evidence": "Combines vtable+0x170, vtable+0xE8(0x7D), the byte tables at g_001CDB88 (+0x40 indexed by actor) and vtable+0x184 with the fallback field f_3A == 5; a pure predicate with no side effects."
+ },
+ {
+  "address": "0x001CDB8C",
+  "name": "maybe_Actor_IsActiveState",
+  "signature": "unsigned int maybe_Actor_IsActiveState(int* self)",
+  "params": {
+   "self": "actor instance"
+  },
+  "summary": "Returns 1 when the actor is in an active state: not in the two idle states (+0x10/+0x14), has the flag from +0xD8, and is neither type 10 nor type 8.",
+  "confidence": 0.45,
+  "evidence": "Chain of virtual checks +0x10, +0x14, +0xD8 and 0x00639954(self,10)/0x00639954(self,8) - a compact state predicate built from the same type-query helper as its neighbours."
+ },
+ {
+  "address": "0x001CDC48",
+  "name": "maybe_Actor_ClassifyStateEx",
+  "signature": "unsigned int maybe_Actor_ClassifyStateEx(int* self, unsigned int arg2, int arg3)",
+  "params": {
+   "self": "actor instance",
+   "arg2": "unused",
+   "arg3": "whether the extended test applies"
+  },
+  "summary": "Extended version of the animation-state classification: same 0x5C/0x5D/0x5E type queries plus an extra short field test when arg3 is set.",
+  "confidence": 0.4,
+  "evidence": "Shares the frame-ratio test 'vtable+0x94 * g_001CDDFC <= vtable+0x90' with 0x001CCC0C and adds a short read after it; only caller is inside the same actor block."
+ },
+ {
+  "address": "0x001CE22C",
+  "name": "maybe_Actor_CreateStatusInstance",
+  "signature": "int* maybe_Actor_CreateStatusInstance(void)",
+  "params": {
+   "returns": "new status instance"
+  },
+  "summary": "Creates the large status instance for an actor character and initialises its id/timer block (0xFFFFFFFF and 0xFF sentinels, eight zeroed bytes).",
+  "confidence": 0.4,
+  "evidence": "func_0027A540() (actor) + 0x00277BBC(actor+0x23C) returns the sub-block whose fields at +0xA7FC are initialised to 0xFFFFFFFF; returns iVar3-0x8F0, the same 'sub-object at a negative offset' idiom used by 0x001CC3EC."
+ },
+ {
+  "address": "0x001CE538",
+  "name": "Ui_MovieWindow_Create",
+  "signature": "void maybe_Ui_MovieWindow_Create(void* self)",
+  "params": {
+   "self": "movie window object"
+  },
+  "summary": "Creates the 'win_movie' layout window for the movie player and hands it to the movie controller.",
+  "confidence": 0.5,
+  "evidence": "Literal s_win_movie passed to 0x001D85EC(self, self+0x138, 'win_movie', 0) (the shared window-create helper), followed by 0x0029126C(&self->f_138, 0) which Ghidra marks as not returning."
+ },
+ {
+  "address": "0x001CE588",
+  "name": "maybe_Ui_MovieWindow_UpdatePlayback",
+  "signature": "void maybe_Ui_MovieWindow_UpdatePlayback(void* self)",
+  "params": {
+   "self": "movie window object"
+  },
+  "summary": "Updates the movie player: enables/disables playback in the window controller depending on the global 'movie enabled' byte and the window's own flag, and sets the display parameter.",
+  "confidence": 0.45,
+  "evidence": "Writes g_001CE650 into f_27C, reads the global byte at manager+0x960, overrides it with self->f_278 and calls 0x0029126C(&self->f_138, 1 or 0) - the playback switch of the movie window created by 0x001CE538."
+ },
+ {
+  "address": "0x001CE658",
+  "name": "maybe_Ui_MovieWindow_UpdateLayout",
+  "signature": "void maybe_Ui_MovieWindow_UpdateLayout(void* self)",
+  "params": {
+   "self": "movie window object"
+  },
+  "summary": "Updates the movie window's animated layout: ticks the three sub-animations, adds the per-frame offset to the placement and clamps the result.",
+  "confidence": 0.45,
+  "evidence": "Calls func_003DFEC4 on the three animation blocks at +0x184/+0x1D4/+0x228, reads the input/hold flags from the game context (+0x74 & 0x200), accumulates into f_27C and uses the constants g_001CE88C/g_001CE890/g_001CE894. Only caller is the movie window code."
+ },
+ {
+  "address": "0x001CE8AC",
+  "name": "maybe_Ui_MovieWindow_InitBase",
+  "signature": "void maybe_Ui_MovieWindow_InitBase(void* self, int arg2)",
+  "params": {
+   "self": "movie window object",
+   "arg2": "owner"
+  },
+  "summary": "Initialises the movie window's base object: installs the type tag, self-links the two intrusive list heads and constructs the embedded timer/animation objects.",
+  "confidence": 0.4,
+  "evidence": "Writes g_001CE948..g_001CE954 (type tags) and performs the *(node+4)=prev / *(prev+8)=node self-link pattern at +0x11C/+0x12C, then 0x003E0454 on the embedded animation objects - the same construction idiom as 0x001C33FC/0x001BB300."
+ },
+ {
+  "address": "0x001CEC28",
+  "name": "Math_QuatMultiply",
+  "signature": "void Math_QuatMultiply(float* out, float* a, float* b)",
+  "params": {
+   "out": "result quaternion/matrix (may alias a)",
+   "a": "left operand",
+   "b": "right operand"
+  },
+  "summary": "Multiplies two quaternions (four floats each) and writes the product back through the first argument.",
+  "confidence": 0.6,
+  "evidence": "Two calls to 0x005755C8 (the quaternion copy/normalise helper) on arg1 and a stack operand, followed by the standard Hamilton product expansion (w*x - ...) into local_38/local_30/local_2c using arg1[0..3] and the second operand's four components. Seven callers (0x00440944..0x004435B4) are rotation/transform code."
+ },
+ {
+  "address": "0x001CF72C",
+  "name": "maybe_Ui_DungeonPlaceWindow_CreateBase",
+  "signature": "int maybe_Ui_DungeonPlaceWindow_CreateBase(int arg1, int arg2)",
+  "params": {
+   "arg1": "owner id",
+   "arg2": "value stored at +0x50"
+  },
+  "summary": "Creates the base chain of the dungeon-place window: six chained sub-nodes, then stores the given value in the sixth node and initialises its 0x54 field to -1. Returns the window base pointer.",
+  "confidence": 0.4,
+  "evidence": "func_001A66A0() + repeated 0x003E0454(&node->f_50) six times (a fixed window-node chain), then f_50 = arg2, 0x0067237C(&f_54, 0xFFFFFFFF) and 'return iVar2 + -0x22C'. The sibling 0x001CF8C0 creates the 'win_dungeon_place' layout on top of it."
+ },
+ {
+  "address": "0x001CF8C0",
+  "name": "Ui_DungeonPlaceWindow_Create",
+  "signature": "void maybe_Ui_DungeonPlaceWindow_Create(void* self)",
+  "params": {
+   "self": "dungeon-place window"
+  },
+  "summary": "Creates the 'win_dungeon_place' layout for the dungeon/place-name window and copies the placement transform into the window.",
+  "confidence": 0.5,
+  "evidence": "Literal s_win_dungeon_place passed to 0x001D85EC(self, self+0x13C, 'win_dungeon_place', 0) - the shared window-create helper also used for 'win_movie' - then 0x001235A4(self+0x130, ..., self+0x154) copies the transform and 0x0029126C starts the window."
+ },
+ {
+  "address": "0x001D03F8",
+  "name": "maybe_Actor_CheckLinkedState",
+  "signature": "unsigned int maybe_Actor_CheckLinkedState(void* self, void* record)",
+  "params": {
+   "self": "object with a linked list at +0x14/+0x18",
+   "record": "record with flags at +0x92"
+  },
+  "summary": "Validates the object's linked node and its target, optionally re-checking the target's flags (+0x288 and the count at +4) before reporting success.",
+  "confidence": 0.4,
+  "evidence": "Repeatedly tests self->f_14 != 0, self->f_18 == f_14->f_C (intrusive-list validation), 0x00659318(f_14) and the flag byte at f_14+0x288 / count at f_14+4, then branches on arg2->f_92."
+ },
+ {
+  "address": "0x001D08D8",
+  "name": "maybe_Ui_Window_InitHeader",
+  "signature": "void maybe_Ui_Window_InitHeader(void)",
+  "params": {
+   "returns": "nothing"
+  },
+  "summary": "Initialises the header of another window object: installs the type tag and vtable pointer, self-links the three intrusive list sentinels and copies the default colour/parameter block.",
+  "confidence": 0.45,
+  "evidence": "Same idiom as 0x001BB300/0x001CE8AC: *obj = tag (iRam001D096C), obj[0x13] = tag+0x7C (vtable), three self-linked list heads at 0x54/0x58/0x5C, f_19 = 0xFF, byte +0x65 = 4 and a copied block at +0x68..+0x7C."
+ },
+ {
+  "address": "0x001D0980",
+  "name": "Ui_Window_ReleaseHeader",
+  "signature": "void maybe_Ui_Window_ReleaseHeader(void* listNode)",
+  "params": {
+   "listNode": "intrusive list node"
+  },
+  "summary": "Unlinks an intrusive list node and frees the owning object.",
+  "confidence": 0.5,
+  "evidence": "Classic '*(node[1]+4) = *node; *(node[0]+8) = node[1]' unlink followed by 0x001A6768() (base teardown) and 0x0010F6CC() (free); the complement of 0x001D08D8."
+ },
+ {
+  "address": "0x001D09A4",
+  "name": "maybe_Ui_EmotionWindow_Init",
+  "signature": "void maybe_Ui_EmotionWindow_Init(void* self, void* owner)",
+  "params": {
+   "self": "emotion window",
+   "owner": "object holding the layout at +0xAC"
+  },
+  "summary": "Sets up the emotion (expression) window: binds the four emotion name slots through the layout interface and loads the 'emotion_sleep' layout animation.",
+  "confidence": 0.45,
+  "evidence": "Calls *(layout+0x2C)(layout, g_001D0A18[i], 1) for i in 0..3 storing the returned pane ids at self[1..4], then *(*self+0xC)(self,0) and 0x003E00CC(self+5, owner->f_AC, 'emotion_sleep', 0) - the literal s_emotion_sleep_001d0a1c is the giveaway."
+ },
+ {
+  "address": "0x001D0B80",
+  "name": "Math_QuatRotateVector",
+  "signature": "void Math_QuatRotateVector(void* self)",
+  "params": {
+   "self": "object holding a quaternion at +0x28 and a result vector at +0x38"
+  },
+  "summary": "Rotates a vector by a quaternion: combines the quaternion's four components into the three output components at +0x38/+0x3C/+0x40.",
+  "confidence": 0.55,
+  "evidence": "Reads q.x/q.y/q.z/q.w from self->f_28 (+0x8C/0x90/0x94/0x98) and writes the standard Hamilton rotation products scaled by _DAT_001D0CB8 (0.5) into +0x38..+0x40, then continues with the same math for the second vector. Callers are render/camera code (0x005E812C, 0x005E84C8, 0x0063451C)."
+ },
+ {
+  "address": "0x001D0CCC",
+  "name": "maybe_Math_QuatSlerpStep",
+  "signature": "void maybe_Math_QuatSlerpStep(void* self)",
+  "params": {
+   "self": "object holding two quaternions"
+  },
+  "summary": "Interpolates between two quaternions by a step factor and re-normalises the result, with a special case when the quaternions are nearly opposite.",
+  "confidence": 0.4,
+  "evidence": "3.3 KB of float code using 0x0063451C (the same camera/transform accessor as 0x001D0B80) and the 0x0B80 rotation products; local_48/local_44/local_40 hold a quaternion built from 'in_s0' - the classic slerp parameter."
+ },
+ {
+  "address": "0x001D12D4",
+  "name": "maybe_Gfx_UpdateScreenEntries",
+  "signature": "void maybe_Gfx_UpdateScreenEntries(void* self)",
+  "params": {
+   "self": "screen/view manager"
+  },
+  "summary": "Per-frame update of the per-screen view entries: walks the two screen blocks (0x54 and 0xB10), updates each entry's transform and copies the resulting basis vectors.",
+  "confidence": 0.4,
+  "evidence": "Iterates the lists from 0x001C7AD0/0x001C7560 (the 10-slot field object) and mixes the constants g_001D1594..g_001D15A0 with float math; the two 0xABC-apart blocks at +0x54/+0xB10 are the two 3DS screens, selected by f_15CC elsewhere."
+ },
+ {
+  "address": "0x001D15AC",
+  "name": "maybe_Ui_ApplyRowLayout",
+  "signature": "void maybe_Ui_ApplyRowLayout(void* self, unsigned int arg2)",
+  "params": {
+   "self": "layout object",
+   "arg2": "row/param block"
+  },
+  "summary": "Applies a packed row layout (u16 fields and a 0x70-byte parameter block) to the object's rows.",
+  "confidence": 0.35,
+  "evidence": "3.8 KB function with a stack record of u16/u32 fields (uStack_C0, uStack_BE ...) that is filled and passed on; Ghidra lost most of the structure. The shape matches the layout/row code that 0x001D15F4 extends."
+ },
+ {
+  "address": "0x001D15F4",
+  "name": "maybe_Ui_ApplyRowLayoutDefault",
+  "signature": "void maybe_Ui_ApplyRowLayoutDefault(void* self)",
+  "params": {
+   "self": "layout object"
+  },
+  "summary": "Same row-layout application as 0x001D15AC with the default parameter block; called by 0x001D1AE8 when the layout timer expires.",
+  "confidence": 0.35,
+  "evidence": "Shares the local layout (u32/u16 fields at -0xCC..-0x54) with 0x001D15AC and is called from 0x001D1AE8 and the camera work code; the decompiled body is 3.5 KB of packed field copies."
+ },
+ {
+  "address": "0x001D18E0",
+  "name": "Gfx_InitScreenViews",
+  "signature": "void Gfx_InitScreenViews(void* self, int arg2, int arg3)",
+  "params": {
+   "self": "view/screen manager",
+   "arg2": "view id",
+   "arg3": "record"
+  },
+  "summary": "Initialises the per-screen view state: resets the handles, sets the default screen mask, determines whether both 3DS screens are in use and builds the first view records.",
+  "confidence": 0.55,
+  "evidence": "Sets f_15CC = 0 / f_15CE = 1, then f_15CC = (0x002F265C() == 2) - i.e. the screen count decides which screen block is active (f_15CC is used as the block selector in 0x1D1F14/0x1D2ADC/0x1D2F64). Calls 0x001D22D0, 0x001D1B60, 0x001D22D0 and 0x001D4DA4, all in this batch."
+ },
+ {
+  "address": "0x001D1AE8",
+  "name": "maybe_Gfx_StartPendingView",
+  "signature": "void maybe_Gfx_StartPendingView(void* self)",
+  "params": {
+   "self": "view/screen manager"
+  },
+  "summary": "Starts the pending view change: when the global timer passed the stored deadline it switches the active view and clears the request; also runs the row-layout default when the flag is set.",
+  "confidence": 0.4,
+  "evidence": "Compares *(g_001D1B58+self) with self->f_4C, sets f_50 = 1 and f_15D4 = f_44, then calls 0x001D15F4 when the byte at g_001D1B5C+self is set; ends by setting f_29 = 1, f_28 = 0."
+ },
+ {
+  "address": "0x001D1B60",
+  "name": "Gfx_ResetScreenViews",
+  "signature": "void Gfx_ResetScreenViews(void* self, unsigned int viewId, char* mode)",
+  "params": {
+   "self": "view/screen manager",
+   "viewId": "view to reset",
+   "mode": "mode record"
+  },
+  "summary": "Resets both 3DS screen view blocks and their view entries, re-applies the default view and initialises the layout state for the given mode.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x00622C30 on both screen blocks at +0x54 and +0xB10 (the same pair as 0x001D22D0/0x001D2ADC), writes the g_001D1D9C sentinel into f_38/f_44 and 0xFFFFFFFF into f_40, then runs the float layout pass; called from 0x001D18E0 (Gfx_InitScreenViews)."
+ },
+ {
+  "address": "0x001D1DA4",
+  "name": "maybe_Gfx_FindViewByDistance",
+  "signature": "void maybe_Gfx_FindViewByDistance(void* self, float* pos, int arg3)",
+  "params": {
+   "self": "view manager",
+   "pos": "reference position",
+   "arg3": "filter"
+  },
+  "summary": "Finds the view entry closest to the given position (squared-distance comparison) and forwards it to the caller.",
+  "confidence": 0.4,
+  "evidence": "Squares the incoming float (in_s0 * in_s0) and iterates the lists returned by 0x001C7AD0/0x001C7560 comparing distances; 0x005E7848/0x00669250 side calls, callers 0x004715BC/0x00471790."
+ },
+ {
+  "address": "0x001D1F14",
+  "name": "maybe_Gfx_PickViewByParams",
+  "signature": "unsigned int maybe_Gfx_PickViewByParams(void* self, int* params)",
+  "params": {
+   "self": "view manager",
+   "params": "parameter words at +0x48"
+  },
+  "summary": "Picks the first view whose parameter word (0xFFFFFFF sentinel) matches the current screen block and reports it.",
+  "confidence": 0.4,
+  "evidence": "Loops over *(int*)(arg2 + i*4 + 0x48) with the 0xFFFFFFF sentinel and indexes self + f_15CC*g_001D1FC0*4 + 0x54 - the same per-screen array base used by 0x001D2F64/0x001D462C."
+ },
+ {
+  "address": "0x001D1FC4",
+  "name": "maybe_Gfx_ComputeViewTransform",
+  "signature": "void maybe_Gfx_ComputeViewTransform(float* self, float* out, unsigned int a3, unsigned int* a4)",
+  "params": {
+   "self": "view entry",
+   "out": "matrix/vector result",
+   "a3": "flags",
+   "a4": "extra output"
+  },
+  "summary": "Computes the view/projection transform for a screen entry (largest float routine in this batch). Ghidra lost part of the control flow, so the exact outputs are not verified.",
+  "confidence": 0.35,
+  "evidence": "12 KB of float code with many float locals and an overlapping-instruction warning at 0x001D222C; indexes the per-screen block with f_15CC and uses 0x00574548/0x00575980 (transform helpers) like 0x001D2F64."
+ },
+ {
+  "address": "0x001D2222",
+  "name": "maybe_Gfx_ComputeViewTransformEx",
+  "signature": "void maybe_Gfx_ComputeViewTransformEx(float arg1, unsigned int arg2, float arg3, float* arg4)",
+  "params": {
+   "arg1": "scalar",
+   "arg2": "flags",
+   "arg3": "scalar",
+   "arg4": "matrix/vector result"
+  },
+  "summary": "Second entry point of the view-transform computation (Ghidra split it at an overlapping instruction), taking scalars in registers instead of a struct.",
+  "confidence": 0.35,
+  "evidence": "Starts at 0x001D2222, i.e. two bytes before its predecessor's end (Ghidra: 'Instruction at 0x001D222C overlaps instruction at 0x001D222A'); same float-heavy body and same callers."
+ },
+ {
+  "address": "0x001D22D0",
+  "name": "Gfx_ResetViewHandles",
+  "signature": "void Gfx_ResetViewHandles(void* self, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "view manager"
+  },
+  "summary": "Clears the view manager's handles and state flags on both screen blocks and invalidates the current view handle.",
+  "confidence": 0.5,
+  "evidence": "Releases the field object (0x001C863C(ctx+0x54, 4)), zeroes f_15E0/f_15E4, calls 0x00622458 on both screen blocks at +0x54 and +0xB10 and invalidates f_15EC with g_001D2338 (the handle generation helper used by 0x001D484C)."
+ },
+ {
+  "address": "0x001D233C",
+  "name": "maybe_Gfx_ComputeProjection",
+  "signature": "void maybe_Gfx_ComputeProjection(float* self, int a2, float* a3, int a4, float* a5)",
+  "params": {
+   "self": "view entry",
+   "a3": "output matrix",
+   "a5": "output matrix"
+  },
+  "summary": "Builds the projection/view matrix for a view entry from the incoming scalars and the per-screen parameters.",
+  "confidence": 0.35,
+  "evidence": "4.7 KB of float math taking three pointers plus two ints; uses the per-screen base and several g_001D26xx constants, and is followed by the billboard/look-at helpers 0x001D26F8/0x001D290C."
+ },
+ {
+  "address": "0x001D26F8",
+  "name": "maybe_Gfx_ComputeBillboardBasis",
+  "signature": "void maybe_Gfx_ComputeBillboardBasis(unsigned int self, float* a, float* b)",
+  "params": {
+   "self": "view entry",
+   "a": "position",
+   "b": "result basis"
+  },
+  "summary": "Computes a camera-facing (billboard) basis from two vectors for the given view entry.",
+  "confidence": 0.35,
+  "evidence": "2.6 KB of float code with two vector pointers; callers 0x004772C0 and the in-batch view code; starts from a stack record and cross/normalise products (0x00669250)."
+ },
+ {
+  "address": "0x001D290C",
+  "name": "maybe_Gfx_ComputeLookAt",
+  "signature": "void maybe_Gfx_ComputeLookAt(void* self, float* target, int a3)",
+  "params": {
+   "self": "view entry",
+   "target": "look-at target",
+   "a3": "flags"
+  },
+  "summary": "Builds the look-at orientation for a view entry from the target position, with the same squared-distance pre-scaling as 0x001D1DA4.",
+  "confidence": 0.35,
+  "evidence": "Shares '(u64)(u32)(in_s0*in_s0)' and the 0x001C7AD0/0x001C75FC list accessors with 0x001D1DA4/0x001D2B6C; produces orientation floats from arg2."
+ },
+ {
+  "address": "0x001D2ADC",
+  "name": "Gfx_SetActiveScreen",
+  "signature": "void Gfx_SetActiveScreen(void* self, int screen)",
+  "params": {
+   "self": "view manager",
+   "screen": "0 = primary, 3 = secondary"
+  },
+  "summary": "Switches which of the two 3DS screens is active by toggling the flags on both screen blocks and refreshing the layout.",
+  "confidence": 0.55,
+  "evidence": "For screen == 3 it sets f_15CC = 1 and calls 0x006226D8(&f_54, 0, &f_15CC) + 0x006226D8(&f_B10, 1, &f_15CC); for screen == 0 the arguments are swapped; both paths then call 0x001D15F4. f_15CC is the screen selector used throughout 0x001D1F14..0x001D462C."
+ },
+ {
+  "address": "0x001D2B6C",
+  "name": "maybe_Gfx_UpdateScreenViews",
+  "signature": "void maybe_Gfx_UpdateScreenViews(void* self)",
+  "params": {
+   "self": "view manager"
+  },
+  "summary": "Updates both screen views from the current render state: refreshes the view entries, resolves their handles and applies the interpolated transforms.",
+  "confidence": 0.35,
+  "evidence": "2.9 KB routine using the view-entry lists (0x001C7AD0/0x001C7560) and 0x001C7560/0x005E7848/0x00669250; called from 0x001D50CC (camera work start)."
+ },
+ {
+  "address": "0x001D2DCC",
+  "name": "maybe_Gfx_SelectViewByParams",
+  "signature": "void maybe_Gfx_SelectViewByParams(void* self, int* params)",
+  "params": {
+   "self": "view manager",
+   "params": "parameter words"
+  },
+  "summary": "Variant of 0x001D1F14 that also applies the selected view to the active screen block.",
+  "confidence": 0.4,
+  "evidence": "Identical parameter loop and sentinel test to 0x001D1F14 (arg2+0x48, 0xFFFFFFF, f_15CC * g_001D2E80 * 4 + 0x54) plus 0x0066D068; caller 0x004C82BC is in the same render path."
+ },
+ {
+  "address": "0x001D2E88",
+  "name": "maybe_Gfx_UpdateViewFromGame",
+  "signature": "void maybe_Gfx_UpdateViewFromGame(void* self)",
+  "params": {
+   "self": "view manager"
+  },
+  "summary": "Synchronises the view manager with the game's current camera/transform values.",
+  "confidence": 0.35,
+  "evidence": "Reads the game context through two levels (game+0x54 -> +0x1C, game+0x74) and copies floats into the view entry; uses 0x005E7848 style setters. Only caller is 0x001D50CC."
+ },
+ {
+  "address": "0x001D2F64",
+  "name": "Camera_UpdateWorkPath",
+  "signature": "unsigned int maybe_Camera_UpdateWorkPath(void* self, int index, unsigned int arg3, float* arg4, float* arg5)",
+  "params": {
+   "self": "camera work owner",
+   "index": "work entry index",
+   "arg3": "target id",
+   "arg4": "output position",
+   "arg5": "output angle"
+  },
+  "summary": "Advances one camera-work entry along its path: interpolates the current position toward the next key with a random jitter, applies the entry's rotation offset and returns whether the entry is still running.",
+  "confidence": 0.5,
+  "evidence": "Entry = self + f_15CC*g_001D32A0*4 + 0x54 + index*0x1C with the per-entry flag at +0x104 and config pointer at +0x10C; uses 0x00574548/0x00575980 (rotate/transform), 0x0051B1FC (random), 0x0063EEAC (target resolve) and compares the squared distance against the entry radius, then interpolates with g_001D32A8..g_001D32C4."
+ },
+ {
+  "address": "0x001D3818",
+  "name": "maybe_Camera_UpdateWorkPathEx",
+  "signature": "void maybe_Camera_UpdateWorkPathEx(void* self)",
+  "params": {
+   "self": "camera work owner"
+  },
+  "summary": "Second half / extended variant of the camera-work path update, handling the per-entry state machine and the transition to the next work entry.",
+  "confidence": 0.4,
+  "evidence": "Directly follows 0x001D2F64 (same 0x1C-stride per-screen entries, f_15CC selector) and shares its callees (0x002E72C8/0x002E7F08/0x005AF154/0x0062DE04); 2.5 KB of float/state code."
+ },
+ {
+  "address": "0x001D4200",
+  "name": "maybe_Camera_ResetScreenEntries",
+  "signature": "void maybe_Camera_ResetScreenEntries(void* self, unsigned int viewId)",
+  "params": {
+   "self": "camera/view owner",
+   "viewId": "view to reset"
+  },
+  "summary": "Resets the entries of one view on both screen blocks and detaches the objects they reference.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x00622480(self+0x54, id, 0) and 0x00622480(self+0xB10, id, 0) (the two screen blocks) plus 0x003B1634 on the projection object at +0x15F4, then walks the entry lists with 0x001C7AD0/0x001C7560."
+ },
+ {
+  "address": "0x001D4248",
+  "name": "maybe_Camera_ReleaseScreenEntries",
+  "signature": "void maybe_Camera_ReleaseScreenEntries(void* self)",
+  "params": {
+   "self": "camera/view owner"
+  },
+  "summary": "Releases every entry of both screen blocks that is no longer referenced.",
+  "confidence": 0.4,
+  "evidence": "Iterates the two lists (0x001C7AD0/0x001C7560) comparing nodes against the sentinel g_001D43B4 and releasing entries; the release half of 0x001D4200."
+ },
+ {
+  "address": "0x001D43C0",
+  "name": "maybe_Camera_UpdateTargetList",
+  "signature": "unsigned int maybe_Camera_UpdateTargetList(unsigned int self, int a2, int a3)",
+  "params": {
+   "self": "camera owner",
+   "a2": "target kind",
+   "a3": "target id"
+  },
+  "summary": "Refreshes the camera's target list: resolves each target candidate through the entity chain and keeps the ones that are still valid.",
+  "confidence": 0.35,
+  "evidence": "3.4 KB routine with five levels of pointer indirection (u32*****) walking a list, using 0x001C7560/0x001C7AD0 and 0x0063451C/0x0062D49C; the deep indirection is the entity/component chain used across this module."
+ },
+ {
+  "address": "0x001D462C",
+  "name": "maybe_Camera_UpdateWorkEntry",
+  "signature": "unsigned int maybe_Camera_UpdateWorkEntry(void* self, int a2, int arg3, int arg4)",
+  "params": {
+   "self": "camera work owner",
+   "a2": "unused here",
+   "arg3": "entry index",
+   "arg4": "target"
+  },
+  "summary": "Updates a single camera-work entry, sharing the path interpolation code with 0x001D2F64.",
+  "confidence": 0.45,
+  "evidence": "Uses the exact same entry address computation as 0x001D2F64 - 'self + (short)f_15CC * (short)g_001D47E4 * 4 + 0x54 + arg3*0x1C', flag +0x104, config +0x10C - and the same 0x0062D814/0x0062FA90 helpers."
+ },
+ {
+  "address": "0x001D47F0",
+  "name": "Camera_ReleaseProjection",
+  "signature": "void maybe_Camera_ReleaseProjection(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Releases the projection/render state object embedded at +0x15F4.",
+  "confidence": 0.5,
+  "evidence": "Single call 0x003B17C0(self+0x15F4); its twin 0x001D4828 sets that object up with 0x003B1698(&f_15F4, arg2, arg3, f_15CC, f_15CE) - the per-screen (f_15CC) and screen-count (f_15CE) arguments identify it as the projection setup."
+ },
+ {
+  "address": "0x001D4828",
+  "name": "Camera_SetupProjection",
+  "signature": "void maybe_Camera_SetupProjection(void* self, unsigned int width, unsigned int height)",
+  "params": {
+   "self": "camera owner",
+   "width": "screen width",
+   "height": "screen height"
+  },
+  "summary": "Configures the projection/render state for the current screen: passes the screen size plus the screen index and count to the render helper.",
+  "confidence": 0.5,
+  "evidence": "0x003B1698(&self->f_15F4, arg2, arg3, self->f_15CC, self->f_15CE) - the two u16 screen fields are passed straight into the projection setup, and the same pair is released by 0x001D47F0."
+ },
+ {
+  "address": "0x001D484C",
+  "name": "maybe_Camera_ReleaseTargetHandle",
+  "signature": "int maybe_Camera_ReleaseTargetHandle(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Releases the camera's target handle at +0x15EC when it still resolves and the target reports 'finished'.",
+  "confidence": 0.45,
+  "evidence": "Generation-checked lookup of *(self+0x15EC) in g_001D48F4 (>>11 index, 0x7FF mask), walks the type chain g_001D48F8 and calls vtable+0x34, then invalidates the handle with g_001D48FC - the same handle protocol as 0x001CCB38/0x001D22D0."
+ },
+ {
+  "address": "0x001D4900",
+  "name": "maybe_Camera_ResolveWorkHandle",
+  "signature": "void maybe_Camera_ResolveWorkHandle(void* self, unsigned int handle)",
+  "params": {
+   "self": "camera owner",
+   "handle": "object handle"
+  },
+  "summary": "Resolves a camera target handle to its object and forwards it to the work-entry setup.",
+  "confidence": 0.4,
+  "evidence": "Resolves arg2 through g_001D4A28/g_001D4A2C, walks the type chain (puVar5->f_C) and calls 0x005E7848/0x0063451C; callers 0x0046E50C/0x004AE8C4."
+ },
+ {
+  "address": "0x001D4A40",
+  "name": "maybe_Camera_ClearWorkList",
+  "signature": "void maybe_Camera_ClearWorkList(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Drains the camera's pending work list at +0x163C, releasing each entry.",
+  "confidence": 0.45,
+  "evidence": "Iterates the intrusive list f_1640 against the sentinel &f_163C calling the release virtuals; also touches the view entries through f_15CC and uses 0x00669250/0x0066 9324."
+ },
+ {
+  "address": "0x001D4DA4",
+  "name": "maybe_Camera_UpdateWorkList",
+  "signature": "void maybe_Camera_UpdateWorkList(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Per-frame update of the camera work list: advances each work entry and rebuilds the list at +0x163C.",
+  "confidence": 0.4,
+  "evidence": "3.4 KB routine starting from f_1640/f_163C (the same list as 0x001D4A40) with many float locals and the 0x0062D814/0x0062FA90 helpers; called from 0x001D18E0 and 0x001D52B0."
+ },
+ {
+  "address": "0x001D5098",
+  "name": "maybe_Math_Vector3_SetFrom",
+  "signature": "void Math_Vector3_SetFrom(unsigned int a1, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "a2": "input vector",
+   "a3": "input vector",
+   "a4": "t"
+  },
+  "summary": "Builds a 12-byte vector on the stack from the two inputs and the parameter (an interpolation helper).",
+  "confidence": 0.4,
+  "evidence": "Only two calls: 0x0039CD08(&local, arg3) then 0x0039CBBC(&local, arg2, arg4) - the same vector/matrix helper pair used by the transform code; the 12-byte stack object is a 3-float vector."
+ },
+ {
+  "address": "0x001D50CC",
+  "name": "maybe_Camera_TryStartWork",
+  "signature": "void maybe_Camera_TryStartWork(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Starts a queued camera work when the current one is idle and the work table entry is set.",
+  "confidence": 0.45,
+  "evidence": "Requires owner->f_3C == 0 and f_11 != 0 plus the byte at g_001D51D4+self, then resolves the game context (game+0x54 -> +0x1C) and calls 0x001D1FC4/0x001D2B6C (this batch) before 0x0062272C/0x00622778."
+ },
+ {
+  "address": "0x001D51E0",
+  "name": "Camera_Reset",
+  "signature": "void Camera_Reset(void* self)",
+  "params": {
+   "self": "camera owner"
+  },
+  "summary": "Resets the whole camera object to its idle state: clears the work flags, releases both screen views, invalidates all handles and empties the work list.",
+  "confidence": 0.55,
+  "evidence": "Calls 0x001D22D0, zeroes f_10 and the byte at g_001D52A8+self, calls 0x00622C30 on both screen blocks (+0x54, +0xB10), writes 0xFFFFFFFF/0 sentinels into f_38..f_4C, releases 0x003B1B14 on the projection at +0x15F4 and 0x00708850 on +0x1624/+0x1630, then empties the list at +0x1640."
+ },
+ {
+  "address": "0x001D52B0",
+  "name": "Camera_SetupFromRecord",
+  "signature": "void Camera_SetupFromRecord(void* self, void* record, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "camera owner",
+   "record": "camera work record (target id at +0xC)",
+   "a3": "flags",
+   "a4": "unused"
+  },
+  "summary": "Starts a camera work item: resolves the target actor from the record's id, stores the handle in the work slot and copies the target's position and rotation into the camera entry.",
+  "confidence": 0.55,
+  "evidence": "func_001C7370(game+0x54, record->f_C) is Field_CreateActorFromId (named), the result is stored at g_001D5424+self and resolved through g_001D5428/g_001D542C, then the target's f_2C/f_30/f_34 are copied into the work entry at +0x9C..+0xA4. Seven in-batch callers (0x001D15AC, 0x001D15F4, 0x001D1FC4, 0x001D2222, 0x001D233C, 0x001D43C0, 0x001D462C) use it as the common setup step."
+ },
+ {
+  "address": "0x001D5850",
+  "name": "Camera_Delete",
+  "signature": "void maybe_Camera_Delete(void* self, unsigned int tag)",
+  "params": {
+   "self": "camera owner",
+   "tag": "type tag"
+  },
+  "summary": "Deleting destructor of the camera object: resets the type tag, unlinks the work list, releases the 0xC-byte entry array and the projection object, then frees the memory.",
+  "confidence": 0.5,
+  "evidence": "*arg1 = arg2 (type tag), self-links at +0x1640/+0x1644, 0x00100BE0(arg1+0x1624, g_001D58D0, 0xC, 2) frees the 0xC-byte entries, then 0x003B1EE8(arg1+0x15D8) hands back the projection base which is freed with 0x0010F6CC - the mirror of Camera_Reset (0x001D51E0)."
+ },
+ {
+  "address": "0x001D58DC",
+  "name": "Model_SetupFaceParams",
+  "signature": "void Model_SetupFaceParams(void* self, char* record)",
+  "params": {
+   "self": "character model",
+   "record": "face record (id, flags)"
+  },
+  "summary": "Applies a face/expression record to a character model: stores the face id and palette byte (or 0xFFFF/0xFF when the id is -1) and pushes it to the face subsystem.",
+  "confidence": 0.5,
+  "evidence": "Caller is Model_SetupCharacterModel (0x002232FC in N_022) - the named character-model setup. Reads arg2[0] == -1 for the 'no face' sentinel and writes u16 +6 / byte +8, then 0x002D6B2C and 0x0063CFC8/-0x003063E5C8 face-table lookups."
+ },
+ {
+  "address": "0x001D5A10",
+  "name": "maybe_Model_SetFaceMode",
+  "signature": "void maybe_Model_SetFaceMode(void* self, int mode, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "character model",
+   "mode": "0 = enable, 1 = disable"
+  },
+  "summary": "Enables or disables a face mode: on enable it rolls the random expression timer (1..3) and stores the resulting duration.",
+  "confidence": 0.45,
+  "evidence": "arg2 == 0 sets f_18 = 1 and f_20 = (rand%3 + 2) * *g_001D5ADC (a frame-count conversion, 60 fps), arg2 == 1 clears f_18; followed by 0x001D5EAC and 0x001D5AE0 (the face animation update)."
+ },
+ {
+  "address": "0x001D5AE0",
+  "name": "maybe_Model_UpdateFaceAnimation",
+  "signature": "void maybe_Model_UpdateFaceAnimation(void* self, int arg2, int frame)",
+  "params": {
+   "self": "character model",
+   "arg2": "face/anim id",
+   "frame": "target frame"
+  },
+  "summary": "Advances the character's face animation toward the requested frame, using the face record selected by the id.",
+  "confidence": 0.45,
+  "evidence": "Resolves the layout through *(*self+0x11C) and indexes f_2C + id*0x158 (the 0x158-byte face records), then compares arg3 with the 0xFF sentinel; called by 0x001D5A10/0x001D5C94/0x001D5F74."
+ },
+ {
+  "address": "0x001D5C94",
+  "name": "maybe_Model_UpdateBlinkTimer",
+  "signature": "void maybe_Model_UpdateBlinkTimer(void* self, unsigned int a2, unsigned int a3, int a4)",
+  "params": {
+   "self": "character model"
+  },
+  "summary": "Ticks the character's blink/expression timer and toggles the face state when it expires.",
+  "confidence": 0.45,
+  "evidence": "Decrements the byte at +9 and the counter f_10, toggles f_14 and re-arms through 0x006F1EEC and 0x001D5AE0/0x001D5EAC; callers 0x0018233C/0x002221F0/0x002242AC (character setup) and 0x005A86D4."
+ },
+ {
+  "address": "0x001D5F62",
+  "name": "maybe_Model_AllocFaceParamBlock",
+  "signature": "unsigned int maybe_Model_AllocFaceParamBlock(int owner, unsigned int a2, unsigned int a3)",
+  "params": {
+   "owner": "owning object",
+   "a2": "size hint",
+   "a3": "extra"
+  },
+  "summary": "Allocates the aligned parameter block for the face system using the allocator registered in the game context.",
+  "confidence": 0.35,
+  "evidence": "Uses the 0x0011FE8C(size, align) / 0x0011CFAC round-up / 0x00116AE0 alloc pattern used everywhere in the game for aligned pools, with the constants g_001D6068..g_001D6078; Ghidra lost the register arguments, so the exact signature is a guess."
+ },
+ {
+  "address": "0x001D5F74",
+  "name": "Svc_GetTableRow",
+  "signature": "int maybe_Svc_GetTableRow(int index)",
+  "params": {
+   "index": "row index"
+  },
+  "summary": "Returns the address of the 8-byte table row for the given index after asserting that the table has been initialised.",
+  "confidence": 0.5,
+  "evidence": "Checks (*(u8*)(g_001D6050+4) & 1) and calls 0x0010009C(g_001D6058) (an assert/abort with the module name) when it is not, then 'return g_001D6054 + index * 8' - a plain 8-byte row table accessor."
+ },
+ {
+  "address": "0x001D607C",
+  "name": "maybe_Field_GetCurrentPlaceId",
+  "signature": "int maybe_Field_GetCurrentPlaceId(void)",
+  "params": {
+   "returns": "current place/room id or 0"
+  },
+  "summary": "Returns the current place/room id from the field manager, or 0 when no map is loaded.",
+  "confidence": 0.45,
+  "evidence": "Returns 0 unless *(int*)(*(int*)(game+0x88)+8) != 0, then 0x0066A7D8()->f_12; the twin 0x001D61D0 reads ->f_11 instead. Callers 0x00381ED8/0x0046CE28 use it as an id accessor."
+ },
+ {
+  "address": "0x001D60AC",
+  "name": "maybe_Model_SetFaceFromRecord",
+  "signature": "void maybe_Model_SetFaceFromRecord(void* self, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "character model",
+   "a2": "face value"
+  },
+  "summary": "Applies a face value to the model: resets the face subsystem for the id and stores the low byte in the model's face record.",
+  "confidence": 0.45,
+  "evidence": "0x001D2ADC(game+0x4C, arg2) followed by 0x003DA59C(self+0x70, arg2 & 0xFF); the same game+0x4C face-manager call appears in the face routines above."
+ },
+ {
+  "address": "0x001D60E4",
+  "name": "Field_ExitTalkMode",
+  "signature": "void maybe_Field_ExitTalkMode(void* self, char* record)",
+  "params": {
+   "self": "talk/message controller",
+   "record": "record whose first byte selects the mode"
+  },
+  "summary": "Leaves a talk session: when the record asks for mode 1 it clears the game's talk flag, otherwise it stops the running voice/sound, then notifies the message window.",
+  "confidence": 0.5,
+  "evidence": "Caller is maybe_Ui_MessageWindow_CloseWithTalkData (0x0019E9E4). record[0] == 1 clears bit 0 of *(game+0x2A648), else calls 0x00442270(game+0x74) (the sound/voice manager), then 0x00235A50/0x006F1EEC for the message side."
+ },
+ {
+  "address": "0x001D61D0",
+  "name": "maybe_Field_GetCurrentRoomId",
+  "signature": "int maybe_Field_GetCurrentRoomId(void)",
+  "params": {
+   "returns": "current room id or 0"
+  },
+  "summary": "Returns the current room id from the field manager (the field at +0x11 of the place record), or 0 when no map is loaded.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same as 0x001D607C but reads ->f_11 instead of ->f_12; callers 0x00381D3C/0x0046CC5C."
+ },
+ {
+  "address": "0x001D6200",
+  "name": "Field_SetupTalkParams",
+  "signature": "void maybe_Field_SetupTalkParams(void* self, void* actor, void* record, unsigned char* params)",
+  "params": {
+   "self": "talk/event object",
+   "actor": "speaker actor",
+   "record": "scene record",
+   "params": "0x48-byte parameter block"
+  },
+  "summary": "Configures a talk/event: converts the frame counts in the global tables to time, copies the parameter block into the object and forwards the actor to the message, face and effect sub-systems.",
+  "confidence": 0.5,
+  "evidence": "Every duration is computed as '*g_001D65B8 * 0x3C' (frames -> 60 ticks) and handed to 0x00113590 as a timer; then 20 fields are copied from arg4 into self, and the actor is passed to 0x001D9870/0x00235E0C/0x001D97B8/0x001D8E2C/0x003DA214/0x001D18E0/0x004AC050. The face-mode branch reads game+0x48+0x281 == 8/9 (the two screen/face modes)."
+ },
+ {
+  "address": "0x001D65E0",
+  "name": "maybe_Field_CreateTalkRecord",
+  "signature": "void maybe_Field_CreateTalkRecord(void* self, char* record, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "talk controller",
+   "record": "record whose first byte selects the variant"
+  },
+  "summary": "Creates (once) the 0x98-byte talk record used by the talk controller and initialises it from the given record.",
+  "confidence": 0.4,
+  "evidence": "Same lazy-singleton pattern as 0x001C71B4: 'if (*g_001D66E0 == 0) { ... alloc 0x98 with 0x10 alignment via 0x0011FE8C/0x0011CFAC/0x00116AE0 ... }', gated on record[0] == 1; then calls 0x001D1AE8/0x004AC2F0/0x00627308."
+ },
+ {
+  "address": "0x001D66F0",
+  "name": "maybe_Field_ResetTalkState",
+  "signature": "void maybe_Field_ResetTalkState(void* self, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "self": "talk/event object",
+   "a2": "scene argument"
+  },
+  "summary": "Resets the talk/event state: clears the message window, the map-jump handler and the event dispatcher before the next scene.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x00236C08(game+0x48, arg2, self+0x14), then 0x001D9844/0x001DA410/0x001D9D7C on game+0x88 - and 0x001D9D7C is Field_HandleMapJumpEvent (named in N_010), which places this function in the field event path. Caller 0x001A0AE4 is the field event dispatcher."
+ }
+]

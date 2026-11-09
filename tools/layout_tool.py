@@ -18,8 +18,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-if "../reference project" not in sys.path:
-    sys.path.insert(0, "../reference project")
+if "../3DS_Translate" not in sys.path:
+    sys.path.insert(0, "../3DS_Translate")
 
 from tools import pack
 
@@ -174,8 +174,172 @@ def parse_bflyt(data: bytes) -> dict:
     }
 
 
+PANE_MAGICS = ("pan1", "pic1", "txt1", "wnd1", "bnd1", "prt1")
+# Offsets are inside the section payload (the 8-byte section header excluded),
+# i.e. the parser's 0x2C/0x38/0x44/0x4C offsets minus 8.
+_PANE_FIELDS = (("translate", 0x24), ("rotate", 0x30), ("scale", 0x3C), ("size", 0x44))
+
+
+def apply_pane_edits(d: dict) -> list[str]:
+    """Writes edited pane values from ``d["panes"]`` into ``d["raw_sections"]``.
+
+    BFLYT stores panes as fixed-size sections, so the binary can only be
+    rebuilt from the raw section payloads. Edits made in the JSON pane list
+    (translate/rotate/scale/size, and same-capacity text) are applied here in
+    place; unchanged JSON therefore rebuilds byte-identically. Returns warnings.
+    """
+    raw = d.get("raw_sections")
+    panes = d.get("panes")
+    if not raw or not panes:
+        return []
+    sections = [s for s in raw if s.get("magic") in PANE_MAGICS]
+    if len(sections) != len(panes):
+        return [
+            f"{len(panes)} panes in JSON but {len(sections)} pane sections in the file; "
+            "pane edits were not written"
+        ]
+    warnings: list[str] = []
+    for pane, section in zip(panes, sections):
+        payload = bytearray(bytes.fromhex(section["payload_hex"]))
+        for key, offset in _PANE_FIELDS:
+            values = pane.get(key)
+            if not isinstance(values, list) or len(values) < 2:
+                continue
+            if offset + 12 > len(payload):
+                continue
+            if key == "scale" or key == "size":
+                struct.pack_into("<ff", payload, offset, float(values[0]), float(values[1]))
+            else:
+                struct.pack_into("<fff", payload, offset, *(float(v) for v in values[:3]))
+        if section.get("magic") == "txt1" and isinstance(pane.get("text"), str):
+            old_off = struct.unpack_from("<I", payload, 0x5C)[0]
+            buffer_bytes = struct.unpack_from("<H", payload, 0x4C)[0]
+            capacity = max(0, buffer_bytes - 2)
+            encoded = pane["text"].encode("utf-16-le")
+            # NW4C string offsets are relative to the section start; the payload
+            # we are editing starts 8 bytes later (after the section header).
+            text_pos = old_off - 8 if old_off >= 8 else old_off
+            if len(encoded) > capacity:
+                # A longer string needs a longer buffer.  The text buffer is
+                # followed only by the pane's text id (an ASCII name), so the
+                # section can be extended in place: the id moves by the size
+                # difference and its offset field is corrected.  Sections after
+                # this one are concatenated without absolute offsets, and
+                # build_bflyt recomputes the section and file sizes, so nothing
+                # else needs patching.
+                if not old_off or text_pos + buffer_bytes > len(payload):
+                    raise ValueError(
+                        f"pane {pane.get('name')!r}: text is {len(encoded) // 2} characters, "
+                        f"the layout reserves {max(capacity, 0) // 2}, and the section does not "
+                        "describe a text buffer this tool can grow")
+                new_buffer = (len(encoded) + 2 + 3) & ~3
+                delta = new_buffer - buffer_bytes
+                if delta <= 0:
+                    raise ValueError(
+                        f"pane {pane.get('name')!r}: cannot grow the text buffer "
+                        f"({buffer_bytes} -> {new_buffer} bytes)")
+                tid_off = struct.unpack_from("<I", payload, 0x78)[0]
+                if tid_off >= old_off + buffer_bytes:
+                    tid_off += delta
+                grown = bytearray(payload[:text_pos])
+                grown += encoded + b"\x00\x00"
+                while len(grown) % 4:
+                    grown += b"\x00"
+                grown += payload[text_pos + buffer_bytes:]
+                struct.pack_into("<I", grown, 0x78, tid_off)
+                struct.pack_into("<H", grown, 0x4C, new_buffer)
+                struct.pack_into("<H", grown, 0x4E, len(encoded) + 2)
+                payload = grown
+                warnings.append(
+                    f"pane {pane.get('name')!r}: text grown from {capacity // 2} to "
+                    f"{len(encoded) // 2} characters (+{delta} bytes); the layout is no "
+                    "longer the retail size")
+            elif old_off and text_pos + capacity <= len(payload):
+                new_text = encoded + bytes(capacity - len(encoded))
+                if payload[text_pos:text_pos + capacity] != new_text:
+                    payload[text_pos:text_pos + capacity] = new_text
+                    struct.pack_into("<H", payload, 0x4E, len(encoded) + 2)
+        section["payload_hex"] = payload.hex()
+    return warnings
+
+
+def complete(doc: dict, original: bytes) -> dict:
+    """Returns ``doc`` with ``raw_sections``, taking them from the original BFLYT if missing.
+
+    A hand-trimmed JSON may carry only the readable pane list; building from it alone
+    would write a header-only file. The pane edits (transform, size, text)
+    are laid over the parsed original instead. Pane names must match in order.
+    """
+    if "raw_sections" in doc:
+        return doc
+    base = parse_bflyt(original)
+    panes = doc.get("panes", [])
+    if [p.get("name") for p in panes] != [p["name"] for p in base["panes"]]:
+        raise ValueError("pane list differs from the original layout; add panes with "
+                         "`layout_tool add-pane` on the .bflyt so the JSON carries raw sections")
+    for edited, pane in zip(panes, base["panes"]):
+        for key in ("translate", "rotate", "scale", "size", "text"):
+            if key in edited and key in pane:
+                pane[key] = edited[key]
+    return base
+
+
+def add_pane(d: dict, source: str, new_name: str) -> dict:
+    """Copies pane ``source`` under ``new_name`` as its next sibling; returns a new document.
+
+    The copy (plus the ``usd1`` user data that follows it, if any) is inserted after the
+    source's whole child block, so it gets the same parent. Children are not copied, because
+    the game finds panes by name and copied children would clash. BFLYT keeps no pane count;
+    ``build_bflyt`` recomputes the section count and file size. Groups, ``cnt1`` and
+    animations do not list the new pane, so it is static and always shown.
+    """
+    raw_name = new_name.encode("ascii")
+    if not raw_name or len(raw_name) > 23:
+        raise ValueError(f"pane name {new_name!r} must be 1-23 ASCII characters")
+    sections = [dict(s) for s in d["raw_sections"]]
+    panes = [dict(p) for p in d["panes"]]
+    if any(p["name"] == new_name for p in panes):
+        raise ValueError(f"pane {new_name!r} already exists")
+    pane_rows = [i for i, s in enumerate(sections) if s["magic"] in PANE_MAGICS]
+    matches = [k for k, i in enumerate(pane_rows) if panes[k]["name"] == source]
+    if not matches:
+        raise ValueError(f"no pane named {source!r}")
+    if len(pane_rows) != len(panes):
+        raise ValueError("pane list and pane sections disagree; re-parse the binary first")
+    src = pane_rows[matches[0]]
+    copied = [dict(sections[src])]
+    end = src + 1
+    if end < len(sections) and sections[end]["magic"] == "usd1":
+        copied.append(dict(sections[end]))
+        end += 1
+    if end < len(sections) and sections[end]["magic"] == "pas1":
+        depth = 0
+        while end < len(sections):
+            depth += {"pas1": 1, "pae1": -1}.get(sections[end]["magic"], 0)
+            end += 1
+            if depth == 0:
+                break
+    payload = bytearray(bytes.fromhex(copied[0]["payload_hex"]))
+    payload[0x04:0x1C] = raw_name.ljust(24, b"\0")  # name at section +0x0C
+    copied[0]["payload_hex"] = payload.hex()
+    pane = dict(panes[matches[0]])
+    pane["name"] = new_name
+    pane["raw_header_hex"] = (bytes.fromhex(pane["raw_header_hex"])[:0x0C] + raw_name.ljust(24, b"\0")
+                              + bytes.fromhex(pane["raw_header_hex"])[0x24:]).hex()
+    insert_pane = sum(1 for i in pane_rows if i < end)
+    out = dict(d)
+    out["raw_sections"] = sections[:end] + copied + sections[end:]
+    out["panes"] = panes[:insert_pane] + [pane] + panes[insert_pane:]
+    out["panes_count"] = len(out["panes"])
+    return out
+
+
 def build_bflyt(d: dict) -> bytes:
     """Rebuilds BFLYT binary from structured dictionary."""
+    warnings = apply_pane_edits(d)
+    if warnings:
+        d = dict(d)
+        d["_warnings"] = warnings
     out_sections = []
 
     # If raw_sections is preserved, rebuild exactly
@@ -270,9 +434,9 @@ def build_bflan(d: dict) -> bytes:
 
 
 def read_romfs():
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     return f, ncch.romfs()
 
 
@@ -386,7 +550,30 @@ def main():
     ver_p = sub.add_parser("verify", help="Verify lossless round-trip re-encoding")
     ver_p.add_argument("--limit", type=int, default=50, help="Number of assets to test")
 
+    add_p = sub.add_parser("add-pane", help="Copy a pane under a new name (BFLYT or layout JSON)")
+    add_p.add_argument("input", type=Path, help=".bflyt or .layout.json")
+    add_p.add_argument("--copy", required=True, help="name of the pane to copy")
+    add_p.add_argument("--name", required=True, help="name of the new pane (1-23 ASCII chars)")
+    add_p.add_argument("--out", type=Path, required=True, help=".bflyt or .json to write")
+    add_p.add_argument("--base", type=Path, help="original .bflyt, needed for an exported JSON")
+
     args = parser.parse_args()
+
+    if args.command == "add-pane":
+        raw = args.input.read_bytes()
+        d = parse_bflyt(raw) if raw[:4] == b"FLYT" else json.loads(raw.decode("utf-8"))
+        if "raw_sections" not in d:
+            if not args.base:
+                parser.error("this JSON has no raw sections; pass --base <original .bflyt>")
+            d = complete(d, args.base.read_bytes())
+        d = add_pane(d, args.copy, args.name)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        if args.out.suffix == ".json":
+            args.out.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+        else:
+            args.out.write_bytes(build_bflyt(d))
+        print(f"added pane {args.name!r} (copy of {args.copy!r}) -> {args.out}")
+        return 0
 
     if args.command == "extract":
         lyt, lan = batch_extract(args.out, args.limit)

@@ -1,0 +1,671 @@
+[
+ {
+  "class": "Ui_Timer",
+  "type": "UiTimer",
+  "summary": "Timed UI part (~0x144 bytes): every tick it advances the child part at +0x98 and decrements the countdown at +0x140; reaching 0 plays SE 0xDD, and bit 0x10 of the state byte at +0x138 resets/hides it. No direct caller, so the owner is unknown.",
+  "size": 324,
+  "base": null,
+  "confidence": 0.45,
+  "evidence": "Only method 0x003BE9C0 (maybe_Ui_Timer_CountdownSe221) has no caller. Assembly confirms tst #0x10 selects the reset branch, which sets +0x13D=0, +0x94=0, +0x140=-1; otherwise +0x140 is decremented and SE 0xDD plays at 0. Size 0x144 from the highest field. +0x94 is the shared UI-part visible byte also cleared by Ui_Overlay_HideQuad.",
+  "fields": [
+   {
+    "offset": 148,
+    "name": "isVisible",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "The reset branch stores 0 at +0x94 (strb), hiding the part; Ui_Overlay_HideQuad clears the same +0x94 visibility byte of its window."
+   },
+   {
+    "offset": 152,
+    "name": "childPart",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "asm: adds r0,r0,#0x98; ldr r1,[r0]; ldr r1,[r1,#0x2c]; blx r1 - every tick forwards to vtable slot +0x2C (part update) of the object at +0x98."
+   },
+   {
+    "offset": 312,
+    "name": "maybe_stateFlags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "bit 0x10 selects the reset branch (asm: tst r0,#0x10; beq countdown): clears +0x13D/+0x94 and sets +0x140 = -1 (mvn r0,#0)."
+   },
+   {
+    "offset": 317,
+    "name": "unknown_13d",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared only in the reset branch (strb r1,[r4,#0x13d]) and never read in the recovered body; purpose not proven."
+   },
+   {
+    "offset": 320,
+    "name": "countdownFrames",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Decremented each tick while > 0 (ldr/cmp/ble/subs/str); when it reaches 0 the routine plays SE 0xDD (221) with a temporary Anim_Sequence. -1 means idle/reset."
+   }
+  ]
+ },
+ {
+  "class": "Ui_Transition",
+  "type": "UiTransition",
+  "summary": "Screen-transition helper (24 bytes, base Ui_Overlay): holds the current handler record at +4/+8, the fade-quad handle at +0xC, the affected window at +0x10 and the transition frame counter at +0x14; CreateFadeQuad/Start/OnAccept drive an overlay fade quad.",
+  "size": 24,
+  "base": "Ui_Overlay",
+  "confidence": 0.55,
+  "evidence": "CreateFadeQuad (0x00445AC8) calls Ui_Overlay_CreateQuadObject(self,...) and stores the handle at +0xC. Start (0x00445A7C) and the sibling Ui_Overlay_ShowQuad/SetupHandlers copy an 8-byte record from overlay handler table 0x0072A79C into +4/+8 (asm: ldrd r0,r1,[table,#0x28]; strd r0,r1,[r4,#4]). The dtor stores vtable 0x0076FF34 and releases +0xC (0x001C7570) and +0x10 (Ui core list).",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "dtor stores *self = 0x0076FF34; constructor stores DAT_00445DB0 - polymorphic object with a vtable at offset 0."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_stateHandler",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Word 0 of the 8-byte handler record copied from 0x0072A79C; the record at +0x28 is {0x004458C0 (this class's OnAccept), 0}. +8 is the record's second word."
+   },
+   {
+    "offset": 12,
+    "name": "fadeQuadHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Generation-tagged handle: validated with >>0xB vs 0x001FFFFF and the 0x007B80C0 table, released via 0x001C7570, filled by Ui_Overlay_CreateQuadObject."
+   },
+   {
+    "offset": 16,
+    "name": "fadeWindow",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "self->f_10->f_94 visibility byte is cleared by OnAccept; the dtor releases it from the Ui core list with 0x0021F8B8."
+   },
+   {
+    "offset": 20,
+    "name": "frameCounter",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Set to 0 whenever the fade quad is (re)created; the screen-transition siblings (Ui_ScreenTransition_UpdateTimer) advance the same +0x14 frame counter."
+   }
+  ]
+ },
+ {
+  "class": "Ui_WidgetGroup",
+  "type": "UiWidgetGroup",
+  "summary": "Group of child UI widgets (no vtable recovered): dispatches update/draw to an intrusive child list at +0x10/+0x14 and notifies active-state listeners in a second list at +0x1E0/+0x1E4. Field offsets coincide with Ui_Window's layout.",
+  "size": 488,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "DispatchDraw/DispatchUpdate walk the list whose first node is self->f_14 and whose nodes' first word is compared with self->f_10, calling child vtable +0x18 (draw) / +0xC (update). NotifyActive (0x001A5F74) calls func_00123594(self,&self->f_1D0) then walks the second list at +0x1E4 calling each node's +0x1C. No vtable or ctor was recovered.",
+  "fields": [
+   {
+    "offset": 16,
+    "name": "maybe_childList",
+    "type": "Ui_List*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Every iterated element's first word is compared against self->f_10 before the loop ends, so +0x10 is the owning list/end marker (Ui_Window +0x10 is a Ui_List*)."
+   },
+   {
+    "offset": 20,
+    "name": "firstChild",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Start node of the intrusive child list: node[0] is the value compared with +0x10, node+4 is the next node (piVar3 = piVar3[1])."
+   },
+   {
+    "offset": 464,
+    "name": "unknown_1d0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Address passed as an out buffer to func_00123594(self,&self->f_1d0) in NotifyActive; 0x1D0..0x1DF is followed by the listener list at 0x1E0, so it may be a 16-byte transform/rect, but nothing proves it."
+   },
+   {
+    "offset": 480,
+    "name": "maybe_listenerList",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "End marker/owner list of the second intrusive list iterated in NotifyActive; each element's vtable slot +0x1C is called with argument 1."
+   },
+   {
+    "offset": 484,
+    "name": "maybe_firstListener",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "First element of the listener list; element[0] is compared with +0x1E0 and element+4 is the next node."
+   }
+  ]
+ },
+ {
+  "class": "Ui_AnimBinder",
+  "type": "UiAnimBinder",
+  "summary": "Animation binder for one layout animation resource: resource at +0xC, per-entry animatable objects at +0x18, a fixed array of {target,tag} bindings at +0x1C with count at +0x20 and capacity at +0x22; filled by Ui_Animator_AppendBinding/BindByName.",
+  "size": 36,
+  "base": null,
+  "confidence": 0.6,
+  "evidence": "Ui_AnimBinder_Init (0x0053682C) sets +0xC = res, allocates res->f_c object pointers into +0x18 via factory vtable +0x14, allocates slotCount 8-byte pairs into +0x1C and stores (short)slotCount at +0x22. Ui_Animator_AppendBinding (0x00536C48) rejects when f_20 >= f_22 and writes {target,tag} at f_1C + f_20*8, proving +0x20 is the current count (not in this batch) and +0x22 the capacity.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "animResource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "self->f_c = res; res->f_c is the entry count and res->f_e the animation-group count consumed by Ui_Animator_BindByName."
+   },
+   {
+    "offset": 24,
+    "name": "animatableObjects",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Allocated array of res->f_c pointers; each entry is created through factory vtable +0x14 and stored at +0x18 + j*4; only allocated when +0x1C allocation succeeded."
+   },
+   {
+    "offset": 28,
+    "name": "bindings",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Zeroed array of capacity 8-byte {target,tag} pairs (memset pairs at +0x1C); Ui_Animator_AppendBinding writes *(f_1C + f_20*8) = (target, tag)."
+   },
+   {
+    "offset": 34,
+    "name": "bindingCapacity",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.7,
+    "evidence": "Stored as (short)slotCount only when the binding array was allocated; AppendBinding returns 0 when the current count f_20 >= f_22."
+   }
+  ]
+ },
+ {
+  "class": "Ui_AnimValue",
+  "type": "UiAnimValue",
+  "summary": "Animated scalar with smoothing: current value at +0x10, per-frame velocity at +0x24, wrap mode at +0x28 and status bits at +0x2C; UpdateScroll integrates toward a target with stop/loop/ping-pong modes (used for text scrolling).",
+  "size": 48,
+  "base": null,
+  "confidence": 0.65,
+  "evidence": "Ui_AnimValue_UpdateScroll (0x0053FFD4) does self->f_10 += self->f_24 * dt, switches on byte f_28 (0 stop / 1 loop / 2 reflect using layout length from 0x0065D3B8) and maintains bits 1/2/4 in f_2C; Ui_AnimValue_SetTarget (0x005401DC) snaps f_10 to 0.0f or the layout length and clears f_2C &= ~7. Independent helper func_0032681C also writes (float)n to this object's +0x10.",
+  "fields": [
+   {
+    "offset": 16,
+    "name": "currentValue",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "Integrated by UpdateScroll (+= velocity*dt) and snapped by SetTarget to 0.0f or the layout length; func_0032681C stores (float)n into +0x10 of the object it loads."
+   },
+   {
+    "offset": 36,
+    "name": "velocity",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Per-frame delta multiplied by the dt argument in UpdateScroll; negated in ping-pong mode (+0x28 == 2) and zeroed when the value stops/clamps."
+   },
+   {
+    "offset": 40,
+    "name": "wrapMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.65,
+    "evidence": "Byte f_28 switches 0=stop, 1=loop (adds the layout length from 0x0065D3B8) and 2=ping-pong (negates f_24); any other value leaves the value unchanged."
+   },
+   {
+    "offset": 44,
+    "name": "stateFlags",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Low 3 bits are cleared each update (&= ~7); bit 1 = clamped at start, bit 2 = wrapped/looped, bit 4 = direction reversed, set in the matching branches. Stored as float by the decompiler but only bit-tested."
+   }
+  ]
+ },
+ {
+  "class": "Ui_ChildSlot",
+  "type": "UiChildSlot",
+  "summary": "Two-digit index cursor: the sub-object at parent+0x2F14 holds two Ui_AnimValue pointers (+0x4C ones digit, +0x9C tens digit) snapped to a slot index. The batch also merges the parent window's 5-entry icon-material table (+0x2F00), so offsets 0x4C/0x9C and 0x2F00/0x2F14 belong to two different objects.",
+  "size": 12056,
+  "base": null,
+  "confidence": 0.3,
+  "evidence": "SetCursorFromIndex (0x004DC5B4) is called with self = window+0x2F14 and uses 0x0032681C(self+0x4C, index%10) and (index/10)%10 on +0x9C; asm of 0x0032681C loads ptr=[arg+0x4C] and stores (float)n at ptr+0x10 (Ui_AnimValue currentValue). SetVisibleIndex (0x0030D67C) works on the window: texture from the 5-pointer table at +0x2F00, then SetCursorFromIndex on +0x2F14.",
+  "fields": [
+   {
+    "offset": 76,
+    "name": "columnValueAnim",
+    "type": "Ui_AnimValue*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "0x0032681C(self+0x4C, index%10) loads the pointer at +0x4C and stores (float)n in its +0x10 (Ui_AnimValue currentValue)."
+   },
+   {
+    "offset": 156,
+    "name": "rowValueAnim",
+    "type": "Ui_AnimValue*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "0x0032681C(self+0x9C, (index/10)%10) loads the pointer at +0x9C and stores (float)n in its +0x10; second digit of the index."
+   },
+   {
+    "offset": 12032,
+    "name": "iconMaterialTable",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "func_003EAF08(self+0x2F00,i) is a 5-entry pointer getter (asm: cmp r1,#5; ldrlo r0,[r0,r1,lsl#2]); entry (index-1)/2 is applied as the slot's texture/material with func_0053E220."
+   },
+   {
+    "offset": 12052,
+    "name": "indexCursor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Sub-object passed as self to Ui_ChildSlot_SetCursorFromIndex; its +0x4C/+0x9C anim values show the slot index as ones/tens digits."
+   }
+  ]
+ },
+ {
+  "class": "Ui_ChildTransform",
+  "type": "UiChildTransform",
+  "summary": "Row/ring container of up to 32 numbered child panes: builds them from an ASCII digit template through the layout factory at +0xA8, arranges them around the parent transform, and persists their 32-bit visibility mask under a 24-bit save-work key at +0xB64/+0xB66.",
+  "size": 2920,
+  "base": null,
+  "confidence": 0.35,
+  "evidence": "CreateRowChildren (0x00452680) increments the digit template at 0x007BFA7E, creates each pane with (*(*self->f_A8+0x2C))(f_A8,name,1) and stores pointers at +0xB68+i*4. UpdateRotatedRow (0x00452348) arranges the panes on a ring and reports the visible mask via 0x00613A10(savework,f_B64,f_B66,mask); 0x0066B64C is the getter (asm: key=id|sub<<24, 8-byte entries at savework+0x3220).",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "The constructor/update writes DAT_0045286C / DAT_00452870 to *self; batch vtable 0x007713D8 slot 0 = 0x004527D8."
+   },
+   {
+    "offset": 168,
+    "name": "paneResolver",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "self->f_A8->f_44 visibility bits are changed, then (*(*f_A8 + 0x2C))(f_A8,name,1) resolves/creates a named pane - a layout/factory object."
+   },
+   {
+    "offset": 2916,
+    "name": "saveKeyId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Low 16 bits of the key given to the save-work value store: 0x0066B64C(bag,id,sub) reads and 0x00613A10(bag,id,sub,mask) writes key = id | sub<<24."
+   },
+   {
+    "offset": 2918,
+    "name": "saveKeySub",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "High byte of that key; together with +0xB64 it selects the persisted 32-bit visibility mask in the bag-work table at +0x3220. The pane pointer array starts at +0xB68, so the object is at least 0xBE8 bytes."
+   }
+  ]
+ },
+ {
+  "class": "Ui_CommandStack",
+  "type": "UiCommandStack",
+  "summary": "Small command/undo stack (0x174 bytes, no vtable): 0xC-byte entries at +0x11C, a current handler at +0x120 with a tagged dispatch word at +0x124, and the depth at +0x170; Unwind pops entries and re-broadcasts to the one below.",
+  "size": 372,
+  "base": null,
+  "confidence": 0.35,
+  "evidence": "Maybe_Ui_CommandStack_Unwind (0x003EC0DC) is called only by maybe_Ui_DataPanel_OpenFromByte (0x003143C8) while swapping data panels: it frees piVar2[depth*3] with 0x0010EBD8, decrements +0x170, invokes the handler at +0x120/+0x124, and finishes with Ui_Object_BroadcastToChildren(entry[depth],1). The 3-word stride and (tag<<1)|1 dispatch encoding are visible in both C and assembly.",
+  "fields": [
+   {
+    "offset": 284,
+    "name": "entries",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Base of an array of 0xC-byte entries: entry = (int*)(self+0x11C) + depth*3; the entry's first word is released with func_0010EBD8 when popped."
+   },
+   {
+    "offset": 288,
+    "name": "maybe_handler",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Invoked after each pop ((*pcVar1)()); when bit 0 of +0x124 is set it is used as a dispatch-table base instead of being called directly."
+   },
+   {
+    "offset": 292,
+    "name": "maybe_handlerTag",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "(tag<<1)|1 packed word: bit 0 selects the dispatch table at +0x120, >>1 indexes a slot read from the entry and added to the table base."
+   },
+   {
+    "offset": 368,
+    "name": "depth",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Stack depth/index: the unwind loop returns when 0, decrements after each pop and re-broadcasts to entry[depth]; batch type Ui_Object* is wrong (arithmetic and comparisons)."
+   }
+  ]
+ },
+ {
+  "class": "Ui_DigitDemo",
+  "type": "UiDigitDemo",
+  "summary": "Digit-demo/number page window (vtable 0x0077317C with Ui_Window methods): resolves its layout at +0x98, binds two position animations at +0x11C/+0x16C, and fills a text-element list at +0xD4 with three columns of digit panes (0..9).",
+  "size": 368,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "maybe_Ui_DigitDemo_Build (0x0046DC00) binds s_position2/s_position1 with Ui_AnimRef_Bind(self+0x11C/+0x16C, self+0x98, ...), then calls Ui_Window_CollectNamedPane(self+0xD4,name,tag,layout) for three 10-row name sets (txt_l0.., txt_r1_0.., txt_r2_0..) and Ui_TextElement_SetString(self+0xD4,index,...) for digits 0..9 plus icons 0x3C..0x4A. ReadObjectRef (slot 6) fills +0x98.",
+  "fields": [
+   {
+    "offset": 152,
+    "name": "layoutRoot",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The serialized-object reader (vtable slot +0x24) writes the resolved reference into self+0x98; the same pointer is the 'layout' argument of both Ui_AnimRef_Bind calls."
+   },
+   {
+    "offset": 212,
+    "name": "maybe_textElementList",
+    "type": "Ui_TextElementList",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "self+0xD4 is passed as 'self' to Ui_Window_CollectNamedPane, which appends {pane,tag} to +8/+0xC/+0x10, and to Ui_TextElement_SetString; 30 digit panes are bound at tags 0..31."
+   },
+   {
+    "offset": 284,
+    "name": "position2Anim",
+    "type": "Ui_AnimRef",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "Ui_AnimRef_Bind(self+0x11C, self+0x98, s_position2_0046defc, 0) - literal string names the animation."
+   },
+   {
+    "offset": 364,
+    "name": "position1Anim",
+    "type": "Ui_AnimRef",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "Ui_AnimRef_Bind(self+0x16C, self+0x98, s_position1_0046df08, 0) - literal string names the animation."
+   }
+  ]
+ },
+ {
+  "class": "Ui_FiveRowSelector",
+  "type": "UiFiveRowSelector",
+  "summary": "Five-row paged selector: a Ui_List at +0x38, entry count at +0x4C and highlighted row 1..5 at +0x50; Scroll(delta) rebinds the five 0xC-byte row slots at +0x70 (ids delta*5+i, -1 = empty) and re-selects the list entry.",
+  "size": 84,
+  "base": null,
+  "confidence": 0.45,
+  "evidence": "Ui_FiveRowSelector_Scroll (0x004654A0) loops i=0..4 rebinding slot self+0x70+i*0xC (fields +0x70 entry, +0x74 value, +0x78 id), clamps the highlighted row with the divide-by-5 magic 0x66666667 and calls Ui_List_SelectEntryById(self->f_38, (selectedRow-1) | f_28<<16). The five row slots at 0x70..0xAB lie beyond the recorded size 0x54, so 84 bytes is only a lower bound.",
+  "fields": [
+   {
+    "offset": 40,
+    "name": "maybe_entryGroupId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Upper 16 bits of the list entry id passed to Ui_List_SelectEntryById: (f_28 << 16) | (selectedRow-1)."
+   },
+   {
+    "offset": 56,
+    "name": "list",
+    "type": "Ui_List*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "self->f_38 is the list object: its +0xC byte is read as the entry count and Ui_List_SelectEntryById(self->f_38, id) applies the new selection."
+   },
+   {
+    "offset": 76,
+    "name": "entryCount",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Compared against the row ids delta*5+i and used in the modulo-5 clamp of the highlighted row; docs and code agree on 'entry count'."
+   },
+   {
+    "offset": 80,
+    "name": "selectedRow",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Highlighted row, 1..5: reset to 5, then reduced modulo 5 and passed as (selectedRow-1) to the list; batch type Ui_List* is wrong (integer arithmetic)."
+   }
+  ]
+ },
+ {
+  "class": "Ui_FloorMapJumpTrigger",
+  "type": "UiFloorMapJumpTrigger",
+  "summary": "Field scene object (vtable 0x0077C298) that acts as a map-jump trigger: +0x45 holds a section id (0xFF = none) applied through Field_HandleMapJumpEvent on the Field2D manager when the actor event slot is free. The Ui_ prefix is stale: readable C reclassified it as Field_MapJumpTrigger.",
+  "size": 72,
+  "base": null,
+  "confidence": 0.35,
+  "evidence": "ApplySection (0x004EFD04) passes &self->f_45 to Field_HandleMapJumpEvent(work+8->+0x88) after the 0x00636AFC Actor2D event-slot test; readable C says this is a field map-jump trigger, not a UI map widget. The ctor (0x004EFDC0) allocates, installs vtable 0x0077C298 and sets +0x45=0xFF, +0x46/+0x47=0. Class name kept only because the structs.json key must match.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Constructor stores *puVar1 = 0x0077C298; the deleting dtor restores the vtable and calls base dtor 0x002650C0 then operator delete."
+   },
+   {
+    "offset": 69,
+    "name": "sectionId",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Ctor writes 0xFF (empty id); ApplySection passes &self->f_45 to Field_HandleMapJumpEvent on the Field2D manager when the event slot is free."
+   },
+   {
+    "offset": 70,
+    "name": "unknown_46",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in the two recovered methods."
+   },
+   {
+    "offset": 71,
+    "name": "unknown_47",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in the two recovered methods."
+   }
+  ]
+ },
+ {
+  "class": "Ui_HandlePair",
+  "type": "UiHandlePair",
+  "summary": "16-byte handle-pair helper around a Gfx_Sprite: active and pending generation-tagged pack handles at +4/+8 and a ready callback at +0xC; Assign releases stale handles, shifts pending into active and attaches the new resource.",
+  "size": 16,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "Assign (0x003A6BD4) validates both generation-tagged pack handles against the 0x007BA2D0 table, calls Pack_ReleaseHandleEntry(self+1), moves self[2] to self[1] and stores the new handle in self[2], then calls maybe_Gfx_Sprite_SetupPattern(*self) and the callback self[3](*self). The batch base Gfx_Sprite is impossible for a 16-byte object (Gfx_Sprite is ~784 bytes), so it was cleared.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "sprite",
+    "type": "Gfx_Sprite*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Passed to maybe_Gfx_Sprite_SetupPattern(*self) after the resource is attached and as the sole argument of the +0xC callback."
+   },
+   {
+    "offset": 4,
+    "name": "activeHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Generation-tagged pack handle (+0xC generation, 0x007BA2D0 table): validated, released with Pack_ReleaseHandleEntry and overwritten by the old +8 handle."
+   },
+   {
+    "offset": 8,
+    "name": "pendingHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Second handle: validated/released, then moved to +4 (self[1] = self[2]) and replaced by the newly attached resource."
+   },
+   {
+    "offset": 12,
+    "name": "readyCallback",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "If non-null it is called with the sprite after Gfx_ResourceList_Attach succeeds and the sprite pattern has been set up."
+   }
+  ]
+ },
+ {
+  "class": "Ui_IconButton",
+  "type": "UiIconButton",
+  "summary": "Single-icon window fragment (readable C: maybe_Ui_IconButton_InitPanes; only the Ui_IconRowWindow destructor references it): resolves the pane named at +0x4C from the layout host at +0x30 into +0x50 and binds one Ui_AnimRef at +0x54. Same size and fields as Ui_IconRowWindow.",
+  "size": 88,
+  "base": null,
+  "confidence": 0.3,
+  "evidence": "maybe_Ui_IconButton_InitPanes (0x003D24D0) calls Ui_AnimRef_Bind(&self->f_54, self->f_30->f_AC, LAB_003d2528, 0), then resolves a pane by name with (*(*(self->f_30->f_AC->f_10)+0x2C))(..., self->f_4C, 1) and stores it at +0x50. structs.json has Ui_IconRowWindow with the same size 88 and fields +0x30/+0x54; readable C says only its dtor references this helper, so it is a duplicate window view.",
+  "fields": [
+   {
+    "offset": 48,
+    "name": "maybe_layoutHost",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "self->f_30->f_AC->f_10 is the pane tree used to resolve the icon; the same +0x30 object also supplies the animation layout for +0x54."
+   },
+   {
+    "offset": 76,
+    "name": "paneName",
+    "type": "char*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Passed as the pane-name argument (f10, self->f_4C, 1) to the layout's create-by-name vtable slot +0x2C."
+   },
+   {
+    "offset": 80,
+    "name": "iconWidget",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Result of the pane lookup, stored at +0x50 by the InitPanes helper (the window's single icon pane)."
+   },
+   {
+    "offset": 84,
+    "name": "animRef",
+    "type": "Ui_AnimRef",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Ui_AnimRef_Bind(&self->f_54, self->f_30->f_AC, LAB_003d2528, 0) binds the icon pane animation."
+   }
+  ]
+ },
+ {
+  "class": "Ui_ListOwner",
+  "type": "Ui_ListOwner",
+  "summary": "List-owner base object (base Ui_Object): installs a main vtable plus a secondary vtable at +0x4C and owns inline 0x24-byte Ui_AnimRefList base sub-objects destroyed by std_destroy_range; the ctor returns an enclosing object 0xA4 bytes earlier, so 0x58 is only a lower bound.",
+  "size": 88,
+  "base": "Ui_Object",
+  "confidence": 0.35,
+  "evidence": "Ctor (0x0022AE10) runs Ui_Object_CtorBase, stores vtable 0x0075C450 and a secondary vtable at +0x4C (main+0x9C), runs Ui_AnimRefList_Ctor twice and returns iVar2-0xA4 (it constructs an enclosing object). The dtor (0x0022A948) restores 0x0075C450, std_destroy_range(obj+0x4C,0x24,2), then Ui_Object_DtorBase and free. The dtor's 0x4C range and the secondary-vtable store are the reproducible facts.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Ui_Object_CtorBase followed by *obj = 0x0075C450; the dtor restores the same vtable before destroying the base."
+   },
+   {
+    "offset": 76,
+    "name": "secondaryVtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ctor stores piVar1[0x13] = mainVtable + 0x9C (byte +0x4C); the dtor std_destroy_range's two 0x24-byte sub-objects starting at this offset."
+   },
+   {
+    "offset": 80,
+    "name": "unknown_50",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Byte cleared by the ctor inside the inline 0x24-byte base sub-object at +0x4C; no reader in the recovered methods."
+   },
+   {
+    "offset": 84,
+    "name": "unknown_54",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Word cleared by the ctor inside that same inline sub-object; no reader in the recovered methods."
+   }
+  ]
+ },
+ {
+  "class": "Ui_ListWidgetScreen",
+  "type": "UiListWidgetScreen",
+  "summary": "List-widget screen: on the first frame it checks the child's state byte and resets the list from its inline label at +0x154, then dispatches to the child object resolved from the +0x26C handle; +0x22C is an embedded object fired once via a latch at +0x23C.",
+  "size": 624,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "UpdateState (0x004057DC) reads a one-shot latch at +4, the child at +8 and its state byte +0x11C; for state 0 it calls std_Str_Length16(&self->f_154) and DispatchToChild, then for +0x23C calls (*(self->f_22C+8))(&self->f_22C) and clears the latch. DispatchToChild (0x0040563C) resolves the generation handle at +0x26C through 0x007B80C0 and branches on three child class ids.",
+  "fields": [
+   {
+    "offset": 340,
+    "name": "maybe_labelText",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "&self->f_154 is passed as the UTF-16 string to std_Str_Length16 (wcslen wrapper 0x006121B4 / 0x00100B74) when the child state byte is 0, so an inline label string starts here."
+   },
+   {
+    "offset": 556,
+    "name": "embeddedObject",
+    "type": "Ui_Object",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "(*(self->f_22C + 8))(&self->f_22C): an inline polymorphic object at +0x22C whose vtable slot 2 is invoked; +0x23C latches the one-shot call."
+   },
+   {
+    "offset": 572,
+    "name": "isDispatchPending",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "One-shot latch: when non-zero UpdateState fires the embedded object's vtable slot +8 and clears it (self->f_23C = 0)."
+   },
+   {
+    "offset": 620,
+    "name": "childHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Generation-tagged handle resolved through the 0x007B80C0 table; the resolved child is dispatched by class id (Anim_SaveStateToSlot / +0xE1 callback / StartWakeupCallback)."
+   }
+  ]
+ }
+]

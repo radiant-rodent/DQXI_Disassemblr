@@ -1,0 +1,1793 @@
+[
+ {
+  "address": "0x00234EBC",
+  "name": "maybe_Gfx_Object_EnterState4",
+  "signature": "void maybe_Gfx_Object_EnterState4(GfxObject* self, const GfxTransform* xform)",
+  "params": {
+   "self": "scene object, f_312 = state, f_60 = owner with component slots",
+   "xform": "xyz position + xyz orientation + trailing flag byte"
+  },
+  "summary": "Puts a scene object into state 4 and stores the transform the caller passed, then attaches the four components that belong to this state (0x44/0x2c/0x30/0x74 bytes) and switches the related overlay groups off.",
+  "confidence": 0.35,
+  "evidence": "Sole caller 0x005A4F40 dispatches on self->f_312 (==4 -> in-place updater 0x00234014, else this); copies 6 words + 1 byte into f_344..f_35c; inserts components via 0x002A8BA4 (destroy old at slot, store new) at slots 0x19/0x1a/1/2, same helper as the state-7 sibling 0x00234BBC; ends with 0x00238CC8(gw+0x48,0) and 0x0023C72C(gw+0x48,1)"
+ },
+ {
+  "address": "0x002351A8",
+  "name": "maybe_Gfx_SubObject_SelectSlot",
+  "signature": "void maybe_Gfx_SubObject_SelectSlot(GfxSubObject* self, const u8* slot, u8 value)",
+  "params": {
+   "self": "sub-object created by 0x00234EBC",
+   "slot": "byte index + expected id",
+   "value": "secondary value"
+  },
+  "summary": "Virtual method installed into the sub-object built by 0x00234EBC: if the requested slot already holds an entry with the expected id it just refreshes it, otherwise it applies that slot's constant from a 12-entry table and records the slot index in f_278.",
+  "confidence": 0.3,
+  "evidence": "0x00234EBC writes this address into the new object's first vtable word (`*piVar2 = _FUN_002351A8`) so it is a per-class override; g_00235238 is a 12-word table indexed by *slot, the same 12 display slots used by the whole module; 0x00231D88 = refresh path, 0x002315C0 = apply path"
+ },
+ {
+  "address": "0x00235378",
+  "name": "maybe_Ui_Overlay_SyncSlotFromHandle",
+  "signature": "void maybe_Ui_Overlay_SyncSlotFromHandle(UiOverlaySlot* self)",
+  "params": {
+   "self": "slot object holding a handle at f_30c"
+  },
+  "summary": "When no display slot is active, resolves the object behind the slot's handle and, if it is an overlay element of the expected class, tells it to detach (vtable+0x3c with 4) and copies its slot id back into the slot object.",
+  "confidence": 0.32,
+  "evidence": "Caller 0x0031C0EC walks a component list and calls this for the component matching class g_0031C188; handle validated with the (handle>>11, handle&0x7ff) table idiom; 0x003F422C resolves the owner; writes (char)piVar1[0x88] back through 0x0023523C"
+ },
+ {
+  "address": "0x00235400",
+  "name": "maybe_Ui_Overlay_FreeSlotSprites",
+  "signature": "void maybe_Ui_Overlay_FreeSlotSprites(UiOverlaySlot* self)",
+  "params": {
+   "self": "slot object with two sprite handles at +0x420/+0x424"
+  },
+  "summary": "Releases the two sprite handles cached in an active overlay slot back to the sprite manager and then lets the slot's 2D sprite object finish its update.",
+  "confidence": 0.32,
+  "evidence": "Loop runs exactly twice over the f_420 array (0x420, 0x424), each value validated as a handle before 0x0035FC84(gameWork+0x60, handle, 0) - the same sprite release used in this module; tail call 0x005F7F98 is the 0x5Fxxxx 2D sprite/animation update"
+ },
+ {
+  "address": "0x00235804",
+  "name": "maybe_Gfx_Sprite_InitFromClass",
+  "signature": "void maybe_Gfx_Sprite_InitFromClass(GfxSprite* self, int classDesc)",
+  "params": {
+   "self": "2D sprite object",
+   "classDesc": "class descriptor, embedded vtable block at +0xb8"
+  },
+  "summary": "Initialises a 2D sprite object: stores its class descriptor, points the object header at the embedded vtable (classDesc+0xb8), releases any cached sprite handle and runs the sprite and base-class constructors.",
+  "confidence": 0.35,
+  "evidence": "`*arg1 = arg2; arg1[0x88] = arg2 + 0xb8` is the same class-word + embedded-vtable layout used by every widget constructor in this module; 0x001C7570 releases the cached scene handle; 0x005F8528 sprite ctor; 0x0010F6CC base-class ctor"
+ },
+ {
+  "address": "0x00235A50",
+  "name": "maybe_Ui_Overlay_ClearAll",
+  "signature": "void maybe_Ui_Overlay_ClearAll(UiOverlay* self, const u8* mode)",
+  "params": {
+   "self": "overlay manager",
+   "mode": "4-byte mode descriptor (mode[3], mode[0])"
+  },
+  "summary": "Full reset of the overlay manager: destroys both child sprite layers, blanks the twelve slot widgets (keeping the two special slots 8 and 9), resets the cached per-slot ids and releases every live marker through its element's virtual release.",
+  "confidence": 0.45,
+  "evidence": "f_11=0 (idle), f_280=0 (not busy); 0x001C82F4/0x001C824C destroy the two child sprites of gameWork+0x54; slot loop 1..11 explicitly skipping 8 and 9; per-slot widgets hidden via 0x00612CA0/0x006133B4; live markers released via 0x003E7CB0 after class match g_00235E08"
+ },
+ {
+  "address": "0x00235E0C",
+  "name": "maybe_Ui_Overlay_ApplySlotSetup",
+  "signature": "void maybe_Ui_Overlay_ApplySlotSetup(UiOverlay* self, const u8* mode, const UiSlotSetup* setup)",
+  "params": {
+   "self": "overlay manager",
+   "mode": "mode descriptor (mode[0], mode[3], mode[4])",
+   "setup": "u16 id at +2, byte at +4, rect/orientation fields at +0xc.."
+  },
+  "summary": "Applies a new slot configuration: derives the visibility flags from the mode bytes, activates the requested slot, recreates the active slot's widget from the game-work slot table, positions every slot widget for the given character id and installs the matching marker into the overlay list.",
+  "confidence": 0.45,
+  "evidence": "Reads gameWork+0x48 active slot f_281 and gameWork+0x46 pause flag; 0x00239A94/0x0023BB00 (de)activate slots; twelve-slot records of gameWork+0x24a98 read through 0x0066B91C/0x66B738/0x66BB08/0x66BAB0/0x66B7C0; actor records on gameWork+0x88 via 0x0062F514/0x62F468; widgets placed with 0x006133B4/0x00612CA0"
+ },
+ {
+  "address": "0x00236B50",
+  "name": "maybe_Ui_Overlay_ResetElementAnimation",
+  "signature": "void maybe_Ui_Overlay_ResetElementAnimation(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Clears the manager's animation flag and asks every registered element of one class to reset its animation - the stop/rewind half of the overlay's animation pair.",
+  "confidence": 0.42,
+  "evidence": "f_284=0 then walks the registry at gameWork+0x54 (0x001C7AD0 begin / 0x001C7560 end) calling 0x003E85FC on objects whose type bits match mask g_00236C04; exact mirror of 0x00238CC8 (f_284=1, 0x003E870C which starts the element's animation via vtable+0x98)"
+ },
+ {
+  "address": "0x00236C08",
+  "name": "maybe_Ui_Overlay_RefreshSlots",
+  "signature": "void maybe_Ui_Overlay_RefreshSlots(UiOverlay* self, const u8* mode, const UiSlotSetup* setup)",
+  "params": {
+   "self": "overlay manager",
+   "mode": "mode descriptor (mode[3], mode[4])",
+   "setup": "slot setup, u16 id at +2"
+  },
+  "summary": "Rebuilds the live overlay widgets after a mode change: re-posts the current marker transform, re-enables both overlay groups, recreates the widgets of all twelve slots from the game-work slot table and the per-slot sprite records, then hands over to the slot updater.",
+  "confidence": 0.45,
+  "evidence": "Same field usage as 0x00235E0C (f_281 active slot, f_4c1d secondary slot, 12 handles at f_4c, 0x66B7C0/0x66B7D4/0x66B7E8/0x66B908/0x66B710/0x66B724 slot getters); calls 0x00236B50 + 0x00238818 (reset pair) when no slot is active; tail 0x003BB1FC(&self->f_4a3c,mode,f_14,f_18) and self->f_308 = 0x0023E794(...)"
+ },
+ {
+  "address": "0x00237034",
+  "name": "maybe_Ui_Overlay_UpdateSlotVisibility",
+  "signature": "void maybe_Ui_Overlay_UpdateSlotVisibility(UiOverlay* self, UiOverlayEntry* entry)",
+  "params": {
+   "self": "overlay manager",
+   "entry": "marker (position f_b0/f_b4, size f_78/f_7c)"
+  },
+  "summary": "Decides whether one marker is drawn this frame: for the two special map slots it follows the anchor path and its screen rect, otherwise it tests the marker rectangle against the collision bitmap and stores the element state as visible or hidden.",
+  "confidence": 0.42,
+  "evidence": "f_281==8 uses 0x004D78E4(&self->f_16c, slot, rect, 0) + 0x0017C054 (path/rail follow); f_281==9 just clears f_280; general path uses 0x0062F0E0 (bitmap manager) + 0x0062C388/0x62C3B0 (find record) + 0x0062CB64/0x62C23C (find pixel / test bit) then 0x005E7848(entry, 2|3, 0) to store the state"
+ },
+ {
+  "address": "0x0023761C",
+  "name": "maybe_Ui_Overlay_PlayElementSe",
+  "signature": "void maybe_Ui_Overlay_PlayElementSe(u32 unused, u32 slotId, u32 seId)",
+  "params": {
+   "unused": "unused",
+   "slotId": "slot/actor id (0xffff = none)",
+   "seId": "sound id"
+  },
+  "summary": "Plays a sound effect on the overlay marker that belongs to a given slot id: resolves the slot handle and forwards the sound id to that element's sound component.",
+  "confidence": 0.35,
+  "evidence": "0x001C8068 maps slot id -> handle (0xffff = unknown), 0x001C8F58 resolves the object; accepted element classes g_0023785C (sound at [0x89]) and g_00237860 ([0xe4]) both end in 0x0040AF5C(component, seId, 1); when 0x0022F59C() reports no direct sound the se comes from the current object's f_224"
+ },
+ {
+  "address": "0x00237868",
+  "name": "maybe_Ui_Overlay_TryTouchSelect",
+  "signature": "u32 maybe_Ui_Overlay_TryTouchSelect(UiOverlay* self, UiOverlayEntry* entry)",
+  "params": {
+   "self": "overlay manager",
+   "entry": "marker to test"
+  },
+  "summary": "Returns 1 when this marker was just touched and has been selected (or when its anchor passes the touch test), 0 otherwise - the per-marker touch-consume step of the overlay.",
+  "confidence": 0.4,
+  "evidence": "Bails out when gameWork+0x6c is set, when gameWork+0x44 != gameWork+0x45, or when 0x0023C398(self,1) refuses. Slot 9 uses 0x0031AD20(anchor,&rect) (hit test) then 0x0022CECC(entry,0); other slots project the anchor with 0x0031A7BC and call the test function from 0x00423A18; selected markers get 0x004D78E4 + 0x0017C054 on self+0x16c or self+0x1c4"
+ },
+ {
+  "address": "0x00237ADC",
+  "name": "maybe_Ui_Overlay_CreateSlotWidget",
+  "signature": "u32 maybe_Ui_Overlay_CreateSlotWidget(UiOverlay* self, u32 slotKind, u8 alpha)",
+  "params": {
+   "self": "overlay manager",
+   "slotKind": "1..10 widget kind",
+   "alpha": "initial alpha byte"
+  },
+  "summary": "Creates the widget for one overlay slot kind and attaches it to the manager; each kind maps to its own widget class and allocation size and the widget is initialised from a shared 0x58-byte style block (type 0xe, scale 0x10, size 0x78x200, colour 0xff).",
+  "confidence": 0.45,
+  "evidence": "switch(slotKind) cases 1..10, one constructor per case (0x0061A848, 0x001A3EE0, 0x002907D8, 0x001D718C, 0x002B41F8, 0x003A1F28, 0x0021B768, 0x0060EE48, 0x0061B690, 0x001A444C) with sizes 0x298/0x4e4/0x3cc/0x2c8/0x74; every ctor calls 0x001A5A60 (UI widget base ctor); widget pointer stored at self+0x50+kind*4; unique id from g_00237E48"
+ },
+ {
+  "address": "0x00238174",
+  "name": "maybe_Ui_Overlay_CreateAuxWidget",
+  "signature": "u32 maybe_Ui_Overlay_CreateAuxWidget(UiOverlay* self, const u8* slot)",
+  "params": {
+   "self": "overlay manager",
+   "slot": "2-byte descriptor (kind, sub-id)"
+  },
+  "summary": "Creates the auxiliary widget for the selected overlay slot (kinds 1..7, stored at self+0x20..0x38) from that slot's sprite record and marks the corresponding element as needing a re-place.",
+  "confidence": 0.42,
+  "evidence": "0x0063D6B8(gameWork table, *slot) supplies the sprite record (f_18/f_1c/f_20) and the same 0x58-byte style block as 0x00237ADC; kinds 1..7 call 0x002B6A08/0x0021B86C/0x002B6AB4/0x0021B81C/0x002F4FF8/0x003A4820/0x0029088C with sizes 0x380/0x354; ends with 0x005F5818 and element->f_59a = 1"
+ },
+ {
+  "address": "0x00238798",
+  "name": "maybe_Ui_Overlay_ReleaseChildSpriteA",
+  "signature": "u32 maybe_Ui_Overlay_ReleaseChildSpriteA(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Destroys the first child 2D sprite of the scene root at gameWork+0x54 and always reports success; used as a state-exit hook.",
+  "confidence": 0.4,
+  "evidence": "Tiny trampoline around 0x001C824C(gameWork+0x54), which releases child f_1c and handle f_120; sole caller 0x0019F908 is a per-state update switch"
+ },
+ {
+  "address": "0x002387BC",
+  "name": "maybe_Ui_Overlay_ReleaseChildSpriteB",
+  "signature": "u32 maybe_Ui_Overlay_ReleaseChildSpriteB(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Destroys the second child 2D sprite of the scene root at gameWork+0x54 and always reports success; the mirror image of 0x00238798.",
+  "confidence": 0.4,
+  "evidence": "Same trampoline shape as 0x00238798 but calls 0x001C82F4, which releases child f_20 / handle f_124 instead of f_1c / f_120; same caller 0x0019F908"
+ },
+ {
+  "address": "0x002387E4",
+  "name": "maybe_Ui_Overlay_FreeSpriteHandleB",
+  "signature": "void maybe_Ui_Overlay_FreeSpriteHandleB(UiOverlaySlot* self)",
+  "params": {
+   "self": "slot object with a sprite handle at f_4c"
+  },
+  "summary": "Releases the slot's sprite handle back to the 2D scene root and does nothing when the handle is stale.",
+  "confidence": 0.35,
+  "evidence": "0x005F2EC8(handle) resolves the sprite, then 0x001C7524(gameWork+0x54, sprite) releases it; same shape as 0x002394DC which uses 0x001C7658"
+ },
+ {
+  "address": "0x00238818",
+  "name": "maybe_Ui_Overlay_HideElementClass",
+  "signature": "void maybe_Ui_Overlay_HideElementClass(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Clears the manager's second visibility flag and asks every registered element of one class to hide itself - the hide half of the overlay show/hide pair.",
+  "confidence": 0.42,
+  "evidence": "f_285=0 then registry walk (0x001C7AD0/0x001C7560 on gameWork+0x54) calling 0x003E7150 on objects matching mask g_002388CC; 0x003E7150 releases the element's sprite and calls its hide slot (vtable+0x54 with 4). Mirror of 0x0023A580 (f_285=1, 0x003E71A4)"
+ },
+ {
+  "address": "0x002388D0",
+  "name": "Ui_Overlay_ClearEntries",
+  "signature": "void Ui_Overlay_ClearEntries(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Drops every live marker: releases both handles of each of the f_278 entry records, zeroes the records, resets the marker count and releases the second child sprite.",
+  "confidence": 0.5,
+  "evidence": "loop over f_278 entries at self+i*0xc reading +0x20c and +0x210, each released with 0x001C7570 and zeroed with 0x00672318; then f_274=0 and 0x0022DD98() when gameWork+0x54+0x20 exists; same record layout as 0x0023A0B0/0x0023E4A8"
+ },
+ {
+  "address": "0x002389B0",
+  "name": "maybe_Ui_Overlay_ResolveSlotSprite",
+  "signature": "u32 maybe_Ui_Overlay_ResolveSlotSprite(UiOverlaySlot* self, u32 kindA, u32 kindB, u32 id)",
+  "params": {
+   "self": "slot object",
+   "kindA": "sprite kind used when the first child exists",
+   "kindB": "sprite kind for the second child",
+   "id": "slot/sprite id"
+  },
+  "summary": "Resolves the sprite that a slot should display: prefers the first child sprite's variant, falls back to the second child's, and records which kind and id were used in f_3b4/f_3b8.",
+  "confidence": 0.35,
+  "evidence": "Tries 0x002309F8(gameWork+0x54 child 0x1c, id) first, then 0x0022CA0C(child 0x20, id); on the first hit it stores arg2 else arg3 into f_3b4 and f_3b8 = (char)arg4; callers 0x00159C48/0x0015A410 are script natives"
+ },
+ {
+  "address": "0x00238CC8",
+  "name": "maybe_Ui_Overlay_TriggerElementAnimation",
+  "signature": "void maybe_Ui_Overlay_TriggerElementAnimation(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Sets the manager's animation flag and asks every registered element of one class to start its animation - the counterpart of 0x00236B50.",
+  "confidence": 0.45,
+  "evidence": "f_284=1, releases the current child (0x00230A90) then registry walk (0x001C7AD0/0x001C7560) calling 0x003E870C on objects matching mask g_00238D84; 0x003E870C sets f_a7=1, seeds three counters and calls the element's vtable+0x98 (start animation)"
+ },
+ {
+  "address": "0x00238D88",
+  "name": "maybe_Ui_Overlay_AvoidCollision",
+  "signature": "u32 maybe_Ui_Overlay_AvoidCollision(UiOverlay* self, UiOverlayEntry* entry)",
+  "params": {
+   "self": "overlay manager",
+   "entry": "marker whose rect (f_78,f_7c) and anchor (f_b4,f_b0) are used"
+  },
+  "summary": "Nudges a marker by one or two pixels away from map geometry when its rectangle overlaps a blocked cell, and reports whether anything had to move.",
+  "confidence": 0.4,
+  "evidence": "Tests the four direction bits 0xb/0xc/0xd/0xe with 0x0062CB64 (find cell) + 0x0062C23C (test bit) on the bitmap manager from 0x0062F0E0; the resulting -1/+1 deltas are scaled by f_27f (1 or 2) and applied with 0x0022D218(entry,&delta); compares against the global last delta g_00238F44"
+ },
+ {
+  "address": "0x002394DC",
+  "name": "maybe_Ui_Overlay_FreeSpriteHandleA",
+  "signature": "void maybe_Ui_Overlay_FreeSpriteHandleA(UiOverlaySlot* self)",
+  "params": {
+   "self": "slot object with a sprite handle at f_4c"
+  },
+  "summary": "Releases the slot's sprite handle through the other scene-root release entry point; the twin of 0x002387E4.",
+  "confidence": 0.35,
+  "evidence": "0x005F2EC8(handle) then 0x001C7658(gameWork+0x54, sprite), whereas 0x002387E4 uses 0x001C7524 - the two are the A/B release pair of the 0x1C7xxx scene object"
+ },
+ {
+  "address": "0x00239794",
+  "name": "maybe_Ui_Overlay_AssignEntryOrder",
+  "signature": "void maybe_Ui_Overlay_AssignEntryOrder(UiOverlay* self, u32 anchorId)",
+  "params": {
+   "self": "overlay manager",
+   "anchorId": "handle of the anchor to keep at order 0"
+  },
+  "summary": "Re-numbers the markers so the anchor sits at order 0 and the rest follow, then updates the anchor's path object; used when the active anchor changes.",
+  "confidence": 0.3,
+  "evidence": "Walks the 0xc-byte entries from index 1, writes a running counter into element word [0x8a] and calls 0x003E7110(element, index); the anchor entry is put at order 0 via 0x0023? path call; decompiler lost several registers (unaff_r*) so control flow is partly guessed"
+ },
+ {
+  "address": "0x0023A080",
+  "name": "maybe_Ui_Overlay_ReleasePartsAndStoreByte",
+  "signature": "void maybe_Ui_Overlay_ReleasePartsAndStoreByte(u8 value, UiOverlaySlot* self)",
+  "params": {
+   "value": "byte stored into f_c1c",
+   "self": "slot object"
+  },
+  "summary": "Stores a byte into the slot object's f_c1c field and releases the slot's part group 8 so the widget is hidden.",
+  "confidence": 0.3,
+  "evidence": "Writes arg2->f_c1c then calls 0x001C839C(gameWork+0x54, 8, 0); 0x001C839C invokes vtable+0x38 on both child sprites with a part mask, so 8 is a part-group id"
+ },
+ {
+  "address": "0x0023A0B0",
+  "name": "Ui_Overlay_RemoveEntry",
+  "signature": "void Ui_Overlay_RemoveEntry(UiOverlay* self, u32 id)",
+  "params": {
+   "self": "overlay manager",
+   "id": "marker id to remove (0 removes nothing)"
+  },
+  "summary": "Removes the marker with the given id from the overlay list: detaches its sprites, releases both handles, re-numbers the remaining markers and decrements the count.",
+  "confidence": 0.5,
+  "evidence": "Scans self->f_274 entries for f_214 == arg2; on a hit calls 0x0064A090(&out, element) + 0x0022DB5C(gameWork+0x54 child, sprite) to detach, releases with 0x001C7570, re-assigns [0x8a] order through 0x003E7110 and ends with f_274 -= 1 - exactly the inverse of 0x0023E4A8"
+ },
+ {
+  "address": "0x0023A580",
+  "name": "maybe_Ui_Overlay_ShowElementClass",
+  "signature": "void maybe_Ui_Overlay_ShowElementClass(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Sets the manager's second visibility flag and asks every registered element of one class to show itself, mirroring 0x00238818.",
+  "confidence": 0.42,
+  "evidence": "f_285=1, 0x0022CB90() on gameWork+0x54 child, then registry walk calling 0x003E71A4 on objects matching mask g_0023A63C; callers 0x00236C08 and 0x00239A94 enable it when a slot becomes active"
+ },
+ {
+  "address": "0x0023A640",
+  "name": "maybe_Ui_Overlay_ApplyEntryTag",
+  "signature": "void maybe_Ui_Overlay_ApplyEntryTag(UiOverlay* self, u32 id, u32 index)",
+  "params": {
+   "self": "overlay manager",
+   "id": "0 for the player, else marker id",
+   "index": "tag/row index (>=0x15 means 'clear')"
+  },
+  "summary": "Pushes a 0x12-byte tag record (text colour and layout fields) either straight to the player's HUD object or to the marker with the given id, and clears it when the index is out of range.",
+  "confidence": 0.35,
+  "evidence": "0x0035EB98(gameWork, id) supplies the target record (f_e5 = index) and 0x0063EB94 the 0x10-byte entry; the copied block is f_120..f_154 of the actor tag; 0x002239F4 / 0x0031A6AC + 0x005F4DCC apply it, 0x00290A94(ptr+500) clears it; caller 0x001562F0 is a script native"
+ },
+ {
+  "address": "0x0023AA5C",
+  "name": "maybe_Ui_Overlay_CheckEntryPlacement",
+  "signature": "u32 maybe_Ui_Overlay_CheckEntryPlacement(UiOverlay* self, UiOverlayEntry* entry)",
+  "params": {
+   "self": "overlay manager",
+   "entry": "marker with anchor f_bc and rect f_78/f_7c"
+  },
+  "summary": "Tests whether a marker can be placed at its current spot: marches the marker rectangle along its anchor direction against the collision bitmap and returns 0 as soon as any sampled cell is blocked or the search distance is exceeded.",
+  "confidence": 0.42,
+  "evidence": "Projects the anchor with 0x003196D0(f_b4,f_b0), asks the anchor direction with 0x0031A7BC(f80)/0x0031A844, sizes the probe 2x1, then per step calls 0x002A56B8 (rect overlap) and 0x00642248 (cell test via 0x0062CB64/0x0062C23C); gives up when the accumulated offset exceeds f7c/0x32/0x1e"
+ },
+ {
+  "address": "0x0023AE04",
+  "name": "maybe_Ui_Overlay_StoreByteAndReleaseParts",
+  "signature": "void maybe_Ui_Overlay_StoreByteAndReleaseParts(UiOverlaySlot* self, u8 value)",
+  "params": {
+   "self": "slot object",
+   "value": "byte stored into f_c1c"
+  },
+  "summary": "Stores a byte into the slot object's f_c1c and releases the same part group 8 as 0x0023A080, differing only in the argument order.",
+  "confidence": 0.28,
+  "evidence": "Duplicate of 0x0023A080 with swapped arguments (`arg1->f_c1c = arg2` then 0x001C839C(...,8,0)); no callers found, so it is reached through a vtable"
+ },
+ {
+  "address": "0x0023AE34",
+  "name": "maybe_Field_FindOverlapIndex",
+  "signature": "int maybe_Field_FindOverlapIndex(u32 unused, u32 shapeHandle, int* idsA, int idCountA, int* idsB, int idCountB, u32 mask, int start)",
+  "params": {
+   "unused": "unused",
+   "shapeHandle": "shape handle",
+   "idsA": "ordered candidate ids",
+   "idCountA": "count of idsA",
+   "idsB": "ids to skip",
+   "idCountB": "count of idsB",
+   "mask": "flag mask",
+   "start": "first index to test"
+  },
+  "summary": "Scans a list of candidate ids from `start` and returns the index of the first one whose shape overlaps the given shape and carries the requested flag bits, skipping the ids in the exclusion list; returns the array length when none matches.",
+  "confidence": 0.32,
+  "evidence": "Outer loop start..idCountA, inner loop compares *(idsA+i) with each idsB[j]; the hit test is 0x00649AAC(shape+0x3c, mask) + 0x00649B48(shape+0x3c, slot) or 0x00640AC0/0x00640B8C for the other record kind, ending in 0x003DF8D8/0x002F2210; the flag word is tested against arg7 with 0x10000/0x20000/0x10000000/0x20000000 bit cases"
+ },
+ {
+  "address": "0x0023B148",
+  "name": "maybe_Field_ApplyShapeToTarget",
+  "signature": "u32 maybe_Field_ApplyShapeToTarget(FieldObject* self, u32 unused, u32 arg3, u32 mask)",
+  "params": {
+   "self": "object with anchor handle f_18",
+   "unused": "unused",
+   "arg3": "geometry arg",
+   "mask": "test/selection flags"
+  },
+  "summary": "Sends a shape test to the object referenced by the anchor handle: picks the shape from the record returned by 0x0063544C and applies it with the matching helper, then falls back to the marker placement test or the menu selection when the direct test fails.",
+  "confidence": 0.3,
+  "evidence": "Resolves f_18 with the handle table (g_0023B2EC) and 0x22C148; two record kinds selected by masks g_0023B2E0/g_0023B2E4 routed to 0x003DF8D8(rec+0x3c,...) or 0x002F2210(rec,...); mask bit 0x20 retries via 0x0023AA5C; bit 0x40/0x20 with bit 0x80 clear goes to 0x00253290(child->f_6c, 0/1)"
+ },
+ {
+  "address": "0x0023BB08",
+  "name": "maybe_Field_SetFlagPairForId",
+  "signature": "void maybe_Field_SetFlagPairForId(u32 unused, u32 key, u32 value)",
+  "params": {
+   "unused": "unused",
+   "key": "3-byte table key",
+   "value": "first flag value (second gets the inverse)"
+  },
+  "summary": "Scans the 3-byte-entry table behind 0x0066AA9C and, for every entry whose first byte equals the key, sets two flags on the holder: the second and third bytes with the value and its inverse.",
+  "confidence": 0.3,
+  "evidence": "0x0066AA9C(holder) gives a table with count f_10 and offset f_14, entries are 3 bytes; matches call 0x0060F824(holder, entry[1], arg3) and 0x0060F824(holder, entry[2], arg3^1)"
+ },
+ {
+  "address": "0x0023BBD4",
+  "name": "maybe_Gfx_Trail_PushSample",
+  "signature": "u32 maybe_Gfx_Trail_PushSample(GfxTrail* self, const TrailSample* sample, int reset)",
+  "params": {
+   "self": "trail object (56 records of 0x30 bytes at +0x3f50)",
+   "sample": "new sample (xyz + colour + scale)",
+   "reset": "1 when the trail must be restarted"
+  },
+  "summary": "Shifts the 56-sample history one step to the right, writes the new transform into sample 0, and re-submits the vertex strip; when asked to restart it first clears the accumulated buffer.",
+  "confidence": 0.4,
+  "evidence": "Explicit loop `i=0x38..1` moving f_3f50/f_3f54/f_3f58/f_3f60/f_3f64/f_3f68/f_3f69/f_3f6c/f_3f70/f_3f74/f_3f78 into f_3f80.. per 0x30-byte record, then the new sample is written from arg2; submission uses 0x006F511C(&self->f_4a2c, vertexArray) + 0x006F4FD8(&self->f_4a2c); guard 0x00672174(&self->f_3f7c,1)"
+ },
+ {
+  "address": "0x0023BF3C",
+  "name": "maybe_Gfx_Trail_BuildRibbon",
+  "signature": "void maybe_Gfx_Trail_BuildRibbon(GfxTrail* self, const TrailSample* sample, const TrailOffset* offset, u8 flags)",
+  "params": {
+   "self": "trail object (0xee records of 0x40 bytes at +0x380)",
+   "sample": "new sample",
+   "offset": "optional per-sample offset (f_58/f_5c)",
+   "flags": "trail flags"
+  },
+  "summary": "Builds one frame of the ribbon/tube around the trail: shifts the 0xee-segment history, normalises the new segment direction against the previous point, computes the side vector and stores the resulting width and distance, then raycasts both edges to clamp the ribbon against the world.",
+  "confidence": 0.35,
+  "evidence": "History shift f_380..f_3b8 -> f_3c0..f_3f8 with 0x40 stride; SQRT of squared distances, sin/cos via 0x006731EC/0x00672E44, quaternion/matrix 0x00574548, world probe 0x002E7F08 through 0x006F202C, results stored in f_420/f_424/f_428 (side vector) and f_42c/f_430 (clamped lengths); threshold 0x34000001"
+ },
+ {
+  "address": "0x0023C398",
+  "name": "maybe_Ui_Overlay_CanShowMarkers",
+  "signature": "u32 maybe_Ui_Overlay_CanShowMarkers(UiOverlay* self, u32 requireIdleChild)",
+  "params": {
+   "self": "overlay manager",
+   "requireIdleChild": "1 also requires the first child object to be in state 0"
+  },
+  "summary": "Gate used before the overlay may show its markers: checks the manager's enable flag and the current game mode, and optionally that the first child sprite is idle.",
+  "confidence": 0.4,
+  "evidence": "Returns 0 unless f_283 is set; the mode comes from 0x00669250() and is accepted as {1,2,9} when f_27c is clear or {1,2,4,5} when it is set; arg2 != 0 additionally requires gameWork+0x54 child f_1c to exist with f_312 == 0"
+ },
+ {
+  "address": "0x0023CD7C",
+  "name": "maybe_Ui_Overlay_UpdateAnchorPath",
+  "signature": "void maybe_Ui_Overlay_UpdateAnchorPath(UiOverlay* self, u32 arg2, u32 arg3)",
+  "params": {
+   "self": "overlay manager",
+   "arg2": "path parameter 1",
+   "arg3": "path parameter 2"
+  },
+  "summary": "Feeds the active slot's anchor path object (self+0x16c) with the current slot index and the two path parameters, then advances the second child sprite along it.",
+  "confidence": 0.35,
+  "evidence": "0x004D78E4(&self->f_16c, self->f_281, arg2, arg3) then 0x0017C054(&self->f_16c, gameWork+0x54 child f_20, 0); same 0x16c path struct used by 0x00237034 and 0x00237868"
+ },
+ {
+  "address": "0x0023CDE0",
+  "name": "maybe_Ui_Overlay_ApplySoundParam",
+  "signature": "void maybe_Ui_Overlay_ApplySoundParam(UiOverlay* self, u32 id, u8 value)",
+  "params": {
+   "self": "overlay manager",
+   "id": "0 for the player, else marker id",
+   "value": "parameter byte"
+  },
+  "summary": "Stores a sound parameter on the actor/marker record and applies it to the corresponding sound component, either on the player's own sound object or on each matching marker's sound component.",
+  "confidence": 0.3,
+  "evidence": "0x0035EB98(gameWork, id)->f_12e4 = value; id==0 uses gameWork+0x54 child f_1c->f_224 and 0x0040AB04; otherwise scans f_274 entries for f_214 == id, matches element class g_0023CF08 and applies 0x0040AB04 to element[0x89]; caller 0x0015D408 is a script native"
+ },
+ {
+  "address": "0x0023CF0C",
+  "name": "maybe_Ui_Overlay_ReorderLastEntry",
+  "signature": "void maybe_Ui_Overlay_ReorderLastEntry(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Moves the most recently added marker to its depth-sorted position by copying its per-sample record block down over the earlier entries, but only in the field mode and when at least two markers exist.",
+  "confidence": 0.3,
+  "evidence": "Requires mode 0 from 0x0062AB3C and f_274 > 1; takes the last entry's element (0x003E708C), its order index (0x0064A020) and the second child's f_bc, tests 0x0065381C against the stored f_3f80/f_3f84 sample and shifts 0x30-byte records from +0x3fac down to the target index"
+ },
+ {
+  "address": "0x0023D078",
+  "name": "maybe_Ui_Actor_FindPortraitId",
+  "signature": "u32 maybe_Ui_Actor_FindPortraitId(u32 actorId, int preferCurrent)",
+  "params": {
+   "actorId": "actor id (0 allowed)",
+   "preferCurrent": "1 to keep the actor's own portrait id"
+  },
+  "summary": "Works out which portrait/face id an actor should display: if the actor has no explicit id it scans the party and enemy tables for the first entry with a valid portrait, then validates that id against the 0x16-entry portrait table and returns it (0xff when none).",
+  "confidence": 0.3,
+  "evidence": "0x0035EB98(gameWork, id) record f_e5 holds the cached id; 0x006292F0(record, 2..5) read the four candidate ids; scans 0x0066AA9C()->f_3758 and 0x0066AA7C()->f_4a8c arrays for entries with a free portrait byte (offset 0x23 / 7); falls back to 0x00640068(actorId); the table from 0x0063EB94 has 0x16 entries of 0x10 bytes compared on their u16 ids"
+ },
+ {
+  "address": "0x0023D518",
+  "name": "maybe_Gfx_Trail_ResetSamples",
+  "signature": "void maybe_Gfx_Trail_ResetSamples(GfxTrail* self, const TrailSample* sample)",
+  "params": {
+   "self": "trail object",
+   "sample": "transform copied into every history slot"
+  },
+  "summary": "Resets the whole trail to a single transform: writes the sample into all 0x39 history records and all 0x19 vertex pairs, then re-submits the strip so the ribbon collapses to a point.",
+  "confidence": 0.4,
+  "evidence": "Two explicit loops (0x39 records of 0x30 bytes at +0x3f80 and 0x19 pairs of 2 floats) copying arg2 fields, followed by the 0x006F511C/0x006F4FD8 submission guarded by self->f_4a2c/0x4a34"
+ },
+ {
+  "address": "0x0023D68C",
+  "name": "maybe_Gfx_Trail_Smooth",
+  "signature": "void maybe_Gfx_Trail_Smooth(GfxTrail* self)",
+  "params": {
+   "self": "trail object with 0x30-byte records from +0x3f7c to +0x49fc"
+  },
+  "summary": "Smooths the trail by averaging each pair of neighbouring history records, so sharp corners of the ribbon become curved.",
+  "confidence": 0.4,
+  "evidence": "Walks 0x30-byte records from arg1+0x3f7c to arg1+0x49fc, using 0x00672174(&rec, &prev) as the 'changed' test and writing (f_14 + f_74) * k into f_44 and (f_18 + f_78) * k into f_48 (k = g_0023D794)"
+ },
+ {
+  "address": "0x0023D804",
+  "name": "maybe_Ui_Overlay_AddActorsForMode",
+  "signature": "void maybe_Ui_Overlay_AddActorsForMode(UiOverlay* self)",
+  "params": {
+   "self": "overlay manager"
+  },
+  "summary": "Registers the actors that should have an on-screen marker for the current mode: walks the game-work actor table, respects the per-mode limit (2 or 4 markers) and adds each enabled actor through 0x0023E4A8.",
+  "confidence": 0.45,
+  "evidence": "Loops i < gameWork->f_27218, id = 0x0066B0E4(gameWork+0x24a98, i), mode from 0x006292F0/0x0062917C decides the 2-slot or 4-slot branch; the marker is only added when gameWork+0x48->f_11 is set and the per-id enable byte at +0x254+id is non-zero; tail call 0x0023C588"
+ },
+ {
+  "address": "0x0023D988",
+  "name": "Ui_Overlay_Update",
+  "signature": "u32 Ui_Overlay_Update(UiOverlay* self, u32 unused, u32 unused2)",
+  "params": {
+   "self": "overlay manager",
+   "unused": "unused",
+   "unused2": "unused"
+  },
+  "summary": "Per-frame update of the overlay: advances the anchor path, resolves the element for the active slot, tests/adjusts its placement, handles the touch selection, refreshes both element classes and returns the number of live markers.",
+  "confidence": 0.5,
+  "evidence": "Guarded by f_10; calls 0x00239D58 + 0x00238F48 for the two element classes, 0x0023E8AC and 0x00238D88 for the active element, 0x00237868 for the touch test, 0x003E870C/0x003E71A4 to (re)start element animations, 0x5F34F0/0x5E7848 to store the result, 0x0017C054 for the path, and ends with f_274 = f_274 + 1 semantics through the shared helper; heavily simplified by Ghidra (halt_baddata in two branches)"
+ },
+ {
+  "address": "0x0023E4A8",
+  "name": "Ui_Overlay_AddEntry",
+  "signature": "void Ui_Overlay_AddEntry(UiOverlay* self, u32 id, u32 kind)",
+  "params": {
+   "self": "overlay manager",
+   "id": "actor/slot id",
+   "kind": "0 none, 1 first child, 2 both children"
+  },
+  "summary": "Adds a marker for the given actor id: removes a stale marker for the same id, picks the first free entry slot, creates the element with the matching sprite and registers it with the ordering pass.",
+  "confidence": 0.5,
+  "evidence": "Starts with 0x0023A0B0 (remove by id) and returns when f_278 <= f_274; resolves the id with 0x001C8068 then 0x001C8F58 (kind 1/2) or 0x001C8EDC (kind 0); creates the element with 0x001C8B48(...,f_27f) / 0x001C8D28, marks it with 0x003E870C + 0x003E71A4 + 0x003E73E0, publishes it via 0x0022DDD0, and ends with f_274 += 1"
+ },
+ {
+  "address": "0x0023E794",
+  "name": "maybe_Ui_Overlay_GetMarkerRect",
+  "signature": "u32 maybe_Ui_Overlay_GetMarkerRect(UiOverlay* self, int primary, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "overlay manager",
+   "primary": "0 uses the first anchor (f_14), else the second (f_18)",
+   "arg3": "rect parameter 1",
+   "arg4": "rect parameter 2"
+  },
+  "summary": "Returns the screen rectangle of a marker: for the first anchor it merges the anchor record's position with the two caller rectangles, for the second anchor it offsets the rect by the anchor child's own offset and size.",
+  "confidence": 0.35,
+  "evidence": "primary==0 resolves f_14 and calls 0x002E6618(owner, &(f_9c,f_a0,f_a4), arg3, arg4); otherwise resolves f_18, adds child f_bc->f_50/f_58 to f_7c and calls 0x002E6CB8(owner, f_ac, f_78, f_7c) with a type-2 header; callers 0x00236C08 and 0x00238F48"
+ },
+ {
+  "address": "0x0023E8AC",
+  "name": "maybe_Ui_Map_WrapMarkerPosition",
+  "signature": "void maybe_Ui_Map_WrapMarkerPosition(u32 unused, UiOverlayEntry* entry)",
+  "params": {
+   "unused": "unused",
+   "entry": "marker with map cell f_78/f_7c"
+  },
+  "summary": "Wraps a marker's map cell around the edge of the map: a cell value of -1 or one past the map width/height is mapped to the opposite edge and the shift is applied to the map camera.",
+  "confidence": 0.45,
+  "evidence": "Compares entry f_78/f_7c with 0x0066CD28/0x0066CD38 (map width and height); wrapping calls 0x002ACF40 (horizontal) and 0x002ACF4C (vertical) on gameWork+0x78 and finally 0x005F34F0(entry,&rect) - the classic world-map torus wrap"
+ },
+ {
+  "address": "0x0023EC7C",
+  "name": "maybe_Ui_Overlay_DestroyChildren",
+  "signature": "void maybe_Ui_Overlay_DestroyChildren(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Destructor trampoline that releases the overlay's child objects and then runs the base-class destructor.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x0023EC8C (the chained destructor of the overlay's sub-objects) and then 0x0010F6CC (the base-class destructor used at the end of every constructor in this module)"
+ },
+ {
+  "address": "0x0023EC8C",
+  "name": "maybe_Ui_Overlay_ReleaseSubObjects",
+  "signature": "int maybe_Ui_Overlay_ReleaseSubObjects(Ui_Overlay* self)",
+  "params": {
+   "self": "overlay object with a chain of embedded sub-objects"
+  },
+  "summary": "Runs the destructors of the overlay's embedded sub-objects in reverse construction order (list window, list rows, anchor paths, container, widget) and returns the address of the last released member.",
+  "confidence": 0.3,
+  "evidence": "Chain of fixed-offset destructor calls: 0x004EFCF4, 0x004EFC98, three times 0x0017C334, 0x003BBCD4, three raw frees via 0x0010F69C, then more 0x0017C334 and returns base-0x7c; also clears f_12b8/f_12cc when the byte at self+4 is set"
+ },
+ {
+  "address": "0x0023EDA0",
+  "name": "Ui_List_SetupRows",
+  "signature": "void Ui_List_SetupRows(Ui_List* self)",
+  "params": {
+   "self": "list widget (10 rows of 0x410 bytes at +0x950)"
+  },
+  "summary": "Creates the ten visible row objects of a list widget, labels the first one 'display' and the rest 'list0'..'list9', and registers each row with its index.",
+  "confidence": 0.5,
+  "evidence": "String literals s_display_0023ee7c and s_list0_0023ee84 passed to 0x001D85EC (create label) and 0x0011FFD8 (format); each row is 0x410 bytes at self+0x950+idx*0x410 and is finished with 0x004DBE88(row, idx); the '9'/'1' carry logic builds the list0..list9 digits"
+ },
+ {
+  "address": "0x0023EEB0",
+  "name": "Ui_List_DestroyRows",
+  "signature": "void Ui_List_DestroyRows(Ui_List* self)",
+  "params": {
+   "self": "list widget"
+  },
+  "summary": "Destroys the list widget's rows and its label node: calls the row destructor for all ten 0x410-byte rows and releases the label layout.",
+  "confidence": 0.5,
+  "evidence": "Calls through self->f_98->f_2c (widget vtable), 0x00477508(&self->f_11c) for the label and 0x004DBD6C(self+i*0x410+0x950) ten times; exact inverse of 0x0023EDA0"
+ },
+ {
+  "address": "0x0023EEF8",
+  "name": "Ui_List_SelectRow",
+  "signature": "void Ui_List_SelectRow(Ui_List* self, u32 row)",
+  "params": {
+   "self": "list widget",
+   "row": "row index 0..9 to select"
+  },
+  "summary": "Highlights one of the ten list rows: every row gets 1 when it is the selected index and 0 otherwise.",
+  "confidence": 0.5,
+  "evidence": "Loop over i in 0..9 computing `arg2 = (row == i) ? 1 : 0` and calling 0x004DBD00(self+i*0x410+0x950, value) - the row's selected flag setter; callers are the four menu scripts/consumers 0x001E21D8/0x00294D18/0x002950AC/0x0029549C"
+ },
+ {
+  "address": "0x0023F088",
+  "name": "Ui_List_ClearRows",
+  "signature": "void Ui_List_ClearRows(Ui_List* self)",
+  "params": {
+   "self": "list widget"
+  },
+  "summary": "Clears all ten row structures to the default row template and releases the row block array.",
+  "confidence": 0.5,
+  "evidence": "0x00100BE0(arg1+0x254, template g_0023F0C8, 0x410, 10) is a 10 x 0x410 memset/copy from a static template, then 0x00477C98(arg1+0x47) + 0x001D8C2C + 0x0010F6CC release the label"
+ },
+ {
+  "address": "0x002403B8",
+  "name": "maybe_Ui_List_InstallStaticTables",
+  "signature": "void maybe_Ui_List_InstallStaticTables(u32* self, u32 arg2)",
+  "params": {
+   "self": "list widget",
+   "arg2": "unused"
+  },
+  "summary": "Installs the list widget's static pointer tables (vtable/data pointers at +0x8d0, +0x8b2, +0x8c8) and then walks the widget hierarchy to initialise the embedded sub-widgets.",
+  "confidence": 0.25,
+  "evidence": "Only structural evidence: PTR_DAT_00240508/0024050c/00240510 written into self[0x8d0]/[0x8b2]/[0x8c8], then a chain of 0x001A6768/0x00370244/0x003802C4 calls with negative offsets ending in 0x001D8C2C; Ghidra produced a partial listing full of dead stores, so the exact sub-widget order is a guess"
+ },
+ {
+  "address": "0x002408D8",
+  "name": "maybe_Ui_List_ResetSubWidget",
+  "signature": "void maybe_Ui_List_ResetSubWidget(Ui_List* self)",
+  "params": {
+   "self": "list widget"
+  },
+  "summary": "Resets one embedded sub-widget of the list (the one at +0x174) and marks the list as dirty at +0x1c4.",
+  "confidence": 0.3,
+  "evidence": "0x003DFF34(&self->f_174, 0) is the sub-widget reset and self->f_1c4 = 1 is the dirty flag; the mirrored teardown is 0x00240900"
+ },
+ {
+  "address": "0x00240900",
+  "name": "maybe_Ui_List_ReleaseSubWidget",
+  "signature": "void maybe_Ui_List_ReleaseSubWidget(Ui_List* self)",
+  "params": {
+   "self": "list widget"
+  },
+  "summary": "Releases the list's two embedded sub-widgets (+0x124 and +0x174) and calls the widget's vtable slot f_24 to finish the teardown.",
+  "confidence": 0.35,
+  "evidence": "0x003B1FA4 + 0x003B1F88(&self->f_124, 0) and 0x003E0088(&self->f_174), then (*self->f_98->f_24)(); caller 0x002285B8 is the owning screen"
+ },
+ {
+  "address": "0x00240980",
+  "name": "maybe_Ui_List_CreateSubWidgets",
+  "signature": "int maybe_Ui_List_CreateSubWidgets(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Creates the list's two embedded sub-widgets and returns the base address of the widget, initialising the handle fields at +0x11c and +0x120.",
+  "confidence": 0.3,
+  "evidence": "0x001D8B6C() returns the widget; writes puVar1[0x47]=0 and puVar1[0x48]=0xfffff800 (empty handle), creates the first sub-widget with 0x003B23EC(puVar1+0x49), the second with 0x003E0454(&res->f_50) and clears f_50; returns base-0x174"
+ },
+ {
+  "address": "0x0024151C",
+  "name": "maybe_Ui_List_GetLabel",
+  "signature": "void maybe_Ui_List_GetLabel(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Returns the list widget's label object by looking it up in the shared UI object registry.",
+  "confidence": 0.25,
+  "evidence": "One call to 0x001A66A0 (registry getter) with no argument use besides the return value; the caller 0x00296D1C is a list refresh. Naming is deliberately vague because Ghidra lost the argument passing"
+ },
+ {
+  "address": "0x00241534",
+  "name": "maybe_Ui_List_FreeLabel",
+  "signature": "void maybe_Ui_List_FreeLabel(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Releases the list widget's label object and then the base class.",
+  "confidence": 0.3,
+  "evidence": "0x001A6768 (registry release) followed by 0x0010F6CC (base destructor); same pair that ends the other destructors in this module"
+ },
+ {
+  "address": "0x00241548",
+  "name": "maybe_Gfx_RenderObject_Recreate",
+  "signature": "void maybe_Gfx_RenderObject_Recreate(Ui_List* self)",
+  "params": {
+   "self": "object owning a renderer at f_98"
+  },
+  "summary": "Recreates the object's renderer: unregisters the old one, allocates a fresh 0x6f4-byte renderer for the current scene mode, registers it and starts its draw path.",
+  "confidence": 0.45,
+  "evidence": "0x0021F8B8(scene+0xc, self->f_98) unregisters, mode from 0x0062AB3C, 0x00109DC8(0x6f4, ...) allocates, 0x00621DD4 builds it, 0x0021F738 re-registers, 0x00621324 + vtable+0x14 initialise and f_94 = 1 marks it ready; the self->f_98 == 0 path falls back to releasing the new one"
+ },
+ {
+  "address": "0x00241650",
+  "name": "maybe_Ui_ResourceIcon_Update",
+  "signature": "void maybe_Ui_ResourceIcon_Update(Ui_ResourceIcon* self)",
+  "params": {
+   "self": "icon widget with a load state at f_18 and a resource id at f_a0"
+  },
+  "summary": "State machine that turns a resource id into a visible icon: while loading it waits, then resolves the id through the resource tables, creates the render object, applies it and moves to state 8 (done).",
+  "confidence": 0.35,
+  "evidence": "f_18 state values 7 and 8; resolves the record via the handle at f_a4 (tagged >>0xc) and 0x00713C3C (table lookup parent/child), creates with 0x002927FC and applies with 0x00291644/0x00291614/0x002917B4; also looks the id up in g_00241BCC with 0x0063CC1C/0x0063CD18 and uses 0x0021F67C(scene,id,3)/0x002F7A7C(scene,3) for the render slot"
+ },
+ {
+  "address": "0x00241FF0",
+  "name": "maybe_Ui_ResourceIcon_FinishLoad",
+  "signature": "void maybe_Ui_ResourceIcon_FinishLoad(Ui_ResourceIcon* self)",
+  "params": {
+   "self": "icon widget (passed in a register Ghidra lost)"
+  },
+  "summary": "Tail of the icon load: applies the resolved resource to the render object and switches the icon to the finished state.",
+  "confidence": 0.25,
+  "evidence": "Body is the tail of 0x00241650 (`0x002917B4(self->f_9c)`, f_14 = 1, f_18 = 8) but Ghidra failed to recover the arguments (unaff_r5); the allocation prologue refers to g_00241BCC like the parent function"
+ },
+ {
+  "address": "0x002433F8",
+  "name": "maybe_Ui_FaceIcon_SetId",
+  "signature": "void maybe_Ui_FaceIcon_SetId(Ui_FaceIcon* self, u32 id)",
+  "params": {
+   "self": "face icon widget",
+   "id": "0xffff clears, otherwise the portrait/item id"
+  },
+  "summary": "Changes the icon shown by a face/portrait widget: hides the two old sub-images, looks up the new id, switches both image slots according to the new record's flags, then rebuilds the icon widget.",
+  "confidence": 0.4,
+  "evidence": "Compares with the current id from 0x006443BC, loads the record with 0x00241CAC(id) (flags f_16/f_17), toggles the two embedded widgets f_1194/f_11b4 through their vtable+8 with f_11a4/f_11a5/f_11c4/f_11c5 as 'replacing' flags, calls 0x00296F98(self,id), and on id 0xffff releases f_11d4; otherwise 0x0024390C builds the new widget"
+ },
+ {
+  "address": "0x0024390C",
+  "name": "maybe_Ui_FaceIcon_CreateWidget",
+  "signature": "void maybe_Ui_FaceIcon_CreateWidget(Ui_FaceIcon* self, u32 id)",
+  "params": {
+   "self": "face icon widget",
+   "id": "portrait/item id"
+  },
+  "summary": "Creates the sprite for a portrait/id using the shared 0x58-byte style block, resolves the id through the picture tables and stores the resulting handle in f_11d4.",
+  "confidence": 0.4,
+  "evidence": "0x0063DCA4(table,id) and 0x0063EE68(table, resolved id) give the two picture records (f_96, f_14/f_15, f_78/f_7c, f_50/f_80); allocates 0x22c bytes and builds with 0x0028DD3C, registers with 0x001235A4, sets piVar7->f_d = 7 and piVar7->f_89 = id, then f_11d4 = the tagged handle"
+ },
+ {
+  "address": "0x00243C84",
+  "name": "maybe_Ui_FaceIcon_HandleEvent",
+  "signature": "void maybe_Ui_FaceIcon_HandleEvent(u32* self)",
+  "params": {
+   "self": "face icon widget whose record f_14 holds the event bits and self[0x27]+0xc the sub-state"
+  },
+  "summary": "Handles the three sub-states of the icon's event: state 0 (and 2) rebuild the picture from the id and post a menu event, state 1 just posts the event.",
+  "confidence": 0.3,
+  "evidence": "Tests (f_14 & 4) -> 0x0037E600, then 0x001A60A0(self+0x19, f_16, f_17, f_18); sub-state sVar3 read from self[0x27]+0xc with branches posting event ids 0x26/0x27/0x28 through 0x002426D4 + 0x003B3334(self,5,event,1); the picture path uses 0x003B2958/0x0045CE0C/0x006484EC + 0x002433F8"
+ },
+ {
+  "address": "0x002445F4",
+  "name": "maybe_Ui_FaceIcon_Init",
+  "signature": "int maybe_Ui_FaceIcon_Init(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Builds a face icon widget: clears its fields, creates the two internal lists, initialises the picture records from the shared templates and returns the widget base address.",
+  "confidence": 0.3,
+  "evidence": "0x0037E7EC() gives the widget; 0x0036B45C(&f_c, 2, 0x10) and 0x001A66A0 build list heads (self+0x14/0x17 self-linked twice), 0x0045CE88 + 0x00111384 set up the picture area, 0x00478A84 the last member; returns iVar3-0x1190"
+ },
+ {
+  "address": "0x00244C2C",
+  "name": "maybe_Ui_FaceIcon_FreeHandles",
+  "signature": "void maybe_Ui_FaceIcon_FreeHandles(u32* self)",
+  "params": {
+   "self": "face icon widget"
+  },
+  "summary": "Releases the four resource handles held by the icon widget and clears their slots.",
+  "confidence": 0.4,
+  "evidence": "Four calls to 0x005634E0 (release handle) on arg1+1, +3, +5, +7 with arg1[2]/[4]/[6] cleared in between; caller 0x002D6C54 is a screen destructor"
+ },
+ {
+  "address": "0x00244C68",
+  "name": "maybe_Ui_FaceIcon_SetOnOff",
+  "signature": "void maybe_Ui_FaceIcon_SetOnOff(Ui_FaceIcon* self, int on)",
+  "params": {
+   "self": "face icon widget",
+   "on": "1 shows the 'on' node, 0 the 'off' node"
+  },
+  "summary": "Switches the icon between its two model node variants by telling the graphics component which node name to show.",
+  "confidence": 0.45,
+  "evidence": "vtable+0x70 is called on the graphics object with the literal node names s_g3085b_off_00244d24 / s_g3085b_off_on_00244d30 depending on arg2, and the value is cached in f_18; callers 0x002C6CBC/0x002C7584 are menu screens"
+ },
+ {
+  "address": "0x002457E0",
+  "name": "maybe_Ui_Toggle_Init",
+  "signature": "u32* maybe_Ui_Toggle_Init(u32* self)",
+  "params": {
+   "self": "toggle widget (two node images)"
+  },
+  "summary": "Constructor of the two-state toggle icon: creates the object, loads syscmn.bch and looks up its two node names 'g3085' and 'g3085_jp', then builds the sprite with the shared style block.",
+  "confidence": 0.45,
+  "evidence": "String literals s_syscmn_bch_00245b7c (model file), s_g3085_00245b8c and s_g3085_jp_00245b94 (node names) passed to 0x00124B24 and 0x00194620; allocates 0x21c bytes and builds with 0x002C68B8 using the 0x58-byte style block, registers with 0x001235A4"
+ },
+ {
+  "address": "0x00245BC0",
+  "name": "maybe_Ui_Toggle_FreeHandle",
+  "signature": "int maybe_Ui_Toggle_FreeHandle(Ui_Toggle* self)",
+  "params": {
+   "self": "toggle widget with a handle at f_14"
+  },
+  "summary": "Releases the toggle icon's sprite handle and returns the widget, so it can be chained in a destructor list.",
+  "confidence": 0.4,
+  "evidence": "Validates f_14 with the handle table and calls 0x001C7570(gameWork+0x54, f_14); returns self unchanged; caller 0x002C9B1C is a screen destructor"
+ },
+ {
+  "address": "0x00245FD0",
+  "name": "Script_Vm_RegisterDefaultDelegates",
+  "signature": "void Script_Vm_RegisterDefaultDelegates(ScriptVm* vm)",
+  "params": {
+   "vm": "Squirrel VM being initialised"
+  },
+  "summary": "Registers every built-in delegate of the Squirrel VM (table, array, closure, string, userdata, integer, float, userpointer, function, generator, thread, class, instance, modulo, typeof, nexti, call, cloned, newslot, delslot, tostring, newmember, inherited, constructor, ...) so scripts can use them.",
+  "confidence": 0.7,
+  "evidence": "String literals read directly off the decompiled body: s_table, s_array, s_closure, s_string, s_userdata, s_integer, s_float, s_userpointer, s_function, s_generator, s_thread, s_class, s_instance, s__modulo, s__typeof, s__nexti, s__call, s__cloned, s__newslot, s__delslot, s__tostring, s__newmember, s__inherited, s_constructor; each is pushed with 0x006111A4(vm,name,-1) and stored with 0x00710A28 on the root table, then the type tags are installed with 0x00600768/0x001BF7D8; caller 0x006BC454 is the script system init"
+ },
+ {
+  "address": "0x00247C68",
+  "name": "Script_Vm_InitTables",
+  "signature": "void Script_Vm_InitTables(ScriptVm* self)",
+  "params": {
+   "self": "Squirrel VM"
+  },
+  "summary": "Initialises the VM's own tables: allocates the 0x50-byte header with three self-linked list heads, resets all statistics counters and installs the default delegate pointer.",
+  "confidence": 0.5,
+  "evidence": "Allocates 0x50 bytes with 0x0014B350, builds three self-linked circular nodes (puVar3[3] = puVar3+4 repeated three times), then initialises the counter/pointer pairs f_18..f_ac (each pair = g_00247D90 default + 0) - the classic VM state block of the Squirrel reference implementation"
+ },
+ {
+  "address": "0x00247D94",
+  "name": "Script_Vm_ReleaseTables",
+  "signature": "u32* Script_Vm_ReleaseTables(u32* vm)",
+  "params": {
+   "vm": "Squirrel VM"
+  },
+  "summary": "Destructor of the Squirrel VM: releases every delegate slot, all hash buckets, the stack, the free-list and the shared string table, then returns the VM pointer.",
+  "confidence": 0.5,
+  "evidence": "Releases vm[0x10]/[0xc]/[0xe]/[0xd]/[0xf]/[2] with 0x001BF7D8, then pops the 8-byte entries of the table at vm[3] until empty, releases the arrays at vm[4]/vm[9]/vm[0xb]/vm[0x12] with 0x00147AEC and the reference-counted objects with the (flag & 0x8000000) pattern; ends vm[6] = g_0024848C"
+ },
+ {
+  "address": "0x00248490",
+  "name": "Script_HashTable_GetOrInsert",
+  "signature": "u32* Script_HashTable_GetOrInsert(ScriptHashTable* table, const char* key, u32 len)",
+  "params": {
+   "table": "hash table (bucket array + count)",
+   "key": "string key",
+   "len": "key length (-1 = strlen)"
+  },
+  "summary": "Looks a string key up in a Squirrel hash table and inserts a new entry when it is missing, growing the bucket array when the load factor is exceeded.",
+  "confidence": 0.55,
+  "evidence": "Classic Squirrel hash: `h = h ^ (h*0x20 + (h>>2) + *p)`, bucket index `h & (size-1)`, entry layout (next at +0x10, len at +0x14, str at +0x1c), grow path allocates size*8 with 0x0014B350 and re-chains, comparison with 0x001009DC (memcmp); also the g_00248668 hash seed/type tag"
+ },
+ {
+  "address": "0x00248AC4",
+  "name": "maybe_Script_NotifyVmGlobal",
+  "signature": "void maybe_Script_NotifyVmGlobal(u32* unused, u32 arg2, u32 arg3)",
+  "params": {
+   "unused": "unused",
+   "arg2": "first payload",
+   "arg3": "second payload"
+  },
+  "summary": "Forwards a notification to the script VM obtained from the global VM accessor; used by the higher level systems to tell the VM that a global table changed.",
+  "confidence": 0.25,
+  "evidence": "Only two calls: 0x006F1F88 (global accessor) and 0x00111D0C on the result; six callers (0x0025ADE0, 0x00285AE4, 0x00298960, 0x002A16E8, 0x003B4194, 0x003B4E48) all pass through this trampoline, so the exact semantics are unproven"
+ },
+ {
+  "address": "0x00249074",
+  "name": "maybe_Event_DispatchScriptCallback",
+  "signature": "u32 maybe_Event_DispatchScriptCallback(EventCallback* cb)",
+  "params": {
+   "cb": "callback record (mode byte at +0, payload pointer at +0x20)"
+  },
+  "summary": "Dispatches one stored script callback by its mode byte: mode 1 calls the plain function, modes 2/3/7 call the event-specific wrapper, 6 calls the object-notify wrapper, and 4/5 forward to the same wrapper only when the VM is idle.",
+  "confidence": 0.4,
+  "evidence": "switch on *arg1 with cases 1,2,3,4,5,6,7 routing to 0x0024870C, 0x0024932C(cb, cb[8], 1), 0x00248AF0, 0x00248CCC; VM busy flags at 0x6F1F88+0xe3c4/0xe3c5 gate every call and 0x00111D0C is the retry; sixteen callers are script-visible event sites (0x0025ADE0, 0x003B4030, ...)"
+ },
+ {
+  "address": "0x00249AF8",
+  "name": "maybe_Event_ResetState",
+  "signature": "void maybe_Event_ResetState(EventState* self)",
+  "params": {
+   "self": "event/cutscene state object (script contexts at f_3dc, command vector f_3f0..f_3f4)"
+  },
+  "summary": "Resets the event/cutscene runtime: clears both completion flags, clears the pending script contexts, drains the queued command list, calls the four sub-system resets and marks the state as idle again.",
+  "confidence": 0.45,
+  "evidence": "f_3d8/f_3d9 = 0, f_428/f_429 = 0xff; 0x00255C1C when f_3ac is clear; test `(*(code**)(self->f_3dc+8))(...) != &g_01000001` is the 'script context still active' idiom used by every event function here; sub-resets 0x00255140/0x00253264/0x00162E98/0x0025370C; command vector f_3f0..f_3f4 walked in 0x14-byte steps calling each vtable[0] then emptied"
+ },
+ {
+  "address": "0x00249DB4",
+  "name": "Event_OnFieldEnd",
+  "signature": "void Event_OnFieldEnd(EventState* self, u32 arg2)",
+  "params": {
+   "self": "event state",
+   "arg2": "event payload"
+  },
+  "summary": "End-of-field handler: resets the event state if the script context is no longer active and then fires the OnFieldEnd script event.",
+  "confidence": 0.6,
+  "evidence": "Literal s_OnFieldEnd_00249e08 passed to 0x006D4588(self, 0xff, name, arg2) - the script event dispatcher; preceded by the 0x00249AF8 reset guarded by the &g_01000001 context test; caller 0x0019E9E4 is the field shutdown path"
+ },
+ {
+  "address": "0x0024B338",
+  "name": "maybe_Event_GetOrAddActorSlot",
+  "signature": "int maybe_Event_GetOrAddActorSlot(EventState* self, u32 actorId)",
+  "params": {
+   "self": "event state (0x10-byte actor slots at f_430..f_434)",
+   "actorId": "actor id"
+  },
+  "summary": "Finds the event's actor slot for an actor id, creating it when missing, and returns its index (or -1 when the actor cannot be resolved).",
+  "confidence": 0.4,
+  "evidence": "First scans the f_430..f_434 array in 0x10-byte steps comparing byte +6 with the id; on a miss resolves the id with 0x0062B3E4 / 0x005AE810 and the two handles with 0x001C87CC/0x001C8704, stores them at +8/+0xc and returns the last index"
+ },
+ {
+  "address": "0x0024BCB8",
+  "name": "maybe_Script_CallEventHandlers",
+  "signature": "bool maybe_Script_CallEventHandlers(EventState* self, u32 filter, u32 arg3)",
+  "params": {
+   "self": "event state (0x18-byte handler records at f_98..f_9c)",
+   "filter": "handler id or 0xff for all",
+   "arg3": "call argument"
+  },
+  "summary": "Runs the script handlers registered for an event: for every enabled record (optionally filtered by id) it pushes the arguments and calls the Squirrel closure, stopping at the first handler that asks to abort.",
+  "confidence": 0.4,
+  "evidence": "Handler table walked as 0x18-byte records between f_98 and f_9c, enabled byte at +0 and id at +0xc; Squirrel calls through 0x005766A4 (top), 0x006BBD7C/0x006BBD28/0x006BB0F4/0x006BB984 (call/arg helpers), 0x005B4C34/0x005B5658 (pop/stack), 0x006BD10C/0x006BD12C (release); f_3d8 is the abort flag, and 0x0025650C is called when nothing ran"
+ },
+ {
+  "address": "0x0024C814",
+  "name": "maybe_Event_FindNearestActor",
+  "signature": "u32 maybe_Event_FindNearestActor(u32 unused, int* startSlot, u32 idA, int x, u32 idB, u32* slots, int count)",
+  "params": {
+   "unused": "unused",
+   "startSlot": "first slot pointer",
+   "idA": "id filter",
+   "x": "reference x",
+   "idB": "id filter 2",
+   "slots": "slot array",
+   "count": "slot count"
+  },
+  "summary": "Searches the event's actor slots for the entity closest to a reference position and returns the best slot, preferring entries inside the reference radius.",
+  "confidence": 0.25,
+  "evidence": "Ghidra lost most registers (unaff_r4..r10 are the x/y/z reference and the handle table); the visible logic compares squared distances of fields [0x27..0x29] and [0x1e]/[0x1f] against a threshold with 0x001C8EDC/0x001C8F58 handle lookups and 0x00628EE0 for the slot table; the 0xd6 bound is a slot-count guard"
+ },
+ {
+  "address": "0x0024CB38",
+  "name": "Event_OnCutSceneEnd",
+  "signature": "void Event_OnCutSceneEnd(EventState* self, u32 arg2)",
+  "params": {
+   "self": "event state",
+   "arg2": "event payload"
+  },
+  "summary": "End-of-cutscene handler: resets the event state when the cutscene script context has finished and fires the OnCutSceneEnd script event.",
+  "confidence": 0.6,
+  "evidence": "Literal s_OnCutSceneEnd_0024cb8c passed to 0x006D4588(self,0xff,name,arg2); same reset guard as 0x00249DB4; callers CutScene and 0x003977D0"
+ },
+ {
+  "address": "0x0024CB9C",
+  "name": "Event_OnCutSceneCommand",
+  "signature": "void Event_OnCutSceneCommand(EventState* self, int command)",
+  "params": {
+   "self": "event state",
+   "command": "index 0..5 into the cutscene command name table"
+  },
+  "summary": "Fires the script event for one cutscene command kind, selecting the event name from a six-entry table.",
+  "confidence": 0.55,
+  "evidence": "Copies the six words of g_0024CBF8 and passes local_30[arg2] to 0x0024BCB8(self, 0xff, name); the six names are the cutscene command events; fourteen callers are cutscene command sites (0x0019EAD8..0x001A20CC)"
+ },
+ {
+  "address": "0x0025104C",
+  "name": "maybe_Gfx_Effect_CreateTracked",
+  "signature": "int maybe_Gfx_Effect_CreateTracked(GfxEffectList* self, u32 effectId, u32 arg3)",
+  "params": {
+   "self": "effect list owner (vector f_760..f_768)",
+   "effectId": "effect id",
+   "arg3": "effect parameter"
+  },
+  "summary": "Creates an effect through the effect manager and inserts it into the owner's ordered effect vector, returning its index (or -1 when the effect system is unavailable).",
+  "confidence": 0.45,
+  "evidence": "0x003DB478(gameWork+0x64, effectId, 0, arg3) creates the effect; the insert path is the standard vector grow/shift over f_760/f_764/f_768 (element size 4, doubling capacity) returning `(f_764-f_760)/4 - 1`; sole caller is the native named CreateEf"
+ },
+ {
+  "address": "0x00253264",
+  "name": "maybe_Event_ResetSoundState",
+  "signature": "void maybe_Event_ResetSoundState(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Resets the audio side of an event/cutscene when the sound object is present.",
+  "confidence": 0.3,
+  "evidence": "Reads gameWork+0x74 and, when it has a non-zero f_ad byte, calls 0x002AE1A8(); called from 0x00249AF8 (event reset) together with the other sub-system resets"
+ },
+ {
+  "address": "0x00253290",
+  "name": "Event_OnTriggerCommand",
+  "signature": "u32 Event_OnTriggerCommand(EventState* self, u32 command)",
+  "params": {
+   "self": "event state",
+   "command": "trigger command id"
+  },
+  "summary": "Fires the TrgCommand script event for a field trigger; returns the script result, or 0 when the state is already busy.",
+  "confidence": 0.6,
+  "evidence": "Literal s_TrgCommand_002532f4 passed to 0x006D4588(self,0xff,name,arg2); early-out when f_3ac is set; 23 callers across field/actor/menu code (0x00176A3C, 0x0023B148, 0x00364148, ...) confirm it is the generic 'script trigger' entry point"
+ },
+ {
+  "address": "0x0025330C",
+  "name": "maybe_Script_LoadEventScript",
+  "signature": "u32 maybe_Script_LoadEventScript(EventState* self, int mode, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "event state (script message tables at f_288/f_290, script object at f_70)",
+   "mode": "0 none, 1 first, 2 last, <0 all"
+  },
+  "summary": "Loads the script/message data an event needs: pulls script_message.bxon and cs_text.bxon out of the message archive, finds the .cnut script object and applies it to every actor slot, honouring the mode selector.",
+  "confidence": 0.45,
+  "evidence": "String literals s_script_message_bxon_0025364c, s_cs_text_bxon_0025366c, s_script_cnut_0025367c loaded with 0x00124B24/0x00124E6C/0x00713AF4; the script object is bound with 0x00579AA4/0x00579D20 and pushed into each 0x18-byte slot with 0x0028E03C; mode <0 selects all slots, 1 the first, 2 the last"
+ },
+ {
+  "address": "0x00253688",
+  "name": "maybe_Event_UpdateCounter",
+  "signature": "void maybe_Event_UpdateCounter(EventState* self, int from, int to, int wrap)",
+  "params": {
+   "self": "event state with counter f_42c",
+   "from": "start value",
+   "to": "end value",
+   "wrap": "1 to wrap around"
+  },
+  "summary": "Advances the event's small counter by the difference between two values, keeping it inside a 0..12 band with an optional wrap that adds a hundred.",
+  "confidence": 0.25,
+  "evidence": "f_42c arithmetic with a modulo-100 step and the 12/300 thresholds; wrap path calls 0x00601248; callers 0x002F2448/0x002F25C4 pass two values - the exact meaning of the counter (frames, angle or score) is not proven"
+ },
+ {
+  "address": "0x00253EA0",
+  "name": "maybe_Script_SetEventParams",
+  "signature": "void maybe_Script_SetEventParams(EventState* self)",
+  "params": {
+   "self": "event state with the script object at +0x70"
+  },
+  "summary": "Publishes the four event parameters to the running .cnut script, but only while the script object is active.",
+  "confidence": 0.4,
+  "evidence": "Guarded by f_94 and calls 0x005799F4(&self->f_70, name) four times with g_00253EF8/g_00253EFC/g_00253F00/g_00253F04 (the parameter names); six callers are cutscene command handlers"
+ },
+ {
+  "address": "0x002541E0",
+  "name": "Event_OnQuestFlagChange",
+  "signature": "void Event_OnQuestFlagChange(u32 self, u32 arg2, u32 arg3)",
+  "params": {
+   "self": "event state",
+   "arg2": "quest id",
+   "arg3": "flag value"
+  },
+  "summary": "Fires the OnQuestFlagChange script event when a quest flag is set or cleared.",
+  "confidence": 0.6,
+  "evidence": "Literal s_OnQuestFlagChange_002541fc passed to 0x006D4854(self,0xff,name,arg2,arg3) - the five-argument variant of the script event dispatcher; sole caller 0x001E7660 is the quest flag setter"
+ },
+ {
+  "address": "0x00254210",
+  "name": "maybe_Sound_GetOrAddSlot",
+  "signature": "int maybe_Sound_GetOrAddSlot(SoundSlots* self, u32 seId)",
+  "params": {
+   "self": "owner with an inline vector of sound handles at f_838..f_848",
+   "seId": "sound id"
+  },
+  "summary": "Returns the index of a free (or matching) sound-effect slot for an id: appends into the owner's inline handle array while it has room, otherwise reuses an existing entry whose sound is still the same.",
+  "confidence": 0.45,
+  "evidence": "Inline vector f_838/f_83c/f_840 bounded by 0x100 entries and the self+0x848 end pointer; the fallback path compares 0x0063060C/0x006307A4(manager, handle) results over the existing handles; the caller is the native named PlaySE_0"
+ },
+ {
+  "address": "0x0025466C",
+  "name": "Event_FireTrgEvent",
+  "signature": "void Event_FireTrgEvent(u32 self, u32 arg2)",
+  "params": {
+   "self": "event state",
+   "arg2": "event payload"
+  },
+  "summary": "Fires the generic TrgEvent script event (the four-argument form of the dispatcher).",
+  "confidence": 0.55,
+  "evidence": "Literal s_TrgEvent_0025467c is the third argument of 0x006D4588(self, arg2, name); no callers found, so it is reached through the event table"
+ },
+ {
+  "address": "0x00254688",
+  "name": "maybe_Event_LoadScenarioPack",
+  "signature": "void maybe_Event_LoadScenarioPack(EventState* self, const u8* mode, const u16* ids)",
+  "params": {
+   "self": "event state",
+   "mode": "mode descriptor (mode[3]: 0 field, 1 ?, 2 scenario, 5 ?, 7 viewer)",
+   "ids": "id table (ids[0], ids[2])"
+  },
+  "summary": "Prepares a scenario/cutscene event: resolves the scenario pack name from the map/event id, loads 'param/scenario_cs*.pack', binds the 54 resource names of the event into the script object and selects the event, the CS viewer or the scenario entry depending on the mode.",
+  "confidence": 0.45,
+  "evidence": "String literals s_param_scenario_cs__s_pack_00254aa8, s_cs_viewer_00254ad4, s_c_com_00254ae0 and the 0x36-entry loop over 0x0066B17C(gameWork+0x24a98,i)/0x0063E300; ids resolved with 0x0063CC70/0x0063CC1C/0x0063D85C; mode byte tested against 0/1/2/5/7 and f_3ac set for the cutscene path; 0x003882F0 loads the pack itself"
+ },
+ {
+  "address": "0x002551F8",
+  "name": "Event_OnScenarioJumpInit",
+  "signature": "void Event_OnScenarioJumpInit(EventState* self, u32 arg2, u8* arg3)",
+  "params": {
+   "self": "event state",
+   "arg2": "scenario id",
+   "arg3": "extra payload passed through"
+  },
+  "summary": "Resets the event state if the previous script context ended and then fires the OnScenarioJumpInit script event with the scenario id and payload.",
+  "confidence": 0.6,
+  "evidence": "Literal s_OnScenarioJumpInit_00255254 passed to 0x006D4854(self,0xff,name,arg2) after storing arg3 in the stack slot handed to the dispatcher; caller 0x00624958 is the scenario jump path"
+ },
+ {
+  "address": "0x00255268",
+  "name": "Script_CallBookIdCommand",
+  "signature": "u32 Script_CallBookIdCommand(EventState* self, u32 arg2, int withArg, u32 arg4)",
+  "params": {
+   "self": "event state (0x18-byte handler records)",
+   "arg2": "book id",
+   "withArg": "1 to pass arg4 as an extra uint",
+   "arg4": "extra value"
+  },
+  "summary": "Runs the TrgBookIDCommand handlers: for every enabled handler it pushes the book id (and optionally an extra integer) and calls the Squirrel closure, returning 1 while a script context is still alive.",
+  "confidence": 0.55,
+  "evidence": "Literal s_TrgBookIDCommand_00255570 used with 0x00579B64(...); arguments pushed with 0x006BC724/0x006BC6C8/0x006BC600 and invoked through 0x006BB984/0x006BB0F4 (Squirrel C API); 0x002CF7E8(&self->f_38,arg4,...) sets the extra argument when withArg"
+ },
+ {
+  "address": "0x00255598",
+  "name": "maybe_Script_SetBookCommandParams",
+  "signature": "void maybe_Script_SetBookCommandParams(EventState* self)",
+  "params": {
+   "self": "event state with the script object at +0x70"
+  },
+  "summary": "Publishes the four book-command parameters to the running .cnut script while the script object is active.",
+  "confidence": 0.4,
+  "evidence": "Same shape as 0x00253EA0: guarded by f_94, four 0x005799F4(&self->f_70, name) calls with g_002555E4/g_002555E8/g_002555EC/g_002555F0; callers 0x001A04A4 and 0x00624958"
+ },
+ {
+  "address": "0x00255670",
+  "name": "Script_CallSelectRuraPattern",
+  "signature": "u32 Script_CallSelectRuraPattern(EventState* self)",
+  "params": {
+   "self": "event state (handler records at f_98..f_9c)"
+  },
+  "summary": "Runs the OnSelectRuraPattern handlers and returns the first non-0xff selection they produce, or 0xff when no handler chose a pattern.",
+  "confidence": 0.55,
+  "evidence": "Literal s_OnSelectRuraPattern_0025595c with 0x00579B64; the return value is read out of the closure call with 0x007078E4/0x00707A10 and 0x006BDAF4/0x006BDA58/0x006BBD28; 0xff is the 'no selection' sentinel returned at both exits"
+ },
+ {
+  "address": "0x00255AB8",
+  "name": "Event_OnFloorMapJump",
+  "signature": "u32 Event_OnFloorMapJump(EventState* self, u32 arg2, u8* arg3)",
+  "params": {
+   "self": "event state",
+   "arg2": "jump target",
+   "arg3": "payload passed through"
+  },
+  "summary": "Fires the TrgFloorMapJumpEvent script event for a floor/map jump, after resetting the state when the previous script context has ended.",
+  "confidence": 0.6,
+  "evidence": "Literal s_TrgFloorMapJumpEvent_00255b24 passed to 0x006D4854(self,0xff,name,arg2); guarded by f_3ac and the &g_01000001 context test; caller 0x004EFD80"
+ },
+ {
+  "address": "0x00255B3C",
+  "name": "maybe_Event_ReleaseJumpRecords",
+  "signature": "u32 maybe_Event_ReleaseJumpRecords(EventState* self)",
+  "params": {
+   "self": "event state with 0xc-byte jump records at f_2f8..f_2fc"
+  },
+  "summary": "Releases the event's jump/transition records and always reports success.",
+  "confidence": 0.3,
+  "evidence": "Walks f_2f8..f_2fc in 0xc-byte steps calling 0x0030C028(record+4); the magic g_00255BB0 is the pointer-difference scaling constant; five cutscene command callers"
+ },
+ {
+  "address": "0x00255C1C",
+  "name": "maybe_Event_ClearEffectsAndHandles",
+  "signature": "void maybe_Event_ClearEffectsAndHandles(EventState* self)",
+  "params": {
+   "self": "event state (effect vector f_760..f_764, handle list f_298..f_29c)"
+  },
+  "summary": "Tears down the transient state of an event: resets the script calls, destroys every effect it spawned and releases every staged handle.",
+  "confidence": 0.4,
+  "evidence": "0x0025650C first, then each handle of f_760..f_764 is destroyed with 0x003DB2BC(gameWork+0x64, handle, 0) and the vector is emptied; the f_298..f_29c list is walked and each entry with f_d8 != -1 goes through 0x005F7798(scene, f_d8) before f_d4 is cleared to the empty handle 0xfffff800"
+ },
+ {
+  "address": "0x002561C8",
+  "name": "Script_CallSelectRiremitoUsable",
+  "signature": "u32 Script_CallSelectRiremitoUsable(EventState* self)",
+  "params": {
+   "self": "event state (handler records at f_98..f_9c)"
+  },
+  "summary": "Asks the OnSelectRiremitoUsable handlers whether the selected travel point is usable and returns 1/0 from the first handler that answers.",
+  "confidence": 0.55,
+  "evidence": "Literal s_OnSelectRiremitoUsable_002564e0 with 0x00579B64; branch on the script result value 1 (usable) and 0 (not usable) handled through 0x007078E4 + 0x006BB0F4/0x006BBD7C; returns 1 when no handler answers"
+ },
+ {
+  "address": "0x0025650C",
+  "name": "maybe_Event_ClearActorSlots",
+  "signature": "void maybe_Event_ClearActorSlots(EventState* self)",
+  "params": {
+   "self": "event state (0x10-byte actor slots at f_430..f_434)"
+  },
+  "summary": "Releases the two scene handles held by every actor slot of the event and empties the slot list.",
+  "confidence": 0.45,
+  "evidence": "For each 0x10-byte record it resolves the two tagged handles at +8 and +0xc (low 6 bits of the tag, table g_00256620/g_0025661c) and releases them with 0x001C917C(gameWork+0x54, handle); ends with f_434 = f_430; called from the script dispatcher 0x006D4588/0x006D4854 and from 0x0024BCB8"
+ },
+ {
+  "address": "0x00256624",
+  "name": "maybe_Event_SelectHandlerSlot",
+  "signature": "void maybe_Event_SelectHandlerSlot(EventState* self)",
+  "params": {
+   "self": "event state (script data at +0x98, descriptor at +0x30)"
+  },
+  "summary": "Selects the current handler slot of the event's script object and binds the event descriptor to it.",
+  "confidence": 0.3,
+  "evidence": "0x0070E7FC(self+0x98) returns the script object and 0x00124D48(object+8, self+0x30) binds the descriptor; the same 0x124D48 binding appears in 0x00254688/0x0025330C; caller 0x00624958"
+ },
+ {
+  "address": "0x00256A58",
+  "name": "maybe_Event_SubObject_Destroy",
+  "signature": "void maybe_Event_SubObject_Destroy(EventState* self)",
+  "params": {
+   "self": "event sub-object (handles at +0x2c and +0x30)"
+  },
+  "summary": "Destroys one event sub-object: releases its inner object, tears down its event part and frees the two handles it owns.",
+  "confidence": 0.3,
+  "evidence": "0x0028485C(self+0xc) + 0x002543E4(self) + 0x005634E0(self+0x2c) + 0x005634E0(self+0x30); caller 0x0019F908 is the per-state teardown switch"
+ },
+ {
+  "address": "0x00257780",
+  "name": "maybe_Event_StartRuraPatternTimer",
+  "signature": "void maybe_Event_StartRuraPatternTimer(EventState* self)",
+  "params": {
+   "self": "object with a state record pointer at +4"
+  },
+  "summary": "Starts the timer that waits for the selected Rura (travel) pattern: if the pattern selection did not return 1 it arms a 0x2a-tick timer and posts it to the menu, otherwise it switches the input to the close action.",
+  "confidence": 0.35,
+  "evidence": "0x00255670 (Script_CallSelectRuraPattern) result compared with 1; the non-1 path uses 0x002BBAD0(0x2a) + 0x006D7A90(record+0x13c, record+0xcc0, g_00257800->f_28, f_2c, 0), the 1 path calls 0x001C3128(self,0x27,0x31)"
+ },
+ {
+  "address": "0x00257B30",
+  "name": "maybe_Text_ExecuteCommand",
+  "signature": "void maybe_Text_ExecuteCommand(TextCommandState* self, u32 command, int restoreCursor)",
+  "params": {
+   "self": "command state (buffer f_0c..f_10, cursor f_8, arg buffer)",
+   "command": "command id 0..7",
+   "restoreCursor": "1 to put the cursor back after the call"
+  },
+  "summary": "Executes one text/talk control command: saves the current character, invokes the command handler from the eight-entry table, refreshes the text window for the command classes that change the layout and then restores the cursor position.",
+  "confidence": 0.45,
+  "evidence": "Sixteen-word table g_00257D00 indexed by arg2*2 (code pointer + flag word), the same tagged pointer convention as the other indirect tables in the game; command classes 1/3/4/5/6 call 0x00463324(textWindow, argBuffer, argCount, 0) and every call ends with 0x00463580(window, multiByte); 14 callers are talk/message scripts"
+ },
+ {
+  "address": "0x00257DB0",
+  "name": "maybe_Text_SetCommandArgs",
+  "signature": "void maybe_Text_SetCommandArgs(TextCommandState* self, const void* args, u8 count)",
+  "params": {
+   "self": "command state",
+   "args": "0x84-byte argument block",
+   "count": "argument count"
+  },
+  "summary": "Stores the argument block and argument count used by the next text command.",
+  "confidence": 0.45,
+  "evidence": "0x00116C10(&self->f_24, args, 0x84) memcpy followed by self->f_12d = count; the mirror read is the arg count at +0x12d in 0x00257B30"
+ },
+ {
+  "address": "0x002590A0",
+  "name": "maybe_Ui_List_GetNestedWidget",
+  "signature": "int maybe_Ui_List_GetNestedWidget(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Walks the shared UI registry to the list widget's nested child widget and returns it (base address adjusted by -0xac).",
+  "confidence": 0.25,
+  "evidence": "0x001A66A0 (registry) -> 0x003A6E3C(obj+0x13) -> two 0x003E0454 hops -> return base-0xac; the chain is identical in shape to 0x00240980 but the intermediate types differ, so only the shape is proven"
+ },
+ {
+  "address": "0x002599D8",
+  "name": "maybe_Ui_LoadScreen_Init",
+  "signature": "void maybe_Ui_LoadScreen_Init(Ui_LoadScreen* self)",
+  "params": {
+   "self": "loading screen object (layout handle at f_ac, window at f_984)"
+  },
+  "summary": "Initialises the loading screen: attaches the two layouts (the main load window and the spell-circle background) and opens the main window.",
+  "confidence": 0.4,
+  "evidence": "0x0053649C(self->f_ac, g_00259DC0) and 0x0053649C(self->f_ac, s_bg_jumon_00259dc4) attach layouts by name; 0x001D85EC(self,&self->f_984,s_win_load_main_00259dd0,1) creates the window from the 'win_load_main' layout and 0x0029126C starts it at state 0"
+ },
+ {
+  "address": "0x0025A248",
+  "name": "maybe_Ui_LoadScreen_Show",
+  "signature": "u32 maybe_Ui_LoadScreen_Show(void)",
+  "params": {
+   "void": "no arguments"
+  },
+  "summary": "Shows the loading screen by forwarding to the shared window show helper and reports success.",
+  "confidence": 0.3,
+  "evidence": "Single call 0x001DAD58 with the object in a register Ghidra dropped, then return 1; 0x001DAD58 is the helper used by every state function in this screen family"
+ },
+ {
+  "address": "0x0025A328",
+  "name": "maybe_Ui_LoadScreen_StateReturn",
+  "signature": "u32 maybe_Ui_LoadScreen_StateReturn(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that returns from the loading screen: copies the shared context, checks that the screen is ready and switches to the close state (0x26) or the error state (0x20).",
+  "confidence": 0.35,
+  "evidence": "0x001DAD58(self+0x918, other+0x8a0) copies the context; 0x0062F680 checks readiness; the two transitions are `(*self->f_11c->f_14)(self->f_11c, 0x26)` and `(...,0x20)` and f_10 commits the new state"
+ },
+ {
+  "address": "0x0025A97C",
+  "name": "maybe_Ui_LoadScreen_State4",
+  "signature": "u32 maybe_Ui_LoadScreen_State4(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that asks the screen controller for state 4 and commits it when accepted.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 context copy, 0x0062F680 readiness test, `(*f_11c->f_14)(f_11c,4)` then f_10; identical skeleton to 0x0025A328 with state 4"
+ },
+ {
+  "address": "0x0025A9E0",
+  "name": "maybe_Ui_LoadScreen_State13",
+  "signature": "u32 maybe_Ui_LoadScreen_State13(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that switches the loading screen to state 0x13, or to the fallback state 0xb when the controller is not ready.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 result 1 selects `f_14(...,0x13)`, otherwise `f_14(...,0xb)`; 0x0062F680 gates the whole step; same 0x918/0x8a0 context copy"
+ },
+ {
+  "address": "0x0025AA74",
+  "name": "maybe_Ui_LoadScreen_State10",
+  "signature": "u32 maybe_Ui_LoadScreen_State10(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that switches the loading screen to state 0x10, or to the fallback state 0xb when the controller is not ready.",
+  "confidence": 0.3,
+  "evidence": "Same skeleton as 0x0025A9E0 with state 0x10 instead of 0x13 (both fall back to 0xb)"
+ },
+ {
+  "address": "0x0025AD80",
+  "name": "maybe_Ui_LoadScreen_State34",
+  "signature": "u32 maybe_Ui_LoadScreen_State34(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that switches the loading screen to state 0x34, unconditionally when ready.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 + 0x0062F680 + `(*f_11c->f_14)(f_11c,0x34)` + f_10 commit; no fallback branch"
+ },
+ {
+  "address": "0x0025ADE0",
+  "name": "maybe_Ui_LoadScreen_UpdateScriptState",
+  "signature": "u32 maybe_Ui_LoadScreen_UpdateScriptState(Ui_LoadScreen* self)",
+  "params": {
+   "self": "loading screen object (script callback at f_810, state at f_814)"
+  },
+  "summary": "Advances the loading screen's script-driven state: dispatches the pending script callback, then chooses the next state from the result bytes at f_719..f_71d and the callback object.",
+  "confidence": 0.35,
+  "evidence": "0x00249074(&self->f_810) (Event_DispatchScriptCallback) first; the callback case uses 0x003D2CD0 + state 1; otherwise 0x006496A0 decides between states 2/3/4 from the flags f_71d (4), *f_718 (3), f_719/f_71a/f_71b/f_71c (2) and 0x001C63C0 copies the callback text"
+ },
+ {
+  "address": "0x0025B2F0",
+  "name": "maybe_Ui_LoadScreen_State0",
+  "signature": "u32 maybe_Ui_LoadScreen_State0(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that resets the loading screen to state 0 and clears the current page byte at f_731.",
+  "confidence": 0.3,
+  "evidence": "self->f_731 = 0xff (the same 'no page' sentinel used in 0x0025ADE0) then `(*f_11c->f_14)(f_11c,0)` + f_10"
+ },
+ {
+  "address": "0x0025B550",
+  "name": "maybe_Ui_LoadScreen_State4B",
+  "signature": "u32 maybe_Ui_LoadScreen_State4B(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen",
+   "other": "screen to copy the context from"
+  },
+  "summary": "State step that switches the loading screen to state 4 without the readiness check of 0x0025A97C.",
+  "confidence": 0.28,
+  "evidence": "Identical body to 0x0025A97C minus the 0x0062F694 test: 0x001DAD58 context copy then `(*f_11c->f_14)(f_11c,4)`"
+ },
+ {
+  "address": "0x0025BB0C",
+  "name": "maybe_Ui_LoadScreen_StateBranch",
+  "signature": "void maybe_Ui_LoadScreen_StateBranch(Ui_LoadScreen* self, u32 arg2)",
+  "params": {
+   "self": "this screen",
+   "arg2": "context provider"
+  },
+  "summary": "Context copy plus an indirect branch that Ghidra could not recover (control flow ends in bad data), so only the context copy is known.",
+  "confidence": 0.2,
+  "evidence": "Only 0x001DAD58(arg1+0x918, arg2+0x8a0) is visible before `halt_baddata()`; kept for completeness with a deliberately vague name"
+ },
+ {
+  "address": "0x0025BD00",
+  "name": "maybe_Ui_LoadScreen_SelectBranch",
+  "signature": "u32 maybe_Ui_LoadScreen_SelectBranch(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "this screen (branch index f_720)",
+   "other": "screen whose flags f_8b4 are tested"
+  },
+  "summary": "Chooses the loading screen's next state from the current branch index (0..4) once the screen has finished its minimum display time and the incoming flags request it.",
+  "confidence": 0.35,
+  "evidence": "Gate `g_0025BE40 < self->f_124` (minimum frame count) and `other->f_8b4 & (0x142 | 4)`; switch on f_720 selecting states 5, 0x16, 8, 0x18, 0x27 and the default 4"
+ },
+ {
+  "address": "0x0025C020",
+  "name": "maybe_Ui_LoadScreen_EnterState30",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState30(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the shared context, waits for the screen to become ready, then requests state 0x30 (mode 1) or 0x20.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58(self+0x918, other+0x8a0) copies the context, 0x0062F680 gates on readiness, 0x0062F694 selects `f_14(...,0x30)` vs `f_14(...,0x20)` and f_10 commits - the shared skeleton of the whole 0x25A300-0x25E890 state family"
+ },
+ {
+  "address": "0x0025C0B4",
+  "name": "maybe_Ui_LoadScreen_EnterState1F",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState1F(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the context and unconditionally requests state 0x1f when the screen is ready.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 + 0x0062F680 + `(*f_11c->f_14)(f_11c,0x1f)` + f_10 commit"
+ },
+ {
+  "address": "0x0025C1AC",
+  "name": "maybe_Ui_LoadScreen_DispatchCallback",
+  "signature": "void maybe_Ui_LoadScreen_DispatchCallback(Ui_LoadScreen* self)",
+  "params": {
+   "self": "load screen (script callback at f_810)"
+  },
+  "summary": "Dispatches the load screen's pending script callback and copies the callback text into the screen's text buffer.",
+  "confidence": 0.3,
+  "evidence": "0x00249074(self+0x810) is Event_DispatchScriptCallback; when it returns zero the decompiled body collapses into bad data (only the 0x25d53e/0x25d54a constants survive), the normal path calls 0x003D2CD0(self+0x718, self+0x810) and 0x002D8544"
+ },
+ {
+  "address": "0x0025C328",
+  "name": "maybe_Ui_LoadScreen_EnterStateScript0",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterStateScript0(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Script-driven load-screen step: dispatches the pending callback, and either runs the wait helper with index 0 or sets page 0xe and requests state 0x3c.",
+  "confidence": 0.32,
+  "evidence": "0x00249074(&self->f_810) + 0x0062F680 + 0x0021FC60(&self->f_4754) + 0x003D2CD0(&self->f_718,&self->f_810); the 0x006496A0 result picks 0x0025EAF0(self,0,1) or f_731 = 0xe with state 0x3c"
+ },
+ {
+  "address": "0x0025C3E8",
+  "name": "maybe_Ui_LoadScreen_EnterState2E",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState2E(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x20 in mode 1, otherwise refreshes the screen and requests the fallback state 0x2e.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 == 1 -> `f_14(...,0x20)`; else 0x0010EBD8(self) then `f_14(...,0x2e)`; the same 0x918/0x8a0 context copy"
+ },
+ {
+  "address": "0x0025C7F0",
+  "name": "maybe_Ui_LoadScreen_EnterState12",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState12(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (sub-object f_728)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: in mode 1 it stamps the frame flags f_38/f_39 from 0x00474624 and requests state 0x12, otherwise the default state 0x10.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 == 1 -> 0x00474624(&self->f_25ec) stored into self->f_728->f_39 with f_38 = 1, then `f_14(...,0x12)`; else `f_14(...,0x10)`"
+ },
+ {
+  "address": "0x0025C8A0",
+  "name": "maybe_Ui_LoadScreen_EnterState14",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState14(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820, flag f_824)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step driven by the script block: requests state 0x14 or 0x15 depending on the script result byte, or page 0xe plus state 0x3c when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x003F333C(&self->f_820) gates, 0x003D2D0C(&self->f_718,&self->f_820) copies the script text; f_71d != 0 -> f_731 = 0xe + state 0x3c, else f_824 == 1 -> 0x14 else 0x15"
+ },
+ {
+  "address": "0x0025C9FC",
+  "name": "maybe_Ui_LoadScreen_EnterState32",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState32(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step after a long delay (frame counter > 0x3fffffff): flushes the queued window updates and requests state 0x32, or page 0x22 plus state 0x3c when the script asks to stop.",
+  "confidence": 0.3,
+  "evidence": "Same 0x3F333C/0x3D2D0C/0x6496A0 script trio plus the loop `while (0x0062F070(self) > 1) 0x0010EBD8(self);`; f_731 = 0x22 on the stop path"
+ },
+ {
+  "address": "0x0025CBAC",
+  "name": "maybe_Ui_LoadScreen_FlushAndClose",
+  "signature": "void maybe_Ui_LoadScreen_FlushAndClose(Ui_LoadScreen* self)",
+  "params": {
+   "self": "load screen"
+  },
+  "summary": "Closes the load screen: drains the pending window updates, tears the window down twice and hides the screen's remaining widget.",
+  "confidence": 0.35,
+  "evidence": "`while (0x0062F070(self) > 1) 0x0010EBD8(self);` then two 0x00123594(self) around 0x00259928(self, self+0x918) and finally 0x001A5F9C(self+0x854, 1) to hide it"
+ },
+ {
+  "address": "0x0025D118",
+  "name": "maybe_Ui_LoadScreen_EnterState18",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState18(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the context and requests state 0x18 when the screen is ready.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 + 0x0062F680 + `(*f_11c->f_14)(f_11c,0x18)` + f_10 commit"
+ },
+ {
+  "address": "0x0025D17C",
+  "name": "maybe_Ui_LoadScreen_EnterState3",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState3(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (flags f_718/f_71d)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 3 when the screen flag or the script stop flag is set, otherwise state 4.",
+  "confidence": 0.3,
+  "evidence": "Two byte tests on f_718 and f_71d choosing between `f_14(...,4)` and `f_14(...,3)`; only 0x001DAD58 + 0x0062F680 guard it"
+ },
+ {
+  "address": "0x0025D254",
+  "name": "maybe_Ui_LoadScreen_EnterState5",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState5(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0xb in mode 1, otherwise state 5.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 == 1 -> `f_14(...,0xb)`, else `f_14(...,5)`; the same context-copy skeleton"
+ },
+ {
+  "address": "0x0025D354",
+  "name": "maybe_Ui_LoadScreen_EnterState15",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState15(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x15, or page 0xe plus state 0x3c when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x003F333C + 0x003D2D0C + 0x006496A0; the stop path sets f_731 = 0xe and state 0x3c"
+ },
+ {
+  "address": "0x0025D454",
+  "name": "maybe_Ui_LoadScreen_EnterState31",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState31(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x31, or page 0x22 plus state 0x3c when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x003F333C + 0x003D2D0C + 0x006496A0; the stop path sets f_731 = 0x22 and state 0x3c"
+ },
+ {
+  "address": "0x0025D500",
+  "name": "maybe_Ui_LoadScreen_EnterStateScript4",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterStateScript4(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Script-driven load-screen step like 0x0025C328 but with wait index 4 instead of 0.",
+  "confidence": 0.32,
+  "evidence": "Identical to 0x0025C328 (0x249074 + 0x62F680 + 0x21FC60 + 0x3D2CD0) except the success path calls 0x0025EAF0(self,4,0)"
+ },
+ {
+  "address": "0x0025D5C0",
+  "name": "maybe_Ui_LoadScreen_HandleInput",
+  "signature": "void maybe_Ui_LoadScreen_HandleInput(Ui_LoadScreen* self, const Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (state requestor f_11c, sub-screen f_bc8)",
+   "other": "screen carrying the input flags f_8b4"
+  },
+  "summary": "Handles the input/transition flags that arrive with the loading screen: button bits open the sub-screen or request the confirm states, the cancel bit requests the close state, and the result is mirrored into the sub-screen's visible flag.",
+  "confidence": 0.4,
+  "evidence": "Tests `other->f_8b4` bits 0x142, 0x4, 0x8 and 0x1: 0x142 -> 0x0045D9F8(&self->f_bc8), f_724 = its f_10 and state 0x2a or 0x28 with f_726 = 1; 0x4 -> state 0x20; 0x8 -> 0x3b when the sub-screen's f_321 is set; bit 0 -> sub-screen vtable+0x3c(f_8b6,f_8b7,f_8b8); tail 0x0029126C(&self->f_1928, f_321 != 0)"
+ },
+ {
+  "address": "0x0025D824",
+  "name": "maybe_Ui_LoadScreen_EnterState1A",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState1A(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x1a in mode 1, otherwise state 0x18.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 context copy + 0x0062F680 readiness + 0x0062F694 branch selecting `f_14(...,0x1a)` / `f_14(...,0x18)`"
+ },
+ {
+  "address": "0x0025D8DC",
+  "name": "maybe_Ui_LoadScreen_EnterState2B",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState2B(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820, flag f_824)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step driven by the script block: requests state 0x2b or 0x2c by the script result byte, or page 0xe plus state 0x3c when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x003F333C(&self->f_820) + 0x003D2D0C(&self->f_718,&self->f_820); f_71d != 0 -> f_731 = 0xe + state 0x3c, else f_824 == 1 -> 0x2b else 0x2c"
+ },
+ {
+  "address": "0x0025DBC4",
+  "name": "maybe_Ui_LoadScreen_EnterState0B",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState0B(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the context and requests state 0xb when the screen is ready.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 + 0x0062F680 + `(*f_11c->f_14)(f_11c,0xb)` + f_10 commit"
+ },
+ {
+  "address": "0x0025DC28",
+  "name": "maybe_Ui_LoadScreen_EnterState2C",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState2C(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script block f_820)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x2c, or page 0xe plus state 0x3c when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x003F333C + 0x003D2D0C + 0x006496A0; stop path sets f_731 = 0xe and state 0x3c"
+ },
+ {
+  "address": "0x0025DCD4",
+  "name": "maybe_Ui_LoadScreen_WaitIndex4",
+  "signature": "u32 maybe_Ui_LoadScreen_WaitIndex4(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen step that only copies the context and then runs the shared wait helper with index 4.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58(arg1+0x918, arg2+0x8a0) followed by 0x0025EAF0(arg1,4,0); returns 1"
+ },
+ {
+  "address": "0x0025DE90",
+  "name": "maybe_Ui_LoadScreen_EnterState27",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState27(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the context and requests state 0x27 when the screen is ready.",
+  "confidence": 0.3,
+  "evidence": "0x001DAD58 + 0x0062F680 + `(*f_11c->f_14)(f_11c,0x27)` + f_10 commit"
+ },
+ {
+  "address": "0x0025DEF4",
+  "name": "maybe_Ui_LoadScreen_HandleInputAlt",
+  "signature": "u32 maybe_Ui_LoadScreen_HandleInputAlt(Ui_LoadScreen* self, const Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (second sub-screen at f_29a8)",
+   "other": "screen carrying the input flags f_8b4"
+  },
+  "summary": "Variant of the load-screen input handler for the second sub-screen: the transition bits force state 0x34 and set the input latch, the confirm bit is forwarded to the sub-screen's vtable slot.",
+  "confidence": 0.35,
+  "evidence": "Same f_8b4 bit tests as 0x0025D5C0 but with `(*self->f_29a8->f_3c)(&self->f_29a8, f_8b6, f_8b7, f_8b8)` and state 0x34 plus f_726 = 1"
+ },
+ {
+  "address": "0x0025E1A4",
+  "name": "maybe_Ui_LoadScreen_EnterState0A",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState0A(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x0a in mode 1, otherwise state 8.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 branch selecting `f_14(...,10)` / `f_14(...,8)` after the 0x918/0x8a0 context copy"
+ },
+ {
+  "address": "0x0025E238",
+  "name": "maybe_Ui_LoadScreen_EnterState2D",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState2D(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen (script callback f_810, script block f_7bc)",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Script-driven load-screen step: dispatches the pending callback and requests state 0x2d, or page 0xe plus state 0x3c plus a script-block reset when the script asks to stop.",
+  "confidence": 0.32,
+  "evidence": "0x00249074(&self->f_810) + 0x003D2CD0(&self->f_718,&self->f_810) + 0x006496A0; the stop path also calls 0x0064D124(&self->f_7bc)"
+ },
+ {
+  "address": "0x0025E2F0",
+  "name": "maybe_Ui_LoadScreen_EnterState29",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState29(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x29 in mode 1, otherwise state 0x26.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 branch selecting `f_14(...,0x29)` / `f_14(...,0x26)`"
+ },
+ {
+  "address": "0x0025E6BC",
+  "name": "maybe_Ui_LoadScreen_EnterState0BAlt",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState0BAlt(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: copies the context and unconditionally requests state 0xb (duplicate of 0x0025DBC4 in a different controller).",
+  "confidence": 0.28,
+  "evidence": "Body identical to 0x0025DBC4 (0x1DAD58 + 0x62F680 + f_14(...,0xb) + f_10); only the owning controller differs"
+ },
+ {
+  "address": "0x0025E720",
+  "name": "maybe_Ui_LoadScreen_EnterState1C",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState1C(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x1c in mode 1, otherwise state 0x18.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 branch selecting `f_14(...,0x1c)` / `f_14(...,0x18)`"
+ },
+ {
+  "address": "0x0025E7FC",
+  "name": "maybe_Ui_LoadScreen_EnterState0BSecond",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState0BSecond(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0xb in mode 1, otherwise state 8.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 branch selecting `f_14(...,0xb)` / `f_14(...,8)`"
+ },
+ {
+  "address": "0x0025E890",
+  "name": "maybe_Ui_LoadScreen_EnterState2A",
+  "signature": "u32 maybe_Ui_LoadScreen_EnterState2A(Ui_LoadScreen* self, Ui_LoadScreen* other)",
+  "params": {
+   "self": "load screen",
+   "other": "screen whose context is copied"
+  },
+  "summary": "Load-screen state step: requests state 0x2a in mode 1, otherwise state 0x26.",
+  "confidence": 0.3,
+  "evidence": "0x0062F694 branch selecting `f_14(...,0x2a)` / `f_14(...,0x26)` - the last state handler of the loading screen family"
+ }
+]

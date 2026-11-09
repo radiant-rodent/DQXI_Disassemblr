@@ -497,11 +497,11 @@ def verify_all(limit: int | None = None, romfs_image: str | Path | None = None) 
     """Verify parse -> build and disasm -> assemble bit-matching across RomFS script packs."""
     root = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(root))
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
     from tools import pack
 
-    rom_path = str(romfs_image) if romfs_image else r"..\reference project\DQXI.3ds"
+    rom_path = str(romfs_image) if romfs_image else r"..\3DS_Translate\DQXI.3ds"
     f, ncsd, ncch = open_image(rom_path)
     romfs = ncch.romfs()
     script_files = [x for x in romfs.files if x.path.startswith("/script/") and x.path.endswith(".pack")]

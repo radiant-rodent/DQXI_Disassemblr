@@ -1,0 +1,72 @@
+[
+ {
+  "class": "Regex_State",
+  "type": "RegexState",
+  "summary": "Compiled regex automaton: owns the 16-byte block allocator, the circular list of state nodes and the key-node array that Regex_Match_Build fills from the parsed pattern. The readable C calls this same object RegexMatcher; the per-state node is a separate 48-byte structure.",
+  "size": 24,
+  "base": null,
+  "confidence": 0.6,
+  "evidence": "Regex_Match_Build (0x005133C8) writes *m = allocator, m[3] = *m, m[4] = key count, m[5] = key array and links the root state into the list head at m+1; Regex_State_FindOrCreate / SplitOverlappingClasses / DeduplicateKeys / CollectEdges / BuildRecursive all take this same object as their first argument (the readable C names it RegexMatcher). The batch size 148 is inflated by a mis-scaled access at 0x90 (see that field); the real object is at least 0x18 bytes.",
+  "fields": [
+   {
+    "offset": 16,
+    "name": "keyCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Regex_Match_Build counts the key_list entries into m[4]; the visited bitset is then allocated as (keyCount+15)>>4 16-byte blocks via Regex_Buffer_Init(...,m[4],...) and every key loop runs 'i < m[4]' (Regex_State_CollectEdges, SplitOverlappingClasses, DeduplicateKeys)."
+   },
+   {
+    "offset": 20,
+    "name": "keyArray",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Allocated as keyCount*4 bytes and filled with the key_list node pointers in Regex_Match_Build ('*(int *)(m[5] + i*4) = node'); Regex_State_CollectEdges dereferences each entry as a node whose child list head is at +0x08/+0x0C, and the final pass compares each entry with the accept key node."
+   },
+   {
+    "offset": 144,
+    "name": "unknown_misscaledStateBitset",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Phantom field, not a real member: struct_db scaled '*param_2 + 0x24' by 4 because param_2 is a pointer-to-pointer, so the real access is (*state)->f_24 - the state node's key bitset pointer. No read or write at 0x90 exists in any of the five methods (sizes_seen is empty, reads 0, writes 0)."
+   }
+  ]
+ },
+ {
+  "class": "Regex_Set",
+  "type": "RegexSet",
+  "summary": "Character-class range set: an intrusive circular list of sorted, disjoint (u16 start, u16 end) code-unit ranges that forms the value of a regex class node; the set object itself is the list sentinel.",
+  "size": 12,
+  "base": null,
+  "confidence": 0.85,
+  "evidence": "Regex_Set_AddRange / RemoveChar / Subtract / Intersect / Normalize all walk the list from set[1] and stop when the node address equals the set itself, so the object is the sentinel; set[2] is passed to the 16-byte block allocator 0x00514390 and the matching free 0x0051435C; range nodes carry u16 start at +8 and u16 end at +0x0A.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "rangeListNext",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Sentinel forward link of the circular range list: Regex_Set_AddRange inserts with 'node->next = *set; node->prev = set; *set = node; node->next->prev = node', and Regex_Set_Normalize resets it to the set address when the list is emptied."
+   },
+   {
+    "offset": 4,
+    "name": "rangeListPrev",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Sentinel backward link: every walk starts at set[1] and follows node[1] (node->prev), e.g. Regex_Set_RemoveChar 'piVar3 = (int *)set[1]' then 'piVar3 = (int *)piVar3[1]', terminating on 'piVar3 == set'."
+   },
+   {
+    "offset": 8,
+    "name": "allocator",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.85,
+    "evidence": "First argument of the 16-byte block allocator 0x00514390 and of the matching free 0x0051435C for every range node ('func_00514390(set[2],1)', 'func_0051435C(set[2],piVar5,1)'); Regex_Set_Normalize saves it to a local, zeroes it while emptying the list and restores it, so it is 0 only while the set has no nodes."
+   }
+  ]
+ }
+]

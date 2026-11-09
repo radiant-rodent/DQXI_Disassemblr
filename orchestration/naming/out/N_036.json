@@ -1,0 +1,136 @@
+[
+ {
+  "address": "0x006E7910",
+  "name": "Container_Variant_ClearChildren",
+  "signature": "VariantValue* Container_Variant_ClearChildren(VariantValue* value)",
+  "params": {
+   "value": "variant value part of a node (node+8): data at +0, type byte at +4, child-list header at +8 {next, prev, pool handle} and the granule pool at +0x10"
+  },
+  "summary": "Frees every node of a variant value's child list and resets the list to an empty ring, leaving the value itself alive; callers use it as the first half of a tree-node destructor and then return the node to the 16-byte-granule pool themselves.",
+  "confidence": 0.55,
+  "evidence": "asm/text/text_006C0048.s 0x006E7910: r6 = self+8 (child-list header), r4 = r6, r5 = [r4+4] (last child), loop { r5next = [r5+4]; free(pool = [r4+8], r5, 1) through 0x0051435C } then [r4+8] = 0, [r4] = [r4+4] = r4, return self. The node constructor 0x006E78EC (called from 0x006E796C) writes exactly this layout: data 0, type byte 1, empty ring at node+0x10, pool handle 0 at node+0x18. Callers 0x005120A4, 0x00512928, 0x00512E5C, 0x005131E4 unlink a node, call this, then free the node itself with 2 units - i.e. it is the 'free my children' step. Type tags 1/2/3/4 = null/u16/list-of-values/byte come from the value copy routine 0x006E7744. Note the asymmetry: children are allocated with 2 units by 0x006E796C but released with 1 unit here (verified in the instruction stream, cause not established - either a pool-quota quirk or a small leak in the original)."
+ },
+ {
+  "address": "0x006E796C",
+  "name": "Container_Variant_AddChild",
+  "signature": "VariantValue* Container_Variant_AddChild(VariantValue** outChild, VariantChildren* childList)",
+  "params": {
+   "outChild": "receives the new node, or NULL when the 16-byte-granule pool is exhausted",
+   "childList": "the parent value's child-list header (&parentValue->children, i.e. parentValue+8): {next at +0, prev at +4, pool handle at +8}"
+  },
+  "summary": "Allocates a 32-byte variant node from the parent's granule pool, constructs it as an empty value (data 0, type 1, its own empty child ring), pushes it at the front of the parent's child list and returns it through outChild.",
+  "confidence": 0.6,
+  "evidence": "asm 0x006E796C: alloc([childList+8], 2) through 0x00514390 (the 16-byte-granule pool allocator) = 32-byte node; constructor 0x006E78EC is called on node+8 and writes data 0 / type byte 1 / empty ring at node+0x10 / pool handle 0 at node+0x18; then [node] = [childList], [node+4] = childList, [childList] = node, [node.next+4] = node, *outChild = node. The same six-instruction link sequence is inlined in 0x00511774, 0x00511B44, 0x005120A4, 0x00512928 and 0x00513FD4, which then fill node+8 with 0x006E7890 / 0x006E7744 - this is the shared 'new child node' helper of that variant tree."
+ },
+ {
+  "address": "0x00708BE4",
+  "name": "std_vsnprintf",
+  "signature": "int std_vsnprintf(char* buf, u32 size, const char* fmt, u32* args)",
+  "params": {
+   "buf": "narrow (byte) output buffer",
+   "size": "capacity in bytes; the output is always NUL-terminated when size != 0",
+   "fmt": "format string, byte characters",
+   "args": "cursor into the caller's argument list (va_list represented as a word array)"
+  },
+  "summary": "The library's integer-only printf formatter: expands %c %s %d %i %u %o %x %X %p %n and %% with the ' ', '+', '-', '0' flags, width (digits or '*'), precision and the h/hh/l/ll length modifiers, never writes more than size bytes, and returns the length the full string would have needed.",
+  "confidence": 0.9,
+  "evidence": "9148-byte state machine at asm/text/text_00700048.s:0x00708BE4: flag bits 1/2/8/0x10 = space/plus/minus/zero, a digits loop for width and '*' from the argument list, '.' + '*' precision, length modifiers h (0x40) / hh (0x100) / l (0x20) / ll (0x80), '%n' stores the written count, '%s' honours precision, '%p' = 8 hex digits, octal/hex/unsigned and 64-bit decimal (0x00125E58 divide, g_00709750 reciprocal); no float conversions exist. On completion it writes the terminating NUL (or forces the last byte when size == 0) and returns buf-write-pointer minus buf, i.e. C99 vsnprintf semantics. Its only caller is the variadic thunk 0x0051BAA0 = snprintf(char*, u32, const char*, ...) (bl at 0x0051BAAC)."
+ },
+ {
+  "address": "0x007116A0",
+  "name": "Fs_Archive_FindDirectory",
+  "signature": "u32 Fs_Archive_FindDirectory(ArchiveDirTable* table, u32* outEntryOffset, u32* outEntryFields, ArchiveQuery* query, u32 nameHash, const u16* name, u32 nameBytes)",
+  "params": {
+   "table": "0x28-byte directory-table descriptor: u64 hash-bucket-table offset at +0, bucket count at +8, bucket reader at +0xC, u64 metadata offset at +0x10, metadata reader at +0x1C",
+   "outEntryOffset": "receives the offset of the matching 0x18-byte directory entry inside the metadata block",
+   "outEntryFields": "receives the entry's three payload words (record words 1..3)",
+   "query": "lookup query: only ->parentId (word 0) is read, and the entry's word 0 must equal it",
+   "nameHash": "path hash of the name, seeded with the parent id (see Fs_Archive_LookupEntry)",
+   "name": "UTF-16 name to compare",
+   "nameBytes": "name length in bytes (twice the character count)"
+  },
+  "summary": "Looks a child directory up by name inside the archive's hashed metadata: bucket = nameHash % bucketCount selects a u32 in the directory bucket table, then the 0x18-byte directory entries of that chain are compared on parent id, name length and the UTF-16 name; a hit returns the entry offset and its three payload words.",
+  "confidence": 0.8,
+  "evidence": "Reads the bucket word with 0x005047E0(table[3], base = table[0..1] + (hash % table[2])*4, out, 4) where the modulo is 0x0011CFAC (unsigned divide, remainder in r1); then 0x18-byte records at table[4..5] + offset with the name following at +0x18; compares record[0] with query->parentId, record[5] (name length) with nameBytes, then 0x00100AD6 (UTF-16 strncmp) on the name; walks record[4] as the next-sibling link until 0xFFFFFFFF. Sole caller 0x00711E90."
+ },
+ {
+  "address": "0x0071180C",
+  "name": "Fs_Archive_ReadDirectoryEntry",
+  "signature": "u32 Fs_Archive_ReadDirectoryEntry(ArchiveDirTable* table, u32* outParentId, u32* outFields, u16* nameBuf, u32* outNameBytes, u32 entryOffset)",
+  "params": {
+   "table": "directory-table descriptor (same layout as for Fs_Archive_FindDirectory)",
+   "outParentId": "receives entry word 0, the id/hash of the parent directory",
+   "outFields": "receives the entry's three payload words 1..3",
+   "nameBuf": "optional buffer for the entry's UTF-16 name; pass NULL to skip the second read",
+   "outNameBytes": "optional, receives the entry's name length in bytes",
+   "entryOffset": "offset of the 0x18-byte entry inside the metadata block"
+  },
+  "summary": "Reads one directory entry at a known metadata offset and optionally copies its UTF-16 name; it is how the path walker obtains a directory's own id, which then seeds the hash for looking up that directory's children.",
+  "confidence": 0.78,
+  "evidence": "0x18-byte read through 0x005047E0(table[7], offset = table[4..5] + entryOffset), then - when nameBuf and outNameBytes are set - a second read at +0x18 with the length taken from record word 5; outputs record[0] to outParentId and record[1..3] to outFields. Callers: 0x00711A44 (seeds the child query) and 0x00711AD0 (the '.' / '..' cases)."
+ },
+ {
+  "address": "0x007118CC",
+  "name": "Fs_Archive_FindFile",
+  "signature": "u32 Fs_Archive_FindFile(ArchiveFileTable* table, u32* outEntryOffset, u32* outEntryFields, ArchiveQuery* query, u32 nameHash, const u16* name, u32 nameBytes)",
+  "params": {
+   "table": "0x28-byte file-table descriptor (same layout as the directory table; it sits at dirTable+0x28 inside the mount object)",
+   "outEntryOffset": "receives the offset of the matching 0x20-byte file entry",
+   "outEntryFields": "receives the entry's five payload words (the stored 64-bit data offset/size plus one extra word)",
+   "query": "lookup query: only ->parentId (word 0) is read",
+   "nameHash": "path hash of the name, seeded with the parent id",
+   "name": "UTF-16 name to compare",
+   "nameBytes": "name length in bytes"
+  },
+  "summary": "The file half of the archive lookup: picks the bucket with nameHash % bucketCount, walks the 0x20-byte file entries' sibling chain comparing parent id, name length and the UTF-16 name, and on a hit returns the entry offset and its five payload words (data offset, size and one spare field).",
+  "confidence": 0.78,
+  "evidence": "Same shape as 0x007116A0 but with 0x20-byte records (name at +0x20, next-sibling at +0x18, name length at +0x1C) and five payload words written out; bucket modulo 0x0011CFAC, name compare 0x00100AD6, data reads 0x005047E0. Called by 0x00711E90 with table = dirTable+0x28 and by the mount's open method 0x00504AE0 with &mount->f_48 (the mount's directory table is at &mount->f_20, exactly 0x28 bytes earlier)."
+ },
+ {
+  "address": "0x00711A44",
+  "name": "Fs_Archive_ResolveChild",
+  "signature": "u32 Fs_Archive_ResolveChild(ArchiveDirTable* table, u32* outEntryOffset, ArchiveQuery* query, u32* outEntryFields, u32 dirOffset, const u16* name, u32 nameChars)",
+  "params": {
+   "table": "directory table the lookup starts from",
+   "outEntryOffset": "receives the offset of the resolved entry",
+   "query": "receives {parentId, name length, name pointer} and is then used as the lookup query",
+   "outEntryFields": "receives the resolved entry's payload words",
+   "dirOffset": "offset of the directory entry whose child is wanted",
+   "name": "UTF-16 name of the child",
+   "nameChars": "name length in characters"
+  },
+  "summary": "Resolves one named child below an already-known directory entry: it reads that directory entry to obtain its id (the hash seed), fills the query with the name span, and runs the hash lookup, so callers can resolve a component without re-reading the parent entry themselves.",
+  "confidence": 0.65,
+  "evidence": "0071180C(table, &id, fields, 0, 0, dirOffset) then *query = id; 0x0050DBA4 fills query[1..2] from the name pointer/length (0x0050DBA4 is the path-span helper of the 0x0050DA68 / 0x0050DAD4 UTF-16 path iterator - it backs up over one '/'-separated component); then 0x00711E90(table, outEntryOffset, outEntryFields, query). Called three times from 0x00711AD0 for the '.', '..' and normal component cases."
+ },
+ {
+  "address": "0x00711AD0",
+  "name": "Fs_Archive_ResolvePath",
+  "signature": "u32 Fs_Archive_ResolvePath(ArchiveDirTable* table, ArchivePathSpan* outLast, u32* outEntryFields, ArchiveQuery* outQuery, u32 allowDotTail, const u16* path)",
+  "params": {
+   "table": "directory table of the mounted archive",
+   "outLast": "receives the last path component as {parentId, length, UTF-16 pointer}",
+   "outEntryFields": "receives the resolved entry's payload words",
+   "outQuery": "receives the resolved directory id plus the remaining path span",
+   "allowDotTail": "non-zero re-resolves a trailing '.'/'..' through the dot machinery instead of returning the raw component (0x00504AE0 passes 0)",
+   "path": "UTF-16 path; it must start with '/'"
+  },
+  "summary": "Resolves a UTF-16 archive path component by component: 0x0050DA68 rejects paths that do not start with '/', repeated separators are skipped, '.' is a no-op, '..' pops through the path stack, every other component is looked up with the hash lookup, and the resolved directory id, last component and payload are returned to the caller.",
+  "confidence": 0.75,
+  "evidence": "0x0050DA68 (tokeniser setup: compares the first UTF-16 unit with 0x2f '/', collapses '//'), 0x0050DAD4 (next component: length in characters, pointer, end-of-path byte at +0xC), 0x00658CE8 / 0x00658C94 / 0x00658C64 (UTF-16 span copy and 'are we at the root' test, used for '..'), '.' (0x2e) and '..' (0x2e2e) are special-cased, and every real component goes through 0x00711E90 / 0x00711A44 / 0x0071180C. Sole caller 0x00504AE0 (the mount's open-by-path method, slots in vtables 0x00780E5C and 0x00780F34), which afterwards hashes the leaf name itself and calls 0x007118CC."
+ },
+ {
+  "address": "0x00711E90",
+  "name": "Fs_Archive_LookupEntry",
+  "signature": "u32 Fs_Archive_LookupEntry(ArchiveDirTable* dirTable, u32* outEntryOffset, u32* outEntryFields, ArchiveQuery* query)",
+  "params": {
+   "dirTable": "directory table; the file table of the same archive is expected at dirTable+0x28",
+   "outEntryOffset": "receives the offset of the matching entry",
+   "outEntryFields": "receives the matching entry's payload words",
+   "query": "in/out: ->parentId seeds the hash, ->nameChars and ->namePtr are hashed and compared"
+  },
+  "summary": "Computes the archive path hash of the query's name (hash = parentId ^ 0x075BCD15, then hash = ror(hash, 5) ^ each UTF-16 unit) and looks the name up as a directory first, retrying in the file table at dirTable+0x28 when the directory lookup reports 'not found' (FS error module 0x11, description 0x6F); returns FS error 0xC8804471 when neither table has the name.",
+  "confidence": 0.82,
+  "evidence": "Literal 0x075BCD15 (the RomFS-style path-hash seed 123456789) at 0x0071201C, used as `eor ip, r3, sb` = parentId ^ seed, then per-unit `eor r3, r0, ip, ror #5`; error literals 0xE0C04702 and 0xC8804471 (module 17 = FS, descriptions 770 and 0x71) at 0x00712020 / 0x00712024; after 0x007116A0 fails it tests module == 0x11 && description == 0x6F and retries with 0x007118CC(dirTable+0x28, ...). Callers: 0x00711A44, 0x00711AD0, and 0x00504AE0 which carries an inline copy of the same hash loop."
+ }
+]

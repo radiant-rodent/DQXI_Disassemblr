@@ -1,0 +1,1796 @@
+[
+ {
+  "address": "0x00106440",
+  "name": "maybe_Os_SetRuntimeFlag",
+  "signature": "void maybe_Os_SetRuntimeFlag(void)",
+  "params": {},
+  "summary": "Takes the global runtime lock and sets the one-byte runtime-ready flag at 0x007AE4A1; looks like a one-shot init or finalisation hook.",
+  "confidence": 0.3,
+  "evidence": "No callers and no data pointer to the address, so it is not reached by the game's normal call graph. Body: bl 0x111D50 then strb #1 to [0x007AE4A0+1]. 0x111D50 is the -1/-2 lock-state helper around the arbitrate syscall, so this is lock plus flag bookkeeping, not game logic."
+ },
+ {
+  "address": "0x0010F3E0",
+  "name": "Save_InitPartySnapshot",
+  "signature": "void Save_InitPartySnapshot(SaveSnapshot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears and defaults the 0xc8b0-byte party snapshot used by save/load: 31 actor state blocks of 0x200 at +0x1830, 54 20-byte records at +0x5630, inventory arrays and checksum fields at +0xe0d8..+0xe0f0.",
+  "confidence": 0.5,
+  "evidence": "All four callers (0x2CCC00, 0x2CD2A0, 0x2CD498, 0x2CE5B4) construct the same object; 0x2CE5B4 accepts exactly arg4==0xc8b0 and verifies func_0051BB08(data,...,-1) against a stored checksum before copying the blob into +0x1830. 0x2CD2A0 copies 31*0x200 bytes from func_0035EB98(world,i)+0xc8 (the actor equipment/status block). Defaults 0x2ae, 0xffff, 0x104c, 0x3ae0 come from g_0010F640..g_0010F650."
+ },
+ {
+  "address": "0x00111B7C",
+  "name": "maybe_Save_CompleteAsyncRead",
+  "signature": "void maybe_Save_CompleteAsyncRead(SaveSnapshot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Finishes an asynchronous save/load request by passing the request fields at +0x14..+0x24 to the read worker and then storing state 5 in the shared work object at 0x007B00E0.",
+  "confidence": 0.35,
+  "evidence": "Calls func_001170CC(self->f_14, self->f_18, self->f_1c, self->f_20, self->f_24); 0x1170CC is the SVC-0x28/save-read worker and also writes *g_00117990 (0x007B00E0). Here the same address is written with 5, so this is the completion callback for that worker."
+ },
+ {
+  "address": "0x00111D0C",
+  "name": "maybe_Save_BeginLoad",
+  "signature": "void maybe_Save_BeginLoad(SaveSnapshot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets the load state of the save object (state 2, clears +0xe120 for 0x2a0 bytes) and initialises the lock word at +0xe118 before a read starts.",
+  "confidence": 0.45,
+  "evidence": "Sibling of Save_InitPartySnapshot: sets f_e3c4/f_e3c0/f_e3c5=0, f_e110=2 and calls the same lock helper func_0011CC10 on &self->f_e118. Called from the five 0x248xxx / 0x25Dxxx paths that start a load, and the -1/-2 state handling matches func_00111D50."
+ },
+ {
+  "address": "0x00111D50",
+  "name": "maybe_Os_MutexLock",
+  "signature": "void maybe_Os_MutexLock(int* lock)",
+  "params": {
+   "param_1": "lock"
+  },
+  "summary": "Blocking lock acquire on a two-state lock word: -1 becomes 0 and -2 becomes 1, each transition guarded by hasExclusiveAccess and the arbitrate syscall.",
+  "confidence": 0.45,
+  "evidence": "31 callers including the CRT init path 0x00106440, the save worker 0x001170CC and the 0x2CCC00 constructors. The hasExclusiveAccess/ldrex loop plus func_0011CC10(*g_00111E04, arg1, 0, 1, 0, 0) is the standard 3DS kernel mutex arbitrate pattern; the exact public nn::os API name is not recoverable from the binary."
+ },
+ {
+  "address": "0x001153B4",
+  "name": "maybe_Save_BuildSectionList",
+  "signature": "u32 maybe_Save_BuildSectionList(SaveSnapshot* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Walks a 0x274c-byte table of function-pointer slots, invokes each handler and chains the results into a tagged list with a running id; part of the save-snapshot construction, but the handlers themselves were not recoverable.",
+  "confidence": 0.35,
+  "evidence": "Iterates self+0x34..self+0x2780 (0x274c bytes, 4-byte slots) dispatching through the table at g_00115928 (0x0072D76C) with an index from f_10. Stores the result tag in f_16c/f_170 and the id in f_174, then calls func_0011C96C. The same g_00115928 table is used by the 0x10F448 snapshot variant."
+ },
+ {
+  "address": "0x00116B34",
+  "name": "Actor_LoadParams",
+  "signature": "u64 Actor_LoadParams(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Copies the 0x50-byte parameter record for actor id self->f_768 from the world actor table into the instance fields at +0x30..+0x78.",
+  "confidence": 0.5,
+  "evidence": "func_006F20C0 returns the world singleton; func_0035EB98(world, self->f_768) returns the actor record (same helper used by every actor getter in this batch). The body copies record +0x10..+0x5c into self +0x30..+0x78 field by field."
+ },
+ {
+  "address": "0x001170CC",
+  "name": "Save_AsyncReadWorker",
+  "signature": "u32 Save_AsyncReadWorker(u32 request)",
+  "params": {
+   "param_1": "request"
+  },
+  "summary": "Asynchronous save/load read worker: waits on the work event, reads length-prefixed records through Fs_ReadRecordBlock, and drives the shared work state at 0x007B0080/0x007B00E0 until the request is complete or times out.",
+  "confidence": 0.5,
+  "evidence": "Uses SVC 0x28 (GetSystemTick) and the 1,000,000 constant g_0011798c, calls Fs_ReadRecordBlock (0x122938), the deadline helper 0x11DF50 and the state check 0x11E374. The globals 0x007B0080/0x007B0086/0x007B00E0 are the same work object updated by Save_InitPartySnapshot's callers, and *g_00117990=5 marks completion."
+ },
+ {
+  "address": "0x0011DF0C",
+  "name": "maybe_Os_GetCurrentThreadHandle",
+  "signature": "void maybe_Os_GetCurrentThreadHandle(OsHandle* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Replaces *out with a freshly queried per-thread handle, closing the previous handle with the arbitrate/close syscall first.",
+  "confidence": 0.4,
+  "evidence": "Calls func_001228FC(&local_10) (TLS-based query returning a handle in TLS+0x8c) and aborts via func_0011ED40 on error; if *out != 0 it issues software_interrupt(0x23) and clears it before storing the new handle. Same shape as 0x122440, which uses the 0xa0000 query instead of 0xb0000."
+ },
+ {
+  "address": "0x0011DF50",
+  "name": "maybe_Os_ComputeDeadline",
+  "signature": "void maybe_Os_ComputeDeadline(float* now, u32* base, u32* out, u32 request)",
+  "params": {
+   "param_1": "now",
+   "param_2": "base",
+   "param_3": "out",
+   "param_4": "request"
+  },
+  "summary": "Converts the current system tick and a packed timeout field into a 64-bit deadline, with the 1e6 scaling constants used by the save worker.",
+  "confidence": 0.4,
+  "evidence": "Reads SVC 0x28 (GetSystemTick) into the first argument, then does 64-bit multiplies by g_0011E0C4/g_0011E0CC/g_0011E0D0 and shifts by 0x12; g_0011E0C8 points at the 0x007B00B8 tick base and g_0011E0D4 is 1.0f. Only caller is Save_AsyncReadWorker 0x1170CC."
+ },
+ {
+  "address": "0x0011E374",
+  "name": "maybe_Save_CheckReadState",
+  "signature": "u32 maybe_Save_CheckReadState(void)",
+  "params": {},
+  "summary": "Checks the save work object's stream state against the cached result codes and returns 0, a stored error, or a freshly queried status from the syscall wrapper.",
+  "confidence": 0.35,
+  "evidence": "Reads g_0011E438 (0x007B2D08) fields +0xc/+8 and compares them with the result constants 0xF9610C02/0xC8A10C01/0xC8A10C0D/0xC8810FEF. On the success path it clears the retry counter at +8 and on failure reports through func_0011ED40."
+ },
+ {
+  "address": "0x00122440",
+  "name": "maybe_Os_GetCurrentProcessHandle",
+  "signature": "void maybe_Os_GetCurrentProcessHandle(OsHandle* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Replaces *out with a queried per-process handle, releasing the old value first; companion of maybe_Os_GetCurrentThreadHandle.",
+  "confidence": 0.4,
+  "evidence": "Calls func_00123C9C(&local_10), which is byte-for-byte the 0xa0000 variant of func_001228FC (0xb0000). On success it stores the TLS+0x8c result into *out after software_interrupt(0x23) clears the previous value. Both are used by the save worker setup."
+ },
+ {
+  "address": "0x001228FC",
+  "name": "maybe_Os_GetThreadLocalValue",
+  "signature": "int maybe_Os_GetThreadLocalValue(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Issues the 0xb0000 thread-local query and returns the status, storing the TLS payload word at +0x8c into *out when successful.",
+  "confidence": 0.35,
+  "evidence": "Reads the CP15 user-thread register, writes 0xb0000 to TLS+0x80, executes software_interrupt(0x32) and then reads TLS+0x84 (status) and +0x8c (value). func_00123C9C is the identical 0xa0000 variant; the exact nn::os wrapper name is not present in the binary."
+ },
+ {
+  "address": "0x00122938",
+  "name": "Fs_ReadRecordBlock",
+  "signature": "u32 Fs_ReadRecordBlock(u32 stream, u32 offset, u32* dst, int* read, int updatePosition)",
+  "params": {
+   "param_1": "stream",
+   "param_2": "offset",
+   "param_3": "dst",
+   "param_4": "read",
+   "param_5": "updatePosition"
+  },
+  "summary": "Reads one length-prefixed record from a stream at offset, returns the bytes read and advances the tracked stream position when requested.",
+  "confidence": 0.55,
+  "evidence": "Calls func_00123AD0(stream, offset, dst, max, &read) which parses the 4-byte 0xa5/14-bit-length header; it also calls func_00123A60 (stream size), func_00123A0C (seek) and func_00123AB0 (align). The state fields at +4/+8 are the current offset and retry counter, and the error path reports through func_0011ED40."
+ },
+ {
+  "address": "0x00122C6C",
+  "name": "maybe_Os_HandleInit",
+  "signature": "int* maybe_Os_HandleInit(int* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Creates a kernel handle through func_0012038C and stores it in *out, aborting the process through func_00118100 if creation fails.",
+  "confidence": 0.4,
+  "evidence": "Body: *out=0; if (*out==0 && func_0012038C(&local)>=0) { *out=local; status=0; } if (status<0) func_00118100(). Used by Save_AsyncReadWorker 0x1170CC and by 0x122484/0x122650, so it is the handle/semaphore constructor for the worker."
+ },
+ {
+  "address": "0x00123AB0",
+  "name": "maybe_Math_AlignUp",
+  "signature": "u32 maybe_Math_AlignUp(int stream, int offset, int extra)",
+  "params": {
+   "param_1": "stream",
+   "param_2": "offset",
+   "param_3": "extra"
+  },
+  "summary": "Returns offset+extra rounded up to the stream's alignment, implemented as a call to the shared align helper with the stream's alignment field at +4.",
+  "confidence": 0.4,
+  "evidence": "Body: func_0011CFAC(extra+offset, *(u32*)(stream+4)); return extraout_r1. 0x11CFAC is the same round-up helper used by the allocation sites (e.g. 0x14E3F4 and 0x1585F8) with a block-size argument, and the result is used as the next record offset."
+ },
+ {
+  "address": "0x00123AD0",
+  "name": "Fs_ReadRecord",
+  "signature": "u32 Fs_ReadRecord(u32 stream, u32 offset, u32 dst, u32 maxLen, u32* read)",
+  "params": {
+   "param_1": "stream",
+   "param_2": "offset",
+   "param_3": "dst",
+   "param_4": "maxLen",
+   "param_5": "read"
+  },
+  "summary": "Reads a 4-byte record header (magic 0xa5 plus a 14-bit payload length) and, if the length fits in maxLen, reads the payload into dst and returns the byte count.",
+  "confidence": 0.6,
+  "evidence": "Header is built as local_1c[0]=0xa5 and the length is (b1 & 0x3f) | ((b1 & 0x40) ? b2<<8 : 0). func_00124B88 is the underlying read; on success *read=result and 0 is returned, otherwise the error code g_00123B64 (0xC8610C0F) is returned. Called only by Fs_ReadRecordBlock 0x122938."
+ },
+ {
+  "address": "0x00123C9C",
+  "name": "maybe_Os_GetProcessLocalValue",
+  "signature": "int maybe_Os_GetProcessLocalValue(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Issues the 0xa0000 process-local query and returns the status, storing the TLS payload word at +0x8c into *out when successful.",
+  "confidence": 0.35,
+  "evidence": "Identical to func_001228FC except TLS+0x80 is set to 0xa0000 instead of 0xb0000. Used by 0x122440, the process-handle companion of the thread-handle helper."
+ },
+ {
+  "address": "0x00123CD8",
+  "name": "maybe_Os_SetThreadLocalValue",
+  "signature": "u32 maybe_Os_SetThreadLocalValue(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Stores value in the thread-local syscall block and returns the value echoed back by the 0x007B2D2C query.",
+  "confidence": 0.4,
+  "evidence": "Writes g_00123D08 (0x00190040) to TLS+0x80 and value to TLS+0x84, executes software_interrupt(0x32), then returns TLS+0x84 when the status at g_00123D0C is non-negative. Called by the save state checks 0x11E374 and 0x122938's caller path."
+ },
+ {
+  "address": "0x00124B28",
+  "name": "maybe_Fs_ResourceFindInBucket",
+  "signature": "int maybe_Fs_ResourceFindInBucket(ResourceTable* self, int bucket, u32 name)",
+  "params": {
+   "param_1": "self",
+   "param_2": "bucket",
+   "param_3": "name"
+  },
+  "summary": "Scans one hash bucket of the resource table and returns the first entry whose name key matches, or 0.",
+  "confidence": 0.4,
+  "evidence": "Indexes self + bucket*8, walks the list from f_108 to f_10c in 4-byte steps and calls func_00124E6C (the resource-by-name lookup) for each entry. No direct callers, so it is probably an inlined/template helper of the resource manager."
+ },
+ {
+  "address": "0x00124E6C",
+  "name": "Fs_ResourceFindByName",
+  "signature": "int Fs_ResourceFindByName(ResourceTable* self, const char* name, u32 unused, u32 unused2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "name",
+   "param_3": "unused",
+   "param_4": "unused2"
+  },
+  "summary": "Looks up a packed resource by name in the global resource table: hashes the bucket, then compares the 0x40-byte name key of each candidate and returns the matching record.",
+  "confidence": 0.65,
+  "evidence": "Field_LoadNpcTables (0x184EF8) calls it with s_npc_list_bxon_00185220 (\"npc_list.bxon\") and 0x1849B4 calls it with \"npc_ie.bxon\" and \"book_ie.bxon\". The body indexes g_00124F54 (0x007BA2D0) by (hash & 0xFFFFF)>>8, compares piVar2[1] with hash>>12, and compares each record's +0x14..+0x50 key via func_00123660 with size 0x40."
+ },
+ {
+  "address": "0x00146ABC",
+  "name": "maybe_Text_InitNameId",
+  "signature": "u32 maybe_Text_InitNameId(u32 id)",
+  "params": {
+   "param_1": "id"
+  },
+  "summary": "Initialises a two-word name/id pair with the invalid-id sentinel 0xFFFF and returns the same buffer.",
+  "confidence": 0.3,
+  "evidence": "Body: func_0061BD4C(arg1, g_00146AD4=0x0000FFFF); return arg1. 0x61BD4C resolves an id to a name record and is the same helper used by the message-name code, so this is a tiny id/name initialiser; no callers were found."
+ },
+ {
+  "address": "0x001473EC",
+  "name": "Script_ReadSerializedValue",
+  "signature": "u32 Script_ReadSerializedValue(VM* self, u32 stream, ReadFn read, u32* out)",
+  "params": {
+   "param_1": "self",
+   "param_2": "stream",
+   "param_3": "read",
+   "param_4": "out"
+  },
+  "summary": "Deserialises one tagged Squirrel value from a stream: handles the 0x01000001/0x05000002/0x05000004 scalar tags and the 0x08000010 string/buffer tag, and raises \"cannot serialize a %s\" for unknown tags.",
+  "confidence": 0.55,
+  "evidence": "The four tag constants are g_0014762C/30/38 plus the immediate 0x08000010; the error string at 0x00789E80 is \"io error, read function failure, the origin stre...\" and the unknown-type message is s_cannot_serialize_a__s_00147614. Calls func_00245CF0/func_00248490 to allocate/refcount the buffer, exactly like a Squirrel blob reader."
+ },
+ {
+  "address": "0x00147AA4",
+  "name": "maybe_Container_DestroyObject",
+  "signature": "void maybe_Container_DestroyObject(ContainerObject* obj)",
+  "params": {
+   "param_1": "obj"
+  },
+  "summary": "Destroys a container object: invokes its optional callback, then its virtual destructor, and finally unregisters it from the global manager.",
+  "confidence": 0.45,
+  "evidence": "Calls obj->f_20(obj+0x28, obj->f_1c) if set, then (**(code**)obj)(obj) and (**(code**)(*(int*)*g_00147B04+0x10))(*g_00147B04, obj). The final call is the manager's remove method, matching the destroy pattern used by 0x16D820."
+ },
+ {
+  "address": "0x00147D9C",
+  "name": "Actor_ClearLowStatusFlags",
+  "signature": "void Actor_ClearLowStatusFlags(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Resolves the actor by id and clears the low 7 status/visibility flag bits (mask 0x7f) in the actor's flag word at +0xda.",
+  "confidence": 0.5,
+  "evidence": "Body: actor = func_0035EB98(world, actorId); func_001902A4(actor, 0x7f). Disassembly of 0x1902A4 is `ldrh r2,[r0,#0xda]; bic r1,r2,r1; strh r1,[r0,#0xda]`, i.e. clear-flags. The same call with 0x80 appears in 0x149178 and 0x163474."
+ },
+ {
+  "address": "0x00147DC4",
+  "name": "Actor_CompareNames",
+  "signature": "u32 Actor_CompareNames(ActorRef* a, ActorRef* b)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b"
+  },
+  "summary": "Compares the display names of two actor references (id plus type 0/1/2) and returns the sign of the comparison after normalising ids >= 0x30A1 by subtracting 0x60.",
+  "confidence": 0.55,
+  "evidence": "Builds two 7-u16 name arrays with func_00100A74 from the actor record selected by type: type 0 -> world+0x24a98+id*0x8c+0x5fe4, type 1 -> *g_00148034+0x6b8+id*0x98, type 2 -> world+0x24a98+id*0x8c+0x7b3c. Then normalises with func_007088A8, subtracts 0x60 from ids >= g_00148038 and compares with func_00100AC0."
+ },
+ {
+  "address": "0x00149178",
+  "name": "Actor_SetStatusFlags",
+  "signature": "void Actor_SetStatusFlags(u32 actorId, int flags)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "flags"
+  },
+  "summary": "Resolves the actor and sets status/visibility flags; 0x80 is handled specially so it is only set when not already present, other masks go through the generic setter.",
+  "confidence": 0.5,
+  "evidence": "Calls func_001902A4(actor,0x7f) first (clear low flags), then if flags==0x80 re-resolves the actor and only calls func_001902A4(actor,0x80) when bit 7 of f_da is clear, else calls func_00192414(actor, flags). 0x192414 is the set-bits counterpart of the 0x1902A4 clear-bits helper."
+ },
+ {
+  "address": "0x00149ED8",
+  "name": "Party_AddInventoryItem",
+  "signature": "void Party_AddInventoryItem(u32 actorId, u32 itemId)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "itemId"
+  },
+  "summary": "Adds an item id to the actor's 40-slot inventory at +0x1274, ignoring duplicates.",
+  "confidence": 0.55,
+  "evidence": "Body: actor = func_0035EB98(world, actorId); func_00629988(actor, itemId). Disassembly of 0x629988 scans the 40-byte array at actor+0x1274 and inserts itemId if absent (0x6291EC counts the same array). The array size 0x28 and the 0xca item-id bound are visible at 0x629900."
+ },
+ {
+  "address": "0x00149F10",
+  "name": "Party_HasInventoryItem",
+  "signature": "u32 Party_HasInventoryItem(u32 actorId, int itemId)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "itemId"
+  },
+  "summary": "Returns 1 when the actor's 40-slot inventory at +0x1274 contains the given item id.",
+  "confidence": 0.5,
+  "evidence": "Loops func_006291EC() (count of non-0xFF bytes in actor+0x1274, 0x28 slots) and compares func_006298E0(actor,i) (byte at actor+0x1274+i) with itemId. This is the read side of Party_AddInventoryItem."
+ },
+ {
+  "address": "0x00149F84",
+  "name": "Party_HasBagItem",
+  "signature": "u32 Party_HasBagItem(u32 actorId, int itemId)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "itemId"
+  },
+  "summary": "Returns 1 when the actor's second inventory list at +0x129c (60 slots) contains the given item id.",
+  "confidence": 0.5,
+  "evidence": "Same loop as Party_HasInventoryItem but uses func_00629214 (count of non-0xFF bytes in actor+0x129c, 0x3c slots) and func_006298F0 (byte at actor+0x129c+i). The two parallel lists are the actor's item and bag/equipment inventories."
+ },
+ {
+  "address": "0x0014A7B0",
+  "name": "Actor_ClearStatusFlags",
+  "signature": "void Actor_ClearStatusFlags(u32 actorId, int flags)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "flags"
+  },
+  "summary": "Resolves the actor and clears the given status flag bits; for mask 0x80 it only acts when the bit is currently set.",
+  "confidence": 0.5,
+  "evidence": "Calls func_001902A4(actor, flags) (clear-bits at +0xda); when flags==0x80 it re-resolves the actor and returns early if bit 7 of f_da is already clear. Mirror image of Actor_SetStatusFlags 0x149178."
+ },
+ {
+  "address": "0x0014A8FC",
+  "name": "Text_SetupEntityNameArg",
+  "signature": "void Text_SetupEntityNameArg(u32 entityId, int count, u32 argSlot, int listIndex)",
+  "params": {
+   "param_1": "entityId",
+   "param_2": "count",
+   "param_3": "argSlot",
+   "param_4": "listIndex"
+  },
+  "summary": "Looks up an entity name and installs it as a message argument (slot 2/3/4), then appends the formatted entry to the text buffer for listIndex.",
+  "confidence": 0.5,
+  "evidence": "func_0061BD4C(&id, entityId) resolves the id/name record; the range check (id-0xAA3 < 0x98) restricts it to a known id block. func_0066C99C(&id,1) returns the wide name, Message_SetArg(argSlot, name, 1) is the named message helper, and func_00707C1C writes into g_0014A9A0 + listIndex*0x108 + 8. Caller 0x306134 passes slots 2/3/4 for a three-entry list."
+ },
+ {
+  "address": "0x0014BB5C",
+  "name": "Event_DispatchHandlerByte6",
+  "signature": "void Event_DispatchHandlerByte6(u32* event, EventCmd* cmd)",
+  "params": {
+   "param_1": "event",
+   "param_2": "cmd"
+  },
+  "summary": "Dispatches one event-timeline command through the handler table indexed by the byte at cmd+6, but only when the entry's type byte matches event[2].",
+  "confidence": 0.5,
+  "evidence": "Checks the initialised flag *g_0014BBDC, indexes g_0014BBE0 + *(u8*)(cmd+6)*8, and calls entry->fn(*event, cmd) when entry->type == *(u8*)(event+2). Called from the event timeline updater 0x2A8CCC, which walks five parallel command lists."
+ },
+ {
+  "address": "0x0014BBE8",
+  "name": "Event_DispatchHandlerField39",
+  "signature": "void Event_DispatchHandlerField39(int event, EventCmd* cmd)",
+  "params": {
+   "param_1": "event",
+   "param_2": "cmd"
+  },
+  "summary": "Dispatches a 0x3c-stride event command through the table indexed by cmd->f_39, matching the event's byte at +8.",
+  "confidence": 0.5,
+  "evidence": "Same structure as Event_DispatchHandlerByte6: checks *g_0014BC94, indexes g_0014BC90 + cmd->f_39*8, and compares entry->type with *(u8*)(event+8). Called from 0x2A8CCC for the f_1a/f_3c command list."
+ },
+ {
+  "address": "0x0014BCA8",
+  "name": "Event_DispatchHandlerByte4",
+  "signature": "void Event_DispatchHandlerByte4(u32* event, EventCmd* cmd)",
+  "params": {
+   "param_1": "event",
+   "param_2": "cmd"
+  },
+  "summary": "Dispatches a 8-byte-stride event command through the table indexed by the byte at cmd+4, matching event[2].",
+  "confidence": 0.5,
+  "evidence": "Checks *g_0014C040, indexes g_0014C03C + *(u8*)(cmd+4)*8, and compares entry->type with *(u8*)(event+2). Called from 0x2A8CCC for the f_16 command list."
+ },
+ {
+  "address": "0x0014C150",
+  "name": "Event_DispatchHandlerField14",
+  "signature": "void Event_DispatchHandlerField14(u32* event, EventCmd* cmd)",
+  "params": {
+   "param_1": "event",
+   "param_2": "cmd"
+  },
+  "summary": "Dispatches a 0x18-byte-stride event command through the table indexed by cmd->f_14, matching event[2].",
+  "confidence": 0.5,
+  "evidence": "Checks *g_0014C200, indexes g_0014C1FC + cmd->f_14*8, and compares entry->type with *(u8*)(event+2). Called from 0x2A8CCC for the f_18 command list."
+ },
+ {
+  "address": "0x0014C28C",
+  "name": "maybe_Field_NotifyActor",
+  "signature": "void maybe_Field_NotifyActor(u32 arg1, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Forwards an actor id plus two payload words to the field/actor manager at world+0x24a98.",
+  "confidence": 0.35,
+  "evidence": "Body: func_005BCA28(arg1, *func_006F20C0() + 0x24a98). 0x24a98 is the field manager offset used throughout this batch, and 0x5BCA28 takes (id, manager). No callers, so the exact event meaning is not recoverable."
+ },
+ {
+  "address": "0x0014D444",
+  "name": "Party_AddEquipmentBonus",
+  "signature": "void Party_AddEquipmentBonus(u32 actorId, u32 statIndex, short amount, u32 unused)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "statIndex",
+   "param_3": "amount",
+   "param_4": "unused"
+  },
+  "summary": "Adds amount to one of ten equipment/status stat fields (+0x100,+0x102,+0x104,+0x106,+0x108,+0x10a,+0x10c,+0x10e,+0x110,+0x112) of the actor's equipment block, then recomputes derived stats.",
+  "confidence": 0.5,
+  "evidence": "Resolves the actor with func_0035EB98(world, actorId), calls func_001902B4 which returns actor+0xc8 (disassembly at 0x1902B4 copies f_14/f_16 to f_e8/f_ea and returns +0xc8), switches on statIndex 0..9 and adds to the ten consecutive u16 fields. Finally calls func_0019201C, the stat/parameter recalculation routine."
+ },
+ {
+  "address": "0x0014E3F4",
+  "name": "maybe_Field_LoadAreaActorData",
+  "signature": "void maybe_Field_LoadAreaActorData(u32 areaId)",
+  "params": {
+   "param_1": "areaId"
+  },
+  "summary": "Searches the current map's actor/object tables for areaId, caches the matching 0x28-byte record, then rebuilds the per-cell actor entries for the 0x36 map cells and their 9 sub-slots.",
+  "confidence": 0.4,
+  "evidence": "Walks 0x14-byte entries from func_0063D420 and 0x28-byte entries from func_0063F348, comparing f_20/f_22/f_24 and writing the cache words f_2a49c/f_2a4a0. The outer loop runs 0x36 times and the inner loop 9 times, calling func_0066B17C (cell lookup) and func_0035EB98 (actor by id). Called by no direct bl, but matches the map/area setup family."
+ },
+ {
+  "address": "0x0014E95C",
+  "name": "Field_SetMapSection",
+  "signature": "void Field_SetMapSection(u32 mapId, u32 section)",
+  "params": {
+   "param_1": "mapId",
+   "param_2": "section"
+  },
+  "summary": "Sets the current map id and section in the world state, caches the matching map-name record, and notifies the map/streaming system.",
+  "confidence": 0.5,
+  "evidence": "Writes the map id to world+0x2a498 and the section to +0x2a49a, clamps section to 1..0x21, looks up the 0x28-byte record with func_0063F348(mapId,section) and caches its f_20/f_22/f_24 in f_2a49c/f_2a4a0. Ends with func_005AF9F8(mapId,section,old) and uses special cases for map ids 0x35 and 10."
+ },
+ {
+  "address": "0x0014ECF8",
+  "name": "maybe_Sound_DecodeBufferInit",
+  "signature": "u32 maybe_Sound_DecodeBufferInit(SoundVoice* self, u32 blockSize, u32 sampleCount, u32 channels, int flag, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "blockSize",
+   "param_3": "sampleCount",
+   "param_4": "channels",
+   "param_5": "flag",
+   "param_6": "mode"
+  },
+  "summary": "Allocates and silences the per-channel decode buffers for a sound voice: channels pointers, each blockSize*(sampleCount*1.5+1) bytes, filled with 0x80 silence and a 0x80 tail.",
+  "confidence": 0.4,
+  "evidence": "Only proceeds when mode==1 and blockSize<=0x400 and flag==0; blockSize is restricted to 0x100/0x200/0x400. Allocates via func_00147740, fills with 0x80 (unsigned 8-bit silence), and sets the three 0x2100-byte buffers at +0x3c/+0x40/+0x44 from g_0014EF10. Caller 0x6B9254 allocates the 0x3c-byte voice and per-channel pointer arrays first."
+ },
+ {
+  "address": "0x0014FF00",
+  "name": "maybe_Field_IsEventMode",
+  "signature": "u32 maybe_Field_IsEventMode(void)",
+  "params": {},
+  "summary": "Returns 1 when the per-world flag byte at g_0014FF44+world has bit 0x80 clear and the current map/event mode query returns <= 0x0e.",
+  "confidence": 0.35,
+  "evidence": "Checks (*(u8*)(g_0014FF44 + world) & 0x80)==0 and func_0066B17C(world+0x24a98, 0x15) <= 0x0e. The same guard appears in 0x15A93C and 0x161270 before they call their field action; 0x15 is the mode/state selector."
+ },
+ {
+  "address": "0x00150D48",
+  "name": "maybe_Actor_AddField14",
+  "signature": "void maybe_Actor_AddField14(u32 actorId, short delta)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "delta"
+  },
+  "summary": "Resolves the actor and adds delta to the value at +0x14 through the actor's first virtual setter.",
+  "confidence": 0.45,
+  "evidence": "Body: actor = func_0035EB98(world, actorId); (**(code**)*actor)(actor, *(short*)(actor+0x14) + delta). The vtable slot 0 is also used by 0x152D5C as a generic setter, so +0x14 is a mutable stat field (the same field 0x15E7A0 returns)."
+ },
+ {
+  "address": "0x00150D8C",
+  "name": "maybe_Actor_AddClampedValue",
+  "signature": "void maybe_Actor_AddClampedValue(u32 actorId, short delta)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "delta"
+  },
+  "summary": "Adds delta to the actor's current value at +0x16, clamping it to the maximum stored at +0x12.",
+  "confidence": 0.45,
+  "evidence": "Body: uVar4=actor->f_12; uVar3=actor->f_16+delta; if (uVar3<uVar4) uVar4=uVar3; actor->f_16=uVar4. The clamp pair +0x12/+0x16 is read by 0x15858C and 0x15E7D0; 0x152D98 is the absolute-set counterpart. The field is most likely current/max HP but the record layout alone cannot prove it."
+ },
+ {
+  "address": "0x00151164",
+  "name": "maybe_Field_SetModeFlag",
+  "signature": "void maybe_Field_SetModeFlag(void)",
+  "params": {},
+  "summary": "Clears the field manager's mode/flag word at world+0x24a98 through func_0066B2CC.",
+  "confidence": 0.3,
+  "evidence": "Body: func_0066B2CC(world+0x24a98, 0). 0x24a98 is the field manager base used by the whole batch; the same manager is passed to 0x66B17C (mode query) and 0x612B08 (per-index stat). No callers, so only the manager target is certain."
+ },
+ {
+  "address": "0x001522A8",
+  "name": "maybe_Party_InitEquipment",
+  "signature": "void maybe_Party_InitEquipment(u32 arg1, int arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Initialises the equipment/parameter blocks of actor ids 1..0x1e (skipping the reserved ids 0, 7 and 0x11), copying each table row into the actor's slots.",
+  "confidence": 0.45,
+  "evidence": "Loops unaff_r4 from 1 to 0x1e and skips 0, 7 and 0x11. For each id it resolves func_0035EB98(world,id), calls func_0019180C(actor,id,row,row+0x28) and func_001912C8(actor). 0x19180C writes the 0x28-byte equipment rows; the caller 0x1522A8 is the setup pass for the 31 actor slots."
+ },
+ {
+  "address": "0x00152D5C",
+  "name": "maybe_Actor_SetFieldViaVtable",
+  "signature": "void maybe_Actor_SetFieldViaVtable(u32 actorId, u32 value)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "value"
+  },
+  "summary": "Resolves the actor and stores value through the actor's first virtual setter.",
+  "confidence": 0.4,
+  "evidence": "Body: actor = func_0035EB98(world, actorId); (**(code**)*actor)(actor, value). Same vtable slot used by 0x150D48 with an incremented field, confirming it is a setter for a stat/value."
+ },
+ {
+  "address": "0x00152D98",
+  "name": "maybe_Actor_SetClampedValue",
+  "signature": "void maybe_Actor_SetClampedValue(u32 actorId, u32 value)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "value"
+  },
+  "summary": "Sets the actor's current value at +0x16 to value, clamped to the maximum at +0x12.",
+  "confidence": 0.45,
+  "evidence": "Body: uVar3=actor->f_12; if (value<uVar3) uVar3=value; actor->f_16=(short)uVar3. Absolute-set counterpart of maybe_Actor_AddClampedValue; the same +0x12/+0x16 pair."
+ },
+ {
+  "address": "0x00153D18",
+  "name": "maybe_Event_JumpToHandler",
+  "signature": "void maybe_Event_JumpToHandler(EventContext* ctx)",
+  "params": {
+   "param_1": "ctx"
+  },
+  "summary": "Tail-transfers to the event/script handler stored at ctx+0x34; Ghidra marks the path as non-returning.",
+  "confidence": 0.3,
+  "evidence": "Only statement is func_005B5C6C(ctx, ctx->f_34) followed by halt_baddata(). 0x5B5C6C is the event-script executor used by the cutscene code; the function is a one-line trampoline, so the subsystem is Event but the exact command is unknown."
+ },
+ {
+  "address": "0x00155540",
+  "name": "maybe_Field_SetModeByte",
+  "signature": "void maybe_Field_SetModeByte(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Stores a single mode byte in the field manager at world+0x27c7b.",
+  "confidence": 0.35,
+  "evidence": "Body: *(u8*)(world+0x27c7b) = value. The offset is in the same 0x24a98 field-manager block as the map/event state; no callers and no other clue to the byte's meaning."
+ },
+ {
+  "address": "0x00156EF4",
+  "name": "maybe_Field_CheckPositionAndTrigger",
+  "signature": "void maybe_Field_CheckPositionAndTrigger(u32 x, u32 y, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "x",
+   "param_2": "y",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Compares the current map position with (x,y) and, on a match, forwards the trigger parameters to func_0035F0C4 with mode 1.",
+  "confidence": 0.45,
+  "evidence": "func_0066B5F8(world+0x24a98) returns two packed position words; the code compares (word>>16)==x and (word2>>16)==y, then calls func_0035F0C4(world,1,arg3,arg4,word,word2,u16). The packed high-half comparison is the standard 20.12 map-coordinate encoding."
+ },
+ {
+  "address": "0x00158554",
+  "name": "maybe_Actor_InvokeVtable1",
+  "signature": "void maybe_Actor_InvokeVtable1(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Resolves the actor and invokes its second virtual method (slot 1).",
+  "confidence": 0.4,
+  "evidence": "Body: actor = func_0035EB98(world, actorId); (**(code**)(*actor+8))(). Slot 1 is the second entry of the actor vtable; no arguments, so it is a no-arg update/reset method."
+ },
+ {
+  "address": "0x0015858C",
+  "name": "maybe_Actor_GetMaxValue",
+  "signature": "u16 maybe_Actor_GetMaxValue(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Returns the actor's maximum value field at +0x12.",
+  "confidence": 0.45,
+  "evidence": "Body: return func_0035EB98(world, actorId)->f_12. This is the same field used as the clamp in maybe_Actor_AddClampedValue and maybe_Actor_SetClampedValue."
+ },
+ {
+  "address": "0x001585F8",
+  "name": "maybe_Battle_GetTableMultiplier",
+  "signature": "u32 maybe_Battle_GetTableMultiplier(int* multiplierTable, int* dataTable, u32 key)",
+  "params": {
+   "param_1": "multiplierTable",
+   "param_2": "dataTable",
+   "param_3": "key"
+  },
+  "summary": "Looks up key in a data table, maps its f_29 index into the caller's float multiplier array, and returns the product of that multiplier and the row's f_2a value.",
+  "confidence": 0.45,
+  "evidence": "dataTable is walked as a relocatable array of 4-byte entries (f_58 base + count at +0x60); a matching u16 key yields the row byte f_29. That byte indexes multiplierTable->f_58 (a float array) and the result is multiplied by the row's u16 f_2a. Called from the battle action code 0x461B28 and from 0x15F838, which adds a per-row modifier byte."
+ },
+ {
+  "address": "0x0015A93C",
+  "name": "maybe_Field_SetStat",
+  "signature": "void maybe_Field_SetStat(u32 index, u32 value)",
+  "params": {
+   "param_1": "index",
+   "param_2": "value"
+  },
+  "summary": "Guarded field-manager write: when the field is not in event mode, stores value in the per-index stat array at world+0x2000+index*4+0x998.",
+  "confidence": 0.35,
+  "evidence": "Same guard as 0x14FF00 (byte flag 0x80 clear and func_0066B17C(...,0x15) <= 0x0e), then func_00612B08(world+0x24a98, index, value). Disassembly of 0x612B08 is `str r2,[r0 + r1*4 + 0x2998]`, i.e. a per-index stat slot."
+ },
+ {
+  "address": "0x0015DB24",
+  "name": "maybe_Field_SetFlagBit",
+  "signature": "void maybe_Field_SetFlagBit(u32 index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Sets bit 0 of the per-index flag byte at world+0x5000+index+0x762.",
+  "confidence": 0.35,
+  "evidence": "Body: func_00612550(world+0x24a98, index). Disassembly of 0x612550 checks index<0x65, reads byte at world+0x5762+index, ORs 1 and writes it back. Likely a per-map/per-actor visited or enabled flag."
+ },
+ {
+  "address": "0x0015E7A0",
+  "name": "maybe_Actor_GetField14",
+  "signature": "u16 maybe_Actor_GetField14(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Returns the actor's stat field at +0x14.",
+  "confidence": 0.45,
+  "evidence": "Body: return func_0035EB98(world, actorId)->f_14. The same field is incremented through the vtable in 0x150D48."
+ },
+ {
+  "address": "0x0015E7D0",
+  "name": "maybe_Actor_GetField16",
+  "signature": "u16 maybe_Actor_GetField16(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Returns the actor's current value field at +0x16 (the one clamped by +0x12).",
+  "confidence": 0.45,
+  "evidence": "Body: return func_0035EB98(world, actorId)->f_16. Read counterpart of maybe_Actor_AddClampedValue / maybe_Actor_SetClampedValue."
+ },
+ {
+  "address": "0x0015E9E4",
+  "name": "maybe_Field_SetState",
+  "signature": "void maybe_Field_SetState(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Writes a state value into the field manager through func_0066B004.",
+  "confidence": 0.3,
+  "evidence": "Body: func_0066B004(world+0x24a98, value). The manager base is certain, the meaning of the value is not; no callers."
+ },
+ {
+  "address": "0x0015F838",
+  "name": "maybe_Battle_CalcValueWithModifier",
+  "signature": "int maybe_Battle_CalcValueWithModifier(u32 tableA, u32 tableB, int* rowTable, int key, int modifierIndex)",
+  "params": {
+   "param_1": "tableA",
+   "param_2": "tableB",
+   "param_3": "rowTable",
+   "param_4": "key",
+   "param_5": "modifierIndex"
+  },
+  "summary": "Computes a table value with maybe_Battle_GetTableMultiplier and adds the per-row modifier byte selected by modifierIndex.",
+  "confidence": 0.4,
+  "evidence": "Calls func_001585F8(tableA,tableB,key), then indexes the relocatable u16 array at rowTable->f_58 at modifierIndex and adds byte +1 of that entry. The 0xff sentinel means no modifier. Used by the battle table code."
+ },
+ {
+  "address": "0x0016068C",
+  "name": "maybe_Actor_ShowPartA",
+  "signature": "void maybe_Actor_ShowPartA(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "For actors of the expected runtime type, enables the component at actor+0x224 and marks its flag byte +0x61.",
+  "confidence": 0.45,
+  "evidence": "Calls the actor's vtable[0] to obtain a type id and compares it with the constant at 0x001606E8. On match it takes the component pointer at actor[0x89] (offset 0x224), calls func_0040B674(comp,1,0) and sets comp->f_61=1. 0x160EB4 is the exact inverse (0,0 and f_61=0)."
+ },
+ {
+  "address": "0x00160EB4",
+  "name": "maybe_Actor_HidePartA",
+  "signature": "void maybe_Actor_HidePartA(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Disables the same actor component as maybe_Actor_ShowPartA and clears its +0x61 flag.",
+  "confidence": 0.45,
+  "evidence": "Identical type check and component fetch as 0x16068C, but calls func_0040B674(comp,0,0) and stores 0 in comp->f_61."
+ },
+ {
+  "address": "0x00160F14",
+  "name": "maybe_Actor_ShowPartB",
+  "signature": "void maybe_Actor_ShowPartB(Actor* actor, u32 unused, u32 unused2, u32 arg4)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "unused2",
+   "param_4": "arg4"
+  },
+  "summary": "Enables the second actor component variant (flag +0x60) and forwards arg4 to the component's setup function.",
+  "confidence": 0.45,
+  "evidence": "Same type check/component fetch as 0x16068C, then func_0040B674(comp,1,1,arg4,...) and comp->f_60=1. 0x161918 is the inverse (0,1 and f_60=0)."
+ },
+ {
+  "address": "0x00161270",
+  "name": "maybe_Field_Action",
+  "signature": "void maybe_Field_Action(u32 arg1)",
+  "params": {
+   "param_1": "arg1"
+  },
+  "summary": "Guarded field-manager action: when not in event mode, calls func_006138D4(world+0x24a98,arg1), which increments the per-index counter at +0x2998.",
+  "confidence": 0.35,
+  "evidence": "Same guard as 0x14FF00/0x15A93C. func_006138D4 adds 1 to the 32-bit value at world+0x24a98+index*4+0x2998 (disassembly at 0x6138D4), so this is an increment/count action for a map index."
+ },
+ {
+  "address": "0x00161918",
+  "name": "maybe_Actor_HidePartB",
+  "signature": "void maybe_Actor_HidePartB(Actor* actor, u32 unused, u32 unused2, u32 arg4)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "unused2",
+   "param_4": "arg4"
+  },
+  "summary": "Disables the second actor component variant and clears its +0x60 flag.",
+  "confidence": 0.45,
+  "evidence": "Identical to 0x160F14 but calls func_0040B674(comp,0,1,arg4,...) and stores 0 in comp->f_60."
+ },
+ {
+  "address": "0x00161FC4",
+  "name": "maybe_Object_SetChildFlag",
+  "signature": "void maybe_Object_SetChildFlag(UiText* self, u8 style)",
+  "params": {
+   "param_1": "self",
+   "param_2": "style"
+  },
+  "summary": "Fetches a child object through vtable slot 0x48 and stores a byte in its large +0xb0f7 flag field.",
+  "confidence": 0.3,
+  "evidence": "Calls (**(code**)(*self+0x48))(self,0), checks the returned child and its f_10 vtable, then writes child->f_b0f7=style. The huge field offset means a very large object (UI or field actor); the exact flag meaning is not recoverable."
+ },
+ {
+  "address": "0x001623C8",
+  "name": "maybe_Ui_CloseWindow",
+  "signature": "void maybe_Ui_CloseWindow(void)",
+  "params": {},
+  "summary": "Fetches the UI singleton and invokes its vtable+0x40 method with argument 4 (a close/dismiss command).",
+  "confidence": 0.3,
+  "evidence": "Body: p=func_005E64E0(); if (p) (**(code**)(*p+0x40))(p,4). 0x5E64E0 is a UI singleton getter; command 4 recurs in the UI state machines of this batch, but the window class is not identifiable from this two-line wrapper."
+ },
+ {
+  "address": "0x00162E40",
+  "name": "Party_SpendGold",
+  "signature": "bool Party_SpendGold(u32 amount)",
+  "params": {
+   "param_1": "amount"
+  },
+  "summary": "Subtracts amount from the party's gold at world+0x24ac0 and returns false when there is not enough.",
+  "confidence": 0.55,
+  "evidence": "Returns arg1 <= *(u32*)(world+0x24ac0) and only then calls func_00613FC0(world+0x24a98, -arg1). Disassembly of 0x613FC0 clamps the subtraction at zero, i.e. a currency/resource decrement. The same field is tested before a purchase in Shop_CanAfford 0x195274 and decremented in Shop_BuyItem 0x194DF4."
+ },
+ {
+  "address": "0x00162FFC",
+  "name": "Actor_IsVisible",
+  "signature": "u8 Actor_IsVisible(u32 actorId)",
+  "params": {
+   "param_1": "actorId"
+  },
+  "summary": "Returns bit 7 of the actor's flag word at +0xda, the visibility/enabled bit.",
+  "confidence": 0.55,
+  "evidence": "Body: return func_0035EB98(world, actorId)->f_da >> 7. The same bit is set/cleared by Actor_SetVisible (0x163474) and tested by 0x149178/0x165820; 0x1902A4 clears masks in this word with bic."
+ },
+ {
+  "address": "0x00163474",
+  "name": "Actor_SetVisible",
+  "signature": "void Actor_SetVisible(u32 actorId, int visible)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "visible"
+  },
+  "summary": "Sets or clears the actor's visibility bit 0x80 in the flag word at +0xda, doing nothing when the state already matches.",
+  "confidence": 0.55,
+  "evidence": "Resolves the actor and compares the current bit 7 of f_da with the requested state. Clearing calls func_001902A4(actor,0x80) (the bic helper at 0x1902A4); setting calls func_00192414(actor,0x80). Actor_IsVisible reads the same bit."
+ },
+ {
+  "address": "0x001636DC",
+  "name": "maybe_Party_SpendResource",
+  "signature": "void maybe_Party_SpendResource(u32 index, u32 amount)",
+  "params": {
+   "param_1": "index",
+   "param_2": "amount"
+  },
+  "summary": "Consumes up to amount of the per-index resource at world+0x24a98, using func_00612B08 to store the new value.",
+  "confidence": 0.4,
+  "evidence": "Calls func_00613FC0(world+0x24a98, ...) (the clamped decrement) and, when the current per-index value from func_0066B0F8(world,10) is below -amount, calls func_00612B08(world,10,-amount). The index 10 and the generic per-index stat array at +0x2998 identify a counter, not gold."
+ },
+ {
+  "address": "0x001651CC",
+  "name": "Script_ReadClosureRef",
+  "signature": "u32 Script_ReadClosureRef(VM* self, ReadFn read, u32 stream, int expectedId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "read",
+   "param_3": "stream",
+   "param_4": "expectedId"
+  },
+  "summary": "Reads a 4-byte closure/object id from a serialized stream and verifies it against expectedId, raising \"invalid or corrupted closure str...\" on mismatch.",
+  "confidence": 0.55,
+  "evidence": "Calls (*read)(stream,&value,4); if the read count is not 4 it reports through func_005B3DA4 with g_0016522C, and if value != expectedId it raises s_invalid_or_corrupted_closure_str_00165230. Companion of Script_ReadSerializedValue 0x1473EC and called from the same 0x2C9CD4/0x2CC714 deserialiser."
+ },
+ {
+  "address": "0x00165820",
+  "name": "maybe_Actor_EnsureVisible",
+  "signature": "void maybe_Actor_EnsureVisible(u32 actorId, int flags)",
+  "params": {
+   "param_1": "actorId",
+   "param_2": "flags"
+  },
+  "summary": "Sets the visibility bit 0x80 on the actor when it is not already set; other masks are forwarded to the generic flag setter.",
+  "confidence": 0.45,
+  "evidence": "Resolves the actor, special-cases flags==0x80 by returning when bit 7 of f_da is already set, then calls func_00192414(actor,flags). Similar to Actor_SetStatusFlags 0x149178 but only the set direction."
+ },
+ {
+  "address": "0x00166056",
+  "name": "maybe_Event_CallHandler",
+  "signature": "void maybe_Event_CallHandler(int arg1, u32 arg2, int* arg3)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Tail-calls the event handler pointer selected from arg3 (or the current context) with the adjusted context pointer.",
+  "confidence": 0.3,
+  "evidence": "Ghidra lost the argument registers; the body computes unaff_r6+arg1, optionally loads *arg3, then calls func_0031C94C(ctx). 0x31C94C is in the event/cutscene code region, so this is an event trampoline, but the exact handler is unknown."
+ },
+ {
+  "address": "0x00166CA8",
+  "name": "maybe_Ui_DialogUpdateQueue",
+  "signature": "u32 maybe_Ui_DialogUpdateQueue(Dialog* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Per-frame dialog/page update: when the page queue at +0x4a4..+0x4a8 is empty it raises the pending-page flag at world+0x27220 and runs the page transition, otherwise it pops the next queued page id.",
+  "confidence": 0.4,
+  "evidence": "Only runs when self->f_48c is 2..5. Compares f_4a4 with f_4a8; on empty sets *(u8*)(world+0x27220)=1 and calls the vtable at self+0x11c; on non-empty pops one byte and calls func_001675B8(self,id,...). The queue-of-page-ids shape and the 0x11c vtable match the dialog page handlers in this batch."
+ },
+ {
+  "address": "0x00166DBC",
+  "name": "maybe_Ui_DialogAdvance",
+  "signature": "u32 maybe_Ui_DialogAdvance(Dialog* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Advances the dialog state machine according to the pending-command bitmask at +0x480, selecting command 2/4/5/6/8/9/10 for the page vtable.",
+  "confidence": 0.4,
+  "evidence": "Checks func_0062B230(self+0x488); branches on self->f_480 & 0x142/4/1 and on the map data helpers func_0066BB18/func_0066B92C, then calls (**(code**)(*&self->f_11c+0x14))(page, command). Commands 2/4/5/6/8/9/10 are the same transition codes used by 0x167088 and 0x167210."
+ },
+ {
+  "address": "0x0016701C",
+  "name": "Text_SetSpeakerNameArg",
+  "signature": "void Text_SetSpeakerNameArg(Dialog* self, u32 arg2, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Installs the current speaker's name as message argument 5 and copies the speaker/party strings into the dialog's text buffers.",
+  "confidence": 0.5,
+  "evidence": "Gets the current actor id with func_0066B0E4(world,0), resolves it via func_0035EB98, then Message_SetArg(5, actor+0xca, 0). Copies two strings with func_00707C1C into g_0016774C+0x848 and +0x950, then calls func_001C5924 with the dialog sub-object. Caller context is the dialog page setup."
+ },
+ {
+  "address": "0x00167088",
+  "name": "maybe_Ui_DialogAdvance2",
+  "signature": "u32 maybe_Ui_DialogAdvance2(Dialog* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Second dialog state-machine variant: dispatches page commands 1/7 based on the +0x480 mask and the pending id at +0x468.",
+  "confidence": 0.4,
+  "evidence": "Uses the same f_480 & 0x142/4/1 pattern and page vtable at self+0x11c as 0x166DBC, but reads the pending id from +0x468 and calls func_006122F0(world,id) before command 7. The +0x3c4/+0x3d8 pair is the alternate page object."
+ },
+ {
+  "address": "0x00167210",
+  "name": "maybe_Ui_DialogAdvance3",
+  "signature": "u32 maybe_Ui_DialogAdvance3(Dialog* self, u32 arg2, u32 arg3, int arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Third dialog/page state-machine variant, using the +0x120 mask and page object at self+0x47.",
+  "confidence": 0.4,
+  "evidence": "Same structure as 0x166DBC/0x167088 but reads self->f_120 and the page vtable at self[0x47]; calls func_00612570(world,id) for command 3. Ghidra reports overlapping instructions, so only the dispatch shape is certain."
+ },
+ {
+  "address": "0x001675C0",
+  "name": "Text_SetListEntryNameArg",
+  "signature": "void Text_SetListEntryNameArg(Dialog* self, int index, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index",
+   "param_3": "arg3"
+  },
+  "summary": "Selects a 0x14-byte list entry by index, installs the current actor name as message argument 5, and copies the entry strings into the dialog text buffers.",
+  "confidence": 0.5,
+  "evidence": "Bounds-checks index against the record count at self->f_4c0->f_60, indexes the 0x14-stride table at +0x58, then does the same Message_SetArg(5, actor+0xca, 0) and func_00707C1C copies as Text_SetSpeakerNameArg. self->f_4bd selects which of the four entry words is used."
+ },
+ {
+  "address": "0x0016D820",
+  "name": "Container_DestroyList",
+  "signature": "void Container_DestroyList(Container* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destroys a container: releases the owned object at +0xe4 and walks the intrusive list at +0x110, invoking each element's virtual destructor.",
+  "confidence": 0.5,
+  "evidence": "Calls (**(code**)(*self->f_e4+4))() then clears f_e4. Walks piVar3=self->f_110 while *piVar3 != self->f_10c, calling (**(code**)(*elem+4))() on each. The +0x10c/+0x110 pair is an intrusive sentinel list; the slot +4 is the virtual destructor."
+ },
+ {
+  "address": "0x00174E40",
+  "name": "maybe_Field_UpdateEffectSlots",
+  "signature": "void maybe_Field_UpdateEffectSlots(FieldSlots* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Walks the 0x50x5 effect/action slot array at +0xe8 and either fires the slot callback or retires the slot through func_0016911C.",
+  "confidence": 0.4,
+  "evidence": "Outer loop iVar7=self->f_124..0x4f, inner 5 columns of 0x8c bytes. A live slot has an actor pointer at +0, state 1..0x19 at +0x88, flags at +0x10/+0x11 and a callback index at +0x7c. It resolves the actor via func_0035EB98 and calls func_00639954(actor,8/10) to test states before dispatching. The 0x50*5*0x8c layout is a fixed field effect/action table."
+ },
+ {
+  "address": "0x0017505C",
+  "name": "maybe_Battle_ResetActionSlots",
+  "signature": "void maybe_Battle_ResetActionSlots(FieldSlots* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Compacts the live entries of the 0x50x5 slot array from +0xe8 into +0xec and reinitialises the freed slots to 0/-1 with state 6.",
+  "confidence": 0.4,
+  "evidence": "Two parallel 0x50*0x2c8 arrays at self->f_e8 and self->f_ec; each row has five 0x8c records. The function copies live rows, clears the rest (0xffffffff sentinels, state 6, flags 0/1) and retires actors whose state matches the 0x7/0x8 or f_e4==5 checks. The same slot layout as maybe_Field_UpdateEffectSlots."
+ },
+ {
+  "address": "0x0017AF74",
+  "name": "Container_SortRecordsAsc",
+  "signature": "void Container_SortRecordsAsc(Container* self, u32 compareCtx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "compareCtx"
+  },
+  "summary": "Sorts the 8-byte record array at self+8 (count at self+0x10) in ascending order with the comparison function func_0071428C.",
+  "confidence": 0.5,
+  "evidence": "Calls func_00719750 (the bulk sort) over count=(end-start)>>3, then insertion-sorts the tail with func_00716C88 and func_0071428C. The element size 8 and the comparator context arg2 are explicit. 0x17B074 is the same routine with the descending comparator 0x7143A8."
+ },
+ {
+  "address": "0x0017B074",
+  "name": "Container_SortRecordsDesc",
+  "signature": "void Container_SortRecordsDesc(Container* self, u32 compareCtx)",
+  "params": {
+   "param_1": "self",
+   "param_2": "compareCtx"
+  },
+  "summary": "Sorts the 8-byte record array at self+8 in descending order with the comparison function func_007143A8.",
+  "confidence": 0.5,
+  "evidence": "Byte-for-byte twin of 0x17AF74 with func_00719B24/func_00716EDC/func_007143A8 instead of 0x719750/0x716C88/0x71428C. Same 8-byte element size and count field at +0x10."
+ },
+ {
+  "address": "0x0017B174",
+  "name": "Shop_BuildFilteredItemList",
+  "signature": "void Shop_BuildFilteredItemList(ItemList* out, u32 actorId, int filterIndex)",
+  "params": {
+   "param_1": "out",
+   "param_2": "actorId",
+   "param_3": "filterIndex"
+  },
+  "summary": "Builds an 8-byte-per-entry item list for the given actor and filter: collects owned inventory items and current-area shop items whose ids fall in the item ranges and pass the selected filter callback.",
+  "confidence": 0.5,
+  "evidence": "Writes u16 id, u8 type, u8 slot, u8 value, u8 flag entries to out+8 with count at out+0x10. Filters ids with (id-0xa4 < g_0017B598) or (id-0xb19 < 4), tests func_0066C1A8(item,actor) and the callback g_0017B58C[filterIndex*4]. Reads the party inventory through func_00629150/func_00629890 and the area shop through func_0066AD10/func_0066ACC0."
+ },
+ {
+  "address": "0x0017B59C",
+  "name": "Shop_BuildFilteredItemListByParty",
+  "signature": "void Shop_BuildFilteredItemListByParty(ItemList* out, u32 actorId, int filterIndex)",
+  "params": {
+   "param_1": "out",
+   "param_2": "actorId",
+   "param_3": "filterIndex"
+  },
+  "summary": "Party-scoped variant of Shop_BuildFilteredItemList: filters the actor's own inventory and the area shop into the same 8-byte list format.",
+  "confidence": 0.5,
+  "evidence": "Same output layout and id ranges as 0x17B174, but iterates func_00629150/func_00629890 on the resolved actor first and uses the alternate filter table g_0017B980. Additional check func_0066C5CC skips entries the actor cannot use."
+ },
+ {
+  "address": "0x0017B994",
+  "name": "maybe_Party_BuildActorIndex",
+  "signature": "u32* maybe_Party_BuildActorIndex(u32* out, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "out",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Initialises a small descriptor and fills the global reverse index g_0017BA00 with the actor slot for each id returned by func_0066B0E4.",
+  "confidence": 0.45,
+  "evidence": "Body writes out[0]=arg3, out[1]=0xff, out[2..4]=0, then for i=0..0x1e calls func_0066B0E4(world,i) and stores i at g_0017BA00[id*4] when id<0x1f. This is the inverse of the id-to-slot mapping used by the item list builders."
+ },
+ {
+  "address": "0x0017D350",
+  "name": "maybe_Ui_VisitWidgets",
+  "signature": "void maybe_Ui_VisitWidgets(Widget* root, int arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "root",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Walks the intrusive child list at root->f_120 and calls func_0053CD1C for each child whose vtable[1] type differs from the cached type id.",
+  "confidence": 0.4,
+  "evidence": "Iterates piVar6=root->f_120->f_10 while piVar6 != &f_120->f_10; each node's +8 is a widget, filters (widget->f_11 & 1) and vtable[1] != g_0017D3EC, then func_0053CD1C(arg3, *(u32*)(arg2+4), widget, arg4) and stores the result back at arg2+4. The sentinel-list + vtable shape is UI widget traversal."
+ },
+ {
+  "address": "0x0017E8FC",
+  "name": "Ui_WorldMap_Load",
+  "signature": "void Ui_WorldMap_Load(WorldMap* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Loads the world-map UI resources for the current map: builds \"ui/map/%s\" and \"ui/map/world_map_%c_%s.pack\" names, loads them through the pack/resource manager and swaps the handles into +0x44/+0x5c.",
+  "confidence": 0.7,
+  "evidence": "Strings s_ui_map__s_0017EC50 and s_ui_map_world_map__c__s_pack_0017EC6C are formatted with func_006F0C10; the results go through func_003882F0, the pack lookup and func_0012416C/0x124DD0/0x1241D0. Callers include the named Ui_WorldMap_Setup (0x17DAD8). The %c argument is 0x61/0x62 selected by world+0x27508."
+ },
+ {
+  "address": "0x0017ED3C",
+  "name": "Ui_WorldMap_LoadVariant",
+  "signature": "void Ui_WorldMap_LoadVariant(WorldMap* self, int arg2, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Alternate world-map loader that also toggles the map's cursor/visibility state through func_00621644 and func_00621324 before loading the same ui/map resources.",
+  "confidence": 0.6,
+  "evidence": "Same ui/map/%s and ui/map/world_map_%c_%s.pack strings and pack-handle swapping as Ui_WorldMap_Load, preceded by func_00621644(self->f_20, ...) and func_00621324(self->f_20, ...) guarded by func_002BD04C. Ghidra lost some registers, but the resource path is unambiguous."
+ },
+ {
+  "address": "0x0017EDE0",
+  "name": "Ui_WorldMap_LoadVariant2",
+  "signature": "void Ui_WorldMap_LoadVariant2(WorldMap* self, u32 arg2, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Third world-map loader variant; loads the ui/map resource pair and updates the map handles without the cursor toggles of Ui_WorldMap_LoadVariant.",
+  "confidence": 0.6,
+  "evidence": "Contains the same s_ui_map__s_0017EC50 and s_ui_map_world_map__c__s_pack_0017EC6C format strings and the identical func_003882F0 -> pack lookup -> func_0012416C/0x124DD0 sequence. No direct callers, so it is likely a page-specific entry point."
+ },
+ {
+  "address": "0x0017FD10",
+  "name": "maybe_Ui_WorldMapMarker_Init",
+  "signature": "int maybe_Ui_WorldMapMarker_Init(u32* out, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "out",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Initialises a world-map marker/cursor object: stores the id, allocates the 0x10-byte sub-object, and fills the position/scale fields with the -4096 sentinel and the default flags.",
+  "confidence": 0.4,
+  "evidence": "Sets *out=arg2, calls func_0036B45C(out+1,0,0x10), then writes many 0xfffff000 sentinels to +0x40..+0x78, flags +0x88..+0x90, and copies g_0017FE54 into +0x94..+0xa0. func_006722C4 initialises the +0x20 sub-object. The field pattern matches the world-map icon/cursor data used by the Ui_WorldMap_Load family."
+ },
+ {
+  "address": "0x00180C90",
+  "name": "Field_SpawnObject",
+  "signature": "void Field_SpawnObject(MapObject* self, PlacementRecord* rec)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec"
+  },
+  "summary": "Initialises a map object from a placement record: copies position/direction, resolves the model pair, and sets up the animation/attach sub-objects.",
+  "confidence": 0.5,
+  "evidence": "Copies rec->f_12/f_14 (x/y), f_16/f_18 (direction/scale), f_1a/f_1c (model pair) and f_20 (object id) into self->f_230..f_244 and self->f_78..f_80. Calls func_00319848(rec->f_1c, rec->f_1a), func_0029E41C, then func_0018057C(self,rec+8) and func_0018031C(self,rec+8,rec). The same record layout is used by the map placement decoder."
+ },
+ {
+  "address": "0x00180D7C",
+  "name": "Field_SpawnObjectVariant",
+  "signature": "void Field_SpawnObjectVariant(MapObject* self, PlacementRecord* rec, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Fuller map-object spawn path: additionally selects an alternate position/orientation row from the 0x18-byte variant table and stores the variant index.",
+  "confidence": 0.5,
+  "evidence": "Same field copies as Field_SpawnObject but reads rec->f_22/f_24/f_26/f_28/f_29/f_30/f_31/f_32/f_34/f_38. When rec->f_10 != 0 it indexes the 0x18-stride table at self->f_248 and compares row->f_14 with world+0x27508, then writes self->f_2a8/f_2a4 and the chosen position. Calls func_005E7848 to start the object."
+ },
+ {
+  "address": "0x00180FE0",
+  "name": "Field_SpawnObjectCompact",
+  "signature": "void Field_SpawnObjectCompact(MapObject* self, CompactPlacement* rec)",
+  "params": {
+   "param_1": "self",
+   "param_2": "rec"
+  },
+  "summary": "Initialises a map object from the compact placement form (three shorts at +2/+4/+6 plus a model pair), used for simple props and NPCs.",
+  "confidence": 0.5,
+  "evidence": "Reads rec+2, rec+4, rec+6 as x/y/direction, rec->f_c and rec+10 as the model pair, and rec->f_10 as the object id. Sets self->f_234=1 (compact marker), resolves func_00319848(rec->f_c, rec+10) and clears the animation fields. The compact layout matches the 68-byte placement records documented for the level editor."
+ },
+ {
+  "address": "0x001811BC",
+  "name": "maybe_Field_StartObject",
+  "signature": "void maybe_Field_StartObject(MapObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Starts a spawned map object: applies the position/rotation, selects animation 1, and queues the object for the scene graph when it has a model.",
+  "confidence": 0.4,
+  "evidence": "Calls func_005F34F0(self,&self->f_238), func_005F36E0(self,self->f_244,1), clears f_2a8, sets f_2b5=1, and only calls func_005E7848(self,1,0) when f_248 or f_24c is non-zero. 0x5F34F0/0x5F36E0 are the transform/animation setters used by the spawn family."
+ },
+ {
+  "address": "0x0018215C",
+  "name": "maybe_Model_SetupObject",
+  "signature": "void maybe_Model_SetupObject(MapObject* self, ModelRef* primary, ModelRef* fallback)",
+  "params": {
+   "param_1": "self",
+   "param_2": "primary",
+   "param_3": "fallback"
+  },
+  "summary": "Chooses the model/attachment record from the primary or fallback reference, reads its model id, and copies the model transform and scale into the object.",
+  "confidence": 0.4,
+  "evidence": "Prefers *primary, falls back to *fallback; reads the relocatable array at +0x58, picks the row whose f_24 is present in world+0x27508 and f_26 matches. Copies row+8/+0xc/+0x10 into self->f_9c/f_a0/f_a4, calls func_005F6C4C(self,&row->f_14,1), func_00572D94/func_00574548 for the transform, and sets f_118=1. Called by nine map/UI object constructors."
+ },
+ {
+  "address": "0x00182AC4",
+  "name": "maybe_Map_UnlinkObject",
+  "signature": "void maybe_Map_UnlinkObject(MapObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "If the object's resource handle at +0x370 is still registered, calls the manager's release method and detaches the object.",
+  "confidence": 0.35,
+  "evidence": "Checks g_00182B24 against self->f_370>>0xb, verifies the handle slot at g_00182B28, gets the manager via func_003F422C and calls its vtable+0x40 with 4, then func_001836A0(self,0). The handle/slot test is the same pack-handle pattern used by the world-map loader."
+ },
+ {
+  "address": "0x001833E8",
+  "name": "maybe_Anim_PlayByName",
+  "signature": "int maybe_Anim_PlayByName(MapObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Plays the animation selected by self->f_313 from the string table at g_00183480, falling back to the first entry, then applies the frame delta at +0x374.",
+  "confidence": 0.4,
+  "evidence": "Calls func_005F7948(self, g_00183480[self->f_313]) and retries with g_00183480[0] if that fails. The g_00183480 table at 0x007A3C6C is an array of animation-name pointers whose first entries are \"Nut\" and \"Ecstacy\", so 0x5F7948 is a by-name animation/script lookup. The +0x374 frame delta is applied through func_005F7784."
+ },
+ {
+  "address": "0x00183918",
+  "name": "maybe_Map_UnlinkObject2",
+  "signature": "void maybe_Map_UnlinkObject2(MapObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant of maybe_Map_UnlinkObject that calls vtable+0x3c and passes the manager's byte at +0x220 to func_001836A0.",
+  "confidence": 0.35,
+  "evidence": "Same handle check against g_0018397C/g_00183980 and func_003F422C, but calls vtable+0x3c with 4 and then func_001836A0(self, (char)manager[0x88]). The two functions are the detach paths for two different object categories."
+ },
+ {
+  "address": "0x001849B4",
+  "name": "Field_LoadNpcIeResources",
+  "signature": "int Field_LoadNpcIeResources(FieldManager* self, u32 arg2, u32 arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Loads the NPC interaction tables \"npc_ie.bxon\" and \"book_ie.bxon\" into the field manager, caching the two pack handles and matching the entry whose event id is 0xf4 or 0x46.",
+  "confidence": 0.65,
+  "evidence": "Calls Fs_ResourceFindByName(self+4, s_npc_ie_bxon_0018523c) and then with s_book_ie_bxon_00185248. For each it walks the returned record list via vtable[0], checks entry[0x16]/entry[0x17], calls func_00570DF8, and stores the matching entry in self->f_10 (npc_ie, id 0xf4) or self->f_18 (book_ie, id 0x46), with the pack handle in self->f_14/f_1c."
+ },
+ {
+  "address": "0x00184D00",
+  "name": "Party_FindMemberByActor",
+  "signature": "void Party_FindMemberByActor(PartyWindow* self, u32 actorId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actorId"
+  },
+  "summary": "Finds the party slot whose actor id matches and asks the window to show that member.",
+  "confidence": 0.5,
+  "evidence": "Iterates func_00643504(world) (party count), reads each member's actor id from func_0035F6C0(world,i)+200, and on a match calls self->vtable[0x58] then func_001D809C(result, (self[10]<<16|1)+i). The party-member accessors are the same ones used by the shop list builders."
+ },
+ {
+  "address": "0x00184DB8",
+  "name": "Ui_PartySelectWindow_Setup",
+  "signature": "void Ui_PartySelectWindow_Setup(UiPartySelectWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initialises the party-select window panes, then selects and shows the pane for the current party count (1..12).",
+  "confidence": 0.6,
+  "evidence": "Calls the named Ui_PartySelectWindow_InitPanes (0x294530) and func_0029417C, sets self->f_40c=&self->f_410, queries the pane count through vtable+8, and if 1<=count<=12 calls func_003DFF34(self+count*0x50-4,1) and func_001A61FC(self,0,count-1,...). The caller name from N_002 makes the window identity explicit."
+ },
+ {
+  "address": "0x0018C1EC",
+  "name": "Container_SortIdsByName",
+  "signature": "void Container_SortIdsByName(u16* first, u16* last)",
+  "params": {
+   "param_1": "first",
+   "param_2": "last"
+  },
+  "summary": "Insertion-sorts a u16 id array by display name using Container_CompareIdNames.",
+  "confidence": 0.6,
+  "evidence": "Bulk-sorts with func_0071D530 then insertion-sorts with the comparator func_0018C4C0, exactly the same structure as the 8-byte record sorts 0x17AF74/0x17B074 but for 2-byte ids. The comparator resolves both ids through func_0061BD4C and compares the name records, so the ordering is by name."
+ },
+ {
+  "address": "0x0018C4C0",
+  "name": "Container_CompareIdNames",
+  "signature": "u32 Container_CompareIdNames(u16* a, u16* b, u16* unused)",
+  "params": {
+   "param_1": "a",
+   "param_2": "b",
+   "param_3": "unused"
+  },
+  "summary": "Compares two ids by their resolved name records; returns 1 when a sorts after b and 0 otherwise, with missing records sorting last.",
+  "confidence": 0.6,
+  "evidence": "Calls func_0061BD4C(&recA,*a) and func_0061BD4C(&recB,*b), then compares CONCAT22(recA->f_e,idA) <= CONCAT22(recB->f_e,idB). func_0061BD4C is the id-to-name-record resolver used by the message code, so f_e is the name comparison key."
+ },
+ {
+  "address": "0x0018C6B4",
+  "name": "maybe_Text_MeasureCache",
+  "signature": "void maybe_Text_MeasureCache(int* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Rebuilds the text-layout cache: allocates the 0x80-filled scratch buffer, walks every text entry and accumulates two measured sizes plus a zero-size count.",
+  "confidence": 0.4,
+  "evidence": "Uses the lazy-init flag g_0018C7A8 and buffer pointer g_0018C7AC, then func_00383B24 (entry count), func_00383D2C, func_00383D3C (entry getter) and two calls to func_0018D5A0 per entry. Writes total, count and zero-count into out[0..3]. The func_0038xxxx helpers are the font/text layout module, so this is a measurement/cache rebuild."
+ },
+ {
+  "address": "0x0018CC14",
+  "name": "maybe_Text_ThrowError",
+  "signature": "void maybe_Text_ThrowError(TextError* err)",
+  "params": {
+   "param_1": "err"
+  },
+  "summary": "Throws a text/font error: resolves actor 0, then long-jumps through func_00100B74 with the error object at err+4.",
+  "confidence": 0.35,
+  "evidence": "Calls func_0035EB98(world,0) and then func_00100B74(err+4), which Ghidra marks as non-returning. The same func_00100B74 is the throw target of the text helpers 0x18CEA4/0x18D24C/0x18D5A0, so this is the error path of the font/text module."
+ },
+ {
+  "address": "0x0018CEA4",
+  "name": "maybe_Text_Throw",
+  "signature": "void maybe_Text_Throw(void)",
+  "params": {},
+  "summary": "Non-returning text/font error throw with no payload.",
+  "confidence": 0.3,
+  "evidence": "Single call to func_00100B74, marked as not returning. Called by 0x192644, which copies a 0x84-byte text record before throwing; the exact error kind is not encoded in this wrapper."
+ },
+ {
+  "address": "0x0018D0CC",
+  "name": "maybe_Text_InitStringRef",
+  "signature": "void maybe_Text_InitStringRef(TextRef* out, u32 unused, u32 arg3, u32 arg4, u32 textId)",
+  "params": {
+   "param_1": "out",
+   "param_2": "unused",
+   "param_3": "arg3",
+   "param_4": "arg4",
+   "param_5": "textId"
+  },
+  "summary": "Fills a three-word text reference: two caller words plus the hash/lookup of textId with selector 0xe.",
+  "confidence": 0.4,
+  "evidence": "Body: out[0]=arg3; out[1]=arg4; out[2]=func_0051BB08(arg5,0xe,0xffffffff). 0x51BB08 is the same hash/checksum helper used for save sections, here keyed by selector 0xe, so out[2] is a resolved text/string handle."
+ },
+ {
+  "address": "0x0018D1C4",
+  "name": "Ui_IsMode",
+  "signature": "u32 Ui_IsMode(u32 mode)",
+  "params": {
+   "param_1": "mode"
+  },
+  "summary": "Returns 1 when the global UI mode byte at world+0x2d1f8 equals mode, treating mode 3 as \"3 or higher\".",
+  "confidence": 0.55,
+  "evidence": "Reads *(u8*)(world+0x2d1f8); if arg1==3 it returns whether the byte is >=3, otherwise it compares for equality. Nine callers including Ui_ItemScreen_HandleInput (0x308548) and several 0x3F1xxx UI handlers, so this is the shared UI screen-mode test."
+ },
+ {
+  "address": "0x0018D214",
+  "name": "maybe_Field_SetModeValue",
+  "signature": "void maybe_Field_SetModeValue(int value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Stores value in the field manager at world+0x24a98+0x8760 and clears the previous buffer when value is 0.",
+  "confidence": 0.4,
+  "evidence": "Writes *(int*)(g_0018D248 + world + 0x24a98) = value; g_0018D248 is 0x00008760. When value==0 it first calls func_00111498(world+0x24a98) (a reset/free helper). The 0x8760 offset is inside the same field-manager block used by the map code."
+ },
+ {
+  "address": "0x0018D24C",
+  "name": "maybe_Text_ThrowArg",
+  "signature": "void maybe_Text_ThrowArg(u32 unused, u32 errorArg)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "errorArg"
+  },
+  "summary": "Non-returning text/font error throw carrying one argument.",
+  "confidence": 0.3,
+  "evidence": "Tail-calls func_00100B74(errorArg), the same non-returning throw used by maybe_Text_ThrowError and maybe_Text_Throw. Only the argument is passed; the error type is supplied by the caller."
+ },
+ {
+  "address": "0x0018D380",
+  "name": "maybe_Party_RemoveMember",
+  "signature": "void maybe_Party_RemoveMember(Party* self, int index)",
+  "params": {
+   "param_1": "self",
+   "param_2": "index"
+  },
+  "summary": "Removes a party member by shifting the 0x98-byte member records down one slot and clearing the last record's 0x84-byte block.",
+  "confidence": 0.45,
+  "evidence": "Calls func_00116C10(self+index*0x98, self+(index+1)*0x98, (0x13-index)*0x98) (memmove over 20 slots), then func_00116AE0(&self->f_b48,0x84) and clears f_bd0/f_bd4/f_bd8/f_bd9. The 0x98-byte record stride matches the party member records used by 0x184D00."
+ },
+ {
+  "address": "0x0018D5A0",
+  "name": "maybe_Text_ThrowNoReturn",
+  "signature": "void maybe_Text_ThrowNoReturn(void)",
+  "params": {},
+  "summary": "Non-returning text/font error throw used by the text measurement code.",
+  "confidence": 0.3,
+  "evidence": "Single call to func_00100B74, marked non-returning. Called twice per entry by maybe_Text_MeasureCache, so it is the measurement module's error path."
+ },
+ {
+  "address": "0x0018D648",
+  "name": "maybe_Ui_BuildListEntries",
+  "signature": "void maybe_Ui_BuildListEntries(u32 tableId)",
+  "params": {
+   "param_1": "tableId"
+  },
+  "summary": "Builds UI list rows from a 0xc-byte record table: resolves each name/icon, computes the text width and submits the row to func_006121B4.",
+  "confidence": 0.4,
+  "evidence": "Gets the table via func_0063F0B8(world,tableId), walks 0xc-stride rows, copies the name with func_00100A74, resolves the icon with func_00149814/func_00158F94 and the text width with func_0015141C/func_0063DB5C, then calls func_006121B4(world,&row,0). The row fields +5/+6/+10 are the icon/colour/type bytes."
+ },
+ {
+  "address": "0x0018E3D0",
+  "name": "maybe_Ui_PickSizeStep",
+  "signature": "u32 maybe_Ui_PickSizeStep(UiLayout* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Chooses one of the descending steps 400/200/150/100/50/40/10/0 for the current layout, zeroing steps outside the object's [f_a, f_b] range.",
+  "confidence": 0.3,
+  "evidence": "Builds local_30 = {0,400,200,0x96,100,0x32,0x28,10}, zeroes entries outside [self+10, self->f_b], and calls func_005F9650(table,8,0) to pick a step. The thresholds look like UI sizes/scales; no callers, so the exact consumer is unknown."
+ },
+ {
+  "address": "0x0018E6C4",
+  "name": "maybe_Ui_IsMenuOpen",
+  "signature": "u32 maybe_Ui_IsMenuOpen(void)",
+  "params": {},
+  "summary": "Returns 1 when both the UI singleton and the current menu/actor query report an active object.",
+  "confidence": 0.35,
+  "evidence": "Gets a singleton with func_006F2224, tests func_00383A80(singleton) != 0, then func_0062A38C(world+0x24a98) != 0. Both are UI/menu state queries; four UI callers use it as a guard."
+ },
+ {
+  "address": "0x0018E934",
+  "name": "Item_PickRandomByCategory",
+  "signature": "short Item_PickRandomByCategory(u32 category, u32 actorId)",
+  "params": {
+   "param_1": "category",
+   "param_2": "actorId"
+  },
+  "summary": "Picks a random owned item from the 0xa4.. id range whose data category matches, walking backwards through category values when none is available.",
+  "confidence": 0.55,
+  "evidence": "Scans item ids 0xa4..g_0018EB40, tests the inventory bitmask at world+0x295c8, resolves each id with func_0063CDD8 and keeps entries whose f_d == category and f_10 == 0. The candidate list is then randomly indexed with func_0051B1FC(actorId,0x7fffffff) and func_0011CD80; returns 0xa4 when nothing is found. Called from the item reward/drop path 0x18D7C4."
+ },
+ {
+  "address": "0x0018FF88",
+  "name": "Ui_ItemList_RemoveItem",
+  "signature": "u32 Ui_ItemList_RemoveItem(ItemScreen* self, u32 itemId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "itemId"
+  },
+  "summary": "Removes itemId from the screen's two u16 selection lists, decrements the remaining-count field and recalculates the derived stats.",
+  "confidence": 0.5,
+  "evidence": "Looks up the item record with func_0063CF74(world,itemId); searches self->f_122..f_19a and self->f_1a2..f_1be for the id, shifts the tails down, and subtracts *(u8*)(record+6) from self->f_e6. Calls func_00191E3C/func_0019201C to rebuild the display and stats. The two parallel u16 lists are the item and equipment selections."
+ },
+ {
+  "address": "0x0019054C",
+  "name": "Ui_ItemList_RemoveMatching",
+  "signature": "void Ui_ItemList_RemoveMatching(ItemScreen* self, u32 predicate)",
+  "params": {
+   "param_1": "self",
+   "param_2": "predicate"
+  },
+  "summary": "Scans the screen's item list and removes every entry accepted by func_003AA574.",
+  "confidence": 0.5,
+  "evidence": "Iterates i from self+0x122 to self+0x19a, calls func_003AA574(*(u8*)(self+200), *i, predicate) and on a non-zero result calls Ui_ItemList_RemoveItem(self,*i). The 0x122..0x19a range is the same item selection list."
+ },
+ {
+  "address": "0x001905AC",
+  "name": "maybe_Ui_Equipment_ClearSlots",
+  "signature": "u32 maybe_Ui_Equipment_ClearSlots(ItemScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Clears the six equipment-slot bytes at +0x11c to 0xff and recalculates the display/stats.",
+  "confidence": 0.4,
+  "evidence": "Sets six bytes starting at self+0x11c to 0xff, then calls func_00191E3C and func_0019201C. The same six-byte slot array at +0x11c is walked by 0x1916A8 and 0x192A30, so it is the equipment-slot list."
+ },
+ {
+  "address": "0x00190A7C",
+  "name": "Text_AdvanceTyping",
+  "signature": "u16 Text_AdvanceTyping(MessageText* self, int delta)",
+  "params": {
+   "param_1": "self",
+   "param_2": "delta"
+  },
+  "summary": "Advances the typewriter effect: adds delta to the character timer, clamps it to the page limit, advances the visible-character counter across the next-line thresholds and notifies the message system.",
+  "confidence": 0.6,
+  "evidence": "Adds arg2 to self->f_dc, clamps against *g_00190B44, then while the threshold at g_000012D8+self is non-zero and <= f_dc it increments f_d8 and calls func_0019201C (the line-layout rebuild). Returns (oldVisible<<8)|newVisible. On a page change it calls the world vtable with command 0x20d. This is the standard text reveal timer."
+ },
+ {
+  "address": "0x00191120",
+  "name": "maybe_Ui_GetItemIconType",
+  "signature": "u32 maybe_Ui_GetItemIconType(int actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Maps the item/equipment category byte f_29 (0..9) of the selected entry to a 1..15 icon/display type, distinguishing the two compared entries.",
+  "confidence": 0.4,
+  "evidence": "Resolves two entries with func_006292F0(actor,0/1), then switches on entry0->f_29: 0..4 map to 1/3/5/7/9 and become +1 when entry1 has the same f_29; 5..9 map to 0xb..0xf. Returns 0xff when no entry is present. The category-to-icon mapping is UI presentation."
+ },
+ {
+  "address": "0x001912C8",
+  "name": "maybe_Party_CompactEquipmentSlots",
+  "signature": "void maybe_Party_CompactEquipmentSlots(Actor* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Compacts the actor's 0x18-slot equipment array at +0xec, removing empty slots and rebuilding the six-slot quick-equipment list.",
+  "confidence": 0.45,
+  "evidence": "Counts non-0xff entries in the 0x18 u16 slots at self+0xec, then for each empty slot calls func_00116A14 to shift the tail and writes 0xffff. For non-empty slots it calls func_00191470(self,i), rebuilds with func_0019201C/func_00191E3C, and calls func_00612008(world,oldId,1). The 0x18 slot count and +0xec base match the equipment list found at 0x1902CC."
+ },
+ {
+  "address": "0x001916A8",
+  "name": "Party_ValidateEquipment",
+  "signature": "void Party_ValidateEquipment(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Re-validates the six quick-equipment slots at +0x11c, dropping entries whose item is no longer owned and recalculating stats.",
+  "confidence": 0.5,
+  "evidence": "When world+0x27719 is set, loops i=0..5 over the signed byte self->f_11c[i], resolves the referenced u16 equipment id at self+0xec, checks func_0066C434 and func_00191470, then calls func_00191E3C and func_0019201C. The same six-slot array is cleared by Ui_Equipment_ClearSlots."
+ },
+ {
+  "address": "0x001924DC",
+  "name": "maybe_Party_RecalcAllStats",
+  "signature": "void maybe_Party_RecalcAllStats(Actor* self, u32 arg2, int command)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "command"
+  },
+  "summary": "When command 9 is issued, loops all party actors and recalculates the stats of each one that has an active equipment entry.",
+  "confidence": 0.4,
+  "evidence": "Calls func_00612418, then when arg3==9 iterates func_0066B0E4(world,i) for i<world+0x24a98's actor count, resolves each actor, tests the equipment flag byte at +0xcc and calls func_0019201C(actor+0xc8+4). The +0xc8 equipment block is the same one used by Party_AddEquipmentBonus."
+ },
+ {
+  "address": "0x0019259C",
+  "name": "maybe_Field_BuildIdBitmask",
+  "signature": "void maybe_Field_BuildIdBitmask(FieldState* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds a 32-bit-per-block presence bitmask at self+0x4b30 for the ids returned by func_0066C368.",
+  "confidence": 0.45,
+  "evidence": "Resolves a base id with func_0061BD4C, then loops offset 0..record->f_10, computes id=base+offset, resolves it, and if func_0066C368(base)==func_0066C368(id) sets bit (base+offset) in the word array at self+0x4b30. The 0x4b30 array is a large per-map id set."
+ },
+ {
+  "address": "0x00192644",
+  "name": "maybe_Text_DecodeName",
+  "signature": "void maybe_Text_DecodeName(u8* out, u32 src)",
+  "params": {
+   "param_1": "out",
+   "param_2": "src"
+  },
+  "summary": "Copies a 0x84-byte text record, decodes it through the font/text throw path, and returns the two result bytes.",
+  "confidence": 0.3,
+  "evidence": "Clears a 0x84-byte stack block, copies arg2 into it, calls func_0018CEA4 (the non-returning text helper) and stores local_16/local_15 into out[0]/out[1]. The 0x84-byte record is the same size as the text records in 0x18C6B4/0x18D380."
+ },
+ {
+  "address": "0x00192978",
+  "name": "maybe_Party_RecalcAllStats2",
+  "signature": "void maybe_Party_RecalcAllStats2(void)",
+  "params": {},
+  "summary": "Second recalculation pass over all party actors, rebuilding each actor's equipment-derived stats.",
+  "confidence": 0.4,
+  "evidence": "Calls func_0014E3C4 first, then the same actor loop as Party_RecalcAllStats: func_0066B0E4, resolve via func_0035EB98, test the +0xcc equipment flag and call func_0019201C(actor+0xcc). The different first call suggests a post-map-change variant."
+ },
+ {
+  "address": "0x00192A30",
+  "name": "maybe_Party_RecalcEquipment",
+  "signature": "void maybe_Party_RecalcEquipment(Actor* self, int command, int arg3)",
+  "params": {
+   "param_1": "self",
+   "param_2": "command",
+   "param_3": "arg3"
+  },
+  "summary": "Recalculates every actor's equipment-derived stats, and for command 0x211 additionally revalidates all six equipment slots of all 31 actors.",
+  "confidence": 0.45,
+  "evidence": "First loop mirrors 0x192978 over all actors. When command==0x211 and arg3!=0 it loops j=0..0x1e over actor records, then i=0..5 over the equipment slots at +0x11c, checks func_0066C434/func_00191470 and calls func_00191E3C/func_0019201C. Command 0x211 is the equipment-change message id."
+ },
+ {
+  "address": "0x00193098",
+  "name": "maybe_Party_ShiftSkillSlots",
+  "signature": "void maybe_Party_ShiftSkillSlots(Actor* self, u32 record)",
+  "params": {
+   "param_1": "self",
+   "param_2": "record"
+  },
+  "summary": "Shifts the 0x44-byte skill/ability slots at +0x92f4..+0x9448 down one entry and inserts the new record, or appends it when the list is full.",
+  "confidence": 0.35,
+  "evidence": "Checks the first byte at +0x92f4 != 0xff and the next three bytes != -1, then func_00100B74 (throw) when the slot chain is invalid. Copies 0x44-byte blocks with func_00116C10 at offset (g_00193178>>31)*-0x44, otherwise calls func_00192DEC and copies into +0x9404. The 0x44 stride matches the skill/ability records."
+ },
+ {
+  "address": "0x00193450",
+  "name": "maybe_Ui_InitTransform",
+  "signature": "void maybe_Ui_InitTransform(void)",
+  "params": {},
+  "summary": "Initialises a 0x24-byte transform/rectangle on the stack through func_006722C4; Ghidra loses the following control flow.",
+  "confidence": 0.25,
+  "evidence": "Only visible statements are local_24=0, func_006722C4(auStack_3c), then halt_baddata() due to overlapping instructions. 0x6722C4 is the transform/rect initialiser used by the world-map marker and UI code; the real work after it is unrecovered."
+ },
+ {
+  "address": "0x00193520",
+  "name": "maybe_Battle_CopyPartyData",
+  "signature": "void maybe_Battle_CopyPartyData(BattleParty* self, u32* record)",
+  "params": {
+   "param_1": "self",
+   "param_2": "record"
+  },
+  "summary": "Copies the 0x2e-word party/battle blocks from +0x8c7c down to +0x8bc4, then stores the incoming 0x2e-word record at +0x923c.",
+  "confidence": 0.4,
+  "evidence": "Loops copying 0x2e u32 words (0x84 bytes plus 11 words plus a byte) from self+0x8c7c to self+0x8bc4 until +0x92f4, then writes *arg2 to +0x923c and copies arg2+1 for 0x84 bytes plus the +0x22..+0x2d words. The fixed 0x2e-word stride matches the party battle records."
+ },
+ {
+  "address": "0x00193CE4",
+  "name": "Ui_ActionPane_Init",
+  "signature": "UiActionPane* Ui_ActionPane_Init(UiActionPane* self, u32 actionId, u32 arg3, const char* name, u8 arg5)",
+  "params": {
+   "param_1": "self",
+   "param_2": "actionId",
+   "param_3": "arg3",
+   "param_4": "name",
+   "param_5": "arg5"
+  },
+  "summary": "Initialises an action-pane object: installs the vtables, copies the command/name string (bounded to 15 bytes), and stores the action id, owner and style byte.",
+  "confidence": 0.55,
+  "evidence": "Sets self[0]=g_00193D78 and self[1]=g_00193D7C (the pane vtable pair), copies name via func_0011142C with length min(strlen+1,15), NUL-terminates, sets self[9]=arg3, self[8]=arg2 and *(u8*)(self+6)=arg5. Six callers are the named Ui_ActionPane_AnimCtor/Ui_ActionWindow_CreateChildren/Ui_ActionListWindow_InitPanes routines."
+ },
+ {
+  "address": "0x00194990",
+  "name": "Ui_ActionWindow_Setup",
+  "signature": "void Ui_ActionWindow_Setup(UiActionWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Sets up the action window: configures the scroll pane, initialises the six-slot action list and selects the first/last visible command.",
+  "confidence": 0.55,
+  "evidence": "Calls func_00622038(&self->f_2dc,...), sets the action state at self->f_3570 (+0x10=1, +0x30=1), func_002D5F54(...,6,-1,0), func_00648B7C(&self->f_11c,7), func_00479414, then chooses vtable command 5 or 0 at self->f_3574 depending on whether the list is empty. The 6-entry list and action-pane vtable match Ui_ActionPane_Init."
+ },
+ {
+  "address": "0x00194DF4",
+  "name": "Shop_BuyItem",
+  "signature": "u32 Shop_BuyItem(Shop* self, int itemIndex, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "itemIndex",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Buys the selected shop item: reads its price, subtracts the price from the party's gold, updates the shop slot state and moves the window to the success state.",
+  "confidence": 0.6,
+  "evidence": "func_001DAD58(self+0x34d8,itemIndex+0x520) and func_0062F680 read the selected entry; func_00194A70(self, entry+0x51c) returns the price; func_00613FC0(world,-price) subtracts it (the clamped gold helper used by Party_SpendGold). Then func_0061B7A4/func_0061B724/func_003BE0E0 update the shop slot and the vtable at self+0x3574 gets command 4 or 6."
+ },
+ {
+  "address": "0x00194F7C",
+  "name": "Ui_ActionWindow_Destroy",
+  "signature": "void maybe_Ui_ActionWindow_Destroy(UiActionWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destroys the action window: drains the pending action queue, releases both scroll/list sub-objects and tears down the pane hierarchy.",
+  "confidence": 0.5,
+  "evidence": "while (func_0062F070(self)>0) func_0010EBD8(self); then func_00123594(self,self+0x34bc) and (self,self+0x34d8), func_003BDB94(self), func_002D20F4(self,1), and finally func_0029126C(self+0xbc8,1) (non-returning). The two released sub-objects are the shop list and detail panes used by Shop_BuyItem."
+ },
+ {
+  "address": "0x00195148",
+  "name": "maybe_Ui_ActionWindow_Destroy2",
+  "signature": "void maybe_Ui_ActionWindow_Destroy2(UiActionWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Alternate action-window teardown that additionally calls func_003BD148 before releasing the two sub-objects.",
+  "confidence": 0.45,
+  "evidence": "Same drain loop and func_00123594(self,self+0x34bc)/func_003BDB94/func_002D20F4 sequence as 0x194F7C, with func_003BD148(self) inserted and only the +0x34bc sub-object released. Likely the equipment-window variant of the same destructor."
+ },
+ {
+  "address": "0x00195274",
+  "name": "Shop_CanAfford",
+  "signature": "u32 Shop_CanAfford(Shop* self, int itemIndex, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "itemIndex",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Checks whether the party can pay for the selected shop item and moves the window to the affordable/unaffordable state.",
+  "confidence": 0.55,
+  "evidence": "Reads the selection with func_001DAD58/func_0062F680, gets the price via func_00194A70, and compares *(u32*)(world+0x24ac0) (the gold field used by Party_SpendGold) with the price. Sets vtable command 2 when gold is insufficient and 3 when it is enough."
+ },
+ {
+  "address": "0x00195560",
+  "name": "maybe_Ui_ActionWindow_InitSlots",
+  "signature": "void maybe_Ui_ActionWindow_InitSlots(UiActionWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initialises the six action slots and their pane children, copying the per-slot icon/style bytes from the five helper lookups.",
+  "confidence": 0.45,
+  "evidence": "Calls vtable+0x54(self,0x2f,-1), func_00622038(self+0xc1c,...), func_002D5F54(...,6,-1,0), sets self->f_3570->f_30=1, then loops six slots and fills bytes from func_001A5AE4(0..4) and func_001A5B28. The 6-slot loop and +0x3570 action state match Ui_ActionWindow_Setup."
+ },
+ {
+  "address": "0x001956A8",
+  "name": "maybe_Ui_ItemDetail_Setup",
+  "signature": "void maybe_Ui_ItemDetail_Setup(UiActionWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Fills the item-detail pane from the selected action entry: copies the actor/status block, builds message argument 6 and updates the detail labels.",
+  "confidence": 0.45,
+  "evidence": "Uses self->f_3570->f_51c as the selected entry, Message_SetArg(5, ...), then copies a large actor/status snapshot (0x200, 0x68, 0x78, 0xf00 bytes) into stack buffers and calls Message_SetArg(6, ...) plus func_003BD148 and func_001A6460 (the named Ui_Pane_SetVisibleWithAnim). The many field copies are the item/character detail layout."
+ },
+ {
+  "address": "0x00196A68",
+  "name": "maybe_Ui_GetListItem",
+  "signature": "int* maybe_Ui_GetListItem(int* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Returns a pointer to the selected 0xf-word list item when the list has a current selection, else NULL.",
+  "confidence": 0.35,
+  "evidence": "If (char)list[5] != 0 it calls vtable+0x44(list) to get the index and returns list + index*0xf + 0x1b. The 0xf-word (60-byte) item stride matches the UI list rows; no callers were found, so it is probably an inline accessor."
+ },
+ {
+  "address": "0x00197254",
+  "name": "Ui_MessagePage_UpdatePager",
+  "signature": "void Ui_MessagePage_UpdatePager(MessagePage* self, u16 pageCount)",
+  "params": {
+   "param_1": "self",
+   "param_2": "pageCount"
+  },
+  "summary": "Updates the message page's pager: lays out the lines, counts party members, sets the page/line counters and shows/hides the icon_next and icon_prev buttons.",
+  "confidence": 0.6,
+  "evidence": "Calls the named Text_LayoutLines (0x1965FC), counts actors via func_0066B0E4/func_0035EB98/func_0062917C, sets f_144 = (partyCount>4)+1 and f_140=1, formats two pane strings with func_006F0D9C/func_001A6680, then fetches the panes s_icon_next_001973E8 and s_icon_prev_001973F4 and sets their f_44 visibility bit from 1<f_144."
+ },
+ {
+  "address": "0x00197CF4",
+  "name": "maybe_Ui_BuildStatusList",
+  "signature": "void maybe_Ui_BuildStatusList(UiList* self, int* ids, u32 arg3, int count)",
+  "params": {
+   "param_1": "self",
+   "param_2": "ids",
+   "param_3": "arg3",
+   "param_4": "count"
+  },
+  "summary": "Builds a two-word-per-entry status list from an id array, reading each entry's value from world+0x2aaf4 and notifying the list vtable.",
+  "confidence": 0.4,
+  "evidence": "Scans up to 8 ids from arg2, stops at -1, and for each writes id and *(u16*)(world + id*0x8c + 0x2aaf4) to self+0x2c. Sets self->f_6c = entry count, then calls the vtable at g_005C3400[self->f_c]+0x10 with the new list. The 0x8c stride is the actor record used throughout."
+ },
+ {
+  "address": "0x0019903C",
+  "name": "maybe_Ui_MenuUpdate",
+  "signature": "void maybe_Ui_MenuUpdate(MenuScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Per-frame menu update: advances the repeat timer, polls the input/action object and hands control to the list update and scroll routines.",
+  "confidence": 0.4,
+  "evidence": "Calls self->f_98->f_2c (per-frame callback), decrements the repeat counter f_1164 when positive, queries self->f_10d0 vtable+0x28/+0x2c, checks input flag 0x20 in f_1bc, then calls func_006D7630(&f_120), func_00229BF4(&f_e20), func_0019B950(self) and func_00294518(&f_1c4,f_20c). The f_1bc input flags are the same ones used by the equipment list handlers."
+ },
+ {
+  "address": "0x00199A10",
+  "name": "maybe_Ui_EquipmentList_Update",
+  "signature": "void maybe_Ui_EquipmentList_Update(EquipmentScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Handles input for the equipment list: scrolls the selected row, updates the description/message arguments and opens the item detail pane.",
+  "confidence": 0.45,
+  "evidence": "When f_1bc bit 2 is clear it calls func_001A60A0(self+0xa08, ...), resolves the selected actor with func_0066C668/func_0064E010 and calls func_0022A144(&f_e20,...). For bit 0x102 it sets Message_SetArg(3, actor+0xca, 0) and invokes the detail vtable at f_10d0. The same f_1bc bits drive 0x199B60."
+ },
+ {
+  "address": "0x00199B60",
+  "name": "maybe_Ui_EquipmentList_Scroll",
+  "signature": "void maybe_Ui_EquipmentList_Scroll(EquipmentScreen* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Scrolls the equipment list with wrap-around, updates the two visible columns and refreshes the selected-entry message.",
+  "confidence": 0.45,
+  "evidence": "Same f_1bc bit tests and func_001A60A0/func_0064E054/func_0064E010 selection logic as 0x199A10. It computes the new row with wrap (iVar4<0 -> last, >=count -> 0) and calls func_006E57E4(page,row*0xc,1); for bit 0x102 it sets Message_SetArg(3,...), func_001A62C0, func_003E5D7C, func_001235A4 and func_006D7508."
+ },
+ {
+  "address": "0x0019A514",
+  "name": "maybe_Ui_EquipmentList_UpdateLayout",
+  "signature": "void maybe_Ui_EquipmentList_UpdateLayout(EquipmentScreen* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the two equipment-list panes after a selection change, recomputing the visible row and the pane scroll offsets.",
+  "confidence": 0.4,
+  "evidence": "Calls func_006E5628(&f_ee0,...), selects between the f_654 and f_5f4 pane objects via func_0063B5E4/func_0063B60C/func_0063B638, computes the row from f_f2c*0xc and the pane's line height, clamps it with func_006E57E4, and calls func_003E5EA4/func_001A6460 (Ui_Pane_SetVisibleWithAnim). Same page objects as 0x199B60."
+ },
+ {
+  "address": "0x0019A774",
+  "name": "Ui_EquipmentWindow_UnequipSelectedItem",
+  "signature": "void Ui_EquipmentWindow_UnequipSelectedItem(EquipmentWindow* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Unequips the selected equipment slot: walks the actor equipment list backwards, clears each non-cursed slot with func_001901F4 and rebuilds the equipment window.",
+  "confidence": 0.5,
+  "evidence": "Uses func_001DAD58(self+0x1084,self+0x1a8) and func_0062F680/func_0062F694 to read the confirmed row; resolves the actor with func_0063B5A0(self+0x1c4)/func_0035EB98, walks the equipment list backwards with func_00629150/func_006292A4, and for entries without bit 0x80 calls func_001901F4 (which shifts the 0x18-slot equipment array at +0xec and clears a slot) and func_00612008 before the named Ui_EquipmentWindow_Confirm (0x1994F4)."
+ }
+]

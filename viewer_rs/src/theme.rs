@@ -31,10 +31,68 @@ pub const COL_ADDR: Color32 = Color32::from_rgb(0xe8, 0xb8, 0x4b);
 pub const COL_PUNCT: Color32 = Color32::from_rgb(0x88, 0x92, 0xa6);
 pub const MONO: Color32 = Color32::from_rgb(0xc9, 0xd3, 0xe0);
 
+// ---------------------------------------------------------------------------
+// filled controls: readable text on light / saturated backgrounds
+// ---------------------------------------------------------------------------
+
+/// Ink for light fills. `#111` (not pure black) keeps the look softer while
+/// still clearing WCAG AA on every fill in this palette (amber is ~10:1).
+pub const ON_LIGHT: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
+/// Ink for dark fills.
+pub const ON_DARK: Color32 = Color32::WHITE;
+
+/// WCAG 2.x relative luminance of an opaque colour (0.0 black .. 1.0 white).
+pub fn relative_luminance(color: Color32) -> f32 {
+    fn linear(channel: u8) -> f32 {
+        let v = channel as f32 / 255.0;
+        if v <= 0.039_28 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    0.2126 * linear(color.r()) + 0.7152 * linear(color.g()) + 0.0722 * linear(color.b())
+}
+
+/// WCAG contrast ratio between two opaque colours: 1.0 (identical) .. 21.0
+/// (black on white). AA body text needs >= 4.5:1.
+pub fn contrast_ratio(a: Color32, b: Color32) -> f32 {
+    let (la, lb) = (relative_luminance(a), relative_luminance(b));
+    let (hi, lo) = if la >= lb { (la, lb) } else { (lb, la) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+/// Text colour for a filled surface: dark ink on light fills, white on dark
+/// ones, whichever actually measures better contrast.
+///
+/// This exists because `egui::Button::fill` keeps the fill in *every* state
+/// (inactive, hovered, pressed), so the default light label can land on amber
+/// and drop to ~1.8:1. Deriving the ink from the fill keeps hover and pressed
+/// readable too. The theme has no light mode (`apply` uses `Visuals::dark`),
+/// but the rule only depends on the fill, so it would hold there as well.
+pub fn text_on(fill: Color32) -> Color32 {
+    if contrast_ratio(ON_LIGHT, fill) >= contrast_ratio(ON_DARK, fill) {
+        ON_LIGHT
+    } else {
+        ON_DARK
+    }
+}
+
+/// A filled (saturated) button whose label stays readable in every state.
+///
+/// Use this instead of `Button::new(..).fill(..)` for `ACCENT`, `WARN`, `OK`,
+/// `INFO` and any other light fill. Hover/pressed feedback is the theme's
+/// border stroke plus the pointing-hand cursor, because the fill itself is
+/// pinned; the label colour is pinned too, so contrast cannot regress.
+pub fn filled_button(text: impl Into<String>, fill: Color32) -> egui::Button<'static> {
+    let label = egui::RichText::new(text.into())
+        .color(text_on(fill))
+        .strong();
+    egui::Button::new(label).fill(fill)
+}
+
 pub fn accent_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
-    let button = egui::Button::new(egui::RichText::new(label).color(Color32::from_rgb(0x16, 0x18, 0x1d)))
-        .fill(ACCENT);
-    ui.add(button)
+    ui.add(filled_button(label, ACCENT))
 }
 
 pub fn dim_label(text: impl Into<String>) -> egui::RichText {
@@ -126,4 +184,88 @@ fn install_fonts(ctx: &egui::Context) {
         }
     }
     ctx.set_fonts(fonts);
+}
+
+#[cfg(test)]
+mod contrast_tests {
+    use super::*;
+
+    /// Every colour in this module that is used as a filled background behind
+    /// text (button fills, badges, chips, selected rows). `text_on` must give
+    /// each of them an AA-readable label.
+    const FILLS: &[(&str, Color32)] = &[
+        ("ACCENT", ACCENT),
+        ("ACCENT_DIM", ACCENT_DIM),
+        ("INFO", INFO),
+        ("WARN", WARN),
+        ("ERR", ERR),
+        ("OK", OK),
+        ("JP_TEXT", JP_TEXT),
+        ("BG_SELECT", BG_SELECT),
+        ("BG_HOVER", BG_HOVER),
+        ("BG_RAISED", BG_RAISED),
+        ("BG_PANEL", BG_PANEL),
+        ("BG_INPUT", BG_INPUT),
+        ("BORDER_LIGHT", BORDER_LIGHT),
+        ("COL_STRING", COL_STRING),
+        ("COL_KEYWORD", COL_KEYWORD),
+        ("COL_TYPE", COL_TYPE),
+        ("COL_NUMBER", COL_NUMBER),
+        ("COL_ADDR", COL_ADDR),
+        ("TEXT_DIM", TEXT_DIM),
+        ("TEXT_FAINT", TEXT_FAINT),
+    ];
+
+    #[test]
+    fn every_fill_gets_aa_readable_text() {
+        for (name, fill) in FILLS {
+            let ink = text_on(*fill);
+            let ratio = contrast_ratio(ink, *fill);
+            assert!(
+                ratio >= 4.5,
+                "{name} ({fill:?}) picks ink {ink:?} at only {ratio:.2}:1 (WCAG AA needs 4.5:1)"
+            );
+        }
+    }
+
+    #[test]
+    fn light_fills_use_dark_ink() {
+        assert_eq!(text_on(ACCENT), ON_LIGHT);
+        assert_eq!(text_on(WARN), ON_LIGHT);
+        assert_eq!(text_on(OK), ON_LIGHT);
+        assert_eq!(text_on(INFO), ON_LIGHT);
+        assert_eq!(text_on(ERR), ON_LIGHT);
+        assert_eq!(text_on(COL_STRING), ON_LIGHT);
+    }
+
+    #[test]
+    fn dark_fills_use_white_ink() {
+        assert_eq!(text_on(BG), ON_DARK);
+        assert_eq!(text_on(BG_PANEL), ON_DARK);
+        assert_eq!(text_on(BG_INPUT), ON_DARK);
+        assert_eq!(text_on(BG_SELECT), ON_DARK);
+        assert_eq!(text_on(ACCENT_DIM), ON_DARK);
+    }
+
+    /// Sanity-check the formula itself so a typo in the constants cannot make
+    /// the AA assertions above pass trivially.
+    #[test]
+    fn luminance_and_ratio_match_known_values() {
+        assert!(relative_luminance(Color32::BLACK).abs() < 1e-6);
+        assert!((relative_luminance(Color32::WHITE) - 1.0).abs() < 1e-6);
+        assert!((contrast_ratio(Color32::BLACK, Color32::WHITE) - 21.0).abs() < 0.01);
+        assert!((contrast_ratio(ACCENT, ACCENT) - 1.0).abs() < 1e-6);
+        // White on the amber Play button was the reported bug: ~1.8:1.
+        assert!(contrast_ratio(Color32::WHITE, ACCENT) < 2.0);
+    }
+
+    /// The two normal-text pairs that are not fills still need AA.
+    #[test]
+    fn body_and_accent_text_read_against_the_panels() {
+        assert!(contrast_ratio(TEXT, BG_PANEL) >= 4.5);
+        assert!(contrast_ratio(TEXT_DIM, BG_PANEL) >= 4.5);
+        assert!(contrast_ratio(ACCENT, BG_PANEL) >= 4.5);
+        assert!(contrast_ratio(TEXT, BG_SELECT) >= 4.5);
+        assert!(contrast_ratio(ACCENT, BG_SELECT) >= 4.5);
+    }
 }

@@ -50,7 +50,7 @@ impl TextureIndex {
             let pack = png
                 .strip_prefix(&dirs.textures)
                 .ok()
-                .and_then(|rel| rel.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()))
+                .and_then(pack_of_rel)
                 .unwrap_or_default();
             let meta = png.with_file_name(format!(
                 "{}.meta.json",
@@ -148,5 +148,53 @@ impl TextureIndex {
             }
         }
         None
+    }
+}
+
+/// Pack a texture belongs to, from its path under the textures folder: the first folder below
+/// the grouping folders (`arcs/ui/map/b001_101a_2d/...` -> `b001_101a_2d`,
+/// `arcs/ui/battle_2d/...` -> `battle_2d`). Area names like `b001_101a_2d` are what the Maps
+/// panel matches, so taking the top folder (`arcs`) left every map with no textures.
+fn pack_of_rel(rel: &std::path::Path) -> Option<String> {
+    let dirs: Vec<String> = rel
+        .parent()?
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    let skip = dirs
+        .iter()
+        .take(dirs.len().saturating_sub(1))
+        .take_while(|d| matches!(d.to_lowercase().as_str(), "arcs" | "ui" | "map" | "maps" | "by_category"))
+        .count();
+    dirs.get(skip).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pack_of_rel;
+    use std::path::Path;
+
+    #[test]
+    fn pack_is_the_folder_below_the_grouping_folders() {
+        let p = |s: &str| pack_of_rel(Path::new(s)).unwrap_or_default();
+        assert_eq!(p("arcs/ui/map/b001_101a_2d/b001_101a/timg/b001_101a.png"), "b001_101a_2d");
+        assert_eq!(p("arcs/ui/battle_2d/battle_2d/timg/bg.png"), "battle_2d");
+        assert_eq!(p("Shared_UI_Icons/icon.png"), "Shared_UI_Icons");
+        assert_eq!(p("loose.png"), "");
+    }
+
+    /// Every exported map texture folder must end up attached to an area in the Maps panel.
+    #[test]
+    fn map_textures_attach_to_their_area() {
+        let dirs = crate::utils::Dirs::detect();
+        if !dirs.textures.join("arcs/ui/map").is_dir() {
+            return; // no exported assets in this checkout
+        }
+        let mut index = super::TextureIndex::default();
+        index.ensure(&dirs);
+        let areas: std::collections::HashSet<String> =
+            index.packs().iter().filter_map(|(p, _)| crate::data::areas::area_of(p)).collect();
+        assert!(areas.contains("b001_101a"), "b001_101a has no texture pack");
+        assert!(areas.len() > 100, "only {} areas have textures", areas.len());
     }
 }

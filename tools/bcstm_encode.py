@@ -98,17 +98,116 @@ def build_bcstm(template: bytes, pcm: np.ndarray, rate: int, channels: int) -> b
     return bytes(out)
 
 
+def build_bcstm_dsp(
+    template: bytes,
+    pcm: np.ndarray,
+    rate: int,
+    channels: int,
+) -> bytes:
+    """Rebuilds the stream as DSP-ADPCM, keeping the template's block layout.
+
+    The template supplies the header sections and the per-channel coefficient
+    table, so the output is structurally the same stream with a new payload.
+    Only the base sample data is replaced; loop/seek/region sections stay.
+    """
+    from tools.dspadpcm_encode import SAMPLES_PER_FRAME, encode_interleaved
+
+    info, audio_start = parse_bcstm_info(template)
+    if channels != info.channels:
+        raise SystemExit(
+            f"template has {info.channels} channels but WAV has {channels}; "
+            "convert the WAV to the matching channel count first"
+        )
+    pcm = _resample(pcm, rate, info.sample_rate)
+    if pcm.ndim == 1:
+        pcm = pcm.reshape(-1, 1)
+    total = len(pcm)
+
+    # Keep the retail block geometry when it is a DSP-ADPCM stream; otherwise
+    # use Nintendo's common 8192-byte / 14336-sample block.
+    if info.codec == 2 and info.samples_per_block % SAMPLES_PER_FRAME == 0 and info.block_size > 0:
+        frames_per_block = info.samples_per_block // SAMPLES_PER_FRAME
+        block_size = frames_per_block * 8
+    else:
+        frames_per_block = 1024
+        block_size = 8192
+    if block_size % 0x20:
+        # HW wants 32-byte aligned channel blocks; round the frame count up.
+        frames_per_block = (frames_per_block + 3) // 4 * 4
+        block_size = frames_per_block * 8
+    samples_per_block = frames_per_block * SAMPLES_PER_FRAME
+
+    data_off = struct.unpack_from("<I", template, 0x30)[0]
+    if audio_start != data_off + 0x20:
+        raise SystemExit("unexpected DATA header layout")
+    declared_data_size = struct.unpack_from("<I", template, data_off + 4)[0]
+    if data_off + declared_data_size > len(template) or len(template) - (data_off + declared_data_size) > 31:
+        raise SystemExit("DATA section is not the final section; cannot replace safely")
+
+    coeffs = info.channel_coeffs
+    if not coeffs or all(not any(pair) for per_channel in coeffs for pair in per_channel):
+        coeffs = None  # a PCM template has no meaningful predictor table
+    streams = encode_interleaved(pcm, channels, coeffs)
+    blocks = max(1, (total + samples_per_block - 1) // samples_per_block)
+    last_samples = total - (blocks - 1) * samples_per_block
+    last_frames = max(1, (last_samples + SAMPLES_PER_FRAME - 1) // SAMPLES_PER_FRAME)
+    last_size = last_frames * 8
+
+    body = bytearray()
+    for block in range(blocks):
+        frames = frames_per_block if block < blocks - 1 else last_frames
+        for ch in range(channels):
+            start = block * frames_per_block * 8
+            chunk = streams[ch][start:start + frames * 8]
+            body += chunk
+            body += bytes((-len(chunk)) % 0x20)   # channel blocks are 32-byte aligned
+    while len(body) % 0x20:
+        body.append(0)
+
+    out = bytearray(template[:audio_start])
+    out += body
+    info_off = struct.unpack_from("<I", template, 0x18)[0]
+    struct.pack_into("<B", out, info_off + 0x20, 2)  # DSP-ADPCM
+    struct.pack_into("<B", out, info_off + 0x21, 1 if info.loop else 0)
+    struct.pack_into("<H", out, info_off + 0x22, channels)
+    struct.pack_into("<I", out, info_off + 0x24, info.sample_rate)
+    struct.pack_into("<I", out, info_off + 0x28, min(info.loop_start, total) if info.loop else 0)
+    struct.pack_into("<I", out, info_off + 0x2C, total)
+    struct.pack_into("<I", out, info_off + 0x30, blocks)
+    struct.pack_into("<I", out, info_off + 0x34, block_size)
+    struct.pack_into("<I", out, info_off + 0x38, samples_per_block)
+    struct.pack_into("<I", out, info_off + 0x3C, last_size)
+    struct.pack_into("<I", out, info_off + 0x40, last_frames * SAMPLES_PER_FRAME)
+
+    struct.pack_into("<I", out, data_off + 4, len(out) - data_off)
+    struct.pack_into("<I", out, 0x0C, len(out))
+    return bytes(out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--template", type=Path, required=True, help="existing BCSTM to reuse")
     ap.add_argument("--wav", type=Path, required=True, help="replacement PCM WAV")
     ap.add_argument("--out", type=Path, required=True, help="output BCSTM")
+    ap.add_argument(
+        "--codec",
+        choices=["dspadpcm", "pcm16"],
+        default="dspadpcm",
+        help="DSP-ADPCM keeps the retail bandwidth (default); PCM16 is lossless but ~4x larger",
+    )
     args = ap.parse_args()
     pcm, rate, channels = wav_to_pcm16(args.wav)
-    out = build_bcstm(args.template.read_bytes(), pcm, rate, channels)
+    template = args.template.read_bytes()
+    if args.codec == "dspadpcm":
+        out = build_bcstm_dsp(template, pcm, rate, channels)
+    else:
+        out = build_bcstm(template, pcm, rate, channels)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(out)
-    print(f"wrote {args.out} ({len(out)} bytes, {len(pcm)} samples, {rate} Hz, {channels} ch)")
+    print(
+        f"wrote {args.out} ({len(out)} bytes, {len(pcm)} samples, {rate} Hz, "
+        f"{channels} ch, {args.codec})"
+    )
     return 0
 
 

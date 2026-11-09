@@ -21,8 +21,8 @@ class TestPairwiseKnowledgePipeline(unittest.TestCase):
         }
         self.assertEqual(query["params"]["address"], "0x00100024")
 
-    def test_pair_13_rea_to_notes(self):
-        """Pair 13 (F12 + F13): Decompiled analysis discoveries are structured for insertion into the project notes."""
+    def test_pair_13_rea_to_agent_log(self):
+        """Pair 13 (F12 + F13): Decompiled analysis discoveries are structured for insertion into AGENT_LOG.md."""
         log_entry_template = (
             "### REA Analysis: 0x00100024 (InitBss)\n"
             "- **Status**: Verified matching\n"

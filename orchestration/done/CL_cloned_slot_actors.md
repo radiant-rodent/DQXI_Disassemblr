@@ -1,0 +1,3 @@
+# CL_cloned_slot_actors - marked done by the orchestrator (2026-11-05), solved in the editor sessions
+
+Cause found and fixed (docs/CUSTOM_ROOM.md): two rules decide whether an actor is created: the display-mode mask in the entity class and the generated collision's bounds; duplicates must be made in the ACTIVE layer (a copy of the priest record 0x152C works, one of 0x1010 does not). Proven in the emulator: pressing A on the cloned room's priest opens his menu (cr_22574), an edited npc_ie line shows (cr_22955), and an NPC added to the cloned room says the custom line (cr_23952). The Level Editor now warns about the actor display mode and keeps class 0x300 on Duplicate.

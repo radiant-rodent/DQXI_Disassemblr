@@ -3,10 +3,14 @@
 pub mod areas;
 pub mod audio;
 pub mod code;
+pub mod collision;
 pub mod dialogues;
 pub mod files;
+pub mod game_font;
+pub mod layout_scene;
 pub mod layouts;
 pub mod models;
+pub mod rig;
 pub mod scripts;
 pub mod tables;
 pub mod textures;

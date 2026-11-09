@@ -40,7 +40,7 @@ DATA_DIR = PROJECT_ROOT / "game_data"
 ROMFS_DIR = DATA_DIR / "romfs"
 PACK_DIR = DATA_DIR / "packs"
 READ_LOCK = threading.Lock()
-REFERENCE_ROM = Path(r"..\reference project\DQXI.3ds")
+REFERENCE_ROM = Path(r"..\3DS_Translate\DQXI.3ds")
 LOCAL_ROM = PROJECT_ROOT / "original" / "DQXI.3ds"
 
 
@@ -53,7 +53,7 @@ def rom_path() -> Path:
 
 
 def open_romfs():
-    sys.path.insert(0, r"..\reference project")
+    sys.path.insert(0, r"..\3DS_Translate")
     from dq11tool.ctr.formats import open_image
 
     f, _ncsd, ncch = open_image(str(rom_path()))

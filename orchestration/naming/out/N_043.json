@@ -1,0 +1,1828 @@
+[
+ {
+  "address": "0x001FA974",
+  "name": "maybe_FieldParty_RegisterMemberModel",
+  "signature": "void maybe_FieldParty_RegisterMemberModel(int slot, int characterId)",
+  "params": {
+   "slot": "party slot index",
+   "characterId": "actor character/model id"
+  },
+  "summary": "Registers the character id of the actor occupying a party slot with the menu/party model manager, but only while the game-work mode byte at g_001fa9c8 is 1.",
+  "confidence": 0.3,
+  "evidence": "All five external callers pass (slot, actor->f_768 & 0xffff), i.e. the actor's character/model id; forwards to func_00607650(*(g_001fa9d0+slot), id), which resolves the id through func_0063EEAC and calls func_002070A8 on the game work. No strings, no return value."
+ },
+ {
+  "address": "0x001FA9DC",
+  "name": "maybe_FieldParty_ApplyMemberEffectSlots",
+  "signature": "void maybe_FieldParty_ApplyMemberEffectSlots(void* group, void* paramTable, Actor* actor, int playerLane)",
+  "params": {
+   "group": "party group object",
+   "paramTable": "per-slot flag table (0x1a + 2*i + lane)",
+   "actor": "actor to decorate",
+   "playerLane": "selects player 1/2 flag column"
+  },
+  "summary": "Walks 28 per-slot flags of a parameter table and, for each set flag, toggles the matching attachment/effect on the actor through its virtual interface (slots +0x50, +0x110, +0x30, +0xe4) and registers it in one of 32 group slots.",
+  "confidence": 0.3,
+  "evidence": "Only reached through a vtable (only self-caller). Reads flags at param_2 + i*2 + (param_4!=0) + 0x1a for i in 0..0x1b; per-flag virtual calls with ids 0x29/0x15/0x1c; writes the 0x20-entry table at group+0x5a. Sibling 0x001FD2D4 has the same loop shape and spawns effects via func_003FBE4C, so the slots are visual attachments."
+ },
+ {
+  "address": "0x001FAC10",
+  "name": "FieldParty_CalcGroupCenterPosition",
+  "signature": "void FieldParty_CalcGroupCenterPosition(float* outPos, PartyGroup* group)",
+  "params": {
+   "outPos": "receives XYZ",
+   "group": "party group (virtual interface)"
+  },
+  "summary": "Computes the point the camera/leader should look at for a group of party actors: the single member's position when only one is active, otherwise the bounding-box centre of the members, converted to world space and adjusted by the leader's height.",
+  "confidence": 0.5,
+  "evidence": "Branches on the count of non-null entries in group+0x1c..0x2b; reads actor position fields +0x9c/+0xa0/+0xa4; calls func_005736A0 (vector subtract/normalise) and func_005F5F54 (local->world). Callers 0x3D3E40 and 0x42xxxx compare the result against the leader position; 0x2DA850/0x468320 use it as a target point."
+ },
+ {
+  "address": "0x001FAF48",
+  "name": "maybe_FieldParty_UpdateTalkMemberState",
+  "signature": "void maybe_FieldParty_UpdateTalkMemberState(PartyGroup* group, Actor* other)",
+  "params": {
+   "group": "party group",
+   "other": "optional actor being talked to"
+  },
+  "summary": "For every member whose actor type matches the special talk category (type 0x76 / g_001fb188), checks whether the other actor is also of that category and then swaps the member's sub-actor/attachment state and starts the matching animation.",
+  "confidence": 0.3,
+  "evidence": "Calls func_00639954(actor,0x76) and func_00639954(actor,g_001fb188) (actor-category query); sets actor+0x2c63 = g_001fb18c; uses func_005F5818 on actor+0x44 and vfunc+0x110 then toggles vtable slot 0x98 and 0x5E7848(...,1,1). Called from 11 field/menu updaters (0x42B5CC, 0x4394D4, 0x59DEEC...)."
+ },
+ {
+  "address": "0x001FB230",
+  "name": "FieldParty_CalcGroupBoundsCenter",
+  "signature": "void FieldParty_CalcGroupBoundsCenter(float* outPos, PartyGroup* group)",
+  "params": {
+   "outPos": "receives XYZ",
+   "group": "party group"
+  },
+  "summary": "Computes the axis-aligned centre of the positions of all members of a party group (min/max of the actor X and Z fields scaled by a constant blend factor).",
+  "confidence": 0.5,
+  "evidence": "Loops func_00630DC8(group) members via vfunc+0x40, accumulates min/max of actor+0xa4 and actor+0x9c, then applies g_001fb340. Mirror of the bbox part of 0x001FAC10 but without the single-member shortcut."
+ },
+ {
+  "address": "0x001FB350",
+  "name": "maybe_FieldParty_PlayMemberVoiceById",
+  "signature": "int maybe_FieldParty_PlayMemberVoiceById(PartyGroup* group, Actor* actor, int force)",
+  "params": {
+   "group": "party group",
+   "actor": "actor whose voice is requested",
+   "force": "ignore the 'player' check"
+  },
+  "summary": "Looks up the actor's linked character record through the game-work tables and plays the corresponding voice/SE id (or 0 when nothing matches).",
+  "confidence": 0.3,
+  "evidence": "Uses func_006F20C0 (global work), func_0035EB98/006292F0/0061BD4C/0063DF9C/0063FDAC (record lookups), then func_001EBC68 which is the SE request helper used by the whole block; reads actor f_768 (character id) and f_be/f_aa (linked ids). Only self-referenced (vtable)."
+ },
+ {
+  "address": "0x001FB4A4",
+  "name": "maybe_FieldParty_UpdateStateMachine",
+  "signature": "int maybe_FieldParty_UpdateStateMachine(PartyGroup* group)",
+  "params": {
+   "group": "party group / sequence object"
+  },
+  "summary": "Large state machine that advances a party-group sequence (waiting for menu/field mode flags in the game work, spawning member join/leave effects) one state per call and returns whether the sequence finished.",
+  "confidence": 0.4,
+  "evidence": "22 callers across the field and menu code (0x2A9F4C, 0x3212C8, 0x3F8C48, 0x42B5CC, 0x48356C...). Compares self[0x45] against g_001fb7ec and steps by 0x79/0xb96, checks game-work bytes +0x4244/+0x4320 through func_006F1EEC, and calls func_00640348 (actor list busy test), func_002BB7D4/0x3FCxxx (member setup)."
+ },
+ {
+  "address": "0x001FC4FC",
+  "name": "maybe_FieldParty_ApplyAttachmentSlots",
+  "signature": "void maybe_FieldParty_ApplyAttachmentSlots(PartyGroup* group, Actor* a, Actor* b, ActorParam* param, int arg5)",
+  "params": {
+   "group": "party group",
+   "a": "primary actor",
+   "b": "secondary actor",
+   "param": "attachment slot descriptor",
+   "arg5": "effect variant"
+  },
+  "summary": "Spawns the attachments/effects described by a parameter block for one or two actors: several id/duration pairs through func_00398744/0x39881C and func_001FCF80, plus a UI-window notification for the main actor.",
+  "confidence": 0.35,
+  "evidence": "Field of 0x20 records of 0x7c bytes at group+0x164 filled by func_001FCF80; ids from param shorts +0xa/+6/+0x16; func_00398744/0x39881C take (list, actor, id, flags, arg5); the +0x55 branch calls func_006F1EEC and func_005E7848(actor component,0x42,0)."
+ },
+ {
+  "address": "0x001FC7FC",
+  "name": "maybe_FieldParty_SelectFormationSlot",
+  "signature": "void maybe_FieldParty_SelectFormationSlot(PartyGroup* group, int mode, int arg3, int slot)",
+  "params": {
+   "group": "party group",
+   "mode": "0 = formation mode",
+   "arg3": "target actor",
+   "slot": "member slot"
+  },
+  "summary": "Selects a formation slot for an actor and, when more than one member is present, recomputes the formation offsets for all members.",
+  "confidence": 0.35,
+  "evidence": "Calls group vfunc+0x40 (get member) and +0x54 (set something) with the slot, counts non-null entries in group+0x1c, and calls func_001F5F5C (formation offset computation, also used by 0x001FEC68/0x001FD97C) when count>1."
+ },
+ {
+  "address": "0x001FC8EC",
+  "name": "maybe_Menu_CheckMemberSelectable",
+  "signature": "int maybe_Menu_CheckMemberSelectable(PartyGroup* group, int slot, int arg3, int arg4)",
+  "params": {
+   "group": "party group",
+   "slot": "member slot",
+   "arg3": "unused",
+   "arg4": "stack cookie"
+  },
+  "summary": "Returns 0 only when the menu mode byte is set, the requested member exists and the global selector returns 0; otherwise returns 1.",
+  "confidence": 0.25,
+  "evidence": "Pattern identical to 0x001FE200: mode byte through g_001fc958 + game-work field, vfunc+0x40 lookup, then func_0066A2BC (global selector). Called from 0x590D44."
+ },
+ {
+  "address": "0x001FC95C",
+  "name": "maybe_Menu_BuildMemberIdList",
+  "signature": "void maybe_Menu_BuildMemberIdList(PartyGroup* group, unsigned flags, int extra)",
+  "params": {
+   "group": "party group",
+   "flags": "bit0 = use live members, rest forwarded",
+   "extra": "first id when flags bit0 clear"
+  },
+  "summary": "Builds a 9-entry id array (first id + up to 8 member ids taken from the group's lists) and pushes it into the window object registered at g_001fcb60 via vtable slot +0x60.",
+  "confidence": 0.3,
+  "evidence": "Fills a 9-word stack record local_d8..local_b8, counts group+0x1c entries, calls group vfunc+0x60 for each slot, then (**(code**)(*(int**)(g_001fcb60+group)+0x60))(obj,record). Also resets dword 0x79 in four sub-lists at gamework+0x428c (shared with 0x00202F3C)."
+ },
+ {
+  "address": "0x001FCB64",
+  "name": "maybe_Menu_BuildMemberIdListAlt",
+  "signature": "void maybe_Menu_BuildMemberIdListAlt(PartyGroup* group, unsigned flags, int slot)",
+  "params": {
+   "group": "party group",
+   "flags": "bit0 selects the branch",
+   "slot": "member slot"
+  },
+  "summary": "Same 9-entry id record as 0x001FC95C but resolved through vtable slot +0x4c of the group and forwarded to the window object at g_001fce08.",
+  "confidence": 0.3,
+  "evidence": "Byte-for-byte the same structure as 0x001FC95C, differing only in the vfunc (+0x4c vs +0x60), the per-slot input (param3 vs member index) and the window pointer g_001fce08."
+ },
+ {
+  "address": "0x001FCF80",
+  "name": "FieldParty_AddAttachmentSlot",
+  "signature": "int FieldParty_AddAttachmentSlot(PartyGroup* group, int owner, Actor* actor, void* param, short duration, int type)",
+  "params": {
+   "group": "party group",
+   "owner": "owning object",
+   "actor": "actor to attach",
+   "param": "0x58-byte parameter block",
+   "duration": "frames the attachment lives",
+   "type": "attachment id/type"
+  },
+  "summary": "Adds an attachment record for an actor to the group's 32-entry attachment table: if the actor is already present its remaining time is extended, otherwise a new 0x7c-byte entry is created and the parameter block copied.",
+  "confidence": 0.55,
+  "evidence": "Searches 0x20 entries of 0x7c bytes at group+0x164 for actor; on hit adds param_5 to entry+0x170, else stores owner/actor/duration/type and copies 0x58 bytes with func_00116C10 (memcpy). Returns 1 in both cases; caller 0x001FC4FC passes effect ids from a descriptor."
+ },
+ {
+  "address": "0x001FD044",
+  "name": "maybe_FieldParty_SpawnLeaderEffect",
+  "signature": "void maybe_FieldParty_SpawnLeaderEffect(PartyGroup* group)",
+  "params": {
+   "group": "party group"
+  },
+  "summary": "Builds an effect record for the group's first member, choosing the effect variant from the member's actor category (0x7c for category 8, 0x82 for category 10), and submits it to the effect list at g_001fd108+group+0xbc.",
+  "confidence": 0.35,
+  "evidence": "Fetches member 0 via vfunc+0x48, calls func_00639954(member,8) and (member,10) to pick 0x7c/0x82, fills a record with g_001fd104 and func_003FBE4C (the effect submitter also used by 0x001FCE98/0x001FD2D4)."
+ },
+ {
+  "address": "0x001FD2D4",
+  "name": "maybe_FieldParty_ApplyAttachmentSet",
+  "signature": "void maybe_FieldParty_ApplyAttachmentSet(PartyGroup* group, void* paramTable, Actor* actor, int playerLane)",
+  "params": {
+   "group": "party group",
+   "paramTable": "per-slot flags",
+   "actor": "decorated actor",
+   "playerLane": "player 1/2 flag column"
+  },
+  "summary": "Large switch over 28 attachment/effect ids that spawns the effect described by each set flag bit of the parameter table on the given actor.",
+  "confidence": 0.3,
+  "evidence": "Same 0x1c-iteration flag loop as 0x001FA9DC; each case builds a record and calls func_003FBE4C (spawn effect) or func_001FCE98 (spawn effect from actor vfunc state); only self-referenced (vtable method)."
+ },
+ {
+  "address": "0x001FD97C",
+  "name": "FieldParty_MoveActorTowardTarget",
+  "signature": "void FieldParty_MoveActorTowardTarget(PartyGroup* group, int mode, int useSlot, int slot)",
+  "params": {
+   "group": "party group",
+   "mode": "0=group centre,1=offset A,2=offset B",
+   "useSlot": "use member slot instead of member 0",
+   "slot": "member slot"
+  },
+  "summary": "Moves the selected member actor a step (in_s0) toward a target point chosen from the group centre, a formation offset or a stored offset, then marks the actor's position dirty.",
+  "confidence": 0.55,
+  "evidence": "Reads target vectors group+0x37/+0x40 or centre from func_001F5F5C; delta to leader; calls func_005736A0 (normalise); adds delta*in_s0 to actor+0x9c/+0xa0/+0xa4 and sets actor+0x118=1. Called from 0x42C7F8/0x430584 etc."
+ },
+ {
+  "address": "0x001FDB9C",
+  "name": "maybe_FieldParty_SelectMemberVoiceId",
+  "signature": "unsigned maybe_FieldParty_SelectMemberVoiceId(GameWork* work, Actor* actor, ActorParam* param, int force)",
+  "params": {
+   "work": "sound work",
+   "actor": "speaking actor",
+   "param": "actor parameters",
+   "force": "ignore default branch"
+  },
+  "summary": "Chooses the voice/SE id for an actor from its category and linked-record state (constants 0x15c and the g_001fdd50..6c table) and requests it through func_001EBC68.",
+  "confidence": 0.45,
+  "evidence": "Switch on param short +4 (values -0x13/-0x14/-4/-5/-0x19/-0x1a/-0x12) and on actor->f_10 (player) / param->f_26; result passed to func_001EBC68, which builds an SE request (same helper as 0x001FDEC4 which requests id 300)."
+ },
+ {
+  "address": "0x001FDD7C",
+  "name": "maybe_FieldParty_SelectMemberVoiceById",
+  "signature": "void maybe_FieldParty_SelectMemberVoiceById(unsigned unused, Actor* actor, ActorParam* param, int force)",
+  "params": {
+   "unused": "unused",
+   "actor": "speaking actor",
+   "param": "actor parameters",
+   "force": "ignore default branch"
+  },
+  "summary": "Second variant of the member voice selector: resolves the voice id from the actor's character record (u16 at record+200) or from the category-specific constants.",
+  "confidence": 0.4,
+  "evidence": "Uses func_0063E5C8(actor->f_768) to fetch the character record and reads u16 at +200; otherwise constants g_001fdebc/g_001fdec0 and 0x15c; always ends in func_001EBC68."
+ },
+ {
+  "address": "0x001FDEC4",
+  "name": "maybe_FieldParty_PlayCommonVoice",
+  "signature": "void maybe_FieldParty_PlayCommonVoice(void)",
+  "params": {},
+  "summary": "Requests the fixed voice/SE id 300 through the sound helper.",
+  "confidence": 0.35,
+  "evidence": "Three instructions: func_006F1DF8 (sound work getter) then func_001EBC68(*work,300,0); no arguments, only self-referenced (vtable slot 1 of a 9-entry table)."
+ },
+ {
+  "address": "0x001FE200",
+  "name": "maybe_Menu_CheckActorActionable",
+  "signature": "int maybe_Menu_CheckActorActionable(PartyGroup* group, int slot, int arg3, int arg4)",
+  "params": {
+   "group": "party group",
+   "slot": "member slot",
+   "arg3": "unused",
+   "arg4": "stack cookie"
+  },
+  "summary": "Returns 0 when the menu mode is active, the slot holds an actor and the global selector reports a valid entry; otherwise 1.",
+  "confidence": 0.25,
+  "evidence": "Same skeleton as 0x001FC8EC (g_001fe270 mode byte, vfunc+0x40, func_00669324()!=0xff); external caller 0x590D44 is in the menu code."
+ },
+ {
+  "address": "0x001FE630",
+  "name": "maybe_FieldParty_ResetAllEffectFlags",
+  "signature": "void maybe_FieldParty_ResetAllEffectFlags(void)",
+  "params": {},
+  "summary": "Walks every actor in the game work's global list and the four sub-lists and clears their effect/attachment flags (0x75-0x77 plus g_001fe800), then drops the two linked sub-actor references.",
+  "confidence": 0.45,
+  "evidence": "Iterates gamework+0x4260/+0x4264 and the four lists at +0x428c; calls func_00278668(actor,id,1) with ids 0x76,0x77,g_001fe800,0x75 and zeroes actor[0x237]/[0x238] (offsets 0x8dc/0x8e0, the same fields read by func_00639B90). Vtable slot 4 of a 6-entry table."
+ },
+ {
+  "address": "0x001FE804",
+  "name": "maybe_FieldParty_AdvanceMemberCursor",
+  "signature": "int maybe_FieldParty_AdvanceMemberCursor(PartyGroup* group, int mode)",
+  "params": {
+   "group": "party group",
+   "mode": "condition passed to the member test"
+  },
+  "summary": "Advances the group's member cursor (group[0x490]) until it finds a member accepted by func_001FA6F0, returning 1 when the cursor wraps past the last member.",
+  "confidence": 0.4,
+  "evidence": "Uses group[0x43] (state) with g_001fe964 and steps of 0x1442/9 like the state machines in this block; calls func_001FA6F0(group,member,1,mode) per candidate and resets group[0x490] to 0; 23 callers."
+ },
+ {
+  "address": "0x001FEC68",
+  "name": "maybe_FieldParty_CalcFormationPosition",
+  "signature": "void maybe_FieldParty_CalcFormationPosition(PartyGroup* group, int mode, int useSlot, int slot)",
+  "params": {
+   "group": "party group",
+   "mode": "0=centre,1/2=stored offsets",
+   "useSlot": "use member slot instead of member 0",
+   "slot": "member slot"
+  },
+  "summary": "Builds a transform at the selected member's position and offsets it by the formation centre or by one of the stored offset vectors (group+0x37 / group+0x40).",
+  "confidence": 0.45,
+  "evidence": "func_00574044(matrix, group+0x3a, memberPos) then func_00574224(matrix, group+0x37 or +0x40 or a computed centre); the centre branches on member count and uses func_001F5F5C and vfunc+0x74, exactly like 0x001FD97C/0x001FEE54."
+ },
+ {
+  "address": "0x001FEDA8",
+  "name": "maybe_FieldParty_UpdateSlotTypeFlags",
+  "signature": "void maybe_FieldParty_UpdateSlotTypeFlags(PartyGroup* group, int checkType)",
+  "params": {
+   "group": "party group",
+   "checkType": "query actor categories before setting"
+  },
+  "summary": "For each of up to 8 members and 7 attachment slots, tests the slot's actor category and stores the result in a per-member flag byte, then updates the visible attachment set.",
+  "confidence": 0.4,
+  "evidence": "Arrays at group+0x1e4 (7 u16 category ids) and +0x1f2 (8x7 flag bytes); calls func_00639954(member, id) per slot and vfunc+0x120(member,id,1); loops func_00630DC8(group) members. Vtable slot 8 of the 15-entry party-group table."
+ },
+ {
+  "address": "0x001FEE54",
+  "name": "maybe_FieldParty_CalcMemberWorldPosition",
+  "signature": "void maybe_FieldParty_CalcMemberWorldPosition(PartyGroup* group, int mode, int slot)",
+  "params": {
+   "group": "party group",
+   "mode": "0=member0,1/2=stored offsets",
+   "slot": "member slot"
+  },
+  "summary": "Computes a member position relative to the group origin (group+0x3a) and adds one of the group offset vectors, writing the result through the transform helper.",
+  "confidence": 0.4,
+  "evidence": "func_00574044(group+0x3a, memberPos) then func_00574224 with member0 position or group+0x37/+0x40; called by 0x42C7F8."
+ },
+ {
+  "address": "0x001FEF18",
+  "name": "maybe_FieldParty_ClearSlotTypeFlags",
+  "signature": "void maybe_FieldParty_ClearSlotTypeFlags(PartyGroup* group)",
+  "params": {
+   "group": "party group"
+  },
+  "summary": "Clears every set attachment-slot flag stored by 0x001FEDA8 and disables the corresponding attachment on the member actor.",
+  "confidence": 0.45,
+  "evidence": "Walks group+0x1e4 7-u16 ids and group+0x1f2 flag bytes; for each set byte calls vfunc+0xe4(member,id,1) and clears the byte. Vtable slot 9 next to UpdateSlotTypeFlags (slot 8)."
+ },
+ {
+  "address": "0x001FEFC0",
+  "name": "maybe_FieldParty_InitFromParams",
+  "signature": "void maybe_FieldParty_InitFromParams(PartyGroup* group, GroupParams* params)",
+  "params": {
+   "group": "party group",
+   "params": "parameter block"
+  },
+  "summary": "Initialises a party-group object from a parameter block: copies ids, offsets and flags, adopts the leader actor, snapshots its position when the menu mode is active, and resets the runtime arrays.",
+  "confidence": 0.45,
+  "evidence": "Bulk copies params[0]..params[0x2c] into group+0x50..+0xd8, calls func_003CDEDC on group+0x14, reads game-work mode +0x4244 to decide whether to snapshot vfunc+0x3c position into group+0x37 and func_00669D88 into group+0x3d, clears group[4..0x13]. Vtable slot 2 of a 4-entry table."
+ },
+ {
+  "address": "0x001FF200",
+  "name": "FieldParty_ResetMemberSlot",
+  "signature": "void FieldParty_ResetMemberSlot(PartyGroup* group)",
+  "params": {
+   "group": "party group"
+  },
+  "summary": "Resets one group member slot: clears the embedded list/vector at +0x50 and marks the slot absent in the global lookup table.",
+  "confidence": 0.5,
+  "evidence": "Two operations only: func_003CDEDC(group+0x50) and *(u32*)(g_001ff220+group)=0xffffffff. Called by 48 different functions, i.e. the common per-slot initialiser/destructor. Vtable slot 0 of the 15-entry party-group table (destructor position)."
+ },
+ {
+  "address": "0x001FF224",
+  "name": "maybe_FieldParty_AttachMemberSlot",
+  "signature": "int maybe_FieldParty_AttachMemberSlot(PartyGroup* group, int slot, Actor* actor, int keepEffects)",
+  "params": {
+   "group": "party group",
+   "slot": "member slot",
+   "actor": "actor to attach",
+   "keepEffects": "1 = clear instead of re-add effects"
+  },
+  "summary": "Attaches an actor to a group member slot, clears or re-adds its special attachment category (0x5e/0x5f) and plays the group's join sound when not in menu mode.",
+  "confidence": 0.4,
+  "evidence": "Calls vfunc+0x30(actor,slot,1) (attach), func_001CAE90(actor,0x10), tests func_00639954(actor,0x5e/0x5f) and calls func_001F84A4(group,actor,0x1c) or vfunc+0x124; finally func_001EBC68(sound,g_001ff360). Vtable slot 9 of the second party-group table."
+ },
+ {
+  "address": "0x001FF36C",
+  "name": "maybe_FieldParty_GetMemberRideObject",
+  "signature": "void* maybe_FieldParty_GetMemberRideObject(PartyGroup* group, Actor* actor, int arg3)",
+  "params": {
+   "group": "party group",
+   "actor": "member actor",
+   "arg3": "locator id"
+  },
+  "summary": "Returns the actor's ride/mount sub-object if it has one, otherwise builds a locator transform pair and returns that buffer.",
+  "confidence": 0.25,
+  "evidence": "Tries vfunc+0x1c then vfunc+0x10 on the actor; if both fail and the actor is 'active', counts group members via func_005797D8(work+0x4254,0,1) and builds a transform with func_00176948/func_00176064 using arg3."
+ },
+ {
+  "address": "0x001FF434",
+  "name": "maybe_FieldParty_CompactMemberList",
+  "signature": "int maybe_FieldParty_CompactMemberList(PartyGroup* group)",
+  "params": {
+   "group": "party group"
+  },
+  "summary": "Compacts the group's 8 member id slots, then scans members and marks/returns the first one that is not selectable so the caller can retry.",
+  "confidence": 0.4,
+  "evidence": "Copies group[j+0x14] into group[0x14..0x1b] for non-null members, then for each member calls vfunc+0x28, checks vfunc+0xd8/+0x10 and sets group+0xd2=1 and member->f_108=1 before returning 1. Vtable slot 4 of the party-group table."
+ },
+ {
+  "address": "0x001FF63C",
+  "name": "maybe_FieldParty_UpdateActorAttachments",
+  "signature": "unsigned maybe_FieldParty_UpdateActorAttachments(PartyGroup* group, short* cmd, int arg3, Actor* actor, unsigned flags, int a6, int a7, int a8)",
+  "params": {
+   "group": "party group",
+   "cmd": "command descriptor (negative ids -5..-3)",
+   "arg3": "slot/param",
+   "actor": "target actor",
+   "flags": "flags",
+   "a6": "arg6",
+   "a7": "arg7",
+   "a8": "arg8"
+  },
+  "summary": "Applies one attachment/effect command (descriptor ids -5..-3 and positive ids) to an actor: resolves the actor handle, sets the category flag, spawns the effect or plays voice, and updates the actor's position through the group formation.",
+  "confidence": 0.35,
+  "evidence": "Reads cmd[0]; negative ids -5/-4/-3 map to func_005E7848(actorComp,0x2a/0x29/0x2b,0) plus func_001EBC68 SE ids; positive branch uses func_005F5818(actor+0x44), func_005F5F54, func_001FF36C and func_001F84A4; ends with vfunc+0xb0(actor+0x44,8). Vtable slot 10 of the second party-group table."
+ },
+ {
+  "address": "0x001FFF9C",
+  "name": "maybe_Menu_AdvanceWaitTimer",
+  "signature": "bool maybe_Menu_AdvanceWaitTimer(WaitContext* self, unsigned* idPtr, int arg3, int arg4)",
+  "params": {
+   "self": "object holding the timer at +0x1234",
+   "idPtr": "id used for the work lookup",
+   "arg3": "unused",
+   "arg4": "stack cookie"
+  },
+  "summary": "Advances a one-second wait timer by the frame delta and reports true when it expires (or when the global lookup for the id fails), resetting the timer for the next use.",
+  "confidence": 0.4,
+  "evidence": "Adds the float argument to self->f_1234, compares against 0x3f800000 (1.0f), calls func_006F1DF8 (work) + func_006307A4(work,id), and restores self->f_1234 from g_001ffff8 on completion. Seven field/menu update functions call it."
+ },
+ {
+  "address": "0x00200240",
+  "name": "maybe_Menu_ResolveEntryHandler",
+  "signature": "unsigned maybe_Menu_ResolveEntryHandler(MenuState* self, Actor* actor, int entryId)",
+  "params": {
+   "self": "menu state",
+   "actor": "actor the entry belongs to",
+   "entryId": "entry/command id"
+  },
+  "summary": "Chooses the handler for an entry id: rejects a few ids while a flag is set, then routes to the 'value' handler when the entry has a linked record of type 6, otherwise to the default handler.",
+  "confidence": 0.35,
+  "evidence": "Reads self->f_57e (mode) and func_0020781C(work)->f_129; ids 3/4/0x254 short-circuit to 0; func_0063FD24(id)->f_193/f_147 and func_0063D018(f_147)->f_dc==6 decide between 0x00203838 and 0x00202DB8."
+ },
+ {
+  "address": "0x002004AC",
+  "name": "maybe_Menu_CalcEquipStatValues",
+  "signature": "unsigned maybe_Menu_CalcEquipStatValues(MenuState* self, int arg2, unsigned mode)",
+  "params": {
+   "self": "menu state (equipment page)",
+   "arg2": "slot argument forwarded to 0x2047A0",
+   "mode": "mode forwarded to 0x2047A0"
+  },
+  "summary": "Reads the six base stat/equipment values for the current character from the game tables, applies the modifier for the currently focused equipment slot, and sums the pairs into the totals used by the status page.",
+  "confidence": 0.4,
+  "evidence": "Copies 6 ints from func_0063D1F8(table,self->f_57f); if self->f_44c!=-1 it fetches func_0063FC70(model,slot,self->f_434,self->f_44c) and zeroes that entry when f_e==0; then folds even/odd entries into local_50[6]/[7] and calls func_002047A0(self,values,mode)."
+ },
+ {
+  "address": "0x00200A5C",
+  "name": "maybe_Menu_BuildTargetActorSet",
+  "signature": "unsigned long long maybe_Menu_BuildTargetActorSet(MenuState* self, Entry* entry, TargetSet* out)",
+  "params": {
+   "self": "menu state",
+   "entry": "selected entry record",
+   "out": "16-slot target actor set"
+  },
+  "summary": "Builds the 16-slot actor set an entry acts on: clears it, fills it with the entry actor for 'all' type entries, or propagates/removes a single actor for the other entry types, then returns the game-work actor-list pointer.",
+  "confidence": 0.35,
+  "evidence": "Zeroes out->f_20..f_5c then, for local_90==4, replicates self->f_428 into the slots according to local_8d; for types 1/5 it clears or shifts slots; the function ends by walking all 16 slots and returning *(gamework+0x5c)+0x4238. Called from 0x203BF4/0x2045A4/0x204980."
+ },
+ {
+  "address": "0x00202F3C",
+  "name": "maybe_Menu_CollectActorsForList",
+  "signature": "void maybe_Menu_CollectActorsForList(MenuState* self, unsigned* handles, int arg3, int arg4)",
+  "params": {
+   "self": "menu state (two 64-entry lists at +0/+0x100)",
+   "handles": "pair table (id,?)",
+   "arg3": "count part 1",
+   "arg4": "count part 2"
+  },
+  "summary": "Fills the two 64-entry actor lists used by the selection window: first the actors resolved from the given handle table, then all active actors of the four sub-lists, split by whether they are already in the actor's group.",
+  "confidence": 0.45,
+  "evidence": "Zeroes 0x100 bytes at self and self+0x100, resolves each handle with func_0020870C(work,id), tests membership with func_0049ABCC(self->f_428,actor,1) and stores into self+0x100 or self; then repeats for the four lists at gamework+0x428c in two passes (vfunc+0x14/+0x10 filters)."
+ },
+ {
+  "address": "0x002031A4",
+  "name": "maybe_Menu_UpdateSelectionPage",
+  "signature": "unsigned maybe_Menu_UpdateSelectionPage(MenuState* self, unsigned* out, unsigned arg3, unsigned arg4, unsigned arg5, int arg6)",
+  "params": {
+   "self": "menu state",
+   "out": "entry result (actor + slot ids)",
+   "arg3": "handle table",
+   "arg4": "count1",
+   "arg5": "count2",
+   "arg6": "mode"
+  },
+  "summary": "Main update of the entry selection page: builds the candidate list, resolves the current entry, applies the page/limit rules and writes the chosen actor and sub-slot back to the caller.",
+  "confidence": 0.35,
+  "evidence": "Calls 0x202F3C to fill lists, 0x2004AC repeatedly, func_0063FC70/0x63FD24 to inspect entry records (f_15e == 0x29 special-cased with 0x2053CC scanning 0x2d entries), and func_001CA474 to pick a random/indexed slot; writes out[0x1a]/[0x1b]."
+ },
+ {
+  "address": "0x002039BC",
+  "name": "maybe_Menu_DispatchEntryAction",
+  "signature": "int maybe_Menu_DispatchEntryAction(MenuState* self, Entry* entry, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "entry": "entry record",
+   "arg3": "actor/target",
+   "arg4": "mode"
+  },
+  "summary": "Reads the entry's two type bytes from the game tables and dispatches to the action routine with a mode 0..6, or to the alternative handler for type 3.",
+  "confidence": 0.4,
+  "evidence": "Looks up func_0063FA60(model)->f_434*0xb+entry->f_68 and func_0063FE6C(model) records, then calls 0x203BF4 with 0..6 for type bytes 0/1/2 or 0x204D88 for 3; overrides the result with *g_00203bf0 when set."
+ },
+ {
+  "address": "0x00203BF4",
+  "name": "maybe_Menu_ApplyEntryAction",
+  "signature": "unsigned maybe_Menu_ApplyEntryAction(MenuState* self, int arg2, int arg3, unsigned mode, int arg5)",
+  "params": {
+   "self": "menu state",
+   "arg2": "entry/actor table",
+   "arg3": "actor",
+   "mode": "action mode 0..6",
+   "arg5": "extra"
+  },
+  "summary": "Applies the action selected by an entry to its target set: counts the 16 target slots, resolves the entry's linked actor and runs the mode-specific actor operation.",
+  "confidence": 0.3,
+  "evidence": "Counts non-null slots at arg2+0x20, uses func_0063FD24(0xffffffff) and func_00630F6C/func_006319BC, func_0063112C, then 0x2044F8; contains decompiler 'bad instruction' sections, so exact control flow is uncertain."
+ },
+ {
+  "address": "0x002040D0",
+  "name": "maybe_Menu_FindActorInListByType",
+  "signature": "unsigned maybe_Menu_FindActorInListByType(int unused)",
+  "params": {
+   "unused": "unused"
+  },
+  "summary": "Scans a list for an actor of category 0x9c and returns 1 when one exists.",
+  "confidence": 0.2,
+  "evidence": "Decompiler output is heavily broken (unaff_r4/unaff_r5 list walk); the only clear operation is func_00639954(*node,0x9c) in the loop. Treat the signature as a guess."
+ },
+ {
+  "address": "0x00204980",
+  "name": "maybe_Menu_AdvanceListCursor",
+  "signature": "int maybe_Menu_AdvanceListCursor(MenuState* self, int arg2, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "arg2": "entry id array",
+   "arg3": "actor",
+   "arg4": "mode"
+  },
+  "summary": "Garbled switch over the page/sub-mode (self->f_57f-7) that advances a six-entry cursor and triggers one of the entry actions.",
+  "confidence": 0.2,
+  "evidence": "switch(self->f_57f-7) with cases using a modulo-6 cursor at self->f_438 and g_00200420 magic division; most cases are decompiled as bad instructions (halt_baddata)."
+ },
+ {
+  "address": "0x002049FC",
+  "name": "maybe_Menu_EvalEntryCondition",
+  "signature": "unsigned char maybe_Menu_EvalEntryCondition(MenuContext* ctx, int arg2, int arg3, int arg4)",
+  "params": {
+   "ctx": "menu context (actor at f_428)",
+   "arg2": "entry id",
+   "arg3": "unused",
+   "arg4": "condition index"
+  },
+  "summary": "Evaluates the display/availability condition of an entry: a large switch over (arg1+arg4) covering party membership, actor category, HP/MP ratio, equipment and 'any member has item/skill' checks.",
+  "confidence": 0.45,
+  "evidence": "switch((arg4+arg1)) cases 0..0x22; uses func_00639954(actor,0x9c/0xdd/0xde/0xdc/6/0xb9), func_00630EC4, func_00631DFC (counts), func_0063DCA4(record)->f_b, vfunc+0x90/+0x94 (ratios) and vfunc+0x98 (level). Called via vtable."
+ },
+ {
+  "address": "0x00204BC0",
+  "name": "maybe_Menu_FindLinkedActorByModelId",
+  "signature": "void maybe_Menu_FindLinkedActorByModelId(MenuState* self, Entry* entry, unsigned* out)",
+  "params": {
+   "self": "menu state",
+   "entry": "entry record",
+   "out": "out[1] receives the actor"
+  },
+  "summary": "Finds the actor whose stored model/character id matches the entry's model id and records it as the entry's linked actor, preferring the caller's current actor when present.",
+  "confidence": 0.4,
+  "evidence": "Reads entry->f_193 and u16 at entry+100; if it equals self->f_428->f_768 uses entry->f_6a; scans the four lists at gamework+0x428c, comparing node[0x1da] with the id and filtering by func_00645728/func_00639954(8/10); writes out[1] and calls func_0038A5AC."
+ },
+ {
+  "address": "0x00204D88",
+  "name": "maybe_Menu_BuildCandidateList",
+  "signature": "unsigned maybe_Menu_BuildCandidateList(MenuState* self, int entryTable, int filter, int arg4)",
+  "params": {
+   "self": "menu state",
+   "entryTable": "entry records",
+   "filter": "use filtered path",
+   "arg4": "list half selector"
+  },
+  "summary": "Builds a 64-entry candidate table of actors for the entry, zeroing the record arrays first and copying actor/slot metadata for every accepted candidate.",
+  "confidence": 0.35,
+  "evidence": "Zero-initialises 0x40 records of 0xc bytes and the 0x100/0x100 slot arrays of self; walks the actor lists with vfunc+0x18/+0x10 filters and writes three words per candidate; contains bad-instruction sections near the tail."
+ },
+ {
+  "address": "0x002053CC",
+  "name": "maybe_Menu_EvalEntryRatioCondition",
+  "signature": "unsigned char maybe_Menu_EvalEntryRatioCondition(MenuState* self, int entryTable, int index)",
+  "params": {
+   "self": "menu state",
+   "entryTable": "entry table",
+   "index": "entry index"
+  },
+  "summary": "Evaluates the per-entry condition byte stored at entryTable+0x205+index*2: compares the actor's HP/MP ratio with the threshold, checks status bits or counts party members, and returns whether the entry may be used.",
+  "confidence": 0.4,
+  "evidence": "Reads byte at arg2+arg3*2+0x205 and its neighbour; cases 1/2 compare vfunc+0x90/+0x94 ratio against the byte times g_00205714; case 3 tests actor->f_e74 bit 8; cases 4.. use vfunc+0xe8(0xb9) and the four actor lists; called from 0x202C50/0x2031A4."
+ },
+ {
+  "address": "0x00206220",
+  "name": "maybe_Menu_InitSubPanel",
+  "signature": "int maybe_Menu_InitSubPanel(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Initialises the sub-panel structure embedded at self+0x200: resets ids/counters to 0 or -1, sets two cursor bytes to 0xff and clears the two 0x100-byte work buffers.",
+  "confidence": 0.45,
+  "evidence": "func_00267B60(self+0x200) then explicit f_228..f_260 = 0/-1/0xff, func_00111384(&f_264,0x11a,1) (memset 0x11a bytes), and func_00116AE0(self-0x200/self-0x100,0x100) clears two 256-byte arrays. Only caller 0x1CC3EC (sub-panel owner)."
+ },
+ {
+  "address": "0x002062BC",
+  "name": "maybe_Menu_InitSlotTables",
+  "signature": "void maybe_Menu_InitSlotTables(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Initialises the menu's item-slot tables: 0x1f records with default 0xff/-1 fields plus 4x8 records used when the list is paginated.",
+  "confidence": 0.45,
+  "evidence": "func_00111384(&self->f_158,0x1f,0xff) then fills 0x1f entries at stride 0x64 with g_00206400/g_00206404 defaults and 0xff; then 4x8 entries at stride 0x64 with the same defaults. Called by 0x20AB04 (window close) and 0x210044."
+ },
+ {
+  "address": "0x00206AE4",
+  "name": "maybe_Menu_NotifyActorSelection",
+  "signature": "void maybe_Menu_NotifyActorSelection(unsigned self, unsigned arg2)",
+  "params": {
+   "self": "menu/window object",
+   "arg2": "selected actor id"
+  },
+  "summary": "Notifies the menu system that an actor was selected: runs the generic window update and forwards the actor id to the game-work selection work at +0x88.",
+  "confidence": 0.3,
+  "evidence": "Calls func_0020E358() then func_001D8C80(*(gamework+0x88),arg2); only caller 0x19ECA8."
+ },
+ {
+  "address": "0x00206B10",
+  "name": "Menu_ForEachActorCall148",
+  "signature": "void Menu_ForEachActorCall148(unsigned unused, unsigned arg2)",
+  "params": {
+   "unused": "unused",
+   "arg2": "argument forwarded to vfunc 0x148"
+  },
+  "summary": "Calls virtual slot +0x148(arg2) on every valid actor of the four menu actor lists.",
+  "confidence": 0.5,
+  "evidence": "Loops i<4 over gamework+0x428c lists, tests vfunc+0x18(node) then calls vfunc+0x148(node,arg2). Called by 0x001FF63C."
+ },
+ {
+  "address": "0x00206C40",
+  "name": "maybe_Menu_OpenItemEntryWindow",
+  "signature": "int* maybe_Menu_OpenItemEntryWindow(MenuState* self, int column, int entryId, void* owner, int noCheck)",
+  "params": {
+   "self": "menu state",
+   "column": "list column (0..3)",
+   "entryId": "entry/item id",
+   "owner": "owning object stored on the entry",
+   "noCheck": "skip the availability check"
+  },
+  "summary": "Creates or opens the window entry for an item/entry id in a list column: validates availability, resolves the entry's sub-type, builds the entry record and attaches the window to the game-work UI list.",
+  "confidence": 0.4,
+  "evidence": "Calls func_0020B100(self,column,id,1,0) (availability), func_0063EEAC(record)->f_9e/f_9f, func_002AB62C(list,0), func_00208960(self,&rec), then func_0060347C/func_00606AE8 to create the window, func_001235A4 to link it, and func_0027A3BC(result)/func_005E7848(..,0x27,0) for the actor."
+ },
+ {
+  "address": "0x0020713C",
+  "name": "maybe_Menu_InitFromParams",
+  "signature": "void maybe_Menu_InitFromParams(MenuState* self, int arg2, Param* param, unsigned char* flags)",
+  "params": {
+   "self": "menu state",
+   "arg2": "mode/id",
+   "param": "parameter block",
+   "flags": "flag block"
+  },
+  "summary": "Initialises the menu state from an event/talk parameter block: stores mode flags, selects the window object (camp vs field), resolves the actor record and resets the entry lists and counters.",
+  "confidence": 0.45,
+  "evidence": "Stores param byte+4 into self->f_4244, calls func_0016F0DC on the selected window (self+0x4330 or self+0x47a0), reads param+0x5c via func_0063F1E0, sets f_4246..f_4252, calls func_0020884C and func_00210044 and clears f_424b/f_4253. Called from 0x1A14EC."
+ },
+ {
+  "address": "0x00207890",
+  "name": "maybe_Menu_NotifyLayoutUpdate",
+  "signature": "void maybe_Menu_NotifyLayoutUpdate(unsigned self, unsigned arg2)",
+  "params": {
+   "self": "menu object",
+   "arg2": "id"
+  },
+  "summary": "Forwards a layout/selection change to the game-work UI work, then rebuilds the menu layout.",
+  "confidence": 0.35,
+  "evidence": "func_001D9844(*(gamework+0x88),arg2) then func_00207BA0(self); only caller 0x1A14EC."
+ },
+ {
+  "address": "0x00207BA0",
+  "name": "maybe_Menu_RemoveActorAttachments",
+  "signature": "void maybe_Menu_RemoveActorAttachments(MenuState* group)",
+  "params": {
+   "group": "menu/party group object"
+  },
+  "summary": "Removes the per-actor menu attachment from every actor in the global list and the four sub-lists, and stops the actor's menu animation when its counter has expired.",
+  "confidence": 0.4,
+  "evidence": "For each actor compares u16 at g_00207de8+actor with g_00207de4; calls vfunc+0xe4(actor,id,1) and, when func_001CA474(...)<=record->f_103, calls vfunc+0x50(actor,1,0)."
+ },
+ {
+  "address": "0x00207DEC",
+  "name": "maybe_Menu_RebuildEffectList",
+  "signature": "void maybe_Menu_RebuildEffectList(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Rebuilds the per-actor effect/animation descriptors for all currently inactive actors: counts them, allocates a table and fills one 0x10-byte record per actor.",
+  "confidence": 0.3,
+  "evidence": "Counts actors with vfunc+0x18==0 and (f_e74 & 0x46)==0 over the four lists, allocates count<<4 with func_0010F6EC and fills 16-byte records, then frees with func_0010F69C; also calls func_0020D4C0/0x20FA34 for the layout. Called by 0x16C714/0x2DE4BC."
+ },
+ {
+  "address": "0x0020870C",
+  "name": "Menu_GetActorByIndex",
+  "signature": "int Menu_GetActorByIndex(GameWork* work, int index)",
+  "params": {
+   "work": "game work",
+   "index": "flat actor index"
+  },
+  "summary": "Returns the actor at a flat index across the global list followed by the UI list at work+0x427c.",
+  "confidence": 0.5,
+  "evidence": "Walks work->f_4260 list while vfunc+0x24 is true, then work->f_427c/f_4280, then continues the first list; returns 0 when the index is past the end. Used by 0x202F3C, 0x467E58, 0x481800, 0x63761C."
+ },
+ {
+  "address": "0x002087F4",
+  "name": "maybe_Menu_FindSlotForEntry",
+  "signature": "unsigned maybe_Menu_FindSlotForEntry(unsigned self, unsigned entryId, unsigned arg3)",
+  "params": {
+   "self": "menu state",
+   "entryId": "entry id",
+   "arg3": "extra flag"
+  },
+  "summary": "Searches the four list columns for a slot that accepts the entry id and returns its index, or 0xffffffff when none does.",
+  "confidence": 0.4,
+  "evidence": "Loops 0..3 calling func_0020B100(self,i,entryId,arg3,0) and returns the first non-zero index; called by 9 menu open paths (0x42C7F8, 0x432E24, 0x47EFE8...)."
+ },
+ {
+  "address": "0x0020884C",
+  "name": "maybe_Menu_ApplyActorModelPattern",
+  "signature": "void maybe_Menu_ApplyActorModelPattern(MenuState* self, unsigned unused, unsigned unused2, unsigned unused3)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Copies each actor's menu model pattern (u16 at entry+0x34e4) into its model instance and notifies the game-work that the menu models were updated.",
+  "confidence": 0.35,
+  "evidence": "Walks the four lists and for each index reads self+0x34e4, sets (((vfunc+0xa0 record))+4) and +0x12/+0x16, then func_002AEA84(*(gamework+0x74),1,0). Only caller 0x20713C (menu init)."
+ },
+ {
+  "address": "0x00208E04",
+  "name": "maybe_Menu_SetSlotSerial",
+  "signature": "void maybe_Menu_SetSlotSerial(MenuState* self, unsigned id, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "id": "serial/id to store",
+   "arg3": "alternate",
+   "arg4": "stack cookie"
+  },
+  "summary": "Stores a serial id into the first free of five 0x40-byte slot records (or into a matching record), used to keep the menu slot list in sync with the actor list.",
+  "confidence": 0.35,
+  "evidence": "Compares self->f_4e/f_8e/f_ce/f_10e/f_14e chain (same layout as 0x20B49C/0x20DF20) and writes f_4e = (short)id, f_48=0, f_50=-1; then func_0020BC04(self,id) when the game-work menu flag is set. Called by 0x27C374/0x27C46C."
+ },
+ {
+  "address": "0x00208ED4",
+  "name": "maybe_Menu_CreateEntryObjects",
+  "signature": "void maybe_Menu_CreateEntryObjects(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Creates the menu's per-entry objects (0x68 of them) on the self+0x4308 list and initialises the item-slot metadata block at +0x56c4.",
+  "confidence": 0.3,
+  "evidence": "Writes the metadata bytes f_56c4..f_56cf (0x3d/6/0x27/0x4e), loops 0x68 times allocating records with func_00109DC8(g_00209aec,...) and linking them with func_001235A4, and calls func_00275094 on each; called by 0x20713C."
+ },
+ {
+  "address": "0x00209FCC",
+  "name": "maybe_Menu_OpenStatusWindow",
+  "signature": "unsigned maybe_Menu_OpenStatusWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Finds the hero actor and a second actor flagged by vfunc+0x80, then opens the status/compare window with the actor's current parameters.",
+  "confidence": 0.35,
+  "evidence": "Scans the global actor list for actor with f_768==1 (hero) and one with vfunc+0x80()==1; builds a 0x?? parameter block, calls func_00171930(selected window,&block,actor[0x2c44],8) and then func_004868D8/0x488414 to check the result. Called from 0x20C348."
+ },
+ {
+  "address": "0x0020A208",
+  "name": "maybe_Menu_Camp_UpdateModelFadeIn",
+  "signature": "unsigned maybe_Menu_Camp_UpdateModelFadeIn(MenuState* self)",
+  "params": {
+   "self": "menu state (camp menu)"
+  },
+  "summary": "Drives the fade-in of the party's 3D models in the camp menu: waits until all model actors are ready, then advances the fade step counter, averaging the per-actor fade values.",
+  "confidence": 0.35,
+  "evidence": "Checks self->f_4248, counts four sub-groups at +0x428c, calls func_0020C0C8/0x20BFF0 (model measurement), iterates self->f_4264 actor list with vfunc+0x24/+0x18, scales by g_0020a534/538/53c/540, and increments self->f_4d74 up to 3."
+ },
+ {
+  "address": "0x0020A560",
+  "name": "maybe_Menu_Slot_StoreActorId",
+  "signature": "void maybe_Menu_Slot_StoreActorId(MenuState* self, unsigned actorId, unsigned unused, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "actorId": "character id",
+   "unused": "unused",
+   "arg4": "stack cookie"
+  },
+  "summary": "Stores a character id into the first free of five 0x40-byte slot records (or into an existing matching one) and notifies the item-icon layer.",
+  "confidence": 0.4,
+  "evidence": "Compares self->f_4d/f_8d/f_cd/f_10d/f_14d, then writes record f_4d=id, f_48=0, f_50=-1 and calls func_0020BD94(self,id) when gamework+0x4244 is set; sibling of 0x00208E04."
+ },
+ {
+  "address": "0x0020A63C",
+  "name": "maybe_Menu_AttachActorToWindow",
+  "signature": "int maybe_Menu_AttachActorToWindow(MenuState* self, int column, unsigned slot, unsigned entry, unsigned flags, int immediate)",
+  "params": {
+   "self": "menu state",
+   "column": "list column",
+   "slot": "list index",
+   "entry": "entry id",
+   "flags": "flags",
+   "immediate": "create immediately"
+  },
+  "summary": "Creates the actor for an entry and attaches it to the window of the given list column, or refreshes an existing attachment; returns whether a window/entry was created.",
+  "confidence": 0.35,
+  "evidence": "Calls func_00605C84(self+0x4330) or func_00601CC0(self+0x47a0) depending on gamework+0x4244, then func_002AB62C(list,slot) and vfunc+0x44(actor,entry,flags); attaches with func_00606AE8 or func_0060347C/0x604334 and plays SE via func_005E7848(..,0x27,0)."
+ },
+ {
+  "address": "0x0020A9B8",
+  "name": "maybe_Menu_Actor_PlayUiAnimation",
+  "signature": "void maybe_Menu_Actor_PlayUiAnimation(MenuState* self, unsigned anim, unsigned arg3, unsigned arg4, unsigned arg5, unsigned arg6)",
+  "params": {
+   "self": "menu state",
+   "anim": "animation id",
+   "arg3": "arg",
+   "arg4": "arg",
+   "arg5": "arg",
+   "arg6": "arg"
+  },
+  "summary": "Plays a UI animation on the menu's actor controller (self->f_4320->f_204) by enabling it and forwarding the animation parameters.",
+  "confidence": 0.45,
+  "evidence": "if self->f_4320!=0: f204=self->f_4320->f_204; calls vfunc+0x18(f204,1), vfunc+0x74(f204,0) and func_002DFDE8(f204,anim,arg5,arg4,arg6,0,local); 26 callers, all menu code."
+ },
+ {
+  "address": "0x0020AA54",
+  "name": "maybe_Menu_SetSelectedActorId",
+  "signature": "void maybe_Menu_SetSelectedActorId(MenuState* self, int actorId, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "actorId": "id, 0xff normalised to 0",
+   "arg3": "unused",
+   "arg4": "stack cookie"
+  },
+  "summary": "Stores the selected actor id in the menu state and, when the actor is the leader, applies the id as the model's animation pattern.",
+  "confidence": 0.35,
+  "evidence": "Stores (char)arg2 into self->f_4208 (0xff->0); when self->f_4244 set, resolves the actor via func_00610768 and the record table and calls func_00610494(actor,self->f_4208,0) if record->f_78==4 and f_38==2."
+ },
+ {
+  "address": "0x0020AB04",
+  "name": "maybe_Menu_CloseWindow",
+  "signature": "void maybe_Menu_CloseWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Closes a menu window: clears its state, sends the close notification with the window parameters, stops the associated talk/message UI and releases the window object.",
+  "confidence": 0.45,
+  "evidence": "func_0020D8BC(self,0xff,g_0020ac4c), func_00626338(work), clears *(g_0020ac50+self), builds {state,f_4e64,f_4e0f,f_4e10} and calls func_0019EAD8(self->f_c,&rec), func_0062AD58/0x1F17C (sound), then func_002062BC; releases self->f_4204 via vfunc+4."
+ },
+ {
+  "address": "0x0020AC60",
+  "name": "maybe_Menu_ResumeActorAnimations",
+  "signature": "void maybe_Menu_ResumeActorAnimations(void)",
+  "params": {},
+  "summary": "Resumes the idle animation of every non-player actor in the work's party list, skipping when more than one local player is active.",
+  "confidence": 0.35,
+  "evidence": "Loops i<4 over func_002AB62C(gamework+0x4254,i), and for actors whose vfunc+0x10 is 0 calls vfunc+0x90/+0x94 (float accessors) and vfunc+0xe4(actor,1) when func_003CE464()>1."
+ },
+ {
+  "address": "0x0020AF04",
+  "name": "maybe_Menu_CheckActorAnimationDone",
+  "signature": "bool maybe_Menu_CheckActorAnimationDone(MenuState* self, unsigned actorId)",
+  "params": {
+   "self": "menu state",
+   "actorId": "character id"
+  },
+  "summary": "Returns true when the actor with the given id has finished its menu animation, tracking a per-actor retry counter in the game work.",
+  "confidence": 0.3,
+  "evidence": "Scans the four lists with func_005797D8/func_002AB62C, filters f_e74 bit 0, resolves func_0062BD04(actor)->f_d4==arg2, then compares record->f_102 (u16 frame counter) against g_0020b060 and updates *(gamework+0x2d54c+arg2)."
+ },
+ {
+  "address": "0x0020B10C",
+  "name": "maybe_Menu_CheckSlotSelectable",
+  "signature": "unsigned maybe_Menu_CheckSlotSelectable(MenuState* self, int column, unsigned entryId, int arg4, int arg5)",
+  "params": {
+   "self": "menu state",
+   "column": "list column",
+   "entryId": "entry id",
+   "arg4": "extra slot count",
+   "arg5": "skip window check"
+  },
+  "summary": "Decides whether an entry can be put into a list column: checks the global limit (9/0x1b), the current number of visible entries and the entry's window slot, and may create the window.",
+  "confidence": 0.4,
+  "evidence": "func_00631DFC()+arg4<9, func_00631C60(self,entryId,0)+arg4<0x1b, func_0063EEAC(entryId)->f_9e/f_9f, calls 0x20B320 for the count, compares list occupancy, reads self->f_4201 mode and calls func_00603E8C/func_006079F4."
+ },
+ {
+  "address": "0x0020B320",
+  "name": "maybe_Menu_CountVisibleSlots",
+  "signature": "bool maybe_Menu_CountVisibleSlots(MenuState* self, unsigned entryType, int limit, int arg4)",
+  "params": {
+   "self": "menu state",
+   "entryType": "entry type 0..4",
+   "limit": "slot budget",
+   "arg4": "count mode"
+  },
+  "summary": "Counts the actors of the four list columns whose entry type matches and returns whether that count fits the per-type slot budget.",
+  "confidence": 0.4,
+  "evidence": "Maps entry type 0..4 to budgets 8/7/6/4; scans the four lists via func_002AB62C, matching func_0063EEAC(actor->f_768)->f_9e/f_9f against the type, adding func_002AB6FC(list,1) or func_005797D8(list,0,1); returns budget < limit+count."
+ },
+ {
+  "address": "0x0020B49C",
+  "name": "Menu_ResetSlotRecords",
+  "signature": "void Menu_ResetSlotRecords(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Resets the five 0x40-byte slot records (and the trailing field at +0x154) to their empty values, releasing each record's sub-object first.",
+  "confidence": 0.5,
+  "evidence": "Loops i<5 over self+i*0x40, tests f_4c/f_4d==-1 && f_4e==-1, calls func_0030CA34(&rec->f_14) when in use, then sets f_48/f_50=-1, f_4c/f_4d=0xff, f_4e=0xffff; finally self->f_154=0xff."
+ },
+ {
+  "address": "0x0020B5AC",
+  "name": "Menu_CountPartyActors",
+  "signature": "int Menu_CountPartyActors(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Returns the total number of actors in the party list and the guest/second list.",
+  "confidence": 0.5,
+  "evidence": "Returns func_005797D8(self+0x4254,0) + func_005797D8(self+0x4270,0); called by 8 menu paths."
+ },
+ {
+  "address": "0x0020B5E8",
+  "name": "maybe_Menu_GetPartyActorByIndex",
+  "signature": "int maybe_Menu_GetPartyActorByIndex(MenuState* self, Actor* skip)",
+  "params": {
+   "self": "menu state",
+   "skip": "actor excluded from the result"
+  },
+  "summary": "Picks an actor from the party/guest lists that is not the given actor.",
+  "confidence": 0.4,
+  "evidence": "Collects up to 16 valid actors from the four lists via vfunc+0x18 into local_68, then func_001CA474 picks an index; arg2 is the actor to avoid; called from 0x43247C/0x493980."
+ },
+ {
+  "address": "0x0020BC04",
+  "name": "maybe_Menu_UpdateItemIcon",
+  "signature": "void maybe_Menu_UpdateItemIcon(MenuState* self, unsigned actorId, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "actorId": "character id",
+   "arg3": "slot",
+   "arg4": "index"
+  },
+  "summary": "Refreshes the item icon/slot record of the actor whose id matches, using the 'it_0001' icon sheet and the five slot records.",
+  "confidence": 0.35,
+  "evidence": "Inline literal 'it_0001' at 0x20BD8C; checks self->f_4e/f_8e/... chain and calls func_0011CCA0/func_0011142C/func_0030CAF4/func_0030CA34 for the slot record; only called from 0x208E04."
+ },
+ {
+  "address": "0x0020BD9C",
+  "name": "maybe_Menu_UpdateSkillIcon",
+  "signature": "void maybe_Menu_UpdateSkillIcon(MenuState* self, unsigned actorId, unsigned skillId, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "actorId": "character id",
+   "skillId": "skill id",
+   "arg4": "slot"
+  },
+  "summary": "Refreshes the skill icon/command entry of an actor, using the 'sk_0155'/'sk_0034'/'sk_0104' icon sheets.",
+  "confidence": 0.35,
+  "evidence": "Inline literals sk_0155/sk_0034/sk_0104 at 0x20BFD4..0x20BFE4; same five-slot id chain as 0x20BC04 but writes f_4e; uses func_0030CC0C/func_0030CA34."
+ },
+ {
+  "address": "0x0020BFF0",
+  "name": "maybe_Menu_Camp_CreateCommandHandlers",
+  "signature": "void maybe_Menu_Camp_CreateCommandHandlers(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Registers the camp menu's command/input handlers in a fixed order (movement, confirm, cancel, page switches) on the handler list at self+0x428c.",
+  "confidence": 0.45,
+  "evidence": "Measures the visible actor count/size via the list at self+0x4298 then calls func_003D13C4(self+0x428c, cmd, mode) about 40 times with command ids 0x1d,0x41,7,2,0x11,0x10,0x1e,0x1f,0x2c... (handler factory). Called from 0x20A208."
+ },
+ {
+  "address": "0x0020C0C8",
+  "name": "maybe_Menu_MeasureActorHeight",
+  "signature": "void maybe_Menu_MeasureActorHeight(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Measures the current height/animation offset of each valid actor in the global list so the menu can align the 3D models.",
+  "confidence": 0.3,
+  "evidence": "Walks self->f_4264 list; for actors where vfunc+0x24 and +0x18 are true, sums func_0048E2C0(actor,0) and func_0048F154(actor) and converts the signed result to float."
+ },
+ {
+  "address": "0x0020C2C4",
+  "name": "maybe_Menu_CloseCampWindow",
+  "signature": "int maybe_Menu_CloseCampWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Closes the camp menu: notifies the menu manager with the current menu id, updates the sound work and advances the window state machine.",
+  "confidence": 0.4,
+  "evidence": "func_001F36B8(*(gamework+0x94),self->f_4200,u16(g_0020c340+self),self->f_4244,0), func_002D24BC(*(work+0x14)), then vfunc+0x18(self->f_10,0xd); returns 1."
+ },
+ {
+  "address": "0x0020C348",
+  "name": "maybe_Menu_OnSlotChanged",
+  "signature": "void maybe_Menu_OnSlotChanged(MenuState* self, unsigned actorId, int arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "actorId": "new actor id",
+   "arg3": "target index (-1 = auto)",
+   "arg4": "stack cookie"
+  },
+  "summary": "Handles a slot/actor change in the menu: validates the id against the five slots, computes the target index (special ids 1 and 0x4d), and moves the selection.",
+  "confidence": 0.4,
+  "evidence": "Checks self->f_4c/f_8c/f_cc/f_10c/f_14c chain; for arg2==1 calls func_00209FCC, for 0x4d flips func_001CA3A0(work+0x4218); arg3<0 resolved by func_0020F13C(self,id,idx); then walks the list."
+ },
+ {
+  "address": "0x0020C810",
+  "name": "Menu_FindActorByHandle",
+  "signature": "int Menu_FindActorByHandle(unsigned unused, unsigned* handle)",
+  "params": {
+   "unused": "unused",
+   "handle": "actor handle to find"
+  },
+  "summary": "Returns the actor in the four menu lists whose handle matches the given handle, or 0.",
+  "confidence": 0.5,
+  "evidence": "Compares *(node+0x110) with *arg2 in the 0xffff-masked form (uVar3>>0xb) over the four lists at gamework+0x428c; 16 callers including 0x2DAC4C/0x38A4F8."
+ },
+ {
+  "address": "0x0020C8A4",
+  "name": "maybe_Menu_BuildMemberMask",
+  "signature": "unsigned maybe_Menu_BuildMemberMask(MenuState* self, unsigned actorIndex, int includeInactive)",
+  "params": {
+   "self": "menu state",
+   "actorIndex": "target index",
+   "includeInactive": "include inactive members"
+  },
+  "summary": "Builds a bitmask of party members present in the party list and stores the selection mask for the given index; used when several members share an action.",
+  "confidence": 0.35,
+  "evidence": "Walks work+0x4254, vfunc+0x24/+0x184 flags, func_00639B74(actor) bit index, accumulating uVar6; compares with 1<<(arg2&0xff); then func_004A55A0/func_004A4BB4 and func_00100050 on error (assert)."
+ },
+ {
+  "address": "0x0020CB6C",
+  "name": "Menu_ClearActorUiFlag",
+  "signature": "void Menu_ClearActorUiFlag(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Clears the UI flag byte at +0x94 of the window object registered for this menu state.",
+  "confidence": 0.5,
+  "evidence": "Only operation: if *(g_0020cba0+self)!=0 then *(u8*)(that+0x94)=0. Called from 8 menu update paths."
+ },
+ {
+  "address": "0x0020CBA4",
+  "name": "maybe_Menu_InsertPartyActors",
+  "signature": "void maybe_Menu_InsertPartyActors(MenuState* self, char a, char b, char c, char d)",
+  "params": {
+   "self": "menu state",
+   "a": "first actor id",
+   "b": "second actor id",
+   "c": "third actor id",
+   "d": "fourth actor id"
+  },
+  "summary": "Inserts up to four party actors at the front of the menu's party list, in the given order, and updates the menu model.",
+  "confidence": 0.4,
+  "evidence": "Loops i=3..0 over local_50[]={a,b,c,d}, resolves each with func_002AB698(self+0x4254,id), then moves the matching node to the list head with func_0010EBE4/func_001235A4; later calls func_002D2564/func_0027A3BC."
+ },
+ {
+  "address": "0x0020CE5C",
+  "name": "maybe_Menu_CalcLayoutOffsets",
+  "signature": "void maybe_Menu_CalcLayoutOffsets(float* out, MenuState* self, int column)",
+  "params": {
+   "out": "receives min/max offsets",
+   "self": "menu state",
+   "column": "list column"
+  },
+  "summary": "Computes the horizontal/vertical extents of the entries of one list column so the layout can be positioned.",
+  "confidence": 0.3,
+  "evidence": "Counts func_005797D8(&self[column].f_428c,1), walks the list with vfunc+0x18/+0x10 and calls func_0020D650(&local,self,*node), subtracting g_0020cfb0/cfb4 and taking min/max into out[1]/out[0]."
+ },
+ {
+  "address": "0x0020CFC0",
+  "name": "maybe_Menu_ApplyEntryAttachments",
+  "signature": "void maybe_Menu_ApplyEntryAttachments(MenuState* self, unsigned unused, unsigned unused2, unsigned unused3)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "For every entry in the four lists, computes its attachment id and applies it to all actors of the global list.",
+  "confidence": 0.35,
+  "evidence": "Loops i<4 over gamework+0x428c lists, for each node calls func_00639E94(globalActor,node) and vfunc+0x120(globalActor,id,1) when the id differs from g_0020d088; called from 0x20F480."
+ },
+ {
+  "address": "0x0020D1F0",
+  "name": "Menu_HasMultipleEntries",
+  "signature": "bool Menu_HasMultipleEntries(MenuState* self, unsigned entryId)",
+  "params": {
+   "self": "menu state",
+   "entryId": "entry id"
+  },
+  "summary": "Returns true when more than one list column accepts the entry id.",
+  "confidence": 0.5,
+  "evidence": "Sums func_0063B0D4(&self[i].f_428c,entryId) over i<4 and returns 1<sum; called from 5 menu paths."
+ },
+ {
+  "address": "0x0020D294",
+  "name": "maybe_Menu_Item_InitHandlers",
+  "signature": "void maybe_Menu_Item_InitHandlers(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Initialises the item-use menu window: chooses the message/window type for the selected item and registers the confirm/cancel/page handlers.",
+  "confidence": 0.4,
+  "evidence": "Sets f_424a/f_423e, reads g_0020d42c+self flag and func_0063F1E0(item)->f_3c, calls func_001F36B8(*(work+0x94),f_4200,f_4e64,f_4244), then a run of func_003D13C4(self+0x4d78, cmd, mode) handler registrations."
+ },
+ {
+  "address": "0x0020D430",
+  "name": "maybe_Menu_ClearPendingFlagA",
+  "signature": "void maybe_Menu_ClearPendingFlagA(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Clears a per-menu pending flag byte.",
+  "confidence": 0.4,
+  "evidence": "Single instruction: *(u8*)(g_0020d454+self)=0; sibling of 0x20E554/0x20E6CC/0x20EE1C which only differ in the table address. Likely a vtable 'on leave' hook."
+ },
+ {
+  "address": "0x0020D970",
+  "name": "maybe_Menu_Status_InitHandlers",
+  "signature": "void maybe_Menu_Status_InitHandlers(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Initialises the status/equipment sub-menu: resets the cursor id, registers the command handlers and starts the layout animation.",
+  "confidence": 0.35,
+  "evidence": "self->f_4211=0xff; func_003D13C4(self+0x4d78, ids 0x13,0x15,0x14,9,10,0x39,7,2,0xc,0x10,0x26,0xdc,0x18,0x27,0x2b ...) with func_0020EB5C/0x20C48C/0x3D1248/0x3D1144; ends with func_001F36B8(...)."
+ },
+ {
+  "address": "0x0020DB40",
+  "name": "maybe_Menu_PlaySelectSe",
+  "signature": "int maybe_Menu_PlaySelectSe(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Plays the menu selection sound when the per-menu flag is set.",
+  "confidence": 0.4,
+  "evidence": "if *(g_0020db88+self)!=0 then vfunc+0x18(self->f_10,1); returns 0. func_003D1454 is the sound/cursor helper used by the identical siblings 0x20F054/0x20F434."
+ },
+ {
+  "address": "0x0020DB8C",
+  "name": "maybe_Menu_SelectPartyPair",
+  "signature": "void maybe_Menu_SelectPartyPair(MenuState* self, unsigned first, unsigned second, int arg4)",
+  "params": {
+   "self": "menu state",
+   "first": "index into party list",
+   "second": "index into party list",
+   "arg4": "selected slot"
+  },
+  "summary": "Selects two actors of the party list (e.g. source and target of an item/skill) and stores their ids in the four selection slots.",
+  "confidence": 0.35,
+  "evidence": "func_002AB62C(&self->f_4254,arg2/arg3), compares f_110 handles through g_0020df0c/df10, then vfunc+0x18/+0x24 and stores arg4 into f_4318/f_4319/f_431a/f_431b; ends with f_424c=1."
+ },
+ {
+  "address": "0x0020DF20",
+  "name": "Menu_ResetSlotRecord",
+  "signature": "void Menu_ResetSlotRecord(SlotRecord* rec)",
+  "params": {
+   "rec": "0x40-byte slot record"
+  },
+  "summary": "Resets one 0x40-byte menu slot record to empty, releasing its sub-object if it was in use.",
+  "confidence": 0.5,
+  "evidence": "Tests rec->f_4c/f_4d==-1 && f_4e==g_0020df6c, calls func_0030CA34(&rec->f_14), then sets f_48/f_50=-1, f_4c/f_4d=0xff, f_4e=(short)g_0020df6c; identical structure to the loop in 0x20B49C."
+ },
+ {
+  "address": "0x0020DF9C",
+  "name": "maybe_Menu_UnsupportedPath",
+  "signature": "void maybe_Menu_UnsupportedPath(unsigned self, unsigned arg2)",
+  "params": {
+   "self": "menu object",
+   "arg2": "id"
+  },
+  "summary": "Handles the (unexpected) case where the menu mode flag is set: runs the fallback path and then hits the engine's fatal-error helper.",
+  "confidence": 0.25,
+  "evidence": "If gamework+0x4244 != 0 calls func_0020B990(self,arg2) and then func_00100050(...,g_0020e0c8,8,4,0xff) - func_00100050 is the 'subroutine does not return' fatal/assert helper seen elsewhere."
+ },
+ {
+  "address": "0x0020E448",
+  "name": "maybe_Menu_SetEntryOnActor",
+  "signature": "void maybe_Menu_SetEntryOnActor(MenuState* self, unsigned index, unsigned char entry, unsigned unused)",
+  "params": {
+   "self": "menu state",
+   "index": "party list index",
+   "entry": "entry value",
+   "unused": "unused"
+  },
+  "summary": "Sets a per-entry value on the actor at the given party-list index by forwarding it to the actor's UI animation controller.",
+  "confidence": 0.4,
+  "evidence": "func_002AB62C(self+0x4254,index), then func_0027A3BC(actor) and vfunc+0xb0(controller,&packed,1); called from 0x38F1A8/0x38F6C4."
+ },
+ {
+  "address": "0x0020E554",
+  "name": "maybe_Menu_ClearPendingFlagB",
+  "signature": "void maybe_Menu_ClearPendingFlagB(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Clears a per-menu pending flag byte (second table).",
+  "confidence": 0.4,
+  "evidence": "Single instruction *(u8*)(g_0020e578+self)=0; identical sibling of 0x20D430/0x20E6CC/0x20EE1C; calls func_003D1198."
+ },
+ {
+  "address": "0x0020E57C",
+  "name": "maybe_Menu_CloseSubWindow",
+  "signature": "int maybe_Menu_CloseSubWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Closes a sub-window when its flag is set, notifying the menu manager and the sound work.",
+  "confidence": 0.4,
+  "evidence": "if *(g_0020e61c+self)!=0: func_001F36B8(*(work+0x94),f_4200,u16(g_0020e620+self),f_4244,0), func_002D24BC(*(work+0x14)), vfunc+0x18(self->f_10,0xd); returns 1."
+ },
+ {
+  "address": "0x0020E628",
+  "name": "maybe_Menu_InitHandlersVariant",
+  "signature": "void maybe_Menu_InitHandlersVariant(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Registers a reduced command-handler set for the current menu page when the 'sub-menu' flag is set.",
+  "confidence": 0.35,
+  "evidence": "self->f_424a=0; if f_4e6f!=0 registers func_003D13C4(self+0x4d78,0x13/0x15/0x14), calls func_0020EB5C/0x3D1144 and func_001F36B8(...)."
+ },
+ {
+  "address": "0x0020E6CC",
+  "name": "maybe_Menu_ClearPendingFlagC",
+  "signature": "void maybe_Menu_ClearPendingFlagC(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Clears a per-menu pending flag byte (third table).",
+  "confidence": 0.4,
+  "evidence": "Single instruction *(u8*)(g_0020e6f0+self)=0; identical sibling of 0x20D430/0x20E554/0x20EE1C."
+ },
+ {
+  "address": "0x0020E75C",
+  "name": "maybe_Menu_UpdateSelectionWindow",
+  "signature": "void maybe_Menu_UpdateSelectionWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Updates the multi-member selection window: allocates the per-selection objects, refreshes the actor list and closes the window when the selection completes.",
+  "confidence": 0.35,
+  "evidence": "Bails out when gamework+0x4244==0; uses self->f_4318..f_431b, func_001C8468(*(work+0x54)), a lazily allocated 0x21c-byte object, func_002AB698/func_002AB62C, func_003CE464, func_002D23D0 and several func_0060xxxx window calls. Called from 0x20F948 too."
+ },
+ {
+  "address": "0x0020ED4C",
+  "name": "maybe_Menu_InitTargetHandlers",
+  "signature": "void maybe_Menu_InitTargetHandlers(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Registers the target-selection handlers for the current menu page (cursor, confirm, page) depending on the page type.",
+  "confidence": 0.35,
+  "evidence": "Picks self->f_442c or f_489c as page id, func_001F36B8(...), and for page 2 sets f_423e=1 and registers func_003D13C4(self+0x4d78,8,10),(0,0x3c),(7,0),(2,0); otherwise only (8,5)."
+ },
+ {
+  "address": "0x0020EE1C",
+  "name": "maybe_Menu_ClearPendingFlagD",
+  "signature": "void maybe_Menu_ClearPendingFlagD(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Clears a per-menu pending flag byte (fourth table).",
+  "confidence": 0.4,
+  "evidence": "Single instruction *(u8*)(g_0020ee40+self)=0; identical sibling of 0x20D430/0x20E554/0x20E6CC."
+ },
+ {
+  "address": "0x0020EF58",
+  "name": "maybe_Menu_InitCursorHandlers",
+  "signature": "void maybe_Menu_InitCursorHandlers(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Registers the cursor-movement handlers and resets the cursor id for a simple list page.",
+  "confidence": 0.35,
+  "evidence": "self->f_4211=0xff; func_003D13C4(self+0x4d78,0x13),(0x15),(0x14),(9),(10); func_003D1144; func_001F36B8(...). Same pattern as 0x20D970/0x20F330."
+ },
+ {
+  "address": "0x0020F030",
+  "name": "Menu_ResetCursorField",
+  "signature": "void Menu_ResetCursorField(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Resets the menu cursor field to 0xff (no selection).",
+  "confidence": 0.5,
+  "evidence": "Single store self->f_4211=0xff and a call to func_003D1198; identical to 0x20F410."
+ },
+ {
+  "address": "0x0020F054",
+  "name": "maybe_Menu_PlaySelectSeVariant",
+  "signature": "int maybe_Menu_PlaySelectSeVariant(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Plays the selection sound when the corresponding menu flag is set.",
+  "confidence": 0.4,
+  "evidence": "if *(g_0020f09c+self)!=0 then vfunc+0x18(self->f_10,1); returns 0; identical to 0x20DB40/0x20F434."
+ },
+ {
+  "address": "0x0020F330",
+  "name": "maybe_Menu_InitCursorHandlersVariant",
+  "signature": "void maybe_Menu_InitCursorHandlersVariant(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Registers the cursor handlers plus the layout animation reset for another list page.",
+  "confidence": 0.35,
+  "evidence": "Same registration block as 0x20EF58/0x20D970 but additionally calls func_0020EB5C (layout reset); ends with func_001F36B8(...)."
+ },
+ {
+  "address": "0x0020F410",
+  "name": "Menu_ResetCursorField2",
+  "signature": "void Menu_ResetCursorField2(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Resets the menu cursor field to 0xff (second copy).",
+  "confidence": 0.5,
+  "evidence": "Single store self->f_4211=0xff + func_003D1198; identical to 0x20F030."
+ },
+ {
+  "address": "0x0020F434",
+  "name": "maybe_Menu_PlaySelectSeVariant2",
+  "signature": "int maybe_Menu_PlaySelectSeVariant2(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Plays the selection sound when the corresponding menu flag is set (third copy).",
+  "confidence": 0.4,
+  "evidence": "if *(g_0020f47c+self)!=0 then vfunc+0x18(self->f_10,1); returns 0; identical to 0x20DB40/0x20F054."
+ },
+ {
+  "address": "0x0020F480",
+  "name": "maybe_Menu_SumPartyStats",
+  "signature": "void maybe_Menu_SumPartyStats(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Sums the current HP and stat values of all visible party actors and adds them to the menu totals used by the status page.",
+  "confidence": 0.45,
+  "evidence": "Calls func_0020B064, loops the four lists, filters vfunc+0x10 and (f_39d & 0x56)==0, resolves func_0063E5C8(actor[0x1db])->f_c4/f_100, adds into self->f_56b4/f_56b8; then func_00604F50/func_0017505C on the selected window and func_0020CFC0."
+ },
+ {
+  "address": "0x0020F600",
+  "name": "maybe_Menu_OpenMessageWindow",
+  "signature": "void maybe_Menu_OpenMessageWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Opens the message/description window for the selected entry, choosing the message table by the menu flag and wiring the message callbacks.",
+  "confidence": 0.45,
+  "evidence": "Resets f_4211, calls func_0020AEF4(self,self->f_4e0f) into f_424f, then func_006133B4/func_00613F54 or func_00612CA0 on work+0x24a98 (message work) with f_4e0f/f_4e10/f_4e12...; also func_001E77FC(*(work+0x90),0x101,1) (text window request)."
+ },
+ {
+  "address": "0x0020F728",
+  "name": "maybe_Menu_CloseMessageWindows",
+  "signature": "void maybe_Menu_CloseMessageWindows(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Closes the message windows that were opened for the entry (ids 0x101, g_0020f874, g_0020f878, 0x104) based on the per-window flags.",
+  "confidence": 0.45,
+  "evidence": "Calls vfunc+8(messageWork,id,1) and func_001E77FC(*(work+0x90),id,1) for ids 0x101 (f_56c5), g_0020f874 (f_56c8), g_0020f878 (f_56cb), 0x104 (f_56ce)."
+ },
+ {
+  "address": "0x0020F87C",
+  "name": "maybe_Menu_SelectPartyActor",
+  "signature": "void maybe_Menu_SelectPartyActor(MenuState* self, unsigned index)",
+  "params": {
+   "self": "menu state",
+   "index": "party list index"
+  },
+  "summary": "Selects the actor at the given party-list index as the current menu actor and stores it in the first free selection slot.",
+  "confidence": 0.4,
+  "evidence": "When gamework+0x4244 set: f_424c=1, f_424d=0, func_002AB62C(&self->f_4254,index), func_001C7570(*(work+0x54),actor->f_110), and stores actor->f_768 into f_4318..f_431b."
+ },
+ {
+  "address": "0x0020F948",
+  "name": "maybe_Menu_TeardownWindow",
+  "signature": "void maybe_Menu_TeardownWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Tears the menu window down: resets the two layout objects, releases the window object, the five slot records and the selection objects, then updates the selection window.",
+  "confidence": 0.45,
+  "evidence": "func_00175B38(self+0x47a0) or func_0060E2B4(self+0x4330), releases self->f_10 via vfunc+8/+0xc, loops 5x func_00641AF4/func_0030C4A4 on self+i*0x40+0x14, then func_0020E75C; increments self->f_432c."
+ },
+ {
+  "address": "0x0020FA34",
+  "name": "maybe_Menu_CalcColumnFlags",
+  "signature": "unsigned long long maybe_Menu_CalcColumnFlags(MenuState* self, int column, unsigned arg3, unsigned arg4)",
+  "params": {
+   "self": "menu state",
+   "column": "column index 0..6",
+   "arg3": "actor",
+   "arg4": "value"
+  },
+  "summary": "Maps a column index to its bit flag (1,8,0x10,0x20,0x40,0x80,0x100) and computes the value that column contributes to the menu (used for per-slot equipment/stat columns).",
+  "confidence": 0.3,
+  "evidence": "switch(arg2) 0..6 selecting 1/8/0x10/0x20/0x40/0x80/0x100, gated by self->f_4e98<3; uses g_0020fbf4 and the func_006F1EEC game work; called from 0x207DEC."
+ },
+ {
+  "address": "0x0020FC08",
+  "name": "Menu_DestroyWindow",
+  "signature": "void Menu_DestroyWindow(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Destroys the menu window: releases the window object and the two embedded layout objects.",
+  "confidence": 0.5,
+  "evidence": "if self->f_10!=0: vfunc+4(self->f_10), self->f_10=0; func_0016D820(self+0x4330) and func_0016D820(self+0x47a0) (layout destructors); func_0020E358; called from 0x19F908."
+ },
+ {
+  "address": "0x0020FC50",
+  "name": "Menu_BroadcastEntryValue",
+  "signature": "void Menu_BroadcastEntryValue(unsigned unused, unsigned a, unsigned b)",
+  "params": {
+   "unused": "unused",
+   "a": "value a",
+   "b": "value b"
+  },
+  "summary": "Calls virtual slot +0x13c(a,b) on every valid actor of the four menu lists.",
+  "confidence": 0.5,
+  "evidence": "Loops i<4 over gamework+0x428c, tests vfunc+0x18, calls vfunc+0x13c(node,arg2,arg3); called from 0x3CABEC."
+ },
+ {
+  "address": "0x0020FCEC",
+  "name": "Menu_BroadcastEntryId",
+  "signature": "void Menu_BroadcastEntryId(unsigned unused, unsigned entryId)",
+  "params": {
+   "unused": "unused",
+   "entryId": "entry id"
+  },
+  "summary": "Calls virtual slot +0x144(entryId) on every valid actor of the four menu lists.",
+  "confidence": 0.5,
+  "evidence": "Loops the four lists, vfunc+0x18 filter, vfunc+0x144(node,arg2); called from 0x3FC0D4."
+ },
+ {
+  "address": "0x0020FD80",
+  "name": "Menu_BroadcastEntryPair",
+  "signature": "void Menu_BroadcastEntryPair(unsigned unused, unsigned a, unsigned b)",
+  "params": {
+   "unused": "unused",
+   "a": "value a",
+   "b": "value b"
+  },
+  "summary": "Calls virtual slot +0x140(a,b) on every valid actor of the four menu lists.",
+  "confidence": 0.5,
+  "evidence": "Loops the four lists, vfunc+0x18 filter, vfunc+0x140(node,arg2,arg3); called from 0x3CB740."
+ },
+ {
+  "address": "0x002109FC",
+  "name": "maybe_Menu_Camp_CreateLayoutNode",
+  "signature": "unsigned* maybe_Menu_Camp_CreateLayoutNode(void)",
+  "params": {},
+  "summary": "Creates the camp menu's layout node object, installs its vtable and marks three of its sub-panes visible, then registers it with its parent.",
+  "confidence": 0.35,
+  "evidence": "func_001CE22C() returns the object; writes *result=_FUN_00210A38 (vtable at 0x210A38), sets bytes at +0x10/+0x11 to 1, and func_00276980(result+0x23c,result); called from 0x208ED4."
+ },
+ {
+  "address": "0x00211388",
+  "name": "maybe_Menu_InvokeLayoutCallbackA",
+  "signature": "void maybe_Menu_InvokeLayoutCallbackA(LayoutNode* self)",
+  "params": {
+   "self": "layout/animation node"
+  },
+  "summary": "Invokes the callback stored in the global layout descriptor g_0021177c (function pointer + adjustment) and copies the follow-up pane id/flag into the node.",
+  "confidence": 0.35,
+  "evidence": "func_0062F680(&self->f_1d8) guard; reads g_0021177c->f_20/f_24 (code ptr + 'this' adjust) and calls it, then stores f_50/f_54 into self->f_11c/f_120. Identical shape in 0x21143C/0x211500."
+ },
+ {
+  "address": "0x002113FC",
+  "name": "maybe_Menu_InvokeLayoutCallbackB",
+  "signature": "void maybe_Menu_InvokeLayoutCallbackB(LayoutNode* self)",
+  "params": {
+   "self": "layout/animation node"
+  },
+  "summary": "Same callback mechanism as 0x211388 but uses the second descriptor pair (f_28/f_2c, f_58/f_5c) and sets a flag byte first.",
+  "confidence": 0.35,
+  "evidence": "func_0062F680(&self->f_1d8) guard, sets *(u8*)(self+300)=1, calls g_0021177c->f_28 with adjustment f_2c, then self->f_11c/f_120 = f_58/f_5c."
+ },
+ {
+  "address": "0x0021143C",
+  "name": "maybe_Menu_InvokeLayoutCallbackC",
+  "signature": "void maybe_Menu_InvokeLayoutCallbackC(LayoutNode* self)",
+  "params": {
+   "self": "layout/animation node"
+  },
+  "summary": "Third copy of the descriptor-based layout callback invocation (same descriptor as 0x211388).",
+  "confidence": 0.3,
+  "evidence": "Byte-identical body to 0x211388 (g_0021177c->f_20/f_24, f_50/f_54); differs only in the caller/usage site."
+ },
+ {
+  "address": "0x00211500",
+  "name": "maybe_Menu_InvokeLayoutCallbackD",
+  "signature": "void maybe_Menu_InvokeLayoutCallbackD(LayoutNode* self)",
+  "params": {
+   "self": "layout/animation node"
+  },
+  "summary": "Fourth copy of the descriptor-based layout callback invocation, without the extra node fields.",
+  "confidence": 0.3,
+  "evidence": "Same guard func_0062F680(&self->f_1d8) and g_0021177c->f_20/f_24/f_50/f_54 stores; only 0x38 bytes."
+ },
+ {
+  "address": "0x00211A98",
+  "name": "Menu_StartLayoutAnimations",
+  "signature": "void Menu_StartLayoutAnimations(LayoutNode* self)",
+  "params": {
+   "self": "layout node"
+  },
+  "summary": "Starts the five entrance animations (tags 0..5) of a camp-menu layout pane.",
+  "confidence": 0.5,
+  "evidence": "Calls func_001A629C(self,(self->f_28<<16)|n,&value) for n=0,2,3,4,5 with value from g_00211b4c+8, then sets self->f_49=1."
+ },
+ {
+  "address": "0x00211FB0",
+  "name": "maybe_Menu_Camp_CreateNullText",
+  "signature": "void maybe_Menu_Camp_CreateNullText(void)",
+  "params": {},
+  "summary": "Creates the 'null_txt_l0' text pane used as a placeholder in the camp menu layout.",
+  "confidence": 0.45,
+  "evidence": "Inline literals 'null_txt_l0', 'win_camp_select%d' and 'txt_l0' in this function's literal pool; func_001A66A0() creates the pane object, installs g_00211fcc as vtable and clears +0x49."
+ },
+ {
+  "address": "0x00211FD0",
+  "name": "maybe_Menu_Camp_DestroyTextPanes",
+  "signature": "void maybe_Menu_Camp_DestroyTextPanes(void)",
+  "params": {},
+  "summary": "Destroys the 'null_txt_l1/l2/l3' text panes created by the sibling constructor.",
+  "confidence": 0.4,
+  "evidence": "Calls func_001A6768() (pane destructor) and func_0010F6CC() (heap free); its literal pool contains 'null_txt_l0', '_txt_l0' and 'win_camp_select%d'."
+ },
+ {
+  "address": "0x00212DD4",
+  "name": "maybe_Menu_Camp_DestroyTextPanes2",
+  "signature": "void maybe_Menu_Camp_DestroyTextPanes2(void)",
+  "params": {},
+  "summary": "Second destructor for the 'null_txt_l1..l3' text panes (different pane list).",
+  "confidence": 0.4,
+  "evidence": "Same two calls as 0x211FD0 (func_001A6768 + func_0010F6CC); literal pool has 'null_txt_l1/l2/l3' at 0x212DB0..0x212DC8."
+ },
+ {
+  "address": "0x00213210",
+  "name": "maybe_Menu_NotifyDialogResult",
+  "signature": "void maybe_Menu_NotifyDialogResult(MenuState* self, int result, unsigned a, unsigned b, unsigned c)",
+  "params": {
+   "self": "menu state",
+   "result": "non-zero = accepted",
+   "a": "arg a",
+   "b": "arg b",
+   "c": "arg c"
+  },
+  "summary": "Forwards the dialog/selection result (0 or 3) to the message-window object at self->f_ec.",
+  "confidence": 0.4,
+  "evidence": "if self->f_ec!=0: uVar1 = (arg2!=0)?3:0; func_002E8708(self->f_ec,uVar1,arg3,arg4,arg5); called from 0x5D3D8C/0x5D8190/0x5DEA24 (event script side)."
+ },
+ {
+  "address": "0x00213238",
+  "name": "maybe_Menu_ShowResultMessage",
+  "signature": "void maybe_Menu_ShowResultMessage(MenuState* self)",
+  "params": {
+   "self": "menu state"
+  },
+  "summary": "Completes a message/result flow: resolves the current message id, sets the text window contents and starts the next message step.",
+  "confidence": 0.3,
+  "evidence": "Builds a message parameter with func_005E5498/func_0032C424, on success calls func_00197CF4(*(work+0x8c),params), func_00613BDC/func_00613538 (message work), and stores self->f_129=1/f_12a=id; uses func_0021F738/0x21F8B8 (text helpers) and func_0063F430."
+ },
+ {
+  "address": "0x00214140",
+  "name": "maybe_Menu_SetPaneValue",
+  "signature": "void maybe_Menu_SetPaneValue(MenuState* self, unsigned value)",
+  "params": {
+   "self": "menu state",
+   "value": "packed pane id/value"
+  },
+  "summary": "Stores a packed pane value in the menu state and applies it to the two associated layout objects.",
+  "confidence": 0.4,
+  "evidence": "self->f_11c = arg2 & 0xffff0000 | 0xffff; self->f_120=0; if self->f_e4: f_94=1,f_d85=1,func_004A097C(f_e4,arg2); if self->f_f0: func_003D4E90(f_f0,arg2)."
+ },
+ {
+  "address": "0x002141E8",
+  "name": "maybe_Menu_UpdateResultWindow",
+  "signature": "void maybe_Menu_UpdateResultWindow(MenuState* self, unsigned arg2)",
+  "params": {
+   "self": "menu state",
+   "arg2": "value"
+  },
+  "summary": "Updates the result/message window: advances the embedded message player, updates the layout objects and finishes the message when its cursor is done.",
+  "confidence": 0.3,
+  "evidence": "Uses self->f_3c, self->f_dc (vfunc+0xc/+8/+4 message player), self->f_e0/f_e4/f_f0 objects, func_004C4420, func_0064055C, func_00650D20, func_004A1834/0x3D51BC/0x63A3B8/0x62F694/0x667468/0x3D59B4/0x632FC4; calls 0x213238 on completion."
+ },
+ {
+  "address": "0x00214EAC",
+  "name": "Menu_ItemSelect_CreateWindow",
+  "signature": "int Menu_ItemSelect_CreateWindow(void)",
+  "params": {},
+  "summary": "Creates the 'win_dougu_do_select' item/tool selection window object used by the equipment menu.",
+  "confidence": 0.5,
+  "evidence": "func_001A66A0() creates the pane object, installs g_00214ee8 as vtable, sets +0x49=1/+0x4a=0, then chains three func_003E0454 nodes (50 bytes apart) and returns the last -0xec. Literal pool holds 'txt_l1..l5', 'null_txt_l1..l5', 'win_dougu_do_select2/4/5' at 0x214E00..0x214E94."
+ },
+ {
+  "address": "0x00214FFC",
+  "name": "maybe_Menu_ItemSelect_CreateRows",
+  "signature": "void maybe_Menu_ItemSelect_CreateRows(MenuState* self)",
+  "params": {
+   "self": "item-select window"
+  },
+  "summary": "Creates the ten slot rows and five detail rows of the item selection window and links them into its child list.",
+  "confidence": 0.45,
+  "evidence": "Loops 10x func_001D85EC(self,self+i*0x39c+0x138,g_002150c0[i],i) + func_00332E88 + func_001235A4(&self->f_12c,...), then 5x with stride 0x138 at +0x2550 and g_002150c4, then func_00123594."
+ },
+ {
+  "address": "0x00215460",
+  "name": "maybe_Menu_BroadcastAnimUpdate",
+  "signature": "void maybe_Menu_BroadcastAnimUpdate(MenuState* self, unsigned a, unsigned b, unsigned c, unsigned d)",
+  "params": {
+   "self": "menu state",
+   "a": "arg",
+   "b": "arg",
+   "c": "arg",
+   "d": "arg"
+  },
+  "summary": "Calls virtual slot +0x6c on every node of the window's child list, then forwards the animation update to the layout.",
+  "confidence": 0.4,
+  "evidence": "Walks self->f_2b68/f_2b6c list calling vfunc+0x6c per node, then func_001D8A80(self,a,b,c,d) (layout animation update). Vtable slot 8 of a 10-entry table."
+ },
+ {
+  "address": "0x00215594",
+  "name": "maybe_Menu_ItemSelect_Construct",
+  "signature": "void maybe_Menu_ItemSelect_Construct(void)",
+  "params": {},
+  "summary": "Construction wrapper for the item-select window: initialises it and releases the temporary heap block used during construction.",
+  "confidence": 0.4,
+  "evidence": "Calls func_002155A4() then func_0010F6CC(); vtable slot 1 (constructor helper) of the 10-entry item-select table."
+ },
+ {
+  "address": "0x002155A4",
+  "name": "maybe_Menu_ItemSelect_InitAnimations",
+  "signature": "void maybe_Menu_ItemSelect_InitAnimations(ItemSelectWindow* self)",
+  "params": {
+   "self": "item-select window"
+  },
+  "summary": "Initialises the ten slot animations and five detail-row animations of the item-select window and links their intrusive lists.",
+  "confidence": 0.45,
+  "evidence": "Sets *self=g_002156ac, loops 10x func_00291220(self+i*0xe7+0x4e) and 5x func_00291220(self+i*0x4e+0x954), fixes up five list sentinel pairs, then func_00100BE0(self+0x954,g_002156b0,0x138,5) and (self+0x4e,g_002156b4,0x39c,10); ends func_001D8C2C."
+ },
+ {
+  "address": "0x002158D4",
+  "name": "maybe_Menu_InitLayoutNode",
+  "signature": "int maybe_Menu_InitLayoutNode(unsigned* node, unsigned id)",
+  "params": {
+   "node": "layout node",
+   "id": "id/owner"
+  },
+  "summary": "Initialises a small layout/child node: stores the id, creates its 0x50-byte child record and zeroes four preceding fields.",
+  "confidence": 0.4,
+  "evidence": "*arg1=arg2; iVar1=func_003E0454(arg1+5); sets iVar1->f_50=1 and clears the four dwords before it; returns iVar1-0x14. Only self-referenced (vtable slot 1 of a 10-entry table)."
+ },
+ {
+  "address": "0x00215908",
+  "name": "Menu_Camp_UpdateGesture",
+  "signature": "void Menu_Camp_UpdateGesture(MenuState* self)",
+  "params": {
+   "self": "camp menu state"
+  },
+  "summary": "Advance/stop the camp menu character gesture animation ('Gesture2' / 'H3Gesture'): when the current gesture has played long enough, switch or stop it.",
+  "confidence": 0.5,
+  "evidence": "func_00627EE4(self->f_28,\"Gesture2\") / (...,\"H3Gesture\"); uses the lazily allocated g_00215a4c animation manager, func_0051B1FC(manager+0x98,0x7fffffff) for elapsed time, compares g_00215a58/_DAT_00215a5c, then vfunc+0x84(self->f_28, name)."
+ },
+ {
+  "address": "0x00215A68",
+  "name": "maybe_Menu_Camp_FinishGesture",
+  "signature": "void maybe_Menu_Camp_FinishGesture(MenuState* self)",
+  "params": {
+   "self": "camp menu state"
+  },
+  "summary": "Stops the character gesture once the actor's animation reached the configured frame, choosing the stop animation by actor state.",
+  "confidence": 0.4,
+  "evidence": "if self->f_2c<=self->f_24->f_44: func_0017843C(self->f_28) then func_005E7848(self->f_28,4,0), else if func_00669DD4(self->f_28) then func_005E7848(self->f_28,0)."
+ },
+ {
+  "address": "0x00215AE4",
+  "name": "maybe_Menu_RegisterTalkPartyLayout",
+  "signature": "void maybe_Menu_RegisterTalkPartyLayout(void)",
+  "params": {},
+  "summary": "Registers the talk-party layout object with the menu layout manager.",
+  "confidence": 0.35,
+  "evidence": "func_0019C8F4() returns the manager object; stores g_00215b08 into [0xb] and g_00215b0c into [0]."
+ },
+ {
+  "address": "0x00216388",
+  "name": "maybe_Menu_TalkParty_Teardown",
+  "signature": "void maybe_Menu_TalkParty_Teardown(TalkPartyWindow* self, unsigned char* flags)",
+  "params": {
+   "self": "talk-party window",
+   "flags": "four flag bytes"
+  },
+  "summary": "Tears down the talk-party window: releases the layout/animation objects, then rebuilds or clears the sub-panels depending on the flag pair.",
+  "confidence": 0.4,
+  "evidence": "Compares flags[4]/[2] and flags[3]/[1]; calls func_0021849C (release all), releases self->f_94/f_b8/f_98/f_9c/f_a0 via vfunc+4, frees self->f_a4 with func_003F2FA8+func_0010F6CC; uses func_0021F738/0x21F8B8 text helpers and func_00293E2C."
+ },
+ {
+  "address": "0x00216A38",
+  "name": "maybe_Menu_TalkParty_WaitPanels",
+  "signature": "void maybe_Menu_TalkParty_WaitPanels(TalkPartyWindow* self)",
+  "params": {
+   "self": "talk-party window"
+  },
+  "summary": "Waits until all 24 sub-panels report ready, then closes the window and resumes the field UI.",
+  "confidence": 0.4,
+  "evidence": "Loops i<0x18 over self+i*4+0x1c testing vfunc+0xc; when all done calls func_001A0464(*(work)), func_002D2440(*(work+0x14)), vfunc+0x40/+8 on work+0x1c, and checks self->f_9c/f_b8 before releasing."
+ },
+ {
+  "address": "0x002175BC",
+  "name": "maybe_Menu_TalkParty_CreatePanel",
+  "signature": "void maybe_Menu_TalkParty_CreatePanel(TalkPartyWindow* self, int index, unsigned* params)",
+  "params": {
+   "self": "talk-party window",
+   "index": "panel index 0..",
+   "params": "parameter block"
+  },
+  "summary": "Creates (or tears down) one of the talk-party sub-panels by index, choosing the concrete class from the index (text, choice, face, ...).",
+  "confidence": 0.45,
+  "evidence": "switch(arg2) allocates 0x7c/0xb8/8/... bytes with func_00109DC8 and constructs via func_002BD064/func_001C1274/func_00193E58/...; if the slot is already used calls func_00227DCC(self->f_a0, arg2==0) and func_001C4658; ~30 callees, literal pool has 'talk_party.bxon'."
+ },
+ {
+  "address": "0x00217B64",
+  "name": "maybe_Menu_TalkParty_ReleasePanel",
+  "signature": "void maybe_Menu_TalkParty_ReleasePanel(TalkPartyWindow* self, int index)",
+  "params": {
+   "self": "talk-party window",
+   "index": "panel index"
+  },
+  "summary": "Releases the sub-panel at the given index and notifies the layout manager that the panel list changed.",
+  "confidence": 0.45,
+  "evidence": "self += arg2*4; releases self->f_1c via vfunc+4; func_001A1774(*(work+8),8,0); if func_0062AB3C(*(work))==2 and index!=3 calls vfunc+0x44 on *(work+0x14)+0x10 with (1,0xff)."
+ },
+ {
+  "address": "0x002181F8",
+  "name": "Menu_TalkParty_Load",
+  "signature": "void Menu_TalkParty_Load(TalkPartyWindow* self)",
+  "params": {
+   "self": "talk-party window"
+  },
+  "summary": "Loads the talk-party script package (param/talk_party/talk_party_%s.pack) for the current talk id and starts its script.",
+  "confidence": 0.5,
+  "evidence": "Inline literal 'param/talk_party/talk_party_%s.pack' at 0x218390; func_00384B6C() gives the talk id (<0x36), g_0021838c[id] the pack name, func_006F0C10 formats the path, func_003882F0 loads it via the lazily allocated loader g_002183b8, func_0012416C frees the temp path."
+ },
+ {
+  "address": "0x00218220",
+  "name": "maybe_Menu_TalkParty_LoadEx",
+  "signature": "void maybe_Menu_TalkParty_LoadEx(TalkPartyWindow* self)",
+  "params": {
+   "self": "talk-party window"
+  },
+  "summary": "Same talk-party package load as 0x2181F8, plus validation of the resolved pack record (0x218220 is an extended copy with extra checks).",
+  "confidence": 0.45,
+  "evidence": "Identical literal and call sequence (func_00384B6C, g_0021838c, func_006F0C10, func_003882F0, func_0012416C) with an extra check of g_002183c4 against self->f_e0>>0xc; called from 0x14E95C/0x216DD4."
+ },
+ {
+  "address": "0x0021849C",
+  "name": "Menu_TalkParty_ReleaseAll",
+  "signature": "void Menu_TalkParty_ReleaseAll(TalkPartyWindow* self)",
+  "params": {
+   "self": "talk-party window"
+  },
+  "summary": "Releases every talk-party sub-resource: the 24 sub-panels, the layout objects and the animation handles.",
+  "confidence": 0.5,
+  "evidence": "Clears f_e0/f_e4/f_e8/f_ec/f_f0, loops i<0x18 releasing self+i*4+0x1c via vfunc+4, releases f_94/f_9c/f_a0, frees f_a4 with func_003F2FA8+func_0010F6CC; called from 0x216388/0x2187D0 and from 0x62xxxx."
+ },
+ {
+  "address": "0x0021889C",
+  "name": "maybe_Menu_TalkParty_IsActive",
+  "signature": "int maybe_Menu_TalkParty_IsActive(TalkPartyWindow* self, unsigned a, unsigned b, unsigned c)",
+  "params": {
+   "self": "talk-party window",
+   "a": "unused",
+   "b": "unused",
+   "c": "stack cookie"
+  },
+  "summary": "Returns 1 when the talk-party window has a valid talk id and its message player is running.",
+  "confidence": 0.4,
+  "evidence": "if self->f_2e8!=-1 and gamework->f_8 != 0 and func_00636AFC(gamework->f_6c)!=0 return 1; otherwise 0. Vtable slot 30 of a 32-entry table."
+ },
+ {
+  "address": "0x00218A94",
+  "name": "maybe_Menu_TalkParty_HandleCommand",
+  "signature": "void maybe_Menu_TalkParty_HandleCommand(TalkPartyWindow* self, int command)",
+  "params": {
+   "self": "talk-party window",
+   "command": "command id"
+  },
+  "summary": "Handles a talk-party window command id (0 = open, 6 = close, 2/3 = cursor up/down).",
+  "confidence": 0.45,
+  "evidence": "if arg2==0 func_00219764(self,0); else if arg2==6 func_002188F8(); then if self->f_4c!=0: for 2/3 calls vfunc+0x14(f_4c,1/0). Vtable slot 31 of the same 32-entry table."
+ },
+ {
+  "address": "0x00218B00",
+  "name": "maybe_Menu_TalkParty_SetupMessage",
+  "signature": "void maybe_Menu_TalkParty_SetupMessage(TalkPartyWindow* self, short* param)",
+  "params": {
+   "self": "talk-party window",
+   "param": "message parameter block"
+  },
+  "summary": "Applies a talk/message parameter block to the talk-party window: selects the text speed/type, stores the speaker and layout ids and rebuilds the sub-panels.",
+  "confidence": 0.45,
+  "evidence": "Maps param[0xd] 0xe9/0xea/0xeb to 6/0xc0/0xc5 into self->f_2ec, copies param[0]..param[0x13] into f_240/f_296/f_298/f_2ee/f_2f0, checks work+0x27508, then func_0021896C(self,f_2ee) and func_002188F8(self); literal pool holds 'talk_content.bxon'."
+ }
+]

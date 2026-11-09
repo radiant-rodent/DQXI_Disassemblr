@@ -1,0 +1,1693 @@
+[
+ {
+  "address": "0x002F3140",
+  "name": "Field_Marker_UpdateEffectState",
+  "signature": "void Field_Marker_UpdateEffectState(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object (effect id at +0x2EC, effect handle at +0x2F0)"
+  },
+  "summary": "Per-frame upkeep for one map marker: if the marker's placement id is no longer present in the object table it switches the node to its \"Open\" animation (or \"Off\" when the marker is flagged closed), plays it, releases the effect handle and tells the child node it is being removed.",
+  "confidence": 0.5,
+  "evidence": "Calls func_0066B3B0(*g_006F20C0()+0x24A98, (short)self[0xBB]) = id lookup in the world object table (0x24A98 is the same arena base used by other field code); the two callback arguments are the ASCII animation names at 0x002F3248 (\"Open\") and 0x002F3244 (\"Off\") passed to vtable+0x84, which is the set-animation slot used with name strings everywhere else in this module (0x002F449C \"OpenAnim\", 0x00301FB8 \"OpenDoor\"); releases self+0x2F0 through the handle manager FUN_0035FC84; then func_005F7784(self,0x3C,0); finally child at +0x270 gets message 0x10 through its vtable+0x38."
+ },
+ {
+  "address": "0x002F3250",
+  "name": "maybe_Field_Marker_IsAlive",
+  "signature": "u32 maybe_Field_Marker_IsAlive(void)",
+  "params": {},
+  "summary": "Returns 1 while the field marker's owning context still exists and its event/task slot is valid, 0 otherwise. Used as the 'is this marker still usable' predicate.",
+  "confidence": 0.4,
+  "evidence": "Guards on *(int*)(*FUN_006F1EEC()+8) != 0 then func_00636AFC(ctx->f_6C) != 0; both are the global context accessor and the 'task still running' query used throughout this module (compare 0x002F4378, 0x002F4708)."
+ },
+ {
+  "address": "0x002F3288",
+  "name": "Field_Marker_OnNotify",
+  "signature": "void Field_Marker_OnNotify(FieldMarker* self, u32 message, u32 arg)",
+  "params": {
+   "self": "field map-marker object",
+   "message": "node message id (0x10 = destroy, 0x0F = interact)",
+   "arg": "message payload"
+  },
+  "summary": "Node message handler for a map marker: on state 0x10 it releases the marker's effect handle and clears its interaction state, on state 0x0F it checks whether the marker's record id is 0x9DB and, if so, raises system event 4 (the 'examine' bump). Then it forwards the message to the base node and to the child at +0x270.",
+  "confidence": 0.55,
+  "evidence": "msg 0x10 branch: FUN_0044C760(self,self->f_2EC), f_2E4=1, f_2B4=0, release f_2F0 via FUN_0035FC84(...,1). msg 0x0F branch: func_0063DCE8(table,self->f_2EC) returns a short record, compared with 0x9DB, then FUN_001EBC68(system,4,0,1) raises system event 4. Tail: FUN_005E754C = base-node broadcast (see 0x005E754C which walks the listener list at +0x54/+0x58) and self->f_270->vtable[0x38](self->f_270,msg,arg)."
+ },
+ {
+  "address": "0x002F33C4",
+  "name": "Field_Marker_InitFromPlacement",
+  "signature": "void Field_Marker_InitFromPlacement(FieldMarker* self, const MarkerPlacement* p)",
+  "params": {
+   "self": "field map-marker object",
+   "p": "placement record (position at +0x24, id at +0x3C, flags at +0x2E..0x3E)"
+  },
+  "summary": "Initialises a map marker from its placement record: copies the position, halves the offset vector for the sprite, spawns effect 0x496 slightly above the node with rotation (0,0,pi), stores the marker id and copies the four u16 parameters of the marker's table record.",
+  "confidence": 0.5,
+  "evidence": "Position copied from p[9..11] to f_9C/f_A0/f_A4 (the node transform used by 0x005F5F54 elsewhere); scale 0.5 = g_002F359C (0x3F000000), rotation 0x40490FDB = PI at g_002F35A4; FUN_0035FE7C(system->f_60, 0x496, 0, &pos, &rot) is the effect-instance creator used again in 0x002F386C; func_0063DCE8(table,id) supplies the u16 quad stored to f_2C8..f_2E0."
+ },
+ {
+  "address": "0x002F386C",
+  "name": "maybe_Field_Marker_OnPause",
+  "signature": "void maybe_Field_Marker_OnPause(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Pause handler: pauses the node subtree and, if the marker still has its effect flag set and its activity mask bit is set, re-creates the same effect instance (id 0x496) at the node position.",
+  "confidence": 0.42,
+  "evidence": "FUN_005E78E4 is the base-class pause (it clears vtable slots 0x3C/0x54 and the child list); the mask test on f_278 comes from func_006281C8; the re-created instance uses the same id g_002F392C (0x496) and offset 0.3 (0x3E99999A) as 0x002F33C4."
+ },
+ {
+  "address": "0x002F3930",
+  "name": "maybe_Field_Marker_OnResume",
+  "signature": "void maybe_Field_Marker_OnResume(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Resume handler: resumes the node subtree and releases the marker's effect handle with the 'keep node' flag, so the effect is cleaned up before the marker becomes active again.",
+  "confidence": 0.42,
+  "evidence": "FUN_005E7A34 is the base-class resume (mirror of 0x005E78E4: vtable 0x40/0x58 and child slot 0x34); the effect handle f_2F0 is released via FUN_0035FC84(system->f_60, handle, 0) - same handle manager as 0x002F3140."
+ },
+ {
+  "address": "0x002F3990",
+  "name": "maybe_Field_Marker_OnDestroy",
+  "signature": "void maybe_Field_Marker_OnDestroy(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Destroy handler for a marker: when the node is being torn down it destroys the child effect list, unregisters the marker from the world (id at +0x26C) and releases the marker's effect handle.",
+  "confidence": 0.45,
+  "evidence": "Guarded by the 'destroying' byte at +0x41 (the same byte FUN_00336938 checks before freeing the list at +0x224/+0x228); func_001C9110(system->f_54, self) unregisters the object; FUN_0035FC84(...,0) frees the effect handle."
+ },
+ {
+  "address": "0x002F3A28",
+  "name": "maybe_Field_Marker_OnUpdate",
+  "signature": "u32 maybe_Field_Marker_OnUpdate(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Per-frame update: raises system event 9 when the marker carries the 'touched' flag, then advances the marker's task with the id stored at +4. Always returns 1 (keep the marker alive).",
+  "confidence": 0.4,
+  "evidence": "self->f_2C7 flag -> FUN_001EBC68(system,9,0,0) (system event queue); FUN_00256678(ctx->f_6C, 0, *(u32*)(self+4)) is the same 'advance/schedule task' call used by 0x002F3B2C and 0x002F3E78."
+ },
+ {
+  "address": "0x002F3B2C",
+  "name": "maybe_Field_Marker_UpdateDelay",
+  "signature": "int maybe_Field_Marker_UpdateDelay(FieldMarker* self, float dt)",
+  "params": {
+   "self": "field map-marker object",
+   "dt": "frame delta time (passed in s0)"
+  },
+  "summary": "Accumulates delta time in the marker timer and, in state 1, once 0.5 s has elapsed, sends task event 0x0B and returns to state 0. In state 0 it returns whether the global task slot is still busy.",
+  "confidence": 0.45,
+  "evidence": "f_298 += dt, compared with 0x3F000000 (0.5f); state byte f_297 (0/1); FUN_00251230(ctx->f_6C, desc->f_1A, desc->f_1C, 0xB) sends the event; func_00636AFC(ctx->f_6C) is the 'task running' query."
+ },
+ {
+  "address": "0x002F3BD0",
+  "name": "Field_Marker_CreateSpriteChild",
+  "signature": "void Field_Marker_CreateSpriteChild(FieldMarker* self, const MarkerPlacement* p)",
+  "params": {
+   "self": "field map-marker object",
+   "p": "placement record used for the sprite size and tint"
+  },
+  "summary": "Creates the marker's 2D 'sprite' child (0x178-byte object) from the character/object visual record, sizes it from the placement's width/height, attaches it to the node transform at self+0x94 and then creates the marker's sub-node (0x23C bytes) that follows the sprite position.",
+  "confidence": 0.5,
+  "evidence": "new (self->f_48 heap) 0x178 bytes via FUN_00109DC8 (operator new(size,heap,align)); the name string built for the constructor is 'sprite' (literal pool 0x002F3E74 -> \"sprite\", copied with func_0011142C after func_0011CCA0 strlen); FUN_002D1F28 = sprite ctor, FUN_002D1304 = sprite SetParams; sprite->f_154 = self+0x94; then FUN_00335A6C(self,&params,&self->f_24C,0) creates the follower node. Sizes come from p->f_14/p->f_16 (u16 w/h)."
+ },
+ {
+  "address": "0x002F3E78",
+  "name": "maybe_Field_Marker_ExecuteAction",
+  "signature": "u32 maybe_Field_Marker_ExecuteAction(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Runs the marker's interaction action: bails out when no player object exists, aborts the task when the game is not in field mode 5, and otherwise builds the action parameter block (target position, colour, animation ids) and hands it to the actor spawn/message function.",
+  "confidence": 0.35,
+  "evidence": "Checks *(system->f_48 + 0x281) != 5 (field game mode, same byte tested by 0x00301E58 and 0x00300E40 code) then FUN_0022DA24(player,&params) with a 5-field block built from self->f_29C; on failure FUN_00256678(...,0xC,...) aborts. Contains an inlined small-string/allocation sequence identical to 0x002F493C."
+ },
+ {
+  "address": "0x002F41F0",
+  "name": "maybe_Field_Marker_AttachTo",
+  "signature": "void maybe_Field_Marker_AttachTo(FieldMarker* self, FieldObject* parent)",
+  "params": {
+   "self": "field map-marker object",
+   "parent": "owning field object (its transform is at +0x98)"
+  },
+  "summary": "Re-parents the marker: stores the parent's transform pointer, destroys the previously attached sub-node and frees its memory.",
+  "confidence": 0.45,
+  "evidence": "self[0x8B] = parent + 0x98 (the node-transform pointer, compare the sprite attach self+0x94 in 0x002F3BD0); FUN_0017C330(self+0x24C) walks back to the sub-node header; FUN_00335DAC is the sub-node destructor (see 0x00335DAC which restores its vtable and frees the child list) followed by func_0010F6CC free."
+ },
+ {
+  "address": "0x002F4378",
+  "name": "maybe_Field_Marker_PollEvent",
+  "signature": "u32 maybe_Field_Marker_PollEvent(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Polls the marker's task: the first time it is called it arms the wait (flags f_2C8/f_2C9) and sends task event 1, afterwards it simply returns whether the task slot is still busy.",
+  "confidence": 0.4,
+  "evidence": "f_2C8 == 0 branch sets f_2C9 = 1 and calls FUN_00251230(ctx->f_6C, self->f_2CC, self->f_2CA, 1); otherwise returns func_00636AFC(ctx->f_6C). Same event helper as 0x002F3B2C."
+ },
+ {
+  "address": "0x002F442C",
+  "name": "maybe_Field_Marker_SetChildEnabled",
+  "signature": "void maybe_Field_Marker_SetChildEnabled(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Base-node update plus enabling/disabling the marker's effect owner: the effect owner at +0x4C is switched on, then off again when the marker's 'armed' flag is set.",
+  "confidence": 0.38,
+  "evidence": "FUN_0028EA34 is the per-frame base update seen in 0x0030C010; self->f_4C->vtable[0x18](self->f_4C, 1/0) is the same 'set enabled' virtual used with self->f_13C in 0x002F5EBC and 0x002F6380."
+ },
+ {
+  "address": "0x002F449C",
+  "name": "Field_Marker_OnOpenAnim",
+  "signature": "void Field_Marker_OnOpenAnim(FieldMarker* self, u32 message, u32 arg)",
+  "params": {
+   "self": "field map-marker object",
+   "message": "event id (0 = open, 2/3 = child enable/disable)",
+   "arg": "payload"
+  },
+  "summary": "Event handler that starts the marker's open animation: on event 0 it sets the animation \"OpenAnim\" and raises system event 0x100 (or plays the cached open sound when the marker is already open), on events 2/3 it enables/disables the door child, then forwards the event to the child node.",
+  "confidence": 0.5,
+  "evidence": "String symbol s_>OpenAnim_002f457f (the readable export names the literal '>OpenAnim', +1 skips the marker char) is passed to vtable+0x84 = set-animation; FUN_001EBC68(system,0x100,0,0) raises system event 0x100; func_002D24BC(*(g_006F229C()+0x14)) plays the cached sound; child vtable+0x14(1/0) toggles the door; the event is forwarded to arg1[0x9C] via vtable+0x84."
+ },
+ {
+  "address": "0x002F4708",
+  "name": "maybe_Field_Marker_IsEventPending",
+  "signature": "u32 maybe_Field_Marker_IsEventPending(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Returns 0 while the marker is still waiting for its interaction event, or the task result once event 0x11 has been dispatched.",
+  "confidence": 0.35,
+  "evidence": "Only acts when self->f_2C8 == 0; forwards to FUN_00256678(ctx->f_6C, 0x11, ...), the same task helper used by 0x002F3A28 (event 0), 0x002F3B2C (event 0xB) and 0x002F3E78 (event 0xC)."
+ },
+ {
+  "address": "0x002F47DC",
+  "name": "maybe_Field_Marker_SetTransform",
+  "signature": "void maybe_Field_Marker_SetTransform(FieldMarker* self, const float* pos, u32 a3, u32 a4)",
+  "params": {
+   "self": "field map-marker object",
+   "pos": "position + rotation + scale block (pos[0..2], rot[3..5], scale[6..9])"
+  },
+  "summary": "Applies a full transform to the marker: position, rotation, uniform scale (0.5 factor) and the anchor used for the 2D sprite, snapshots the result into the cached fields at +0x2C8 and re-registers the marker with the world object manager.",
+  "confidence": 0.45,
+  "evidence": "writes f_9C/f_A0/f_A4 then FUN_005F6C4C(self,&pos[3],1) (copy rotation); scale factor g_002F48A0 = 0.5; the block copied to f_2C8..f_2E0 is the cached transform; FUN_0028E754(self,pos[10],0) sets the marker id; func_00451538(system->f_80 + 0xE0, self) registers with the object manager, mirroring 0x00335A6C."
+ },
+ {
+  "address": "0x002F4904",
+  "name": "maybe_Field_Marker_AttachToAlt",
+  "signature": "void maybe_Field_Marker_AttachToAlt(FieldMarker* self, FieldObject* parent)",
+  "params": {
+   "self": "field map-marker object",
+   "parent": "owning field object (transform at +0xD4)"
+  },
+  "summary": "Second re-parenting variant (transform offset +0xD4 instead of +0x98): stores the parent transform, destroys the previous sub-node at +0x278 and frees it.",
+  "confidence": 0.4,
+  "evidence": "Mirror of 0x002F41F0 with different struct offsets: self[0x96] = parent + 0xD4, FUN_0017C334(self+0x278), FUN_00336B3C(iVar1-0x278) (the other sub-node destructor, see 0x00336B3C callers), func_0010F6CC free."
+ },
+ {
+  "address": "0x002F493C",
+  "name": "maybe_Field_Marker_QueueSystemCommand",
+  "signature": "int maybe_Field_Marker_QueueSystemCommand(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Queues a system command for the marker: bails out while the task slot is busy, otherwise builds a small command block (with an inline std::string) and posts it to the world command queue.",
+  "confidence": 0.32,
+  "evidence": "Early return func_00636AFC(ctx->f_6C); inlined allocation + SSO string copy (func_0011FE8C size, func_0011CFAC align, func_00116AE0 memset, func_00100050 'construct'); finally func_00613354(*g_002F4BC8 + 0x24A98, 8, self->f_3BC, self->f_3BE) posts command id 8 - the same 0x24A98 arena base as 0x002F3140."
+ },
+ {
+  "address": "0x002F4BF8",
+  "name": "maybe_Field_Marker_InitMultiEffect",
+  "signature": "void maybe_Field_Marker_InitMultiEffect(FieldMarker* self, const MarkerPlacement* p)",
+  "params": {
+   "self": "field map-marker object",
+   "p": "placement with an inline array of up to 4 sub-effect entries"
+  },
+  "summary": "Loads the marker's visual record, stores its animation ids, then creates one sub-effect node per entry of the placement's inline array (each entry is 10 bytes: two u16 rects and a type byte).",
+  "confidence": 0.4,
+  "evidence": "reads p+0x12/0x13/0x16 (ids), func_0063FDEC(table, id) -> record, FUN_0062AC70(system, rec->f_8) -> anim id, FUN_00319848(id, (short)p[5]) -> visual record; loop count min(*p,4) with 10-byte stride (*(int*)(iVar4+i*10+8) fed to func_002D1810), each iteration FUN_00335A6C(self,&params,self+i*0x48+0x298,0) creating one sub-node; func_0047B2E0/func_0047B280 are the rect helpers."
+ },
+ {
+  "address": "0x002F4E90",
+  "name": "maybe_Field_Marker_StartSequence",
+  "signature": "void maybe_Field_Marker_StartSequence(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Starts the marker's two-id animation sequence once both referenced resource ids are loaded, by sending task event 0 with the stored ids.",
+  "confidence": 0.35,
+  "evidence": "Two func_0031A868(self->f_3B8, self->f_3BA) / (self->f_3BC, self->f_3BE) status checks (0x0031A868 is a 'resource ready' query in this module), then FUN_00251230(ctx->f_6C, self->f_3B8, self->f_3BA, 0)."
+ },
+ {
+  "address": "0x002F4F88",
+  "name": "maybe_Field_Marker_DestroyChildren",
+  "signature": "void maybe_Field_Marker_DestroyChildren(FieldMarker* self)",
+  "params": {
+   "self": "field map-marker object"
+  },
+  "summary": "Destructor helper: installs the marker vtable, destroys the fixed 8-element sub-node array at +0x298 (element size 0x5C) and frees the attached sub-node.",
+  "confidence": 0.42,
+  "evidence": "self[0x8B] = g_002F4FEC + 0x98 (vtable/transform setup), FUN_00100BE0(self+0x298, g_002F4FF0, 0x5C, 8) is the container destroy-range helper (same helper used with element ctors in the training-window UI in other batches), then FUN_00335DAC + func_0010F6CC as in 0x002F41F0."
+ },
+ {
+  "address": "0x002F5048",
+  "name": "Ui_HopeSelect_LoadLayout",
+  "signature": "void Ui_HopeSelect_LoadLayout(UIWindow* self)",
+  "params": {
+   "self": "UI window object (sub-window at +0x138)"
+  },
+  "summary": "Loads the BFLYT layout 'win_hope_select' into the window's sub-window slot at +0x138 and hides it until it is shown.",
+  "confidence": 0.55,
+  "evidence": "FUN_001D85EC(self, self+0x138, s_win_hope_select_002f50c4, 0) takes the sub-window object and the layout name (the 'win_' prefix follows the same layout-name convention as the 'win%d' child windows in the training window, batch N_046); func_0029126C(self+0x138, 0) is the show/hide virtual, the same call as func_0029126C(&self->f_138, row[5] != 0) in that batch."
+ },
+ {
+  "address": "0x002F51D8",
+  "name": "Ui_HopeSelect_FreeResources",
+  "signature": "void Ui_HopeSelect_FreeResources(UIWindow* self)",
+  "params": {
+   "self": "UI window object (nested object at +0x324)"
+  },
+  "summary": "Tears down the 'hope select' window's nested layout object and its resources.",
+  "confidence": 0.5,
+  "evidence": "FUN_001A6768(self+0x324) resolves the nested layout object, FUN_002B7868(...-0x1EC) reaches the layout manager, func_001D8C2C(...-0x138) destroys the layout object and func_0010F6CC frees it - the standard UI-window destructor chain seen in batch N_046."
+ },
+ {
+  "address": "0x002F56CC",
+  "name": "maybe_Ui_JockeyPanel_Clear",
+  "signature": "void maybe_Ui_JockeyPanel_Clear(UIWindow* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "jockey selection panel",
+   "arg2": "new selection id"
+  },
+  "summary": "Resets the jockey panel: destroys the previous 3D preview object, releases the preview handle, resets the cursor/scroll fields and asks the panel controller for a new preview by id.",
+  "confidence": 0.45,
+  "evidence": "FUN_0021C334(&self->f_10) destroys the embedded preview holder, the handle at self->f_138 is released through FUN_001241D0 after a handle-table probe (mask >>0xC / >>0x8 pattern used by all handle managers here), self->f_138 is reset with g_002F577C, then FUN_001D8C80(system->f_88, arg2) requests the new preview; f_124..f_145 are zeroed."
+ },
+ {
+  "address": "0x002F587C",
+  "name": "Ui_JockeyPanel_ApplyVisualParams",
+  "signature": "void Ui_JockeyPanel_ApplyVisualParams(UIWindow* self, u32 id, const SelectionKey* key, u32 arg4)",
+  "params": {
+   "self": "jockey selection panel",
+   "id": "jockey/npc id to display",
+   "key": "selection key (3 bytes at +0, +3 used as mode)"
+  },
+  "summary": "Fills the jockey panel from 'npc_jockey_visual_param.bxon': finds the parameter record whose class matches the jockey visual class and whose id field is > 0x27, stores it as the active preview, then binds the record to the 3D preview object and toggles the 8 direction/colour switches.",
+  "confidence": 0.55,
+  "evidence": "String symbol s_npc_jockey_visual_param_bxon_002f5c98 is passed to func_00124B24 (load BXON), the records are walked with (**(code**)*puVar7)() == g_002F5CB8 (record class id) and puVar7[0x18] == 0x11; self->f_134 / f_130 / f_128 are set; FUN_002AE894(system->f_74, &sel, &colour, 1) applies the selection; func_0063EFB0(table, self->f_129) gives the 8-entry state record (f_74/f_75 flags)."
+ },
+ {
+  "address": "0x002F5CE0",
+  "name": "maybe_Ui_JockeyPanel_Release",
+  "signature": "u64 maybe_Ui_JockeyPanel_Release(UIWindow* self, u32 arg2)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Releases the panel's 3D preview object and returns the current render context, used when the panel is closed or rebuilt.",
+  "confidence": 0.4,
+  "evidence": "FUN_0021D09C(&self->f_10,self->f_124,&self->f_129) is the matching 'release/replace' call for the preview holder destroyed by FUN_0021C334 in 0x002F56CC; the return value packs system->f_88."
+ },
+ {
+  "address": "0x002F5D34",
+  "name": "maybe_Ui_JockeyPanel_SetPreviewVisible",
+  "signature": "void maybe_Ui_JockeyPanel_SetPreviewVisible(u32 self, u32 visible)",
+  "params": {
+   "visible": "1 = show preview"
+  },
+  "summary": "Shows or hides the jockey preview through the layout/animation object owned by the UI system.",
+  "confidence": 0.35,
+  "evidence": "FUN_001D9844(system->f_88, arg2) is the sibling of FUN_001D9870 / FUN_001D97B8 used by 0x002F587C on the same +0x88 object; the surrounding panel functions all call it right before a state change."
+ },
+ {
+  "address": "0x002F5D64",
+  "name": "maybe_Ui_JockeyPanel_ResetFade",
+  "signature": "void maybe_Ui_JockeyPanel_ResetFade(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Restarts the panel's fade/sound helper: clears the five fade flags, resets the preview timer, releases both cached sound handles and starts a new help sound.",
+  "confidence": 0.42,
+  "evidence": "f_141..f_145 zeroed, FUN_0021DB48(&self->f_10,1), then the sound system FUN_006F1DF8 (audio context) is used with FUN_001EDF88 / FUN_001EDE9C (free two channels) / func_001EE018 / FUN_001EC088(ctx,5) returning the new handle stored in f_150 - the same audio calls appear in 0x002F5F30 and 0x002F66E8."
+ },
+ {
+  "address": "0x002F5EBC",
+  "name": "maybe_Ui_JockeyPanel_OnOpen",
+  "signature": "u32 maybe_Ui_JockeyPanel_OnOpen(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Panel-open handler: pushes the UI input mode, releases any pending preview and switches the panel state machine to state 6.",
+  "confidence": 0.4,
+  "evidence": "Guarded by f_141; func_004101B4(system->f_74->f_30 + 0xE0, 1, 0) is the UI-input-mode setter used all over this module; FUN_0021C8B0(&self->f_10) drops the preview; self->f_13C->vtable[0x18](self->f_13C,6) is the 'set state' virtual that most of the following functions use."
+ },
+ {
+  "address": "0x002F5F30",
+  "name": "maybe_Ui_JockeyPanel_Teardown",
+  "signature": "void maybe_Ui_JockeyPanel_Teardown(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Destructor: plays the close sound, releases the two cached audio channels and the preview object.",
+  "confidence": 0.45,
+  "evidence": "func_002D24BC(*(g_006F229C()+0x14)) plays the cached sound, then the audio context FUN_006F1DF8 with func_001EE018 / FUN_001EDE9C(f_14C) / FUN_001EDF88(f_148) frees both channels and clears the handles."
+ },
+ {
+  "address": "0x002F5FB8",
+  "name": "maybe_Ui_JockeyPanel_HandleInput",
+  "signature": "u32 maybe_Ui_JockeyPanel_HandleInput(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Per-frame input handler for the jockey panel: reacts to confirm/cancel, plays the error sound 0xEC0 when the selection is invalid, and drives the panel state machine (7 = accept, 8 = back).",
+  "confidence": 0.45,
+  "evidence": "FUN_00633854(&self->f_10) / FUN_006339DC(&self->f_10) are the UI confirm/back queries (same pair used in 0x00301AB4's caller chain); FUN_001EBC68(system,0xEC0,0,0) + FUN_001EC1D0(system,0x2E) = error SE; self->f_13C->vtable[0x18](self->f_13C, 7 or 8) sets the panel state; the 0x100 button mask test (& 0x100) on system->f_C->f_6C is the standard 'confirm pressed' check."
+ },
+ {
+  "address": "0x002F6128",
+  "name": "maybe_Ui_JockeyPanel_Close",
+  "signature": "void maybe_Ui_JockeyPanel_Close(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Closes the jockey panel: restores the input mode, plays the cancel sound pair, resets the preview holder and returns the UI system to the previous menu state.",
+  "confidence": 0.45,
+  "evidence": "func_004101B4(system->f_74->f_30 + 0xE0, 4, 0), FUN_00633A28(self+0x10), FUN_001EBC68(system,0x3E,0) + FUN_001EC1D0(system,0x7C) (cancel SE pair), FUN_0021DB48(self+0x10,0), FUN_00253290(system->f_6C,0x1C)."
+ },
+ {
+  "address": "0x002F61EC",
+  "name": "maybe_Ui_JockeyPanel_UpdateCursor",
+  "signature": "u32 maybe_Ui_JockeyPanel_UpdateCursor(UIWindow* self, float dt)",
+  "params": {
+   "self": "jockey selection panel",
+   "dt": "frame delta"
+  },
+  "summary": "Advances the panel's cursor/hold timer: once the hold threshold is exceeded it unlocks the entry and plays the unlock sound (event 3); it also forces state 9 when the panel timer expires.",
+  "confidence": 0.4,
+  "evidence": "Compares dt against g_002F6328 and g_002F6338, reads a float table indexed by f_129/f_12A at system+0x2A264 (the same 2D table used by 0x002F6450), sets f_145, frees/creates the sound handle via FUN_001EDE9C + FUN_001EB8C8(system,3,0), and calls vtable[0x18](9) when self->f_13C[2] exceeds g_002F6338."
+ },
+ {
+  "address": "0x002F6380",
+  "name": "maybe_Ui_JockeyPanel_OnConfirm",
+  "signature": "u32 maybe_Ui_JockeyPanel_OnConfirm(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Confirm handler: when the selection is not yet accepted it plays the accept sound and switches the panel to state 3; when it already is, it plays the cached sound and switches to state 3 too.",
+  "confidence": 0.4,
+  "evidence": "Both branches call self->f_13C->vtable[0x18](self->f_13C,3); the difference is FUN_00253290(system->f_6C,0x1B) + a virtual query on FUN_006F229C() versus func_002D24BC(*(FUN_006F229C()+0x14)) (cached sound)."
+ },
+ {
+  "address": "0x002F642C",
+  "name": "maybe_Ui_JockeyPanel_ResetMode",
+  "signature": "void maybe_Ui_JockeyPanel_ResetMode(void)",
+  "params": {
+   "(implicit)": "global UI system"
+  },
+  "summary": "Resets the jockey panel mode in the UI system's sub-object (mode 0).",
+  "confidence": 0.35,
+  "evidence": "func_002AE0C4(system->f_74, 0) - the counterpart of FUN_002AE894(system->f_74,...) used by 0x002F587C to apply a selection."
+ },
+ {
+  "address": "0x002F6450",
+  "name": "maybe_Ui_JockeyPanel_OnDecide",
+  "signature": "u32 maybe_Ui_JockeyPanel_OnDecide(UIWindow* self, float value)",
+  "params": {
+   "self": "jockey selection panel",
+   "value": "analog/scroll value from the input system"
+  },
+  "summary": "Commits the current jockey-panel cell: only in game mode 0xD, it packs the cursor indices, stores the input value into the panel's 2D value table, fires the 'ae' UI command and switches to state 0.",
+  "confidence": 0.45,
+  "evidence": "Guard *(system->f_74 + 0x6C) == '\r' (game mode 13); builds a 6-byte selection record from f_129/f_12A/+299; the table write piVar5[f129*4 + f12A + 0x15F3] with base *g_006F20C0()+0x24A98 is the same 0x24A98 arena as 0x002F3140; FUN_0019F898(system->f_88,&rec) submits it; piVar5->vtable[8](piVar5,0xAE,1) issues the UI command; vtable[0x18](0) resets the panel."
+ },
+ {
+  "address": "0x002F66E8",
+  "name": "maybe_Ui_JockeyPanel_Destruct",
+  "signature": "void maybe_Ui_JockeyPanel_Destruct(UIWindow* self)",
+  "params": {
+   "self": "jockey selection panel"
+  },
+  "summary": "Destructor: stops the preview holder when still active, stops the help sound if it is still playing, and releases the panel state object.",
+  "confidence": 0.42,
+  "evidence": "FUN_0021DB80(&self->f_10) when f_143 is clear; func_001EC5B8(system) + FUN_001EC1D0(system,5) stop the help sound and clear f_150; self->f_13C->vtable[8]() + vtable[0xC](self->f_13C,0) release the state object."
+ },
+ {
+  "address": "0x002F6B14",
+  "name": "maybe_Field_FindJockeyObject",
+  "signature": "int maybe_Field_FindJockeyObject(void)",
+  "params": {},
+  "summary": "Returns the jockey/mount control object for the current field area, by querying the world object for its component interface and stepping back to the object base.",
+  "confidence": 0.25,
+  "evidence": "func_001D8B6C() returns the world singleton; FUN_0036B45C(world+0x11C, 1, 0x10) queries a component and FUN_002BB660(comp+0x1C) casts it; the '-0x138' adjustment is the base-pointer fix-up. Same pattern as 0x002F7738 and 0x002F72D0."
+ },
+ {
+  "address": "0x002F6C90",
+  "name": "maybe_Ui_FindDialogObject",
+  "signature": "int maybe_Ui_FindDialogObject(void)",
+  "params": {},
+  "summary": "Walks two levels of the UI object graph and returns the base of the dialogue widget (or 0 if absent).",
+  "confidence": 0.25,
+  "evidence": "FUN_003E0454() chained twice (+0x50 twice) returning '-0x50'; FUN_003E0454 is the UI child lookup (vtable +0x98 equivalent used in 0x002F6D04)."
+ },
+ {
+  "address": "0x002F6D04",
+  "name": "Ui_Pager_SetPage",
+  "signature": "void Ui_Pager_SetPage(UIPager* self)",
+  "params": {
+   "self": "pager widget (page count via vtable+0x84, page at vtable+0x98, page widget at +0x50)"
+  },
+  "summary": "Moves the pager one page forward (wrapping to 0) and updates the visibility of every page: the current page is shown, all others are hidden.",
+  "confidence": 0.5,
+  "evidence": "page count from vtable+0x84, index-1 clamped to 0, f_14 = 'changed' = (old index 0 && new index 0); loop calls vtable+0x98(self,i) then FUN_003DFF34(iVar2+0x50,0) / func_003E043C(iVar2,0) - the same show/hide pair used by the UI window code in 0x002F7110."
+ },
+ {
+  "address": "0x002F6DF8",
+  "name": "maybe_Ui_Pager_ApplyPage",
+  "signature": "void maybe_Ui_Pager_ApplyPage(UIPager* self, u32 index, int pageArray, int slot)",
+  "params": {
+   "self": "pager widget",
+   "index": "target page index",
+   "pageArray": "optional per-page u16 table",
+   "slot": "index into that table"
+  },
+  "summary": "Applies one page selection: calls the pager's pre/post virtuals and forwards the page id (optionally taken from a per-page table) to the scroll helper.",
+  "confidence": 0.45,
+  "evidence": "vtable+0x90 (commit) then vtable+0x94(self,index,tableValue) then func_001A6680(self, index | (*(u16*)(self+0x28) << 16), puVar1) - the 4-argument scroll/notify helper also used by 0x00304FC8's caller chain; default table is g_002F6E78."
+ },
+ {
+  "address": "0x002F7100",
+  "name": "maybe_Ui_Pager_Destruct",
+  "signature": "void maybe_Ui_Pager_Destruct(void)",
+  "params": {},
+  "summary": "Frees the pager widget: destroys the base object and releases its memory.",
+  "confidence": 0.4,
+  "evidence": "FUN_001A6768() (UI object release) followed by func_0010F6CC() (free) - the two-instruction destructor pattern repeated at 0x002FCC64, 0x002F7738's siblings and 0x00307370."
+ },
+ {
+  "address": "0x002F7110",
+  "name": "maybe_Ui_Pager_SelectTab",
+  "signature": "void maybe_Ui_Pager_SelectTab(UIPager* self, int tab)",
+  "params": {
+   "self": "pager widget (3 sub-widgets at +0x4C, +0x9C, +0xEC)",
+   "tab": "0..2"
+  },
+  "summary": "Selects one of three tabs: hides every sub-widget, then shows the chosen one and plays that tab's sound before refreshing the label text.",
+  "confidence": 0.45,
+  "evidence": "Three widgets at self+0x4C / +0x9C / +0xEC toggled with FUN_003DFF34(...,0) and func_003E043C(...,0); the sound id differs per tab (func_001F0E0C(0xE) for tab 0/2, func_001F0E0C(9) for tab 1); the label update is FUN_003A7A2C(self, (u16)self->f_28 << 16, soundId, 1) - the same text-run setter used by the training window in batch N_046."
+ },
+ {
+  "address": "0x002F72D0",
+  "name": "maybe_Ui_FindTabBar",
+  "signature": "int maybe_Ui_FindTabBar(void)",
+  "params": {},
+  "summary": "Returns the base of the tab-bar widget from the UI singleton (three nested lookups).",
+  "confidence": 0.25,
+  "evidence": "FUN_001A66A0() + three FUN_003E0454(+0x50) calls and a '-0xEC' base adjustment; FUN_003E0454 is the UI child lookup used in 0x002F6C90."
+ },
+ {
+  "address": "0x002F7738",
+  "name": "maybe_Field_CreateWorldList",
+  "signature": "int maybe_Field_CreateWorldList(void)",
+  "params": {},
+  "summary": "Initialises the world's intrusive object list (head/tail sentinels) and returns the field object that owns it, creating the list lazily on first use.",
+  "confidence": 0.3,
+  "evidence": "Fills an intrusive list header (puVar2[0x47..0x4D] with self-references, sentinel value g_002F779C), then FUN_0018FF58(puVar2+0x4E) and FUN_0036B45C(iVar4+0x50,1) with a '-0x188' adjustment - the same component-cast idiom as 0x002F6B14."
+ },
+ {
+  "address": "0x002F7B08",
+  "name": "maybe_Field_Prop_OnTouchNotify",
+  "signature": "void maybe_Field_Prop_OnTouchNotify(FieldProp* self, u32 message, const char* arg)",
+  "params": {
+   "self": "touchable field prop (e.g. sign / NPC marker)",
+   "message": "node message (7 = proximity)",
+   "arg": "name of the involved object"
+  },
+  "summary": "Proximity/notification handler: when message 7 arrives with an object whose first name byte matches the prop's stored char, it switches the prop to its interactive animation state, then performs an AABB overlap test between the player box and the prop box and starts the interaction animation.",
+  "confidence": 0.4,
+  "evidence": "msg 7 + func_001902B4(arg3) name compare against (char)self[0xB0]; vtable 0x3C/0x54(4) = set state 4; FUN_003359C4(self) = refresh animation; the two rectangle tests use the player's f_4C/f_50/f_54/f_58/f_5C/f_60 and the prop's +0x54..+0x60; func_005F34F0(self, self+0xB1) starts the interaction."
+ },
+ {
+  "address": "0x002F8138",
+  "name": "maybe_Field_Prop_OnActionEnd",
+  "signature": "void maybe_Field_Prop_OnActionEnd(FieldProp* self, u32 actionId)",
+  "params": {
+   "self": "touchable field prop",
+   "actionId": "id of the finished action"
+  },
+  "summary": "Called when a prop action ends: looks the action record up, and if the record requests it, cancels the prop's hold state and clears the 'player engaged' registration.",
+  "confidence": 0.35,
+  "evidence": "func_0035EB98(*g_006F20C0(), (char)self[0xB0]) returns the action record and (rec->f_DA & 0x10) selects the branch; func_0066A7D8(actionId)->f_1D == 0 leads to vtable 0x58/0x40(4) + FUN_00335A18 (release the player) else FUN_00238A48(system->f_48, char, 1) clears the engagement."
+ },
+ {
+  "address": "0x002F8248",
+  "name": "maybe_Field_Prop_FreeSubNode",
+  "signature": "void maybe_Field_Prop_FreeSubNode(FieldProp* self)",
+  "params": {
+   "self": "field prop (sub-node at -0x64 from the argument)"
+  },
+  "summary": "Destroys and frees the prop's attached sub-node.",
+  "confidence": 0.4,
+  "evidence": "FUN_0017C334(arg1-100) resolves the node header, FUN_00335DAC(iVar1-0x254) is the sub-node destructor (see 0x00335DAC), func_0010F6CC frees - identical body to 0x002F880C."
+ },
+ {
+  "address": "0x002F880C",
+  "name": "maybe_Field_Prop_FreeSubNodeEx",
+  "signature": "void maybe_Field_Prop_FreeSubNodeEx(FieldProp* self)",
+  "params": {
+   "self": "field prop (sub-node at +0x254)"
+  },
+  "summary": "Second destroy-and-free variant for a prop sub-node (different member offset).",
+  "confidence": 0.4,
+  "evidence": "Same three calls as 0x002F8248 with FUN_0017C334(arg1+0x254) and FUN_00335DAC(iVar1-0x254)."
+ },
+ {
+  "address": "0x002F88D0",
+  "name": "Field_Npc_OnReact",
+  "signature": "void Field_Npc_OnReact(FieldNpc* self)",
+  "params": {
+   "self": "NPC object with talk balloons (f_160 = talk-balloon controller)"
+  },
+  "summary": "Reacts to the special 'React' balloon: when the talk-balloon controller is showing the 'React' emote it clears the react flag and, for action ids 0x212..0x215, plays the react animation and sound.",
+  "confidence": 0.5,
+  "evidence": "String symbol s_React_002f8964 passed to FUN_00633D6C(self->f_160, ...) = 'is this balloon the named one'; f_38c &= result; ids 0x212/0x213/0x214/0x215 tested explicitly; func_0051B1FC(system+0x98,0x7FFFFFFF) + func_0011CD80(...,0x5B) = sound/rand helper; func_005F7784(self,1) plays the animation."
+ },
+ {
+  "address": "0x002F896C",
+  "name": "Field_Npc_InitTalkBalloons",
+  "signature": "void Field_Npc_InitTalkBalloons(FieldNpc* self, const NpcPlacement* p, u32 owner)",
+  "params": {
+   "self": "NPC object",
+   "p": "NPC placement record",
+   "owner": "owning scene object"
+  },
+  "summary": "Initialises an NPC that shows dialogue balloons: copies the placement (position, flags, animation id, colour index), attaches the 'outBalloon' and 'defaultTalk' effects, sets the balloon tint from the NPC's colour entry, and hands the NPC to the character renderer.",
+  "confidence": 0.6,
+  "evidence": "String symbols s_outBalloon_002f8dcc and g_002F8DD8 ('defaultTalk') are resolved with FUN_006F44B0 and fed to FUN_00336054 (effect create by name); FUN_003361D8 is the placement-driven variant; the colour comes from func_0063E2BC / func_0062B540 via the NPC colour table (ids 0x5D special case); func_0018215C(self, p+4, p+6) + func_00181D60(self, owner, 0) install the NPC into the scene; f_360/f_364/f_368 hold the tint."
+ },
+ {
+  "address": "0x002F9108",
+  "name": "maybe_Field_Npc_FreeSubNode",
+  "signature": "void maybe_Field_Npc_FreeSubNode(FieldNpc* self)",
+  "params": {
+   "self": "NPC object (sub-node at +0x390)"
+  },
+  "summary": "Destroys and frees the NPC's attached effect node.",
+  "confidence": 0.4,
+  "evidence": "FUN_0017C334(arg1+0x390), FUN_00184CB4(iVar1-0x390) (the effect-node destructor used by 0x002FA43C and 0x002FB420), func_0010F6CC free."
+ },
+ {
+  "address": "0x002F91B8",
+  "name": "Field_Npc_OnApproach",
+  "signature": "void Field_Npc_OnApproach(FieldNpc* self, u32 message, const char* arg, u32 arg4)",
+  "params": {
+   "self": "NPC object",
+   "message": "node message (7 = player proximity)",
+   "arg": "name of the approaching object"
+  },
+  "summary": "NPC proximity handler: when the player with the matching name comes within the NPC's talk radius it turns the NPC towards the player, switches it to its talk animation and starts the talk state.",
+  "confidence": 0.55,
+  "evidence": "msg 7, name byte compare (func_001902B4(arg3)[0] == (char)self[0xE5]); distance test SQRT(dx^2+dy^2+dz^2) against player->f_164->f_58 + own radius; FUN_00335E5C(self) resumes the child list; func_005F7948(self, animName) plays the talk animation (g_002F93D8 name table) with func_005F7784(self) as fallback; the clearance block clears player->f_550/0x555/0x556; FUN_005E754C(self,msg,arg) forwards the message to the base node."
+ },
+ {
+  "address": "0x002F96A4",
+  "name": "Field_Npc_InitEmoteBalloon",
+  "signature": "void Field_Npc_InitEmoteBalloon(FieldNpc* self, const NpcPlacement* p, u32 owner, u32 arg4)",
+  "params": {
+   "self": "NPC object",
+   "p": "NPC placement record (one balloon only)",
+   "owner": "owning scene object",
+   "arg4": "balloon variant id"
+  },
+  "summary": "Second NPC balloon variant: initialises the NPC, attaches a single 'defaultTalk' emote balloon, applies the tint and starts the NPC in the scene; the extra argument selects the balloon rendering mode.",
+  "confidence": 0.5,
+  "evidence": "Same skeleton as 0x002F896C but only one effect name (g_002F9AB4 = 'defaultTalk', g_002F9AB0/g_002F9AB8/g_002F9ABC constants) and FUN_003361D8(self,p,&self->f_268,1) creates the balloon in mode 1; FUN_0040AD50 / FUN_0040BA78 / FUN_0040B748 / FUN_0040AE18 configure the balloon sprite node, FUN_00182960(self, colourIndex) applies the NPC colour; ids 0x20F/0x222/0x223 override f_88."
+ },
+ {
+  "address": "0x002F9C68",
+  "name": "maybe_Field_Npc_InitFullBalloons",
+  "signature": "void maybe_Field_Npc_InitFullBalloons(FieldNpc* self, const NpcPlacement* p, u32 owner)",
+  "params": {
+   "self": "NPC object",
+   "p": "wide NPC placement record (fields shifted by 8 bytes)",
+   "owner": "owning scene object"
+  },
+  "summary": "Widest NPC balloon variant: NPC with two balloons plus an optional extra effect, extra animation/scale fields and a follow target used for cut-scene placement.",
+  "confidence": 0.4,
+  "evidence": "Same body as 0x002F896C/0x002F96A4 but every placement field is 8 bytes further in (p[10..0x1A] instead of p[8..0x17]) and it additionally stores f_398..f_3AC (two 3-float blocks) and the f_3B1 flag which sets player->f_599/f_59A. The balloon ids use g_002FA080/g_002FA088 and the same 0x5D tint special case."
+ },
+ {
+  "address": "0x002FA308",
+  "name": "maybe_Field_Npc_OnActionEnd",
+  "signature": "void maybe_Field_Npc_OnActionEnd(FieldNpc* self, u32 actionId)",
+  "params": {
+   "self": "NPC object",
+   "actionId": "id of the finished action"
+  },
+  "summary": "Mirror of 0x002F8138 for the wider NPC class: ends the current action, releases the player from the interaction if the action record says so, otherwise clears the engagement in the world system.",
+  "confidence": 0.35,
+  "evidence": "func_0035EB98(*g_006F20C0(), (char)self[0xE5]) record test (rec->f_DA & 0x10); FUN_0066A7D8(actionId)->f_1D == 0 -> vtable 0x58/0x40(4) + FUN_00335EB0 (the wide-NPC release variant, compare FUN_00335A18 in 0x002F8138); else FUN_00238A48(system->f_48, char, 1)."
+ },
+ {
+  "address": "0x002FA43C",
+  "name": "maybe_Field_Npc_FreeEffectNode",
+  "signature": "void maybe_Field_Npc_FreeEffectNode(void)",
+  "params": {},
+  "summary": "Destroys and frees the NPC's effect node (no-op wrapper around the shared effect-node destructor).",
+  "confidence": 0.4,
+  "evidence": "FUN_00184CB4() + func_0010F6CC(); FUN_00184CB4 is the destructor called through FUN_0017C334 in 0x002F9108 and 0x002FB420."
+ },
+ {
+  "address": "0x002FA5BC",
+  "name": "maybe_Ui_DrawGlyphIcon",
+  "signature": "void maybe_Ui_DrawGlyphIcon(FieldNpc* self)",
+  "params": {
+   "self": "NPC object carrying a 2D icon/glyph (glyph id at +0x38C, colour at +0x364)"
+  },
+  "summary": "Draws the NPC's floating 2D icon: resolves the glyph record for the current icon id, scales the colour by the NPC's palette index and submits a textured quad at the NPC position.",
+  "confidence": 0.45,
+  "evidence": "Reads the 2D text object at *(g_002FACE0-ish)+0x9C, func_005EB3A0(&rec,&id) fetches the glyph record, func_006282D0 / func_0063DAD4 resolve the glyph for the palette index (modulo 3/16 arithmetic), and func_0017CB7C(gfx, 0, glyph, &pos3, &size3, &uv) is the 2D quad submit used by the sprite/effect renderer; the tint multiplier is chosen from self->f_313 (0x01 / 0x03 / 0x04)."
+ },
+ {
+  "address": "0x002FA83C",
+  "name": "maybe_Field_Npc_InitColorBalloonA",
+  "signature": "void maybe_Field_Npc_InitColorBalloonA(FieldNpc* self, const NpcPlacement* p, const u32* color, u32 owner)",
+  "params": {
+   "self": "NPC object",
+   "p": "NPC placement record",
+   "color": "explicit balloon colour",
+   "owner": "owning scene object"
+  },
+  "summary": "NPC balloon variant that takes an explicit colour word instead of the palette lookup: sets up the NPC, creates the balloon effect in mode 1 and applies the colour to the balloon node.",
+  "confidence": 0.45,
+  "evidence": "self->f_38C = *arg3 (colour taken from the caller), self->f_360 = p[0x11], f_35D = 1; FUN_003361D8(self,p,&self->f_268,1,0); the same 0x5D special case; no FUN_00182960 colour lookup - the colour is written into the balloon node widgets (f_300..f_30C) directly."
+ },
+ {
+  "address": "0x002FAE04",
+  "name": "maybe_Field_Npc_InitColorBalloonB",
+  "signature": "void maybe_Field_Npc_InitColorBalloonB(FieldNpc* self, const NpcPlacement* p, const u32* color, u32 owner)",
+  "params": {
+   "self": "NPC object",
+   "p": "NPC placement record (fields 3 bytes further in)",
+   "color": "explicit balloon colour",
+   "owner": "owning scene object"
+  },
+  "summary": "Same as 0x002FA83C for the placement layout with the balloon id at +0x5E: NPC with one colour-overridden balloon.",
+  "confidence": 0.45,
+  "evidence": "Identical structure to 0x002FA83C with all placement offsets +3 (p[0x17], (int)p+0x5D/0x59, balloon id at +0x5E, colours g_002FB1D4/g_002FB1D8/g_002FB1E0/g_002FB1E8); f_35D = 0 instead of 1."
+ },
+ {
+  "address": "0x002FB420",
+  "name": "maybe_Field_Npc_FreeEffectNodeEx",
+  "signature": "void maybe_Field_Npc_FreeEffectNodeEx(void)",
+  "params": {},
+  "summary": "Second effect-node destructor wrapper (wide NPC class).",
+  "confidence": 0.38,
+  "evidence": "FUN_00184CB4() + func_0010F6CC(), byte-identical to 0x002FA43C; the two addresses are two separate compiled copies for two classes."
+ },
+ {
+  "address": "0x002FB460",
+  "name": "maybe_Field_GetTimer",
+  "signature": "void maybe_Field_GetTimer(void)",
+  "params": {},
+  "summary": "Returns the field's frame timer object from the scene system (unused result in the decompiled view).",
+  "confidence": 0.25,
+  "evidence": "Single call FUN_0036D364(); in the 0x36D3xx cluster this is the scene/frame timing singleton - the value is discarded because the ARM code only loads through it."
+ },
+ {
+  "address": "0x002FB644",
+  "name": "maybe_Field_Prop_Destruct",
+  "signature": "void maybe_Field_Prop_Destruct(FieldProp* self)",
+  "params": {
+   "self": "field prop (node at +0x60)"
+  },
+  "summary": "Destructor: destroys the prop node and releases the prop's effect object.",
+  "confidence": 0.35,
+  "evidence": "func_005E7594() (base node cleanup next to FUN_005E754C/FUN_005E78E4) then FUN_002A86C0(self->f_60, 0) which is the effect/node release used with self->f_60 elsewhere in this module."
+ },
+ {
+  "address": "0x002FC360",
+  "name": "Ui_Text_FitString",
+  "signature": "void Ui_Text_FitString(TextLayout* self, const u16* text)",
+  "params": {
+   "self": "text layout object (string cursor at +0x58/+0x5C)",
+   "text": "UTF-16 string, terminated by the layout's stop glyph"
+  },
+  "summary": "Measures a UTF-16 string until the terminator and, when the whole run fits into the remaining line width, appends it to the layout and advances the write cursor.",
+  "confidence": 0.5,
+  "evidence": "Walks u16 glyphs comparing with g_002FC448 (the terminator glyph) storing the cursor at arg1[0x17]; compares vtable+0x68 (string width) and vtable+0x64 (remaining width) against (u16 at +0x2C) + count*8 - width; on success calls FUN_001D809C(layout, width | (*(u16*)(self+0x28)<<16)) which is the 'append glyph run' writer, then vtable+0x60 (advance) - the same virtual set used by 0x00304FC8."
+ },
+ {
+  "address": "0x002FCB84",
+  "name": "maybe_Ui_List_Destruct",
+  "signature": "void maybe_Ui_List_Destruct(UIList* self)",
+  "params": {
+   "self": "UI list widget (array of 8 x 0x5C elements at +0x60)"
+  },
+  "summary": "Destroys a UI list: releases the eight 0x5C-byte element objects, clears the container and frees the list.",
+  "confidence": 0.45,
+  "evidence": "FUN_00100BE0(self+0x60, g_002FCBBC, 0x5C, 8) - the destroy-range helper (element size 0x5C, count 8, same helper as 0x002F4F88), FUN_001A6768(self) then func_0010F6CC() free."
+ },
+ {
+  "address": "0x002FCBC0",
+  "name": "maybe_Ui_List_Reset",
+  "signature": "void maybe_Ui_List_Reset(UIList* self)",
+  "params": {
+   "self": "UI list widget"
+  },
+  "summary": "Clears the eight list elements and resets the container without freeing the list object itself.",
+  "confidence": 0.42,
+  "evidence": "FUN_00100BE0(self+0x60, g_002FCBF4, 0x5C, 8) followed by FUN_001A6768(self) only (no free) - the reset-only twin of 0x002FCB84."
+ },
+ {
+  "address": "0x002FCC44",
+  "name": "maybe_Menu_ItemBox_Reset",
+  "signature": "void maybe_Menu_ItemBox_Reset(void)",
+  "params": {},
+  "summary": "Resets the shared item-box/menu state (clears the selected-entry pointer).",
+  "confidence": 0.25,
+  "evidence": "FUN_001A66A0() returns the menu singleton and puVar2[0x13] = 0 clears its entry pointer; same accessor as 0x003047C0 and 0x00307370."
+ },
+ {
+  "address": "0x002FCC64",
+  "name": "maybe_Menu_ItemBox_Destruct",
+  "signature": "void maybe_Menu_ItemBox_Destruct(void)",
+  "params": {},
+  "summary": "Releases the menu singleton used by 0x002FCC44.",
+  "confidence": 0.35,
+  "evidence": "FUN_001A6768() + func_0010F6CC() - standard release/free pair."
+ },
+ {
+  "address": "0x002FCFC4",
+  "name": "Ui_Widget_UpdateInput",
+  "signature": "u32 Ui_Widget_UpdateInput(void)",
+  "params": {},
+  "summary": "Thin input-update override for a UI widget: forwards to the shared widget input routine and reports the widget as still alive.",
+  "confidence": 0.5,
+  "evidence": "Only call is FUN_001DAD58() - the widget input dispatcher that every function in the 0x2FD8A8..0x2FED34 group calls as FUN_001DAD58(self+0x34D8, input+0x520) - then 'return 1'."
+ },
+ {
+  "address": "0x002FD8A8",
+  "name": "maybe_Ui_Window_InputToState18",
+  "signature": "u32 maybe_Ui_Window_InputToState18(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window (input node at +0x34D8, state machine at +0x3574)",
+   "input": "input state (button mask at +0x14)"
+  },
+  "summary": "Window input handler: updates the window's input node and, when the widget consumed the input, switches the window state machine to state 0x12 before running it.",
+  "confidence": 0.32,
+  "evidence": "FUN_001DAD58(self+0x34D8, input+0x520) = shared widget input update (button mask 0x14E/0x142, timers at +0x3A..+0x40); func_0062F680(self+0x34D8) = 'action fired' query; then (**(code**)(*piVar2+0x14))(piVar2, 0x12) sets the state and (**(code**)(*piVar2+0x10))(piVar2) runs it. Every function in this group has this exact shape, only the state id differs."
+ },
+ {
+  "address": "0x002FDF7C",
+  "name": "maybe_Ui_Window_InputToStateConfirm",
+  "signature": "u32 maybe_Ui_Window_InputToStateConfirm(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: on a consumed input it marks the window as 'confirmed' and moves to state 6 (or 0x0C when the widget reports a nested-confirm).",
+  "confidence": 0.32,
+  "evidence": "Same skeleton as 0x002FD8A8; the branch is FUN_0062F694(self+0x34D8) == 1 setting f_134/f_135 and state 6, otherwise state 0xC."
+ },
+ {
+  "address": "0x002FE17C",
+  "name": "maybe_Ui_Window_InputClearList",
+  "signature": "u32 maybe_Ui_Window_InputClearList(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window (list at +0x3774..+0x3778, 0x2C-byte entries)",
+   "input": "input state"
+  },
+  "summary": "Window input handler that also empties the window's list buffer and hides the list widget.",
+  "confidence": 0.32,
+  "evidence": "Same input prefix; then func_001DAB30(inputNode,0) (cancel), the loop over f_3774..f_3778 with stride 0x2C (list of 0x2C-byte rows) is emptied by resetting f_3778 = f_3774, and func_0029126C(&self->f_33E4,0) hides the list widget. Also calls the global byte table at g_002FE248 for the 'consumed' test."
+ },
+ {
+  "address": "0x002FE4C4",
+  "name": "maybe_Ui_Window_InputToState6",
+  "signature": "u32 maybe_Ui_Window_InputToState6(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves the window state machine to state 6 when the input was consumed.",
+  "confidence": 0.32,
+  "evidence": "Identical to 0x002FD8A8 with state 6."
+ },
+ {
+  "address": "0x002FE530",
+  "name": "maybe_Ui_Window_InputHideList",
+  "signature": "u32 maybe_Ui_Window_InputHideList(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler that only hides the window's list widget when the input was consumed (no state change).",
+  "confidence": 0.32,
+  "evidence": "Input prefix + the same g_002FE5B8 consumed-byte test as 0x002FE17C, but the only action is func_0029126C(arg1+0x33E4, 0)."
+ },
+ {
+  "address": "0x002FE714",
+  "name": "maybe_Ui_Window_InputToState18B",
+  "signature": "u32 maybe_Ui_Window_InputToState18B(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: sets the 'back' flag, then moves to state 0x12.",
+  "confidence": 0.3,
+  "evidence": "Includes func_0010EBD8(self) (the flag setter used by 0x002FD8A8's sibling) and state 0x12."
+ },
+ {
+  "address": "0x002FE788",
+  "name": "maybe_Ui_Window_InputToState6B",
+  "signature": "u32 maybe_Ui_Window_InputToState6B(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves to state 6 (second copy for another window class).",
+  "confidence": 0.3,
+  "evidence": "Identical to 0x002FE4C4; the duplicate exists because two window classes share the layout of the input handler."
+ },
+ {
+  "address": "0x002FE888",
+  "name": "maybe_Ui_Window_InputToStateToggle",
+  "signature": "u32 maybe_Ui_Window_InputToStateToggle(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: reports a nested confirm (0x12) or, unless the sub-window is in mode 2, marks the window confirmed and moves to state 6.",
+  "confidence": 0.32,
+  "evidence": "FUN_0062F694 == 1 -> state 0x12; otherwise tests *(*(g_002FE940+self)+0x4A5) != 2, sets f_134/f_135 and state 6."
+ },
+ {
+  "address": "0x002FE948",
+  "name": "maybe_Ui_Window_InputToState6C",
+  "signature": "u32 maybe_Ui_Window_InputToState6C(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves to state 6 (third copy).",
+  "confidence": 0.3,
+  "evidence": "Identical to 0x002FE4C4 / 0x002FE788."
+ },
+ {
+  "address": "0x002FEC18",
+  "name": "maybe_Ui_Window_InputToState16",
+  "signature": "u32 maybe_Ui_Window_InputToState16(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves the window state machine to state 0x10.",
+  "confidence": 0.3,
+  "evidence": "Same skeleton, state id 0x10."
+ },
+ {
+  "address": "0x002FEC84",
+  "name": "maybe_Ui_Window_InputToState15",
+  "signature": "u32 maybe_Ui_Window_InputToState15(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves the window state machine to state 0x0F.",
+  "confidence": 0.3,
+  "evidence": "Same skeleton, state id 0x0F."
+ },
+ {
+  "address": "0x002FED34",
+  "name": "maybe_Ui_Window_InputCancel",
+  "signature": "u32 maybe_Ui_Window_InputCancel(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: on cancel it rolls the window's scroll position back by the current offset and moves to state 0x0B (or 6 when it is not cancelling).",
+  "confidence": 0.35,
+  "evidence": "FUN_0062F694 == 1 -> FUN_003BDE6C(self) + FUN_003BDF58(self) subtracted from f_3768 (the scroll position correction helpers) then state 0x0B; otherwise state 6."
+ },
+ {
+  "address": "0x002FF68C",
+  "name": "std_va_list_get",
+  "signature": "int std_va_list_get(void)",
+  "params": {},
+  "summary": "Returns the current position of the C variadic argument cursor plus the 4-byte header offset; used by the vsnprintf wrapper to hand the same argument list to another formatter.",
+  "confidence": 0.6,
+  "evidence": "Calls func_00300308() and returns it + 4. func_00300308 is the function that hands back the va_list cursor of the formatting context (see FUN_00300420, which keeps the cursor in arg1[3] and calls it via a function pointer). Its only caller, FUN_003005A8, uses it as a printf-family entry point."
+ },
+ {
+  "address": "0x002FF6AA",
+  "name": "std_vprintf_flags0",
+  "signature": "void std_vprintf_flags0(u32 stream, u32 fmt, u32* vaList, u32 extra)",
+  "params": {
+   "stream": "output sink (FILE-like)",
+   "fmt": "format string",
+   "vaList": "variadic argument list"
+  },
+  "summary": "One of the two printf entry points: builds a formatting context with control flag 0 and runs the shared formatter.",
+  "confidence": 0.6,
+  "evidence": "Builds a 5-word context {arg1, arg2, &callback, arg4, flags=0} where the callback is a literal-pool function pointer at 0x002FF6BC, then calls FUN_00300420(ctx, arg3). Its twin 0x002FF6E6 is identical with flags=1."
+ },
+ {
+  "address": "0x002FF6E6",
+  "name": "std_vprintf_flags1",
+  "signature": "void std_vprintf_flags1(u32 stream, u32 fmt, u32* vaList, u32 extra)",
+  "params": {
+   "stream": "output sink",
+   "fmt": "format string",
+   "vaList": "variadic argument list"
+  },
+  "summary": "Second printf entry point: same formatter with control flag 1 (the 'long'/wide variant selected by the caller).",
+  "confidence": 0.6,
+  "evidence": "Byte-identical to 0x002FF6AA except local_2C = 1 and the callback literal at 0x002FF6F8."
+ },
+ {
+  "address": "0x002FF91A",
+  "name": "std_strtoul_B",
+  "signature": "u32 std_strtoul_B(const char* text, u32* endPtr, int base)",
+  "params": {
+   "text": "number text",
+   "endPtr": "optional out: first unparsed char",
+   "base": "0 = auto, 8, 10 or 16"
+  },
+  "summary": "Parses an unsigned long from text with 0x/0 prefix detection and saturation: values that overflow 32 bits return 0xFFFFFFFF.",
+  "confidence": 0.75,
+  "evidence": "Explicit '0x'/'0X' prefix handling with base 0x10, leading '0' -> base 8, otherwise base 10; accumulates with a 16-bit split (local_28 & 0xFFFF / >>16) so the carry can be detected (bVar2 = overflow -> % 0xFFFFFFFF via func_002FF9C4); digit validation through func_003006F0(ch, base) returning -1 when invalid - the classic strtoul algorithm."
+ },
+ {
+  "address": "0x00300420",
+  "name": "std_vprintf_core",
+  "signature": "u64 std_vprintf_core(FormatCtx* ctx, const u32* vaList)",
+  "params": {
+   "ctx": "format context (getc at +0xC, putc at +4, sink at +8, va_list at +0xC)",
+   "vaList": "argument list"
+  },
+  "summary": "The engine's own printf formatter: parses '%' conversions, handles the flag characters, width, precision, the h/l/j/t/z/L length modifiers and calls the output callback, pulling variadic arguments through the va_list.",
+  "confidence": 0.8,
+  "evidence": "Full conversion parser: 0x25 '%', flags bitmask built from a table at 0x00300426 (left/plus/space/zero), width/precision via func_002FF90C digit test, '*' reads from local_18 (the va_list), 'l'/'h'/'j'/'t'/'z' flags 0x40/0x100/0x400/0x80, uppercase folding (uVar1-0x41<0x1a -> |0x800), then func_00101AA8(ctx, spec) performs the conversion and advances the va_list by 1 or 8 bytes. Returns the character count in CONCAT44(vaList, ctx[8])."
+ },
+ {
+  "address": "0x003005A8",
+  "name": "std_vsnprintf_B",
+  "signature": "u32 std_vsnprintf_B(u8* buf, u32 size, u32 fmtAndArgs)",
+  "params": {
+   "buf": "destination buffer",
+   "size": "buffer size",
+   "fmtAndArgs": "packed format + argument descriptor"
+  },
+  "summary": "vsnprintf-style wrapper: forwards to the formatter implementation stored in the current format context when that context uses the extended implementation, otherwise checks the character against the context's table.",
+  "confidence": 0.55,
+  "evidence": "FUN_002FF68C() fetches the current format context; if ctx->f_101 == 1 it tail-calls *(code*)(ctx + ctx->f_107 + 0x107)(buf,size,fmt) (a jump-table slot), else it bounds-checks (arg2 < 0x100) against the context byte table and returns 1 / -1."
+ },
+ {
+  "address": "0x00300958",
+  "name": "maybe_Field_State_InitCarry",
+  "signature": "void maybe_Field_State_InitCarry(void)",
+  "params": {},
+  "summary": "Initialises a field action state entry: copies two 2-float vectors from rodata and sets the state ids (1 and 2) that the state machine then uses.",
+  "confidence": 0.3,
+  "evidence": "FUN_00294BD4() returns the current field-state object; writes puVar2[0xB..0xF] from g_003009BC / g_003009C0, sets f_D = 1 and f_10 = 2 (state bytes). The same object is fetched by FUN_00294C34 in 0x00300A70 / 0x00301DD0 / 0x003021B0."
+ },
+ {
+  "address": "0x003009D4",
+  "name": "Field_Action_StartCheckAny",
+  "signature": "void Field_Action_StartCheckAny(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Starts the 'CheckAny' field action: resets the actor's interaction state and begins the named animation on the actor node.",
+  "confidence": 0.5,
+  "evidence": "func_0023B61C(system->f_48) resets the interaction flags; the animation name is the string symbol s_CheckAny_00300a38 passed through the node's vtable+0x84 (set-animation), wrapped in FUN_005F5DF8 which starts the animation on the actor node self->f_28."
+ },
+ {
+  "address": "0x00300A44",
+  "name": "Field_Action_FinishIfDone",
+  "signature": "void Field_Action_FinishIfDone(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Finishes the current field action when the actor reports that the animation/action has completed.",
+  "confidence": 0.5,
+  "evidence": "func_00669DD4(self->f_28) is the 'action finished' query (used identically in 0x003013B8 and 0x00302184); FUN_002340B0(self->f_28, 0) pops the action off the actor's action stack."
+ },
+ {
+  "address": "0x00300A70",
+  "name": "maybe_Field_State_Reset",
+  "signature": "void maybe_Field_State_Reset(void)",
+  "params": {},
+  "summary": "Fetches the field action state object and clears it for a new action.",
+  "confidence": 0.28,
+  "evidence": "FUN_00294C34() returns the state object; the decompiled body only keeps the pointer (the following stores are through vtable calls Ghidra folded away)."
+ },
+ {
+  "address": "0x00300AAC",
+  "name": "maybe_Field_Action_WalkStartToTarget",
+  "signature": "void maybe_Field_Action_WalkStartToTarget(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28, direction at +0x30..+0x38 and +0x40..+0x48)"
+  },
+  "summary": "Starts walking toward another object (normally the player): plays the 'Walk' animation, saves the actor's state, then stores the target position, the normalised direction and the two travel distances used by the following frames.",
+  "confidence": 0.45,
+  "evidence": "vtable+0x84 is called with the inline string g_00300D20, whose literal value is 0x6B6C6157 = \"Walk\", followed by vtable+0x58(4) (state 4); g_00300D28/g_00300D30 (two 3-float vectors) are copied into f_30..f_38 and f_40..f_48, the actor state dword (f_28->f_138) is saved in f_68 and overwritten with g_00300D34, f_6C/f_2C reset; then the target object is looked up through the handle hash (g_00300D38/g_00300D3C), its position (obj[0x27..0x29]) and a second point (obj[0xB8..0xBD]) are subtracted from the actor position and normalised with 1/SQRT(g_00300D48) into f_40..f_48 and f_58..f_60."
+ },
+ {
+  "address": "0x00300E40",
+  "name": "maybe_Field_Action_WalkUpdate",
+  "signature": "void maybe_Field_Action_WalkUpdate(FieldAction* self, float dt)",
+  "params": {
+   "self": "field action object (travel budget at +0x3C, direction at +0x40..+0x48)",
+   "dt": "frame delta"
+  },
+  "summary": "Advances the walk started by 0x00300AAC: moves the actor along the stored direction while the travel budget lasts, and when it runs out plays SE 0x104, snaps the actor to the ground and finishes the action.",
+  "confidence": 0.4,
+  "evidence": "State byte f_2C (0 = walking, 1 = arrived/waiting, 2 = done); f_3C is decremented by speed*dt and the direction f_40..f_48 is scaled by the same amount and added to the actor node velocity f_100/f_104/f_108; when the budget is exhausted FUN_0036294C(target)+func_00669D88(&pos,target)+FUN_005F5F54(node,&pos,0) snap the actor, FUN_001EBC68(system,0x104,0,0) plays the sound, two actor sub-objects are released with vtable+0x28(0,1) and actor->vtable+0x80 stops the action; after 20 ticks (f_6C == 0x14) it moves to state 2."
+ },
+ {
+  "address": "0x003012A4",
+  "name": "maybe_Field_Action_WalkEnd",
+  "signature": "void maybe_Field_Action_WalkEnd(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Ends the walk started by 0x00300AAC: clears the interaction state, restores the actor's saved state dword and resumes the normal animation.",
+  "confidence": 0.42,
+  "evidence": "func_00239A1C(system->f_48) + FUN_00236B50(system->f_48) clear the interaction state, actor vtable 0x54(4)/0x88 are the resume/refresh slots, and self->f_28->f_138 = self->f_68 restores the state dword that 0x00300AAC saved."
+ },
+ {
+  "address": "0x00301318",
+  "name": "maybe_Field_State_InitMove",
+  "signature": "void maybe_Field_State_InitMove(void)",
+  "params": {},
+  "summary": "Initialises the move-state entry: clears the state byte and copies two 3-float and one extra vector from rodata.",
+  "confidence": 0.28,
+  "evidence": "FUN_00294C34() state object; f_B = 0, puVar3[0xC..0x12] = g_00301398 / g_003013A0, f_1A/f_1B set from g_0030139C/g_003013A4."
+ },
+ {
+  "address": "0x003013B8",
+  "name": "maybe_Field_Action_MoveCollide",
+  "signature": "void maybe_Field_Action_MoveCollide(FieldAction* self, float dt)",
+  "params": {
+   "self": "field action object",
+   "dt": "frame delta"
+  },
+  "summary": "Moves the actor with collision: when the actor is not blocked it slides it along the ground, using the camera-relative input direction and pushing it out of the hit normal when it runs into geometry.",
+  "confidence": 0.45,
+  "evidence": "Reads the input direction from self->f_40..f_48, normalises with 1/SQRT, builds a rotation with FUN_00574548 / FUN_005755C8 / FUN_005736A0 (the vector helpers of the 0x574xxx math module) and the cross-product block; adds the result to the actor node velocity f_100/f_104/f_108 and applies it with FUN_005F5F54; the actor state byte f_44/f_45 gates it; finished actions are popped with FUN_002340B0."
+ },
+ {
+  "address": "0x003017E0",
+  "name": "maybe_Field_Action_StopMove",
+  "signature": "void maybe_Field_Action_StopMove(FieldAction* self)",
+  "params": {
+   "self": "field action object"
+  },
+  "summary": "Stops the current move action: clears the pending sound and resets the state id to 0xFFFF.",
+  "confidence": 0.35,
+  "evidence": "FUN_001E1634() (sound/anim stop helper from the 0x1E1xxx audio cluster) then f_80 = 0xFFFF and, when f_74 holds a sound handle, FUN_001EDF88(ctx) releases it - the mirror of 0x00301838 which creates it."
+ },
+ {
+  "address": "0x00301838",
+  "name": "Field_Action_PlayStepSound",
+  "signature": "void Field_Action_PlayStepSound(FieldAction* self, float dt)",
+  "params": {
+   "self": "field action object (sound id at +0x80, pitch at +0x7C)",
+   "dt": "frame delta"
+  },
+  "summary": "Footstep sound: picks SE 0x97 or 0x98 depending on the surface flag, starts it with a randomised pitch and keeps re-triggering it while the actor moves.",
+  "confidence": 0.5,
+  "evidence": "SE ids 0x98 / 0x97 selected by actor->f_311; FUN_001EBC68(system,id,0) creates the sound, f_78 accumulates the playback position and f_7C the pitch (computed from func_0051B1FC(system+0x98,0x7FFFFFFF) random, g_003019D0/g_003019CC/g_003019D4); func_0063060C(system,handle) polls 'still playing' and func_00673BC8 + FUN_001EC33C push the pitch/volume to the channel."
+ },
+ {
+  "address": "0x003019DC",
+  "name": "maybe_Field_Action_StopStepSound",
+  "signature": "void maybe_Field_Action_StopStepSound(FieldAction* self)",
+  "params": {
+   "self": "field action object"
+  },
+  "summary": "Stops the footstep sound started by 0x00301838.",
+  "confidence": 0.42,
+  "evidence": "FUN_001E1A7C() then, when f_74 holds a sound handle, FUN_001EDF88(ctx) frees it - the release half of the FUN_001EBC68/FUN_001EDF88 pair used by 0x00301838."
+ },
+ {
+  "address": "0x00301AB4",
+  "name": "Field_Action_SelectDirAnim",
+  "signature": "void Field_Action_SelectDirAnim(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Chooses one of the eight directional idle/walk animations from the actor's facing angle and starts it.",
+  "confidence": 0.5,
+  "evidence": "FUN_00641150(self, &dirVector, &index) computes the nearest of eight directions (it takes a vector at g_00301B44 and a '-1' initial index), then the actor's vtable+0x84 is called with *(u32*)(g_00301B48 + index*4): g_00301B48 points at the rodata string table 0x007A3EE8 whose entries are the 3-character animation codes 'DGx', '8Gx', 'LGx', 'XGx' (one per direction). f_2C caches the chosen index."
+ },
+ {
+  "address": "0x00301B4C",
+  "name": "maybe_Field_Action_MoveDir",
+  "signature": "void maybe_Field_Action_MoveDir(FieldAction* self, float speed)",
+  "params": {
+   "self": "field action object",
+   "speed": "movement speed for this frame"
+  },
+  "summary": "Directional movement action: selects the facing animation the same way as 0x00301AB4, then advances the actor along that direction with collision correction and stores the new position.",
+  "confidence": 0.4,
+  "evidence": "Same FUN_00641150 eight-way selector and the same 3-character animation-code table (g_00301D84 == 0x007A3EE8); g_00301D88 scales the delta; the position is corrected with FUN_002E72C8(level,&pos,2,3) against the collision mesh (same call as 0x00303DEC) and applied to the actor node; FUN_002340B0(self->f_28,1) pops the action when the direction lookup fails."
+ },
+ {
+  "address": "0x00301D8C",
+  "name": "maybe_Field_Action_StopEffect",
+  "signature": "void maybe_Field_Action_StopEffect(FieldAction* self)",
+  "params": {
+   "self": "field action object (effect object at actor+0x234)"
+  },
+  "summary": "Stops the effect that is currently attached to the actor and releases its handle.",
+  "confidence": 0.35,
+  "evidence": "actor->f_234 must be non-null; FUN_0062EF8C(system->f_50, 0) stops the effect system channel, then the effect object at +0xB8 is released through func_002D0E84(&obj->f_FC) (the 0x2D0xxx sprite/effect destructor used by the sprite child in 0x002F3BD0)."
+ },
+ {
+  "address": "0x00301DD0",
+  "name": "maybe_Field_State_ResetMode",
+  "signature": "void maybe_Field_State_ResetMode(void)",
+  "params": {},
+  "summary": "Resets the field action state object's mode byte to 0xFF.",
+  "confidence": 0.28,
+  "evidence": "FUN_00294C34() state object, f_B = 0xFF, constant g_00301E00 loaded (mode table)."
+ },
+ {
+  "address": "0x00301E58",
+  "name": "maybe_Field_Action_AttachNamedEffect",
+  "signature": "void maybe_Field_Action_AttachNamedEffect(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Attaches an effect to the actor by name: converts the actor's current state id into an effect name, starts that animation on the actor and creates the matching effect instance at the actor position.",
+  "confidence": 0.4,
+  "evidence": "Reads *(system->f_48 + 0x281) as an id, func_0063D6B8(table,id) -> record, the name is the record string at rec+0x38 (FUN_006F44B0 allocates it, func_0011CCA0 validates length) and is passed to actor vtable+0x84; FUN_0032F98C builds a transform, then FUN_0035FF3C(system->f_60, self->f_2C, 0, transform) creates the effect instance and func_005F5AB8(actor, handle) attaches it."
+ },
+ {
+  "address": "0x00301F4C",
+  "name": "maybe_Field_Action_ResetActor",
+  "signature": "void maybe_Field_Action_ResetActor(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Resets the actor's animation state (clears the forced animation and refreshes the node).",
+  "confidence": 0.35,
+  "evidence": "FUN_005F747C(self->f_28, 1) clears the animation override flag (the opposing helper of the vtable+0x84 set-animation used everywhere in this module), then actor vtable+0x88 (refresh)."
+ },
+ {
+  "address": "0x00301FB8",
+  "name": "Field_Action_OpenDoor",
+  "signature": "void Field_Action_OpenDoor(FieldAction* self)",
+  "params": {
+   "self": "door action object (actor node at +0x28, player object looked up through the handle table)"
+  },
+  "summary": "Door-open action: pushes the player away from the door if he stands inside the door's footprint, then plays the 'OpenDoor' animation on the door node.",
+  "confidence": 0.6,
+  "evidence": "The animation name is the string symbol s_OpenDoor_00302178 passed to the actor node's vtable+0x84; the push-back uses the horizontal delta between the player position (handle hash g_00302160/g_00302164, player+0x27..0x29) and the door, normalising with 1/SQRT and applying it with FUN_005F5F54; func_00669D88(&vec, player) reads the facing vector."
+ },
+ {
+  "address": "0x00302184",
+  "name": "maybe_Field_Action_FinishIfDoneEx",
+  "signature": "void maybe_Field_Action_FinishIfDoneEx(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Finishes the door action when the actor reports completion.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x00300A44: func_00669DD4(self->f_28) then FUN_002340B0(self->f_28, 0)."
+ },
+ {
+  "address": "0x003021B0",
+  "name": "maybe_Field_State_GetMode",
+  "signature": "void maybe_Field_State_GetMode(void)",
+  "params": {},
+  "summary": "Fetches the field action state object (used as the 'current mode' getter).",
+  "confidence": 0.25,
+  "evidence": "Single call FUN_00294C34(); the result is not stored because the ARM code only reads a byte through it."
+ },
+ {
+  "address": "0x003021EC",
+  "name": "maybe_Field_Action_TrackCamera",
+  "signature": "void maybe_Field_Action_TrackCamera(u32* out, const FieldAction* self)",
+  "params": {
+   "out": "2-word output (x, y)",
+   "self": "field action object"
+  },
+  "summary": "Copies the action's screen/camera target from the action record, overriding it with the camera position when a camera object exists.",
+  "confidence": 0.3,
+  "evidence": "out[1] = arg2->f_30, out[2] = arg2->f_34, then when *(system->f_74 + 0x30) != 0 they are replaced with camera->f_144 / camera->f_148 (the camera object's screen offsets used by 0x003038CC and 0x002F6130)."
+ },
+ {
+  "address": "0x00302254",
+  "name": "maybe_Field_Action_MoveInput",
+  "signature": "void maybe_Field_Action_MoveInput(FieldAction* self, float dt)",
+  "params": {
+   "self": "movement action object",
+   "dt": "frame delta"
+  },
+  "summary": "Applies the analogue-stick direction to the actor as velocity: reads the stick vector, dead-zones it, scales it by speed*dt and pushes the actor, then refreshes the action.",
+  "confidence": 0.45,
+  "evidence": "FUN_0066A494(input,&vec) / FUN_0066A560(input,&vec) are the two analogue read functions (they also set the 0x200 'touched' bit check on input->f_6C); ABS(local_40) < g_003023F8 applies the dead zone; the result is added to actor velocity f_100/f_104/f_108 and applied with FUN_005F5F54; func_00414570(self) ends the update (the same tail call as 0x003028C0 and 0x00303C50)."
+ },
+ {
+  "address": "0x0030247C",
+  "name": "maybe_Field_Action_ToggleRun",
+  "signature": "void maybe_Field_Action_ToggleRun(FieldAction* self)",
+  "params": {
+   "self": "movement action object"
+  },
+  "summary": "Switches the actor between walking and running: compares the actor's speed against the run threshold, sets the run flag, starts the run loop sound/effect and adjusts the actor's animation speed.",
+  "confidence": 0.35,
+  "evidence": "Calls FUN_00303768 (initialises the run parameters and the run animation), loads the five speed constants g_003025D8..g_003025E8, compares actor->f_278/f_27C with the threshold g_003025EC, sets f_5C = running, then FUN_003025F8(self, running) and forces actor->f_276 = 1 with the new speed pair g_003025F4/g_003025F0."
+ },
+ {
+  "address": "0x003025F8",
+  "name": "maybe_Field_Action_SetRunState",
+  "signature": "void maybe_Field_Action_SetRunState(FieldAction* self, int running)",
+  "params": {
+   "self": "movement action object",
+   "running": "1 = run, 0 = walk"
+  },
+  "summary": "Enables or disables the run state: when running it starts the run effect on the actor, otherwise it creates the smaller walk effect; the effect handle is stored for later release.",
+  "confidence": 0.35,
+  "evidence": "running != 0 -> FUN_00367578(actor,1) + FUN_003E6248(actor) (the run-mode pair); otherwise FUN_00367578(actor,0) and the effect is created with FUN_0035FF3C(system->f_60, g_00302718, &self->f_50, dims, 0) using the parameter block g_00302704..g_00302714; f_58 holds the handle that 0x00302AE0 releases."
+ },
+ {
+  "address": "0x003027C8",
+  "name": "maybe_Field_Action_CreateWalkEffect",
+  "signature": "void maybe_Field_Action_CreateWalkEffect(FieldAction* self)",
+  "params": {
+   "self": "movement action object"
+  },
+  "summary": "Creates the walking dust/dirt effect at the actor's feet and stores its handle.",
+  "confidence": 0.35,
+  "evidence": "Same body as 0x003025F8's else-branch with the second parameter set (g_003028A8..g_003028B8) and effect id g_003028BC; handle into f_58."
+ },
+ {
+  "address": "0x003028C0",
+  "name": "maybe_Field_Action_UpdateMove",
+  "signature": "void maybe_Field_Action_UpdateMove(FieldAction* self, float dt)",
+  "params": {
+   "self": "movement action object",
+   "dt": "frame delta"
+  },
+  "summary": "Per-frame movement update: integrates the movement speed, applies collision, and when the move is blocked switches the action to the blocked state (or plays the bump animation for the blocked tile).",
+  "confidence": 0.4,
+  "evidence": "Same shape as 0x00303C50: analogue read (FUN_0066A494/A560) with dead zone g_00302AD4, speed integration into f_E, vtable 0x30 (get delta) and 0x34 (apply) calls, FUN_00303DEC(self,&delta) applies the move, and vtable 0x38 returns 0xFFFFFFFF on a blocked move -> sets f_17, actor->f_276/f_278/f_27C (g_00302AD8/g_00302ADC) and calls FUN_003025F8(self,1); otherwise func_005E7848(actor, code, 0) plays the bump reaction."
+ },
+ {
+  "address": "0x00302AE0",
+  "name": "maybe_Field_Action_StopMoveEffect",
+  "signature": "void maybe_Field_Action_StopMoveEffect(FieldAction* self, int arg2)",
+  "params": {
+   "self": "movement action object",
+   "arg2": "1 = keep the current speed"
+  },
+  "summary": "Stops the move effect and clears the run flag, restoring the actor's animation speed unless the caller asked to keep it.",
+  "confidence": 0.4,
+  "evidence": "actor vtable+0x88 (refresh); when arg2 != 1 and the actor speed is above g_00302BFC: FUN_003E6064() and the handle FUN_0035FC84(system->f_60, self->f_58, 0) is released; then FUN_00367280(), FUN_003E6064(actor), f_276 = 0, f_2D4 = 0, f_278 = f_27C = g_00302BF8, and the UI input mode is restored with func_004101B4(camera->f_30 + 0xE0, 1, 0)."
+ },
+ {
+  "address": "0x00302CB0",
+  "name": "maybe_Field_Action_HorseStart",
+  "signature": "void maybe_Field_Action_HorseStart(FieldAction* self)",
+  "params": {
+   "self": "horse-riding action object (mount object resolved from actor->f_2D0)"
+  },
+  "summary": "Starts horse riding: resolves the mount's rotation, converts it into the rider's yaw/pitch, applies the orientation to the actor, clamps the run speed and starts the run animation.",
+  "confidence": 0.45,
+  "evidence": "The mount object is fetched through the handle hash g_00302E60/g_00302E64 from actor->f_2D0; the yaw/pitch are derived from the mount's quaternion f_8C..f_98 (or f_92..f_9C) with the 0.5 factor g_00302E6C; FUN_005F5F54(actor,&orientation,0); the speed is clamped to (*g_00302E70 + *g_00302E74) * g_00302E78 and stored in actor->f_26C; then the run animation g_00302E7C is played and the UI run mode 3 is set."
+ },
+ {
+  "address": "0x00302EEC",
+  "name": "Field_Action_HorseJump",
+  "signature": "void Field_Action_HorseJump(FieldAction* self)",
+  "params": {
+   "self": "horse-riding action object"
+  },
+  "summary": "Horse jump: switches to state 1, plays the 'Horse_Jump' animation and starts the vertical velocity.",
+  "confidence": 0.65,
+  "evidence": "String symbol s_Horse_Jump_00302f5c is passed to actor vtable+0x84, state f_2C = 1, vertical velocity f_3C = *g_00302F68, horizontal f_40 = *g_00302F6C * actor->f_26C, then FUN_00366CE8 (mount jump helper) and actor->f_2F4 = 0."
+ },
+ {
+  "address": "0x00302F70",
+  "name": "Field_Action_HorseLand",
+  "signature": "void Field_Action_HorseLand(FieldAction* self)",
+  "params": {
+   "self": "horse-riding action object"
+  },
+  "summary": "Horse landing: switches to state 2, plays the 'Horse_Land' animation, releases the run mode and restores the ground flag.",
+  "confidence": 0.65,
+  "evidence": "String symbol s_Horse_Land_00302ff0 passed to actor vtable+0x84, f_2C = 2, actor vtable+0x54(4), the UI input mode is set with func_004101B4(camera->f_30+0xE0, 1, 0), actor->f_2F4 = 1 and FUN_00367B1C(actor) restores the mount pose."
+ },
+ {
+  "address": "0x00302FFC",
+  "name": "Field_Action_HorseUpdate",
+  "signature": "void Field_Action_HorseUpdate(FieldAction* self, float dt)",
+  "params": {
+   "self": "horse-riding action object",
+   "dt": "frame delta"
+  },
+  "summary": "Per-frame horse movement: integrates the horse velocity in the rider's frame, applies gravity while airborne, and switches to the landing state when the horse touches the ground or runs into an obstacle.",
+  "confidence": 0.5,
+  "evidence": "func_00414570(self) first (the common move-update tail), then the quaternion f_8C..f_98 is converted into a forward vector and scaled by actor->f_26C * dt; state 1 applies the vertical velocity f_40 -= f_3C*dt; state 0 rotates the remaining distance by the mount quaternion (the manual quaternion multiply block) and compares it with the thresholds f_30C/f_310/f_314 to trigger the jump; state 1 -> state 2 when height < g_003033D4 with the land animation g_003033D8 and FUN_00367B1C; state 2 uses func_00669DD4 + func_005E7848(actor, 1 or 2, 0) to finish."
+ },
+ {
+  "address": "0x00303768",
+  "name": "maybe_Field_Action_InitHorseParams",
+  "signature": "void maybe_Field_Action_InitHorseParams(FieldAction* self)",
+  "params": {
+   "self": "horse-riding action object"
+  },
+  "summary": "Initialises the horse movement parameters: copies the five speed constants, selects the idle/run animation from the current mount state and computes the ground normal from the mount quaternion.",
+  "confidence": 0.4,
+  "evidence": "arg1[0xF..0x13] = *g_0030383C / *g_00303840 / *g_00303844 / *g_00303848 / *g_0030384C; the animation id comes from vtable+0x2C(self) and is applied with actor vtable+0x84; arg1[0xB..0xD] are the ground normal derived from f_8C..f_98 with g_00303850; arg1[0xE] = g_00303854 (gravity)."
+ },
+ {
+  "address": "0x003038CC",
+  "name": "maybe_Field_Action_HorseTurn",
+  "signature": "void maybe_Field_Action_HorseTurn(float* out, const HorseAction* self, const float* inputDir)",
+  "params": {
+   "out": "output orientation (2 words used)",
+   "self": "horse action",
+   "inputDir": "desired direction"
+  },
+  "summary": "Steering for the horse: rotates the horse's heading toward the requested direction with a speed scale based on the current speed, and falls back to a smooth interpolation when moving slowly.",
+  "confidence": 0.45,
+  "evidence": "Uses the camera/actor forward vector (or camera->f_140..f_148 when a camera object exists), FUN_00672A14 (dot product), FUN_006731EC (atan2), FUN_00672E44 (sin/cos) and 1/SQRT to build the rotated vector; the slow branch lerps toward inputDir with g_00303B08 and renormalises."
+ },
+ {
+  "address": "0x00303C50",
+  "name": "maybe_Field_Action_MoveStep",
+  "signature": "void maybe_Field_Action_MoveStep(FieldAction* self, float dt)",
+  "params": {
+   "self": "movement action object",
+   "dt": "frame delta"
+  },
+  "summary": "Movement step identical to 0x003028C0 but without the blocked-move reaction: integrates speed, applies the collision-corrected delta and plays the bump animation when the move is blocked.",
+  "confidence": 0.4,
+  "evidence": "Same analogue/dead-zone/vtable 0x30/0x34/0x38 sequence as 0x003028C0 with constants g_00303DD0..g_00303DD8; the only difference is that a blocked move only calls func_005E7848(actor, code, 0) instead of switching the action state."
+ },
+ {
+  "address": "0x00303DEC",
+  "name": "Field_Action_ApplyMove",
+  "signature": "void Field_Action_ApplyMove(FieldAction* self, const float* delta)",
+  "params": {
+   "self": "movement action object (actor node at +0x28)",
+   "delta": "3-float movement delta for this frame"
+  },
+  "summary": "Applies a movement delta to the actor with collision: casts the actor position against the map collision, clamps the delta to the first hit and then moves the actor node.",
+  "confidence": 0.5,
+  "evidence": "If |delta|^2 <= g_00303FEC nothing happens; the actor's ground object (actor+0x26C, or actor->f_294 when actor->f_298 == 2) is queried with FUN_002E7F08(level,&pos,3,0) then FUN_002E72C8(level,&pos,2,3) - the same collision pair used by 0x00301B4C; the corrected delta is added to the actor node velocity f_100/f_104/f_108 and the position is applied with FUN_005F5F54(actor, delta, 0)."
+ },
+ {
+  "address": "0x003047C0",
+  "name": "maybe_Menu_ItemBox_ResetSelection",
+  "signature": "void maybe_Menu_ItemBox_ResetSelection(void)",
+  "params": {},
+  "summary": "Clears the five selection fields of the shared menu/item-box object.",
+  "confidence": 0.3,
+  "evidence": "FUN_001A66A0() menu singleton; puVar2[0x13..0x17] = 0 (five words). Same accessor as 0x002FCC44 and 0x00307370."
+ },
+ {
+  "address": "0x003047F0",
+  "name": "maybe_Menu_ItemBox_Free",
+  "signature": "void maybe_Menu_ItemBox_Free(void)",
+  "params": {},
+  "summary": "Releases the menu singleton used by 0x003047C0.",
+  "confidence": 0.3,
+  "evidence": "FUN_001A6768() + func_0010F6CC()."
+ },
+ {
+  "address": "0x00304D70",
+  "name": "maybe_Ui_SmallWindow_InputToState1",
+  "signature": "u32 maybe_Ui_SmallWindow_InputToState1(SmallWindow* self, const UiInput* input)",
+  "params": {
+   "self": "small UI window (input node at +0x228, state machine at +0x35C)",
+   "input": "input state"
+  },
+  "summary": "Input handler of a small UI window: updates the window's input node and moves the state machine to state 1 when the input was consumed.",
+  "confidence": 0.32,
+  "evidence": "FUN_001DAD58(self+0x228, self+0x330) + func_0062F680(self+0x228) then (**(code**)(*piVar2+0x14))(piVar2,1) and (**(code**)(*piVar2+0x10))(piVar2) - the same handler shape as 0x002FD8A8 but with a smaller window."
+ },
+ {
+  "address": "0x00304FC8",
+  "name": "maybe_Ui_Text_CommitLine",
+  "signature": "void maybe_Ui_Text_CommitLine(TextLayout* self)",
+  "params": {
+   "self": "text layout object"
+  },
+  "summary": "Flushes the current text line: asks the layout for the pending run and appends it with the current colour index.",
+  "confidence": 0.4,
+  "evidence": "vtable+0x58(self) returns the pending run then FUN_001D809C(run, (u32)*(u16*)(self+0x28) << 16) appends it - identical to the writer used by 0x002FC360, only without the width test."
+ },
+ {
+  "address": "0x00305534",
+  "name": "maybe_Menu_Item_UseConfirm",
+  "signature": "void maybe_Menu_Item_UseConfirm(MenuItem* self)",
+  "params": {
+   "self": "menu item action object (context object at +8)"
+  },
+  "summary": "Confirm handler for a consumable item: when the item action is idle and the menu reports it usable it opens the use-confirm popup (or closes it again if the menu is in state 3).",
+  "confidence": 0.3,
+  "evidence": "vtable+0xC (is-idle) then FUN_0037B450(self[2]) (menu usable query) and the sub-state byte at self[2]+0x3DE8 == 3 branch calls func_0019F4F0(system) (close popup); otherwise it builds a 5-field popup descriptor (0xFFFF, 0,0,0,0xFF, g_003055F4) and calls FUN_0037B068(menu,&desc) + FUN_0019E6D0(system,&desc)."
+ },
+ {
+  "address": "0x0030576C",
+  "name": "Field_Action_SetMoveSpeed",
+  "signature": "void Field_Action_SetMoveSpeed(FieldAction* self)",
+  "params": {
+   "self": "field action object (actor node at +0x28)"
+  },
+  "summary": "Starts the moving animation and sets the actor's movement speed, defaulting to the constant speed when no camera object exists.",
+  "confidence": 0.5,
+  "evidence": "The animation name is the inline literal at g_003057D8 passed to actor vtable+0x84; the speed is taken from camera->f_1C (+4) when a camera exists, otherwise from g_003057DC, and applied with FUN_005F58D0(actor, speed) - the same speed setter pattern as g_003057DC users in the horse code."
+ },
+ {
+  "address": "0x00307370",
+  "name": "maybe_Menu_ItemBox_Free2",
+  "signature": "void maybe_Menu_ItemBox_Free2(void)",
+  "params": {},
+  "summary": "Second release/free of the menu singleton (duplicate of 0x003047F0 for another menu class).",
+  "confidence": 0.28,
+  "evidence": "FUN_001A6768() + func_0010F6CC()."
+ },
+ {
+  "address": "0x003075F8",
+  "name": "maybe_Ui_Widget_UpdateInput2",
+  "signature": "u32 maybe_Ui_Widget_UpdateInput2(void)",
+  "params": {},
+  "summary": "Second thin input-update override for a UI widget (duplicate of 0x002FCFC4).",
+  "confidence": 0.4,
+  "evidence": "Only FUN_001DAD58() then return 1."
+ },
+ {
+  "address": "0x00307730",
+  "name": "maybe_Ui_Window_InputToState17IfFast",
+  "signature": "u32 maybe_Ui_Window_InputToState17IfFast(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window (scroll speed at +0x357C)",
+   "input": "input state"
+  },
+  "summary": "Window input handler: only when the scroll speed exceeds 0.5 and the pad is not held does it move the window to state 0x11.",
+  "confidence": 0.3,
+  "evidence": "FUN_001DAD58(&self->f_34D8, input+0x520); if 0x40000000 < self->f_357C (0.5f as float bits) then func_00383A58(*FUN_006F2224()) != 1 and func_0062F680 -> state 0x11."
+ },
+ {
+  "address": "0x00307A60",
+  "name": "maybe_Ui_Window_InputToState2",
+  "signature": "u32 maybe_Ui_Window_InputToState2(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves the state machine to state 2.",
+  "confidence": 0.3,
+  "evidence": "Same skeleton as 0x002FD8A8 with state id 2."
+ },
+ {
+  "address": "0x00307AF4",
+  "name": "maybe_Ui_Window_InputToState19",
+  "signature": "u32 maybe_Ui_Window_InputToState19(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: enables the alternate render mode and moves to state 0x13.",
+  "confidence": 0.3,
+  "evidence": "Same skeleton; additionally FUN_0018D1C4(3) queries the render mode and func_0018D20C(1) sets it before state 0x13."
+ },
+ {
+  "address": "0x003080A8",
+  "name": "maybe_Ui_Window_InputToState19B",
+  "signature": "u32 maybe_Ui_Window_InputToState19B(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves the state machine to state 0x13 (duplicate for another window class).",
+  "confidence": 0.3,
+  "evidence": "Identical to 0x002FD8A8 with state id 0x13."
+ },
+ {
+  "address": "0x003088A0",
+  "name": "maybe_Ui_Window_InputToState17Or16",
+  "signature": "u32 maybe_Ui_Window_InputToState17Or16(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler that branches on a UI flag: state 0x11 when the flag is clear, 0x10 when it is set.",
+  "confidence": 0.32,
+  "evidence": "func_00383A80(*FUN_006F2224()) selects between state 0x11 and 0x10 before the standard vtable[0x14]/vtable[0x10] dispatch."
+ },
+ {
+  "address": "0x00308DA8",
+  "name": "maybe_Ui_Window_InputToState3IfFast",
+  "signature": "u32 maybe_Ui_Window_InputToState3IfFast(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window (scroll speed at +0x357C)",
+   "input": "input state"
+  },
+  "summary": "Window input handler: when the scroll speed exceeds 0.5 and the pad is not held it moves to state 3.",
+  "confidence": 0.3,
+  "evidence": "Same guard as 0x00307730 (0x40000000 < f_357C, func_00383A58 != 1) with state 3."
+ },
+ {
+  "address": "0x00308E68",
+  "name": "maybe_Ui_Window_InputCancelToList",
+  "signature": "u32 maybe_Ui_Window_InputCancelToList(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: on cancel it restores the window's scroll offset from the saved position and returns to state 0x0B, otherwise to state 3.",
+  "confidence": 0.32,
+  "evidence": "FUN_0062F694 == 1 -> FUN_003BD874(self, *(int*)(g_00308F18+self) + 0x51C) (restore scroll from the window's saved offset) then state 0x0B, else state 3."
+ },
+ {
+  "address": "0x003091DC",
+  "name": "maybe_Ui_Window_InputToState4ShowCursor",
+  "signature": "u32 maybe_Ui_Window_InputToState4ShowCursor(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window (cursor list at +0xDF8)",
+   "input": "input state"
+  },
+  "summary": "Window input handler: moves to state 4 and shows the cursor list.",
+  "confidence": 0.32,
+  "evidence": "state 4 then FUN_001D7A40() + FUN_001D7B1C(self+0xDF8, 1) (the cursor-list show call released by 0x00309390)."
+ },
+ {
+  "address": "0x003092F0",
+  "name": "maybe_Ui_Window_InputToState19Or2",
+  "signature": "u32 maybe_Ui_Window_InputToState19Or2(UIWindow* self, const UiInput* input)",
+  "params": {
+   "self": "large UI window",
+   "input": "input state"
+  },
+  "summary": "Window input handler: clears the render mode and goes to state 0x13 on a nested confirm, otherwise state 2.",
+  "confidence": 0.32,
+  "evidence": "FUN_0062F694 == 1 -> func_0018D20C(0) + state 0x13; else state 2."
+ },
+ {
+  "address": "0x00309390",
+  "name": "maybe_Ui_Window_InputToState4SaveScroll",
+  "signature": "u32 maybe_Ui_Window_InputToState4SaveScroll(UIWindow* self)",
+  "params": {
+   "self": "large UI window (input state at +0x3520, scroll save at +0x3558)"
+  },
+  "summary": "Window input handler: saves the current scroll position into the window's backup slot, then moves to state 4 and hides the cursor list.",
+  "confidence": 0.35,
+  "evidence": "FUN_001DAD58(self+0x34D8, self+0x3520); when FUN_0062F694 == 1 it sets *(list+0x518) = 1, calls func_0x003BDDD4(self, list+0x51C, self+0x3558) (save the scroll offset) and func_00100B74(self+0x3558) (clear the backup), then state 4 and FUN_001D7B1C(self+0xDF8, 0)."
+ },
+ {
+  "address": "0x00309FE0",
+  "name": "Field_FindObjectByPrefix",
+  "signature": "u32 Field_FindObjectByPrefix(FieldObject* self)",
+  "params": {
+   "self": "object list holder (list at +0x90, count at list+4)"
+  },
+  "summary": "Searches the object list for an entry whose name starts with the 5-byte key stored in the object table and returns 1 on the first hit.",
+  "confidence": 0.5,
+  "evidence": "Iterates *(u16*)(self->f_90 + 4) entries of the array at *self->f_90; per entry it looks the object up by name in the map (FUN_00659668(&obj->f_74, name, strlen(name)) with the name at g_0030A0DC) and compares each 0xC-byte record with func_00123660(key, tableEntry+4, 5) - a 5-character prefix compare; returns 1 when the compare succeeds."
+ },
+ {
+  "address": "0x0030AC64",
+  "name": "Container_FindEntryByKey",
+  "signature": "int Container_FindEntryByKey(Container* self, u32 key)",
+  "params": {
+   "self": "container with 0xC-byte entries in [f_20, f_24)",
+   "key": "search key"
+  },
+  "summary": "Binary-style search over the container's 0xC-byte entries: halves the range, walks from the middle downwards and returns the first entry accepted by the key matcher.",
+  "confidence": 0.5,
+  "evidence": "Count = (f_24 - f_20) * g_0030ACD8 >> 32 (a fixed-point multiply, i.e. /12), index halved with the >>31 sign fix, loop entries at f_20 + i*0xC decoded by FUN_0071342C and matched with FUN_0019466C(entry,key); returns 0 when nothing matches."
+ },
+ {
+  "address": "0x0030ACDC",
+  "name": "maybe_Container_FindEntryByKeyAlt",
+  "signature": "int maybe_Container_FindEntryByKeyAlt(Container* self, u32 key)",
+  "params": {
+   "self": "container with 0xC-byte entries",
+   "key": "search key"
+  },
+  "summary": "Same search as 0x0030AC64 with the alternate key matcher (returns the matching value instead of a boolean).",
+  "confidence": 0.45,
+  "evidence": "Identical loop with g_0030AD50 and FUN_001941D4(entry,key) instead of FUN_0019466C."
+ },
+ {
+  "address": "0x0030BF0C",
+  "name": "maybe_Container_LinkByName",
+  "signature": "void maybe_Container_LinkByName(void)",
+  "params": {},
+  "summary": "Incomplete decompilation (Ghidra failed to recover the stack frame): walks a container of named entries and links the entry whose name matches the requested one.",
+  "confidence": 0.25,
+  "evidence": "Control flow starts at a label (code_r0x0030C6DC) with unaff_* registers; the visible operations are func_0011CCA0 strlen, func_00123660(name, key, 0x20) 32-byte prefix compare, intrusive-list walks over +0x7C and type-id compares; ends by storing the class byte via FUN_00360854. Only 0x84 of the declared 0x84 bytes carry code, the rest is the shared tail."
+ },
+ {
+  "address": "0x0030C010",
+  "name": "maybe_Field_HandleAcquire",
+  "signature": "u32 maybe_Field_HandleAcquire(FieldHandleOwner* self)",
+  "params": {
+   "self": "object owning a handle at +0x2CC (result byte at +0x2D0)"
+  },
+  "summary": "Validates the object's handle and, when it is still registered, re-acquires it and stores the resulting class byte.",
+  "confidence": 0.4,
+  "evidence": "FUN_0028EA34 (base update) then the handle-table probe (g_0030C08C mask, g_0030C090 table) on f_2CC; FUN_00360854(system->f_60, &f_2CC) re-acquires and its result is stored in f_2D0; success when != -1."
+ },
+ {
+  "address": "0x0030C028",
+  "name": "Field_HandleIsValid",
+  "signature": "u32 Field_HandleIsValid(u32* handle)",
+  "params": {
+   "handle": "pointer to the handle word"
+  },
+  "summary": "Returns 1 when the handle is still present in the global handle table.",
+  "confidence": 0.5,
+  "evidence": "Same table probe (mask / generation compare) and FUN_00360854(*handle) != -1, without storing anything."
+ },
+ {
+  "address": "0x0030C3F0",
+  "name": "maybe_Field_HandleRelease",
+  "signature": "void maybe_Field_HandleRelease(u32* entry)",
+  "params": {
+   "entry": "handle entry (class byte at +4, handle at +0)"
+  },
+  "summary": "Releases a handle entry: frees the secondary class slot and removes the handle from the global table.",
+  "confidence": 0.45,
+  "evidence": "If (char)entry[1] != -1 then func_003603F0(system->f_60, (char)entry[1]) frees the class slot; then the handle-table entry for *entry is unlinked through FUN_001241D0 (the shared 'release handle' helper used by 0x002F56CC)."
+ },
+ {
+  "address": "0x0030C4A4",
+  "name": "maybe_Field_Task_Update",
+  "signature": "void maybe_Field_Task_Update(FieldTask* self)",
+  "params": {
+   "self": "task object (state at +0xC, handle at +0x10, result at +0x18)"
+  },
+  "summary": "Advances a field task: in state 1 it waits for the child task to finish (holding while the child is still below state 4) and then either finishes or moves to state 2; state 2 completes to state 3.",
+  "confidence": 0.4,
+  "evidence": "state f_C: 0/1/2/3; state 1 checks the handle table (g_0030C548/g_0030C54C) and the child's state byte at +0x78 (must be >= 4), calls FUN_0030C550(self) and on 0 either resets to state 0 and calls FUN_0030CA34 (both functions are the next batch's entry points, i.e. the child task's step/finish), or moves to state 2; state 2 -> 3."
+ }
+]

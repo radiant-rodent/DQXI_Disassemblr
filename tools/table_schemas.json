@@ -1,29 +1,423 @@
 {
-  "_comment": "Field names for BXON tables, keyed by table JSON path under game_assets/tables/packs. Only fields with recorded evidence are named; everything else stays addressable by offset. Strings are read-only (edits must keep the file size).",
-  "syscmn/item.json": {
-    "row_name": "name",
-    "fields": {
-      "name": {"offset": "0x00", "type": "string", "evidence": "item name shown in menus (matches translation DB)"},
-      "description": {"offset": "0x04", "type": "string", "evidence": "item help text"},
-      "icon": {"offset": "0x08", "type": "string", "evidence": "icon id, e.g. i_use_001 / w_boo_0006"},
-      "buy_price": {"offset": "0x18", "type": "u32", "evidence": "Medicinal herb = 8; sell_price == buy_price/2 for 629 of 865 priced items"},
-      "sell_price": {"offset": "0x1C", "type": "u32", "evidence": "Medicinal herb = 4; see buy_price"},
-      "field_model": {"offset": "0x24", "type": "u16", "evidence": "row of gamecmn/res_model3d (w1003 for Flametang boomerang); all 946 weapon rows point at w* models"},
-      "battle_model": {"offset": "0x26", "type": "u16", "evidence": "row of gamecmn/res_model3d (w1603 for Flametang boomerang)"},
-      "model_variant": {"offset": "0x28", "type": "u8", "evidence": "0 -> a, 1 -> b, 2 -> c model suffix (Flametang boomerang = 1 -> w1603b)"}
+  "format": 2,
+  "_comment": [
+    "Field names, types and value meanings for the BXON parameter tables, keyed by the table's",
+    "path under game_assets/tables/packs (the same path the RomFS pack uses, minus .bxon).",
+    "Every field records `why` - the evidence that identifies it - and a `confidence` of",
+    "'proven' (checked across many records or against an independent table) or 'inferred'",
+    "(consistent with the data, not yet confirmed).",
+    "",
+    "Types: string (read-only, four-byte relative pointer), u8, u16, u32, s32, f32.",
+    "Offsets are byte offsets from the start of the row, so a u8 may sit anywhere; the reader",
+    "picks the containing 32-bit word apart. `count` repeats a field at 1/2/4-byte strides",
+    "and numbers the names _01.._NN (u8/u16 fields) so a 24-slot shop or a 32-byte resistance",
+    "block does not need 50 hand-written entries. `range` is what the editor accepts before",
+    "saving. `enum` maps raw values to labels. `ref` turns a field into an 'id - name'",
+    "dropdown fed by another table listed here that has an `id` and a `label`.",
+    "",
+    "Fields with no entry stay editable through the generic typed column view, so every table",
+    "in game_assets/tables is editable even when only part of it is named.",
+    "",
+    "All edits are same-size scalar writes: the patched BXON keeps its length, so it goes back",
+    "into the game through tools/patch_asset.py or Table editor > Save to mod."
+  ],
+  "tables": {
+    "syscmn/item.json": {
+      "title": "Items and equipment",
+      "category": "Items",
+      "type": "ItemParam",
+      "row_size": 88,
+      "pack": "syscmn.pack",
+      "label": "name",
+      "id": "id",
+      "note": "One table for everything the bag holds: consumables, materials, weapons, armour and accessories all live here, which is why equipment stats sit next to medicine prices. Rows whose id is 0 are placeholders.",
+      "fields": [
+        {"name": "name", "offset": 0, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the name the menu prints; rows read exactly as 'Medicinal herb' in the translation database"},
+        {"name": "description", "offset": 4, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the two-to-three line help text under the name in the item list"},
+        {"name": "icon", "offset": 8, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "icon id such as i_use_001 on all 2875 rows, w_boo_0006 for a boomerang"},
+        {"name": "id", "offset": 14, "type": "u16", "range": [0, 8191], "confidence": "proven",
+         "why": "consecutive for consecutive herbs (2332, 2333, 2334) and unique across 2805 rows; 0 on the 30 placeholder rows"},
+        {"name": "buy_price", "offset": 24, "type": "u32", "range": [0, 2000000], "confidence": "proven",
+         "why": "Medicinal herb = 8, Strong = 36, Special = 70 - the prices the shops charge"},
+        {"name": "sell_price", "offset": 28, "type": "u32", "range": [0, 2000000], "confidence": "proven",
+         "why": "exactly buy_price/2 for 629 of 865 priced rows (the rest are unsellable or odd-priced)"},
+        {"name": "group", "offset": 32, "type": "u8", "confidence": "inferred",
+         "why": "display grouping byte: 39 on the herb / strong / special medicine trio, 37 on superior medicine and most restorative items, 7 on every recipe book, 45 on every seed"},
+        {"name": "field_model", "offset": 36, "type": "u16", "ref": {"table": "gamecmn/res_model3d.json", "field": "id"},
+         "confidence": "proven",
+         "why": "row in res_model3d: 1070 -> w0100 for the Iseki sword, 65535 (none) for medicine"},
+        {"name": "battle_model", "offset": 38, "type": "u16", "ref": {"table": "gamecmn/res_model3d.json", "field": "id"},
+         "confidence": "proven",
+         "why": "second res_model3d row, used when the weapon is shown in battle (1260 -> w1300 for the Iseki sword)"},
+        {"name": "model_variant", "offset": 40, "type": "u8",
+         "enum": {"0": "a", "1": "b", "2": "c", "3": "d"}, "range": [0, 9], "confidence": "proven",
+         "why": "0..3 on the four rows that share one model (1 on the bronze sword); the game appends the letter to the model code, e.g. w1300b. Medicine rows carry 0 here with 0xFF in the byte above, i.e. no model"},
+        {"name": "upgrade_level", "offset": 16, "type": "u8", "range": [0, 3],
+         "confidence": "proven",
+         "why": "the forge upgrade level: every equipment group of four rows reads 0,1,2,3 and its attack/defence rises with it (stone sword 8/10/14/21 attack, leather armour 11/12/14/17 defence)"},
+        {"name": "attack", "offset": 42, "type": "u16", "range": [0, 400],
+         "confidence": "proven",
+         "why": "the weapon attack bonus: stone sword 8, copper sword 13, iron sword 20, steel sword 35, hero's sword 109 - the numbers the status screen adds"},
+        {"name": "defence", "offset": 44, "type": "u8", "range": [0, 255],
+         "confidence": "proven",
+         "why": "the armour/shield/hat defence bonus: leather armour 11/12/14/17 over its +0..+3 rows, cape 60, general's cape 86"}
+      ]
+    },
+
+    "gamecmn/password_exp_table.json": {
+      "title": "Password / rescue experience table",
+      "category": "Party growth",
+      "type": "PasswordLevelExp",
+      "row_size": 16,
+      "pack": "gamecmn.pack",
+      "label": null,
+      "id": null,
+      "note": "50 thresholds used by the password (rescue) system. The last two rows are 970,000 and 1,000,000 experience.",
+      "fields": [
+        {"name": "rank", "offset": 0, "type": "u32", "confidence": "inferred",
+         "why": "0, 7, 23, 47, 110, 220 ... then -1 on the two final rows, i.e. an index that runs out"},
+        {"name": "exp", "offset": 4, "type": "u32", "range": [0, 9999999], "confidence": "proven",
+         "why": "0, 12, 32, 72, 140, 280 ... 970,000, 1,000,000: strictly increasing experience thresholds"}
+      ]
+    },
+
+    "gamecmn/enemy_base.json": {
+      "title": "Monster identity",
+      "category": "Monsters",
+      "type": "EnemyBaseParam",
+      "row_size": 44,
+      "pack": "gamecmn.pack",
+      "label": "name",
+      "id": "__row__",
+      "note": "One row per monster. The row index is the enemy id used by the encounter and battle tables, and gamecmn/enemy_battle.json has the same row order. The model code (m001a...) is also the key into tools/monster_names.json, which carries the English name.",
+      "fields": [
+        {"name": "name", "offset": 0, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the monster-book name, e.g. 'King Slime' split over two lines"},
+        {"name": "family_id", "offset": 8, "type": "u16", "confidence": "proven",
+         "why": "three consecutive rows (the a/b/c colour variants) share it: 0,0,0 then 1,1,1 then 2,2..."},
+        {"name": "level", "offset": 12, "type": "u16", "range": [0, 99], "confidence": "proven",
+         "why": "values only ever 0..99 - the monster's level, which drives its stat scaling"},
+        {"name": "model", "offset": 16, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "model code m001a / m208b; matches tools/monster_names.json and the 3d/model folders"},
+        {"name": "variant", "offset": 20, "type": "u8",
+         "enum": {"0": "a", "1": "b", "2": "c", "3": "d", "4": "e", "5": "f", "6": "g", "7": "h"},
+         "range": [0, 7], "confidence": "proven",
+         "why": "0,1,2 in step with the a/b/c suffix of the model code on the same rows; the byte above is a separate 0..2 size class, which is why this had to be a u8"},
+        {"name": "scale", "offset": 24, "type": "f32", "confidence": "inferred",
+         "why": "0.4 on 995 of 1043 monsters and larger on the big ones (6.25 for a Metal King Slime) - a size or damage multiplier"}
+      ]
+    },
+
+    "gamecmn/enemy_battle.json": {
+      "title": "Monster battle data",
+      "category": "Monsters",
+      "type": "EnemyBattleParam",
+      "row_size": 268,
+      "pack": "gamecmn.pack",
+      "label": null,
+      "id": null,
+      "note": "Same row order as gamecmn/enemy_base.json, so row N is the same monster. The first 32 bytes are a resistance table: each byte is a percentage where 100 = normal, 0 = immune and above 100 = weak (values seen: 0, 25, 50, 75, 100, 125, 150). The named refs are asset ids the battle scene loads.",
+      "fields": [
+        {"name": "resist", "offset": 0, "type": "u8", "count": 32, "range": [0, 255], "confidence": "inferred",
+         "why": "32 consecutive bytes that are 100 (normal) on the average monster and 0/50/75/125/150 on the resistant or weak ones; the element order is not decoded yet"},
+        {"name": "float_2c", "offset": 44, "type": "f32", "range": [-1000.0, 1000.0], "confidence": "inferred",
+         "why": "0.9 on most monsters, 0.3 or 3.0 on a few - one of the three near-constant battle multipliers (0x2C, 0x60, 0x70)"},
+        {"name": "idle_motion", "offset": 36, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "motion-set name such as n_hat, resolved against the 3d/motion folders"},
+        {"name": "focus_effect", "offset": 52, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "effect name such as FocusPoint, used for the charge / target marker"},
+        {"name": "float_60", "offset": 96, "type": "f32", "range": [-1000.0, 1000.0], "confidence": "inferred",
+         "why": "1.6 on most monsters - same shape as float_2c"},
+        {"name": "idle_sound", "offset": 68, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "sound id such as j_sebo_b (a j_ sound-effect key)"},
+        {"name": "float_70", "offset": 112, "type": "f32", "range": [-1000.0, 1000.0], "confidence": "inferred",
+         "why": "0.6 on most monsters - same shape as float_2c"},
+        {"name": "action_set", "offset": 84, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "AI / action set name such as N_ALL"},
+        {"name": "hit_effect", "offset": 100, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "second effect reference (FocusPoint again on most rows)"}
+      ]
+    },
+
+    "gamecmn/spell.json": {
+      "title": "Spells",
+      "category": "Spells and skills",
+      "type": "SpellParam",
+      "row_size": 256,
+      "pack": "gamecmn.pack",
+      "label": "code",
+      "id": null,
+      "note": "One row per spell. The row index is the spell id that battle scripts and syscmn/player_spell.json use. The code (spell000...) matches the spell art/effect name and is the best human handle; the display name comes from the message tables.",
+      "fields": [
+        {"name": "spell_family", "offset": 0, "type": "u8", "range": [0, 255], "confidence": "inferred",
+         "why": "first byte of the row: only 1, 2 or 3, and every row with the same value shares an effect family"},
+        {"name": "spell_index", "offset": 1, "type": "u8", "range": [0, 255], "confidence": "inferred",
+         "why": "second byte: 1, 2, 3 ... a running number inside the family"},
+        {"name": "code", "offset": 112, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "the literal asset code spell000, spell001 ... on 189 of 191 rows"},
+        {"name": "cast_time", "offset": 128, "type": "f32", "range": [0.0, 100.0], "confidence": "inferred",
+         "why": "float 3.0 on 171 rows with small variants elsewhere - the only near-constant float early in the row"},
+        {"name": "power", "offset": 132, "type": "f32", "range": [-1000.0, 1000.0], "confidence": "inferred",
+         "why": "float 100.0 on 188 rows and 50.0 on 3 - a base power or hit percentage"},
+        {"name": "power_ratio", "offset": 136, "type": "f32", "range": [0.0, 100.0], "confidence": "inferred",
+         "why": "float 1.0 on 164 rows with 0.55 / 0.8 / 0.5 / 0.25 on the rest - a scaling ratio paired with `power`"},
+        {"name": "effect_percent", "offset": 140, "type": "s32", "range": [-1, 255], "confidence": "inferred",
+         "why": "small integers (10, 30, 50, 100) with a -1 sentinel on 183 rows, i.e. a percentage that only some spells set"}
+      ]
+    },
+
+    "fieldcmn/shop.json": {
+      "title": "Shop stock",
+      "category": "Shops",
+      "type": "ShopParam",
+      "row_size": 52,
+      "pack": "fieldcmn.pack",
+      "label": null,
+      "id": null,
+      "note": "One row per shop: 24 item slots followed by two housekeeping words. 65535 means an empty slot. Shops are referenced by row index from the field scripts, so do not reorder rows.",
+      "fields": [
+        {"name": "item", "offset": 0, "type": "u16", "count": 24, "ref": {"table": "syscmn/item.json", "field": "id"},
+         "confidence": "proven",
+         "why": "2362 of the 4654 slot values are ids present in syscmn/item.json; the rest are the 65535 empty marker"},
+        {"name": "name_text_id", "offset": 50, "type": "u16", "range": [0, 65535], "confidence": "inferred",
+         "why": "65535 on 123 rows, otherwise a value that increases monotonically with the row index like a message id"}
+      ]
+    },
+
+    "gamecmn/encount_table.json": {
+      "title": "Field encounters",
+      "category": "Encounters",
+      "type": "EnemyEncountTable",
+      "row_size": 96,
+      "pack": "gamecmn.pack",
+      "label": null,
+      "id": "encounter_id",
+      "note": "One row per encounter group: eleven monster slots followed by the encounter id and its battle background. Slot values are ids into gamecmn/enemy_base.json (the same row order), 65535 means an empty slot, and the level byte scales the monster. Editing a slot changes what spawns in that part of the field, which is the safest encounter edit.",
+      "fields": [
+        {"name": "monster_01", "offset": 0, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 1: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_02", "offset": 10, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 2: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_03", "offset": 20, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 3: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_04", "offset": 30, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 4: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_05", "offset": 40, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 5: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_06", "offset": 50, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 6: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_07", "offset": 60, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 7: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_08", "offset": 66, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 8: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_09", "offset": 72, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 9: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_10", "offset": 78, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 10: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "monster_11", "offset": 84, "type": "u16", "range": [0, 65535],
+         "ref": {"table": "gamecmn/enemy_base.json", "field": "row"}, "confidence": "proven",
+         "why": "the monster id for encounter slot 11: 65535 is an empty slot and every other value is a row in gamecmn/enemy_base.json"},
+        {"name": "level_01", "offset": 2, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 1 (1..8; the level scales the monster stats)"},
+        {"name": "level_02", "offset": 12, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 2 (1..8; the level scales the monster stats)"},
+        {"name": "level_03", "offset": 22, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 3 (1..8; the level scales the monster stats)"},
+        {"name": "level_04", "offset": 32, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 4 (1..8; the level scales the monster stats)"},
+        {"name": "level_05", "offset": 42, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 5 (1..8; the level scales the monster stats)"},
+        {"name": "level_06", "offset": 52, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 6 (1..8; the level scales the monster stats)"},
+        {"name": "level_07", "offset": 62, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 7 (1..8; the level scales the monster stats)"},
+        {"name": "level_08", "offset": 68, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 8 (1..8; the level scales the monster stats)"},
+        {"name": "level_09", "offset": 74, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 9 (1..8; the level scales the monster stats)"},
+        {"name": "level_10", "offset": 80, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 10 (1..8; the level scales the monster stats)"},
+        {"name": "level_11", "offset": 86, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "the level of the monsters in slot 11 (1..8; the level scales the monster stats)"},
+        {"name": "count_01", "offset": 3, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 1 (1..8)"},
+        {"name": "count_02", "offset": 13, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 2 (1..8)"},
+        {"name": "count_03", "offset": 23, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 3 (1..8)"},
+        {"name": "count_04", "offset": 33, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 4 (1..8)"},
+        {"name": "count_05", "offset": 43, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 5 (1..8)"},
+        {"name": "count_06", "offset": 53, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 6 (1..8)"},
+        {"name": "count_07", "offset": 63, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 7 (1..8)"},
+        {"name": "count_08", "offset": 69, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 8 (1..8)"},
+        {"name": "count_09", "offset": 75, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 9 (1..8)"},
+        {"name": "count_10", "offset": 81, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 10 (1..8)"},
+        {"name": "count_11", "offset": 87, "type": "u8", "range": [0, 8], "confidence": "proven",
+         "why": "how many of that monster spawn in slot 11 (1..8)"},
+        {"name": "encounter_id", "offset": 92, "type": "u16", "range": [0, 65535], "confidence": "proven",
+         "why": "10, 11, 12 ... on consecutive rows and unique across all 3545: the id field scripts use"},
+        {"name": "battle_zone", "offset": 94, "type": "u16", "range": [0, 65535], "confidence": "inferred",
+         "why": "one of 17 values across 3545 rows (0 on the first rows) - a battle background / zone id, not a per-row number"}
+      ]
+    },
+
+    "gamecmn/scenario_battle.json": {
+      "title": "Scripted battles",
+      "category": "Encounters",
+      "type": "ScenarioBattleParam",
+      "row_size": 64,
+      "pack": "gamecmn.pack",
+      "label": null,
+      "id": null,
+      "note": "The battles scripts start by id (LoadScenarioBattleEncount): +0x00 is a nested array of u16 enemy id / u8 pad / u8 count entries, so only the background is editable here. The monster list is read-only; changing its length would move data inside the file.",
+      "fields": [
+        {"name": "monster_count", "offset": 0, "type": "u32", "read_only": true, "confidence": "proven",
+         "why": "the element count of the monster array at +0x00 (4 bytes per monster: u16 enemy id, u8 pad, u8 count); read-only because it describes a nested allocation"},
+        {"name": "battle_zone", "offset": 38, "type": "u16", "range": [0, 65535], "confidence": "proven",
+         "why": "battle zone / background id; the reference workspace's dq11tool/battleparam.py documents and rewrites exactly this field to move a test fight to another arena"}
+      ]
+    },
+
+    "gamecmn/battle_act_text.json": {
+      "title": "Skill and action names",
+      "category": "Spells and skills",
+      "type": "BattleText",
+      "row_size": 4,
+      "pack": "gamecmn.pack",
+      "label": "name",
+      "id": null,
+      "note": "One string per action/skill id: row 0 is かえん斬り (Flame Slash), row 1 メタル斬り, row 2 ドラゴン斬り. The row index is the action id used by battle scripts and by gamecmn/skill_param.json.",
+      "fields": [
+        {"name": "name", "offset": 0, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the exact text the battle command list prints; the first rows are the sword skills"}
+      ]
+    },
+
+    "gamecmn/passive_skill.json": {
+      "title": "Passive skills (character builder)",
+      "category": "Spells and skills",
+      "type": "PassiveSkillParam",
+      "row_size": 16,
+      "pack": "gamecmn.pack",
+      "label": "name",
+      "id": null,
+      "note": "One row per passive skill: the two strings are the panel name and help text, the four bytes at +0x08 are the effect, and the float is the panel cost. effect_id is decoded from what the name says (0 max HP, 2 strength, 3 defence, 7 attack power ...).",
+      "fields": [
+        {"name": "name", "offset": 0, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the skill panel title, e.g. 常時みのまもり＋"},
+        {"name": "description", "offset": 4, "type": "string", "read_only": false, "confidence": "proven",
+         "why": "the help text under the panel title, e.g. みのまもりが 増える"},
+        {"name": "effect_id", "offset": 8, "type": "u8", "confidence": "proven",
+         "enum": {"0": "max HP", "1": "max MP", "2": "strength", "3": "defence", "4": "agility",
+                   "5": "deftness", "6": "charm", "7": "attack power (equipment)", "8": "defence (equipment)",
+                   "9": "attack magic", "10": "healing magic", "11": "status ailment rate",
+                   "12": "critical hit rate", "13": "accuracy", "14": "evasion", "15": "HP absorption",
+                   "16": "MP absorption", "17": "weapon guard rate", "18": "shield guard rate",
+                   "19": "victory MP recovery", "20": "zone encounter rate", "21": "zone effect",
+                   "22": "fire/earth resistance", "23": "ice/wind resistance", "24": "light/thunder resistance",
+                   "25": "dual wield", "26": "dual wield mastery", "27": "cover", "28": "cover mastery",
+                   "29": "stand guard", "30": "echo", "31": "guard counter", "32": "melody effect",
+                   "33": "melody effect (2)", "34": "steal rate"},
+         "why": "the stat named in the row's own text: 0 = さいだいＨＰ, 2 = ちから, 3 = みのまもり, 7 = こうげき力 on the 48 equipment passives, 20 = ゾーン突入率 ..."},
+        {"name": "equipment_requirement", "offset": 9, "type": "u8", "range": [0, 255], "confidence": "inferred",
+         "why": "255 (0xFF) on the 105 always-on passives and 0..10 on every '装備時' (when equipped) passive; the 0..10 values look like an equipment category, but the mapping is not decoded"},
+        {"name": "effect_value", "offset": 10, "type": "u8", "range": [0, 255], "confidence": "proven",
+         "why": "the magnitude in the name: みのまもり＋10 has 10, ちから＋15 has 15, ゾーン突入率＋5％ has 5"},
+        {"name": "effect_flag", "offset": 11, "type": "u8", "range": [0, 255], "confidence": "inferred",
+         "why": "0 on 227 rows and 255 on 5; same sentinel shape as equipment_requirement, meaning not decoded"},
+        {"name": "cost", "offset": 12, "type": "f32", "range": [0.0, 100.0], "confidence": "inferred",
+         "why": "3.0 on all 232 rows - the fixed character-builder point cost of one passive node"}
+      ]
+    },
+
+    "gamecmn/res_motion_equip.json": {
+      "title": "Equipment motion types",
+      "category": "Equipment",
+      "type": "PlayerMotionEquipParam",
+      "row_size": 4,
+      "pack": "gamecmn.pack",
+      "label": "equip_motion",
+      "id": null,
+      "note": "16 equipment animation sets; the string is the motion prefix (hnd, swd, 2swd, dgr, axe, stk, boo, tsw, clw, spr, whp, rod).",
+      "fields": [
+        {"name": "equip_motion", "offset": 0, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "ASCII motion prefixes used by the character models: hnd (unarmed), swd, 2swd (two swords), dgr (dagger), axe, stk (staff), boo (boomerang), clw (claw), whp (whip), rod"}
+      ]
+    },
+
+    "syscmn/player_rate_param.json": {
+      "title": "Character stat growth rates",
+      "category": "Party growth",
+      "type": "PlayerRateParam",
+      "row_size": 52,
+      "pack": "syscmn.pack",
+      "label": null,
+      "id": null,
+      "note": "One row per party member and guest. 48 one-byte multipliers (100 = normal, 125/150 = boosted, 75/50 = reduced) followed by a zero word. The multiplier order is not decoded, so the fields keep their byte index; changing one shifts that character's growth.",
+      "fields": [
+        {"name": "stat_rate", "offset": 0, "type": "u8", "count": 48, "range": [0, 255], "confidence": "inferred",
+         "why": "48 percentages that are 100 on a balanced character and 50/75/125/150 on the specialised ones; the stat order is not decoded, so the names keep the byte index"}
+      ]
+    },
+
+    "gamecmn/res_model3d.json": {
+      "title": "3D model codes",
+      "category": "Reference",
+      "type": "ResModel3DParam",
+      "row_size": 12,
+      "pack": "gamecmn.pack",
+      "label": "code",
+      "id": "id",
+      "note": "Lookup table the item and monster tables index into. Row N holds id N, so this is what turns a raw model number into w0100 / cha09100 / m001a.",
+      "fields": [
+        {"name": "code", "offset": 0, "type": "string", "read_only": true, "confidence": "proven",
+         "why": "the model code itself: cha01100, w0100, ccg343"},
+        {"name": "id", "offset": 4, "type": "u16", "confidence": "proven",
+         "why": "0, 1, 2 ... on the first rows: the index the game stores elsewhere"}
+      ]
     }
   },
-  "gamecmn/enemy_base.json": {
-    "row_name": null,
-    "fields": {
-      "model": {"offset": "0x10", "type": "string", "evidence": "monster model code, e.g. m001a; names in model_names.json"}
-    }
-  },
-  "syscmn/level_area.json": {
-    "row_name": "name",
-    "fields": {
-      "name": {"offset": "0x0C", "type": "string", "evidence": "place name (matches translation DB, e.g. Heliodor)"},
-      "area": {"offset": "0x10", "type": "string", "evidence": "area code, e.g. f001 / b001"}
+
+  "patterns": {
+    "syscmn/player_param_*.json": {
+      "title": "Character level curve",
+      "category": "Party growth",
+      "type": "PlayerLevelParam",
+      "row_size": 24,
+      "pack": "syscmn.pack",
+      "label": null,
+      "id": null,
+      "note": "One row per level, 99 rows, one file per party member and story guest. The star in the pattern matches the character key, so player_param_hero.json, player_param_martina.json ... share this layout.",
+      "fields": [
+        {"name": "exp_total", "offset": 0, "type": "u32", "range": [0, 99999999], "confidence": "proven",
+         "why": "0, 16, 44, 93, 180 ... 6,851,601 - strictly increasing over 99 rows: the experience needed to reach that level"},
+        {"name": "max_hp", "offset": 4, "type": "u16", "range": [0, 9999], "confidence": "inferred",
+         "why": "grows 22 -> 750 over 99 levels, the shape of a hit-point curve"},
+        {"name": "max_mp", "offset": 6, "type": "u16", "range": [0, 9999], "confidence": "inferred",
+         "why": "starts at 0 (magic is learned later) and reaches 460 - the shape of a magic-point curve"},
+        {"name": "stat", "offset": 8, "type": "u16", "count": 8, "confidence": "inferred",
+         "why": "eight more monotonically growing 16-bit stat columns; strength/agility/resilience/wisdom/style order is not confirmed, so they keep their offset in the name"}
+      ]
     }
   }
 }

@@ -1,0 +1,746 @@
+[
+ {
+  "address": "0x0051C67C",
+  "name": "Gfx_Y2r_ConvertPlane",
+  "signature": "void Gfx_Y2r_ConvertPlane(u32* dst, u32* planeDesc, int planeIndex, int secondPlane)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "planeDesc",
+   "param_3": "planeIndex",
+   "param_4": "secondPlane"
+  },
+  "summary": "Converts one plane of a YUV frame into the RGB destination: picks the row converter from the descriptor's pixel format and runs 240 pixels per row for 320 or 400 rows. Gfx_Y2r_ConvertFrame calls it once per plane.",
+  "confidence": 0.55,
+  "evidence": "The named caller Gfx_Y2r_ConvertFrame (0x0051C5F0) calls it three times with plane index 1, 0 and (0, secondPlane=1), so it converts one plane of the frame; the disassembly at 0x0051C684 is 'movne ip,#0x140 / moveq ip,#0x190' (320/400 rows), which is the conditional Ghidra lost as in_ZR - the body is damaged but the disassembly settles the row count.",
+  "previous_name": "maybe_Gfx_Y2r_ConvertPlane",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0051D040",
+  "name": "maybe_std_StringSubstrClamped",
+  "signature": "void maybe_std_StringSubstrClamped(u32 str, u32 length, int pos, u32 arg4, u32 arg5)",
+  "params": {
+   "param_1": "str",
+   "param_2": "length",
+   "param_3": "pos",
+   "param_4": "arg4",
+   "param_5": "arg5"
+  },
+  "summary": "Five-argument thunk (real entry 0x0051D03C, which pushes r0-r3): clamps arg2 to arg3+1 and tail-calls the range helper 0x001001C4 with (arg1, clamped, arg4, &arg5). Whether that helper builds a string range or throws is still open, so the substring reading is unproven.",
+  "confidence": 0.4,
+  "evidence": "Disassembly 0x0051D03C-0x0051D064 is 'push {r0-r3}; push {r4,lr}; add r4,r2,#1; cmp r1,r4; movhi r1,r4; blx 0x1001c4' - a clamp-and-forward thunk, not the 540-byte function the doc claims; no bl/b to it exists in asm/text, so the xref callers (Model_Instance_UpdateFromParams, Anim_IsInstanceBusy) are stale.",
+  "previous_name": "maybe_std_StringSubstrClamped",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005225E8",
+  "name": "maybe_Fx_UpdateParticleScaleFromKeyframe",
+  "signature": "short* maybe_Fx_UpdateParticleScaleFromKeyframe(FxParticle* self, u32* particle, short* keyframe)",
+  "params": {
+   "param_1": "self",
+   "param_2": "particle",
+   "param_3": "keyframe"
+  },
+  "summary": "Applies one 6-word keyframe record to a particle: tracks the running maximum in particle[4], copies the base size into particle[1]/particle[0], and when the record's transform flag is set rotates the velocity triple particle[9..0xB] through the emitter basis and negates one component by the record's factor. Returns the next record.",
+  "confidence": 0.45,
+  "evidence": "The four per-particle updaters that call it (0x5237C4/0x524390/0x5257E8/0x526F38) call 0x00523184 immediately after, so the pair is the keyframe stepper; the record is 6 words (returns keyframe+6) and the fields written are size and velocity, so 'ScaleFromKeyframe' covers only half of what it does.",
+  "previous_name": "maybe_Fx_UpdateParticleScaleFromKeyframe",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00523184",
+  "name": "Fx_UpdateParticlePosition",
+  "signature": "int* Fx_UpdateParticlePosition(FxParticle* self, FxParticleState* particle, int* keyframe)",
+  "params": {
+   "param_1": "self",
+   "param_2": "particle",
+   "param_3": "keyframe"
+  },
+  "summary": "Eases the particle position (f_C/f_10/f_14) toward the keyframe target by rate*dt, optionally transforming the target through the emitter basis first; returns the next keyframe record (keyframe+5).",
+  "confidence": 0.55,
+  "evidence": "The body is unambiguous: particle->f_C += keyframe[4]*(keyframe[1]-particle->f_C)*dt for all three components, and the four per-particle updaters (0x5237C4/0x524390/0x5257E8/0x526F38) call it right after the scale step. The dt arrives in s0, which Ghidra dropped as in_s0 (VFP argument trap, not damage).",
+  "previous_name": "maybe_Fx_UpdateParticlePosition",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00524900",
+  "name": "maybe_Fx_UpdateParticleColorA",
+  "signature": "void maybe_Fx_UpdateParticleColorA(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Interpolates the emitter template's f_368/f_36C pair by the particle's lifetime fraction into the particle's f_78/f_7C. The pair is a two-component ramp (colour or UV offset); nothing in the body proves which.",
+  "confidence": 0.4,
+  "evidence": "No callers and no named callee: the two helpers it uses (0x0011CD80/0x0011CFAC) are unnamed interior addresses, so the only support for 'colour' is the shape of the interpolation.",
+  "previous_name": "maybe_Fx_UpdateParticleColorA",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00524A10",
+  "name": "maybe_Fx_UpdateParticleColorB",
+  "signature": "void maybe_Fx_UpdateParticleColorB(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Same template interpolation as 0x00524900 plus five '+= coefficient*dt' accumulators (f_74/f_80/f_84/f_88/f_8C), so a fading particle keeps drifting its colour/UV channels.",
+  "confidence": 0.4,
+  "evidence": "Byte-for-byte the same interpolation as 0x00524900 followed by five accumulators; no caller and no named callee, so the channel meaning stays inferred.",
+  "previous_name": "maybe_Fx_UpdateParticleColorB",
+  "previous_confidence": 0.38,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00524C68",
+  "name": "Fx_CopyEmitterBaseTransform",
+  "signature": "void Fx_CopyEmitterBaseTransform(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Refreshes the emitter (0x005254FC) and copies its two strided transform triples (f_34/f_44/f_54 and f_64/f_74/f_84) into the particle's cached slots (f_E8/f_F8/f_108 and f_118/f_128/f_138).",
+  "confidence": 0.5,
+  "evidence": "The neighbouring updater 0x00523184 reads the same f_34/f_44/f_54 triple as the emitter basis before transforming a target, and this function copies exactly that triple (plus the f_64/f_74/f_84 one) into the particle's cache; the six stores are certain.",
+  "previous_name": "maybe_Fx_CopyEmitterBaseTransform",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0052570C",
+  "name": "Fx_CommitParticleStream",
+  "signature": "u32* Fx_CommitParticleStream(FxEmitter* emitter)",
+  "params": {
+   "param_1": "emitter"
+  },
+  "summary": "Flushes the pending particle vertices into the global stream at 0x007AFF18: copies the node's f_28 block (count = pending*6) and then its f_10 block, advances the write cursor and returns it. Four list updaters tail-call it after filling the records.",
+  "confidence": 0.5,
+  "evidence": "Four named list updaters (0x52BBC4/0x52C58C/0x52CD5C/0x52D010) end with a b/bl to it, and the body is two memcpys into 0x007AFF18[0] followed by 'return advanced pointer' - a stream commit, not an RNG seed.",
+  "previous_name": "maybe_Fx_CommitParticleStream",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00526814",
+  "name": "maybe_Fx_UpdateParticlesInline",
+  "signature": "void maybe_Fx_UpdateParticlesInline(void)",
+  "params": {},
+  "summary": "Interior address, not a function entry: the disassembly at 0x00526814 is 'ldr fp,[r2,#0x548]' in the middle of the particle update loop, so Ghidra's halt_baddata body is an artefact. Kept as a marker.",
+  "confidence": 0.25,
+  "evidence": "asm/text/text_00500048.s shows unbroken ARM instructions across 0x00526814 (0x00526810 vldmia sl!,{s14}; 0x00526814 ldr fp,[r2,#0x548]); no bl/b to it exists, so it is a mid-function split symbol.",
+  "previous_name": "maybe_Fx_UpdateParticlesInline",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005287B4",
+  "name": "maybe_Fx_ApplyParticleRotation",
+  "signature": "void maybe_Fx_ApplyParticleRotation(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Writes the particle's f_3C/f_40/f_44 triple into the current vertex record (+0x60/+0x64/+0x68), flushes the node block (0x0052E3C8) and tail-jumps to the vertex flush 0x0052E784. The triple is a 3-component vector; rotation is only one candidate.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x005287B4-0x005287E8: ldm r1,{r1,r2,r3} from self+0x3C, three stores at [r0,#0x60]!/[r0,#4]/[r0,#8], bl 0x52e3c8, b 0x52e784. Its sibling 0x00529A60 writes the same three words and additionally clears +0x6C, so the triple is a record field, not proven to be a rotation.",
+  "previous_name": "maybe_Fx_ApplyParticleRotation",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00529714",
+  "name": "maybe_Fx_ResetParticleSprite",
+  "signature": "void maybe_Fx_ResetParticleSprite(u32 self, u32 arg2, int* particleRef)",
+  "params": {
+   "param_1": "self",
+   "param_2": "arg2",
+   "param_3": "particleRef"
+  },
+  "summary": "Clears the +0x6C word of the current vertex record and flushes it (0x0052E3C8, then tail-jump to 0x0052E784). The +0x6C word is a per-record flag; 'sprite' is a guess.",
+  "confidence": 0.45,
+  "evidence": "Disassembly is three statements: str #0 into [*particleRef+0x6C], bl 0x52e3c8, b 0x52e784. Its siblings 0x005287B4/0x00529A60 write the same record and 0x00529A60 also clears +0x6C, so the clear is certain but the flag's meaning is not.",
+  "previous_name": "maybe_Fx_ResetParticleSprite",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00529A60",
+  "name": "maybe_Fx_SetParticleSpriteFromNode",
+  "signature": "void maybe_Fx_SetParticleSpriteFromNode(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant of 0x005287B4: writes the f_3C/f_40/f_44 triple into the current vertex record (+0x60/+0x64/+0x68), clears the record's +0x6C flag, flushes the node block and tail-jumps to 0x0052E784.",
+  "confidence": 0.4,
+  "evidence": "Disassembly 0x00529A60-0x00529A9C is the same store sequence as 0x005287B4 plus 'str #0,[r0,#0xc]' (record +0x6C); no bl/b to it exists in asm/text, so the five named callers in the old xref (Fx_System_Init, Fx_DestroyEmitter, ...) are stale.",
+  "previous_name": "maybe_Fx_SetParticleSpriteFromNode",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0052B9D0",
+  "name": "maybe_Fx_InterpolateParticlePair",
+  "signature": "void maybe_Fx_ComputeParticleNormal(float* outA, float* outB, FxParticle* self, int templateRec)",
+  "params": {
+   "param_1": "outA",
+   "param_2": "outB",
+   "param_3": "self",
+   "param_4": "templateRec"
+  },
+  "summary": "Scales the template's f_30/f_34 pair by the particle's lifetime fraction and writes the two results to self+0x1E/+0x1F. The sprite emitters use those as the quad centre (self[0x1E]+self[0x20], self[0x1F]-self[0x21]), so the old 'normal' reading is not supported; the pair's exact meaning is still open.",
+  "confidence": 0.4,
+  "evidence": "Both call sites (0x00525E70 line 169 and 0x00526F38 line 184) pass (self+0x1E, self+0x1F, self, self[0x51]+0x338) and the second pair (self+0x26, self+0x27, self[0x51]+0x3B0), and the body is the same lifetime-fraction interpolation as the colour pair 0x00524900/0x00524A10 - a two-component template ramp, not a normal vector.",
+  "previous_name": "maybe_Fx_ComputeParticleNormal",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0052D010",
+  "name": "maybe_Fx_UpdateParticleListR",
+  "signature": "u32 maybe_Fx_UpdateParticleListR(FxEmitter* self, u32 list, FxParticle* particle, int forwarded, u32 forwarded2)",
+  "params": {
+   "param_1": "self",
+   "param_2": "list",
+   "param_3": "particle",
+   "param_4": "forwarded",
+   "param_5": "forwarded2"
+  },
+  "summary": "Active-list updater for one emitter type: walks the live children, advances each particle (0x5237C4/0x5257E8/0x526554), copies the vertex record and tail-jumps to Fx_CommitParticleStream. The R suffix is a positional label.",
+  "confidence": 0.45,
+  "evidence": "Real callees are maybe_Fx_UpdateParticleA/E/G, 0x00527738/0x00527780 and a tail-jump to Fx_CommitParticleStream; no caller exists, so which emitter type uses it stays unknown and the letter remains positional.",
+  "previous_name": "maybe_Fx_UpdateParticleListR",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0052DF78",
+  "name": "maybe_Fx_UpdateParticleListU",
+  "signature": "void maybe_Fx_UpdateParticleListU(FxEmitter* self, FxParticle* particle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "particle"
+  },
+  "summary": "Minimal active-list updater: walks the child list, calls maybe_Fx_UpdateParticleA for the live entries, unlinks expired ones and keeps the particle counter in sync. The U suffix is a positional label.",
+  "confidence": 0.45,
+  "evidence": "Its only real callee is maybe_Fx_UpdateParticleA (0x005237C4) and it has no caller, so it duplicates the non-forwarded path of 0x0052D010 without the variant selector; the emitter type stays unknown.",
+  "previous_name": "maybe_Fx_UpdateParticleListU",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0052E76C",
+  "name": "maybe_Fx_FlushParticleNodeBlock",
+  "signature": "void maybe_Fx_FlushParticleNodeBlock(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "0x18-byte thunk: calls the shared flush tail 0x0052E3C8 (which copies the current node's f_1C/f_20 block into the stream at 0x007AFF18 and resets the pending count) and returns its argument. It is not a batch begin.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x0052E76C-0x0052E780 is 'push {r4,lr}; mov r4,r0; bl 0x52e3c8; mov r0,r4; pop {r4,lr}' - a pure thunk; Ghidra merged the following function's body into it, which is where the 'begin batch' reading came from. 0x0052E3C8 is the flush tail of Fx_AdvanceEmitterFrame (0x0052E35C).",
+  "previous_name": "maybe_Fx_BeginParticleBatch",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0052E784",
+  "name": "maybe_Fx_EndParticleBatch",
+  "signature": "void maybe_Fx_EndParticleBatch(FxParticle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Shared tail of the seven vertex-record writers: clears the pending count, copies the emitter node's f_810 block (f_814 words) to the stream cursor at 0x007AFF18, advances the cursor and increments the batch counter.",
+  "confidence": 0.45,
+  "evidence": "Seven functions tail-jump here (0x00527758, 0x00528750, 0x005287B4, 0x0052943C, 0x00529714, 0x0052973C, 0x00529A60) right after writing a record, and the body is one memcpy of node->f_810 plus a counter bump; 'end batch' describes the flush+count but the buffer roles are still inferred.",
+  "previous_name": "maybe_Fx_EndParticleBatch",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0052E918",
+  "name": "Fx_AppendNodeData",
+  "signature": "u32* Fx_AppendNodeData(u32* node, u32* stream)",
+  "params": {
+   "param_1": "node",
+   "param_2": "stream"
+  },
+  "summary": "Appends a node's data block to the stream: if node[1] (data) and node[2] (word count) are both set, copies node[2] words and returns the advanced pointer; otherwise returns the pointer unchanged.",
+  "confidence": 0.5,
+  "evidence": "Three real callers (0x00526554, 0x005280A8, 0x0052899C) pass one node and use the returned pointer as the next write position, and the body is memcpy(stream, node[1], node[2]<<2) + 'return stream + node[2]*4' - an append, never a list head.",
+  "previous_name": "maybe_Fx_AppendNodeData",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0052F6D0",
+  "name": "Gfx_ModelSlot_Release",
+  "signature": "void Gfx_ModelSlot_Release(void* self, void* owner, int slotIndex)",
+  "params": {
+   "param_1": "self",
+   "param_2": "owner",
+   "param_3": "slotIndex"
+  },
+  "summary": "Releases one model-resource slot: takes the object from the table at self->f_C[slotIndex], releases its parts (0x00531D58) and calls the owner's virtual release (vtable +0xC), then clears the table entry.",
+  "confidence": 0.55,
+  "evidence": "Its only caller maybe_Gfx_BindResourceSlot (0x0055DBB8) calls it when the slot is occupied and then binds the replacement through the confident Gfx_ModelSlot_Replace, so this is the release half of that pair; the body clears self->f_C[slotIndex] after the vtable release.",
+  "previous_name": "maybe_Gfx_ModelSlot_Release",
+  "previous_confidence": 0.48,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00530054",
+  "name": "maybe_Thumb_MisidentifiedEntry",
+  "signature": "void maybe_Thumb_MisidentifiedEntry(void)",
+  "params": {},
+  "summary": "Not a function entry: 0x00530054 is the ARM instruction 'bl 0x00504F30' (word 0xEBFF53B5) inside maybe_Mem_PoolSlot_Allocate (0x00530014), misdecoded as a Thumb push. Kept as a marker.",
+  "confidence": 0.15,
+  "evidence": "asm/text/text_00500048.s decodes 0x00530054 as 'push {r0,r1,r4,r6,lr}' followed by '.short 0xEBFF', i.e. the Thumb decoder lost sync inside an ARM function; no bl/b to it exists.",
+  "previous_name": "maybe_Thumb_MisidentifiedEntry",
+  "previous_confidence": 0.15,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00535EDC",
+  "name": "maybe_Fs_Sarc_LocateDataBlock",
+  "signature": "int maybe_Fs_Sarc_LocateDataBlock(FsSarcReader* reader, const void* data, u32 index)",
+  "params": {
+   "param_1": "reader",
+   "param_2": "data",
+   "param_3": "index"
+  },
+  "summary": "Not a function entry: 0x00535EDC is the 'bl 0x00123660' (memcmp against the 'SFAT' magic) inside Fs_Sarc_ParseFatNodes (0x00535E74). Kept as a marker for the FAT-section check.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows 0x00535ED0-0x00535EE8 as one straight-line ARM sequence (ldr r1,[pc]; mov r2,#4; str r0,[r4,#4]; bl 0x123660; cmp r0,#0; bne 0x535f80), and the next real entry is Fs_Sarc_FindFile at 0x00535FA4; no bl/b targets 0x00535EDC.",
+  "previous_name": "maybe_Fs_Sarc_LocateDataBlock",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00535F50",
+  "name": "maybe_Fs_Sarc_ValidateArchiveEnd",
+  "signature": "int maybe_Fs_Sarc_ValidateArchiveEnd(FsSarcReader* reader, const void* data, const void* end)",
+  "params": {
+   "param_1": "reader",
+   "param_2": "data",
+   "param_3": "end"
+  },
+  "summary": "Not a function entry: 0x00535F50 is the 'bl 0x00123660' (memcmp against the 'SFNT' magic) inside Fs_Sarc_ParseFatNodes (0x00535E74). Kept as a marker for the filename-section check.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows 0x00535F44-0x00535F60 as one straight-line ARM sequence (add r6,r1,r0; ldr r1,[pc]; mov r0,r6; bl 0x123660; cmp r0,#0; ldrheq r0,[r6,#4]; cmpeq r0,#8; bne 0x535f80); no bl/b targets 0x00535F50.",
+  "previous_name": "maybe_Fs_Sarc_ValidateArchiveEnd",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00537AE8",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelA",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelA(void)",
+  "params": {},
+  "summary": "Not a function entry: 0x00537AE8 is an interior call site (bl 0x0012515C (matrix concat) followed by bl 0x00540AAC Math_BuildRotationMatrix2D) inside Ui_LayoutElement_BuildTransform (0x00537914), which spans 0x00537914-0x00537D48. Kept as a marker.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows the instruction at 0x00537AE8 in the middle of the straight-line matrix composition of 0x00537914 (previous instruction is a vstmia/vstr of the same basis), and no bl/b targets it.",
+  "previous_name": "maybe_Ui_LayoutElement_BuildMatrix_LabelA",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00537B50",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelB",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelB(void)",
+  "params": {},
+  "summary": "Not a function entry: 0x00537B50 is an interior call site (bl 0x0012515C (matrix concat)) inside Ui_LayoutElement_BuildTransform (0x00537914), which spans 0x00537914-0x00537D48. Kept as a marker.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows the instruction at 0x00537B50 in the middle of the straight-line matrix composition of 0x00537914 (previous instruction is a vstmia/vstr of the same basis), and no bl/b targets it.",
+  "previous_name": "maybe_Ui_LayoutElement_BuildMatrix_LabelB",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00537C4C",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelC",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelC(void)",
+  "params": {},
+  "summary": "Not a function entry: 0x00537C4C is an interior call site (bl 0x001252E8 (matrix inverse/transpose)) inside Ui_LayoutElement_BuildTransform (0x00537914), which spans 0x00537914-0x00537D48. Kept as a marker.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows the instruction at 0x00537C4C in the middle of the straight-line matrix composition of 0x00537914 (previous instruction is a vstmia/vstr of the same basis), and no bl/b targets it.",
+  "previous_name": "maybe_Ui_LayoutElement_BuildMatrix_LabelC",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00537C5C",
+  "name": "maybe_Ui_LayoutElement_BuildMatrix_LabelD",
+  "signature": "void maybe_Ui_LayoutElement_BuildMatrix_LabelD(void)",
+  "params": {},
+  "summary": "Not a function entry: 0x00537C5C is an interior call site (bl 0x0012515C (matrix concat) followed by 'b 0x00537ADC') inside Ui_LayoutElement_BuildTransform (0x00537914), which spans 0x00537914-0x00537D48. Kept as a marker.",
+  "confidence": 0.3,
+  "evidence": "asm/text/text_00500048.s shows the instruction at 0x00537C5C in the middle of the straight-line matrix composition of 0x00537914 (previous instruction is a vstmia/vstr of the same basis), and no bl/b targets it.",
+  "previous_name": "maybe_Ui_LayoutElement_BuildMatrix_LabelD",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00502FF8",
+  "name": "maybe_Snd_RequestResourceByName",
+  "signature": "Result maybe_Snd_RequestResourceByName(const char* name)",
+  "params": {
+   "param_1": "name"
+  },
+  "summary": "Two-instruction wrapper: calls Svc_Snd_Cmd0004WithName(name) and normalises a non-negative result to 0, so callers see 0 on success. No callers, so which resource kind snd command 4 requests stays open.",
+  "confidence": 0.45,
+  "evidence": "The callee is the named Svc_Snd_Cmd0004WithName (0x00516170), which fixes the subsystem, but the body only normalises the result; the asm at 0x00502FF8 is decoded as Thumb garbage in asm/text, so no caller can be confirmed either way.",
+  "previous_name": "maybe_Snd_RequestResourceByName",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00504050",
+  "name": "Svc_Object_CreateFromBlock",
+  "signature": "int Svc_Object_CreateFromBlock(u32* out, u32 arg2, u32 arg3, u32 arg4, u32 size, u32 arg6, u32 arg7, u32 arg8, u32 arg9, u32 arg10)",
+  "params": {
+   "param_1": "out",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4",
+   "param_5": "size",
+   "param_6": "arg6",
+   "param_7": "arg7",
+   "param_8": "arg8",
+   "param_9": "arg9",
+   "param_10": "arg10"
+  },
+  "summary": "Builds a four-word descriptor block {arg2, arg3, arg4, size} on the stack, creates the object through Svc_Object_CreateFromDescriptor and, on success, writes {handle, -1} to out and returns 0.",
+  "confidence": 0.5,
+  "evidence": "The only caller is Svc_Content_OpenByRecord (0x005025B4) and the only callee is the named Svc_Object_CreateFromDescriptor (0x00505058), which takes (out, desc, size, flags, ...); the body is exactly the descriptor-block setup plus the {handle,-1} store. The old 'Ipc' word was not supported by anything, so it is dropped.",
+  "previous_name": "maybe_Svc_Ipc_CreateObjectFromBlock",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005042AC",
+  "name": "Svc_ObjectPool_InitB",
+  "signature": "void Svc_ObjectPool_InitB(u32 count, void* obj)",
+  "params": {
+   "param_1": "count",
+   "param_2": "obj"
+  },
+  "summary": "Initialises the second service object pool: stores the slot count in obj+0x10, appends id 0x207 to the pool list at 0x007E7AA4 and tells the kernel the pool layout through Svc command 0x90040, panicking on either failure.",
+  "confidence": 0.5,
+  "evidence": "Byte-identical to the confident Svc_ObjectPool_InitA (0x0050421C) apart from the pool address (0x007E7AA4 vs 0x007E7AB8) and the id (0x207 vs 0x209); both call the named Os_ListAppendNode and Os_SvcCommand90040. Note 0x207 is the registered id, not an entry count as the old summary said.",
+  "previous_name": "maybe_Svc_ObjectPool_InitB",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00509A20",
+  "name": "maybe_Svc_SyncObject_DestroyA",
+  "signature": "int maybe_Svc_SyncObject_DestroyA(SvcSyncHandle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor: unlinks the object through Os_CloseHandleAndUnlink(self), then closes the kernel handle at +0x14 (svcCloseHandle) and clears it, returning the object.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x00509A20-0x00509A48: bl 0x111e44 with r0=self, ldr r0,[r4,#0x14]!, svc #0x23, str #0, sub r0,r4,#0x14. The close-and-clear shape is certain, but nothing in the body identifies the primitive as a sync object, so the old hypothesis stays a maybe_.",
+  "previous_name": "maybe_Svc_SyncObject_DestroyA",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0050F0F8",
+  "name": "maybe_Svc_SyncObject_DestroyC",
+  "signature": "int* maybe_Svc_SyncObject_DestroyC(SvcSyncBundle* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Destructor of a handle bundle: unlinks it (Os_CloseHandleAndUnlink(self+0x2C)) and closes the six kernel handles at +0, +8, +0x10, +0x1C, +0x24 and +0x40, clearing each slot.",
+  "confidence": 0.45,
+  "evidence": "Disassembly is one bl 0x111e44 plus six 'ldr/cmp/svc #0x23/str #0' blocks; no caller and no string identifies the owner, so 'sync object' stays the previous pass's hypothesis.",
+  "previous_name": "maybe_Svc_SyncObject_DestroyC",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0050A09C",
+  "name": "Ui_IconCache_StopService",
+  "signature": "int Ui_IconCache_StopService(void)",
+  "params": {},
+  "summary": "Stops the icon-cache service: drops the start reference (Svc_RefCount_Release), clears the started bytes, asks the protocol layer to close (0x0050C4C0), resets the mailbox (Svc_Cecd_ResetMailbox) and clears the global 'opened' byte at 0x007AE9E0.",
+  "confidence": 0.55,
+  "evidence": "It is the exact counterpart of the named maybe_Ui_IconCache_StartService (0x0050A010): same state block 0x007AE9E0, same lock, and it clears the +1/+2 bytes that StartService sets before clearing the +0 opened byte; the caller Gfx_ShutdownRenderServices (0x00383EC8) is the render-service shutdown path that owns the icon atlas.",
+  "previous_name": "maybe_Ui_IconCache_StopService",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050B878",
+  "name": "Ui_IconCache_CountMatchingEntries",
+  "signature": "int Ui_IconCache_CountMatchingEntries(int* self, u32 flagMask)",
+  "params": {
+   "param_1": "self",
+   "param_2": "flagMask"
+  },
+  "summary": "Walks the icon-cache entries (self[6] of them), reads each 0x60-byte record through the vtable read slot (+0x34) and counts the records whose flag byte intersects flagMask (bit 0x80 ignored); a mask of 0 counts every readable record.",
+  "confidence": 0.5,
+  "evidence": "Both call sites are inside Ui_IconCache_Create (0x0050B45C and 0x0050B4DC) with masks 0 and 1, and the body is a pure count loop over self[6] records with the flag test 'bStack_7c & flagMask & 0xFFFFFF7F'; the family (Ui_IconCache_ReadHeader/SetPage/Commit) is already confident.",
+  "previous_name": "maybe_Ui_IconCache_CountMatchingEntries",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050BAC4",
+  "name": "Ui_IconCache_StoreRecordByCommand",
+  "signature": "void Ui_IconCache_StoreRecordByCommand(int* self, int command, u8* data, u32 size)",
+  "params": {
+   "param_1": "self",
+   "param_2": "command",
+   "param_3": "data",
+   "param_4": "size"
+  },
+  "summary": "Handles one cached-record write command: 0x8C..0x8F store a single saved flag byte (+0x77/+0x1DD/+0x1DE/+0x1DF), 0x65..0xC7 forward the payload through the vtable write slot (+0x30, or +0x24 when there is no data), and the 0x60-byte header is then flushed back to the backing handle.",
+  "confidence": 0.5,
+  "evidence": "Both call sites are inside Ui_IconCache_Create (0x0050B724 with blls and 0x0050B78C) and the body dispatches on the command byte exactly as the old summary said; the sibling Ui_IconCache_Commit (0x0050BD60) uses the same vtable slots.",
+  "previous_name": "maybe_Ui_IconCache_StoreRecordByCommand",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050F03C",
+  "name": "Svc_AdvanceTimeMs",
+  "signature": "void Svc_AdvanceTimeMs(u32* clock, const u32* delta)",
+  "params": {
+   "param_1": "clock",
+   "param_2": "delta"
+  },
+  "summary": "Adds a 64-bit delta converted from microseconds to milliseconds to the running 64-bit clock pair, using the compiler's divide-by-1,000,000 sequence (0x431BDE82D7B634DB) with the 18-bit shift and 0x4000 exponent fix-up.",
+  "confidence": 0.5,
+  "evidence": "The only caller is the named Svc_Time_GetCurrentTimestamp (0x0050EFA4), which uses it to advance its timestamp, and the magic constant 0x431BDE82D7B634DB is the 64-bit reciprocal of 1,000,000, so the unit conversion is certain.",
+  "previous_name": "maybe_Svc_AdvanceTimeMs",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0050F978",
+  "name": "Regex_ParseTokenStreamWithLength",
+  "signature": "int Regex_ParseTokenStreamWithLength(TextParser* p, int mode, const wchar_t* pattern)",
+  "params": {
+   "param_1": "p",
+   "param_2": "mode",
+   "param_3": "pattern"
+  },
+  "summary": "Thunk that computes wcslen(pattern) and tail-falls into Regex_ParseTokenStream (0x0050F9A8) with (p, mode, pattern, length). It is not a fatal-error path: 0x00100B74 is wcslen, not an abort.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x0050F978-0x0050F9A4 is 'push {r4,r5,r6,lr}; mov r5,r0; mov r6,r1; mov r4,r2; mov r0,r2; blx 0x100b74; mov r3,r0; mov r2,r4; mov r1,r6; mov r0,r5; pop {r4,r5,r6,lr}' with no bx lr, so it falls through into 0x0050F9A8 (Regex_ParseTokenStream); 0x00100B74 is the Thumb wcslen loop (ldrh/cmp/bne), which FACTS.md already records as mis-marked noreturn.",
+  "previous_name": "maybe_Text_FatalError",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0050FDC4",
+  "name": "maybe_Regex_ParseBraceQuantifierB",
+  "signature": "u32 maybe_Regex_ParseBraceQuantifierB(RegexParser* self, int* node, u32 arg3, int base)",
+  "params": {
+   "param_1": "self",
+   "param_2": "node",
+   "param_3": "arg3",
+   "param_4": "base"
+  },
+  "summary": "Parses a brace quantifier '{...}' of the text-filter pattern: after the '{' it parses the decimal count through Regex_ParsePredefinedClass and stores node kind 8 with the count; returns 9 when the input is not a valid quantifier.",
+  "confidence": 0.45,
+  "evidence": "The callee is the named Regex_ParsePredefinedClass (0x005142CC) and the body checks for the '{' (0x7B) before parsing, which supports the quantifier reading; but the node kind 8 vs 7 is the only difference from 0x00510050 and nothing proves the repeat semantics, so the B suffix stays positional.",
+  "previous_name": "maybe_Regex_ParseBraceQuantifierB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00510050",
+  "name": "maybe_Regex_ParseBraceQuantifierA",
+  "signature": "u32 maybe_Regex_ParseBraceQuantifierA(RegexParser* self, int* node, u32 arg3, int base)",
+  "params": {
+   "param_1": "self",
+   "param_2": "node",
+   "param_3": "arg3",
+   "param_4": "base"
+  },
+  "summary": "Same brace-quantifier parse as 0x0050FDC4 but stores node kind 7 (with the parsed count) instead of kind 8; returns 9 when the input is not a valid quantifier.",
+  "confidence": 0.45,
+  "evidence": "Identical body to 0x0050FDC4 apart from the node kind and the literal pool, and both call the named Regex_ParsePredefinedClass; the A/B suffix records the node kind, not a proven repeat meaning.",
+  "previous_name": "maybe_Regex_ParseBraceQuantifierA",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00510A28",
+  "name": "maybe_Text_MatchTokenTree",
+  "signature": "int maybe_Text_MatchTokenTree(u32* out, TextParser* parser, const wchar_t* text)",
+  "params": {
+   "param_1": "out",
+   "param_2": "parser",
+   "param_3": "text"
+  },
+  "summary": "Matches a parsed pattern token tree against a wide string: stores {text, wcslen(text)} at *out, then walks the node kinds (7, 0x11, 0x12, 0xC) and returns 0/1. It is not a fatal-error path: 0x00100B74 is wcslen, not an abort.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x00510A28-0x00510A48 is 'str r2,[r4]; blx 0x100b74; str r0,[r4,#4]' (store the string and its length) followed by a 0x330-byte walk over node kinds 7/0x11/0x12/0xC; the only caller Text_NgWord_MatchWord (0x005145E8) uses the result as a match status (==0 / ==1). 0x00100B74 is the Thumb wcslen loop, so the old 'FatalError2' name was wrong.",
+  "previous_name": "maybe_Text_FatalError2",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00517478",
+  "name": "maybe_Sound_Channel_GetBaseTime",
+  "signature": "int maybe_Sound_Channel_GetBaseTime(SoundChannel* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Returns one of four constants (0xDF0C/0xD930/0xCD78/0x30BB0) selected by the channel's mode byte at +3, plus 1500 (0x5DC) or 10000 selected by the byte at +2. The constants look like per-mode sample or tick counts, so 'base time' is still a guess.",
+  "confidence": 0.45,
+  "evidence": "The only caller is the named Sound_Frame_UpdateChannels (0x00518A7C), which fixes the subsystem, but the body is a four-way constant select plus an add; nothing in it names the unit, and the 0x518660 query it uses is unnamed.",
+  "previous_name": "maybe_Sound_Channel_GetBaseTime",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00517A60",
+  "name": "Sound_GetSystemThunk",
+  "signature": "u32 Sound_GetSystemThunk(void)",
+  "params": {},
+  "summary": "16-byte thunk: 'push {r4,lr}; bl 0x005177DC; pop {r4,lr}' returns the sound-system pointer from maybe_Sound_GetSystemIfInitialized (0x005177DC, which loads the global and tests its bit 0).",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x00517A60-0x00517A6C is exactly push/bl 0x5177dc/pop, and 0x005177DC is the real entry of maybe_Sound_GetSystemIfInitialized (ldr r0,[pc]; push {r4,lr}; ldr r0,[r0]; tst r0,#1) - Ghidra split that function at 0x005177E0. Both callers (Sound_Driver_ShutdownHooks, maybe_Sound_Driver_StopTimer) use it as a getter.",
+  "previous_name": "maybe_Sound_GetSystemThunk",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00517DE8",
+  "name": "maybe_Sound_SetPendingState",
+  "signature": "void maybe_Sound_SetPendingState(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Thunk: gets the sound system (0x005177DC) and stores the argument byte at system+8, but only when the system's +0x30 flag is zero. The +0x30 gate and the +8 field are unnamed, so 'pending state' is a guess.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x00517DE8-0x00517E08: push {r4,lr}; mov r4,r0; bl 0x5177dc; mov r1,r4; pop {r4,lr}; ldrb r2,[r0,#0x30]; cmp r2,#0; strbeq r1,[r0,#8]. The conditional setter is certain; the meaning of +0x30/+8 is not.",
+  "previous_name": "maybe_Sound_SetPendingState",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0051846C",
+  "name": "Sound_ForwardToVoicePlayback",
+  "signature": "void Sound_ForwardToVoicePlayback(u32 arg1, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Gathers six register/stack arguments, fetches the sound system (0x005177DC) and tail-forwards everything to the named Snd_StartVoicePlayback (0x005179A8).",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x0051846C-0x0051848C: push {r4-r8,sb,sl,lr}; sub sp,#0x10; mov r8,r0; add r0,sp,#0x30; ldm r0,{r5,r6,r7}; mov sl,r2; mov r4,r3; bl 0x5177dc, then bl 0x5179a8 (Snd_StartVoicePlayback). The decompiler's 'does not return' claim was wrong.",
+  "previous_name": "maybe_Sound_ForwardToVoicePlayback",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00519D90",
+  "name": "maybe_Sound_Channel_ApplyPendingLoopCount",
+  "signature": "void maybe_Sound_Channel_ApplyPendingLoopCount(SoundChannelNode* node)",
+  "params": {
+   "param_1": "node"
+  },
+  "summary": "When the channel node's u16 at +0x6C has bit 0x8000 set, pushes the node's pending value (s16 at +4) into the DSP channel state through 0x00518DE8 (driver 0x007EF414, channel = node[0] & 0xFF) and clears the bit.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x00519D90-0x00519DB8: ldrh r0,[r0,#0x6C]; tst r0,#0x8000; beq end; ldr r0,[r4]; ldrsh r2,[r4,#4]; and r1,r0,#0xff; bl 0x518de8; then clears 0x8000. The old 'FlushPriority' name claimed a priority flush that the body does not do; the callee (maybe_Sound_DspChannel_SetLoopCount) is itself only a maybe_, so the 'loop count' wording stays provisional.",
+  "previous_name": "maybe_Sound_Channel_FlushPriority",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051A978",
+  "name": "maybe_Sound_CloseStream",
+  "signature": "void maybe_Sound_CloseStream(u32* handle)",
+  "params": {
+   "param_1": "handle"
+  },
+  "summary": "Closes an open sound handle: if the global flag at 0x007AEAA8 is set, sends Svc_Snd_Cmd002C, closes *handle with svcCloseHandle, reports a negative handle through 0x0011C814 and clears the flag.",
+  "confidence": 0.45,
+  "evidence": "Disassembly 0x0051A978-0x0051A9AC: ldrb r0,[r4]; cmp r0,#0; beq end; bl 0x51ae60 (Svc_Snd_Cmd002C); ldr r0,[r5]; svc #0x23; lsrs r0,r0,#0x1f; blne 0x11c814; strb #0,[r4]. The close is certain; the only caller is an unnamed 8-byte thunk at 0x0050148C that passes the global 0x007AEAA8, so 'stream' stays a guess.",
+  "previous_name": "maybe_Sound_CloseStream",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0051BD7C",
+  "name": "maybe_Sound_NotifyServiceThread",
+  "signature": "void maybe_Sound_NotifyServiceThread(u32 arg1, u32 arg2)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2"
+  },
+  "summary": "Loads the global at 0x007418D0, asks 0x0011F730 for the current thread id and tail-jumps to Svc_Snd_Cmd001F with (threadId, global, arg1, arg2).",
+  "confidence": 0.3,
+  "evidence": "Disassembly 0x0051BD7C-0x0051BDA4: ldr r5,[r0]; bl 0x11f730; mov r3,r6; mov r2,r4; mov r1,r5; pop {r4,r5,r6,lr}; b 0x51bdac. The argument order is certain, but neither 0x0011F730 nor the global is named, so 'NotifyServiceThread' remains a reading of the two arguments.",
+  "previous_name": "maybe_Sound_NotifyServiceThread",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0051CBF8",
+  "name": "Err_FatalErrInfo_Init",
+  "signature": "void Err_FatalErrInfo_Init(ErrFatalErrInfo* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initialises a 0xF80-byte CTR SDK nn::err::FatalErrInfo: zeroes the header and the 0xED8-byte body, sets +0xEE4 = 1, zeroes 0x89 bytes at +0xEE7, sets the timeout word at +0xF70 to -1 and constructs the object at +0xF76.",
+  "confidence": 0.6,
+  "evidence": "FACTS.md records that 0x0051CBF8 builds the 0xF80-byte FatalErrInfo, and the confident caller Fs_ReportFatalError (0x001D033C, 0.72) documents it: it allocates 0xF90 stack bytes, calls this, writes the nn::Result to errInfo+0x04 and submits through Err_LaunchFatalErrorApplet. The second caller 0x0033598C does the same with word 0 = 2. The old 'Sound_ChannelWork_Ctor' name came from the poisoned Sound_Driver_* range.",
+  "previous_name": "maybe_Sound_ChannelWork_Ctor",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0051D25C",
+  "name": "Fx_ChannelGroup_UpdateUnits",
+  "signature": "void Fx_ChannelGroup_UpdateUnits(FxChannelGroup* group, int count)",
+  "params": {
+   "param_1": "group",
+   "param_2": "count"
+  },
+  "summary": "Steps every unit of an FX channel group for count sub-steps: for each unit whose f_24 matches the group's channel id it calls the unit vtable slots +8/+0x18 (and +0x1C when the template flag bit 0 is set), then releases the finished units through 0x005306CC.",
+  "confidence": 0.5,
+  "evidence": "Its only caller is the named Fx_System_UpdateChannelGroups (0x0052F988), which walks the channel-list table at self+0x120 and passes one group node plus a sub-step count; the body walks group[4..group[2]] and calls the unit vtables, so nothing here is sound code - the old 'Sound_UpdateVoiceGroup' name was wrong.",
+  "previous_name": "maybe_Sound_UpdateVoiceGroup",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005248B0",
+  "name": "Fx_ApplyParticleStateThunk",
+  "signature": "void Fx_ApplyParticleStateThunk(int particle, int mode)",
+  "params": {
+   "param_1": "particle",
+   "param_2": "mode"
+  },
+  "summary": "16-byte thunk: 'push {r4,lr}; bl 0x0052E08C; pop {r4,pc}' forwards both arguments unchanged to Fx_ApplyParticleState.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x005248B0-0x005248B8 is exactly push/bl 0x52e08c/pop with no argument shuffling, so it is a pure thunk; the R_T01 batch already renamed it Fx_ApplyParticleStateThunk, which the disassembly confirms. The batch's old 'UpdateParticleFlagsA' name described the callee's effect, not this function.",
+  "previous_name": "maybe_Fx_UpdateParticleFlagsA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x005248C0",
+  "name": "Fx_ApplyParticleStateThunk2",
+  "signature": "void Fx_ApplyParticleStateThunk2(int particle, int mode)",
+  "params": {
+   "param_1": "particle",
+   "param_2": "mode"
+  },
+  "summary": "Second 16-byte thunk with the same body as 0x005248B0: forwards both arguments unchanged to Fx_ApplyParticleState (0x0052E08C).",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x005248C0-0x005248C8 is 'push {r4,lr}; bl 0x52e08c; pop {r4,pc}', byte-identical to 0x005248B0; the R_T01 batch already renamed it Fx_ApplyParticleStateThunk2, which the disassembly confirms.",
+  "previous_name": "maybe_Fx_UpdateParticleFlagsB",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ }
+]

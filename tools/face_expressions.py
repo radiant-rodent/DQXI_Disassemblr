@@ -66,7 +66,12 @@ def scan() -> dict:
             subprocess.run([str(SPICA_EXE), "matanims", str(bch), str(out)], check=True, capture_output=True)
             rel = bch.relative_to(ROOT).as_posix()
             for anim in json.loads(out.read_text(encoding="utf-8")):
-                tracks = {e["target"]: e for e in anim["elements"] if e["material"] == "Face_high_MT"}
+                # matanims also dumps mesh-node visibility tracks (hand variants,
+                # props); those elements carry "node", not "material".
+                if anim.get("kind") == "visibility":
+                    continue
+                tracks = {e["target"]: e for e in anim["elements"]
+                          if e.get("material") == FACE_MATERIAL.decode()}
                 eyes = track(tracks.get("MaterialTexCoord0Trans"))
                 mouth = track(tracks.get("MaterialTexCoord1Trans"))
                 if not eyes and not mouth:

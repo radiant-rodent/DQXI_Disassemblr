@@ -1,0 +1,1826 @@
+[
+ {
+  "address": "0x00511774",
+  "name": "maybe_Regex_OpBuildOperandSets",
+  "signature": "u32 maybe_Regex_OpBuildOperandSets(RegexCursor* cursor, RegexValueList** out, RegexCursor* left, RegexCursor* right)",
+  "params": {
+   "cursor": "instruction cursor (opcode at *cursor+8, operand count at +0xc, flag field at +0xa)",
+   "out": "receives the result value-list node",
+   "left": "left operand list cursor",
+   "right": "right operand list cursor"
+  },
+  "summary": "Opcode handler of the pattern VM: allocates a result value, then for every operand of the instruction (0..count-1) asks 0x513FD4 for that operand's character-domain list, appends the list to the destination node, and finally appends the node's own domain. Returns 0 on success, 2 on allocation failure.",
+  "confidence": 0.4,
+  "evidence": "Callees are the known regex helpers: maybe_Regex_NodeAlloc (0x510E50), maybe_Regex_MatchNode (0x510EB8), 0x513FD4 (per-operand domain list), 0x514244/0x5141FC (operand cursor copies), 0x514390/0x51435C (intrusive-list node alloc/free). Reached only from the opcode table at 0x7AF1B0, slot 72 of the {handler,flags} table loaded by maybe_Regex_MatchSequence (0x51150C)."
+ },
+ {
+  "address": "0x00511ABC",
+  "name": "maybe_Regex_AddCharWithFoldVariants",
+  "signature": "u32 maybe_Regex_AddCharWithFoldVariants(RegexSet* set, u32 unused, u32 ch)",
+  "params": {
+   "set": "character range set being built",
+   "unused": "second argument, unused by the body",
+   "ch": "code unit to add"
+  },
+  "summary": "Adds a code unit plus its up-to-three case-fold variants to a character set: 0x513F78(ch) binary-searches the 1,397-entry fold table at 0x7B00EC and returns the record {key, alt1, alt2, alt3} (e.g. I -> i, U+0130, U+0131; K -> k, U+212A), and every non-zero alternative is inserted with 0x51384C so the pattern also matches those spellings.",
+  "confidence": 0.48,
+  "evidence": "0x51384C is the sorted interval-list insert; 0x513F78 is a binary search over the 8-byte {key,alt1,alt2,alt3} fold table (count 0x575, base 0x7B00EC, e.g. 0x49 'I' -> 0x69/0x130/0x131, 0x4B 'K' -> 0x6B/0x212A). Called from maybe_Regex_MatchNode (0x510EB8) for the 'class' opcode."
+ },
+ {
+  "address": "0x00511B44",
+  "name": "maybe_Regex_OpBuildOperandSetsSingle",
+  "signature": "u32 maybe_Regex_OpBuildOperandSetsSingle(RegexCursor* cursor, RegexValueList** out, RegexCursor* left, RegexCursor* right)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the result value-list node",
+   "left": "value list of the first operand",
+   "right": "value list of the second operand"
+  },
+  "summary": "Single-operand variant of 0x511774: when the instruction's flag field at +0xa is zero it just pushes the one value from *left; otherwise it walks the operand count at +0xa, computes each operand domain with 0x513FD4, appends the domains into the destination node and finally pushes the instruction's own value.",
+  "confidence": 0.38,
+  "evidence": "Same callee set as 0x511774 (0x510E50/0x510EB8/0x513FD4/0x514244/0x5141FC) but keyed on *(short*)(*cursor+0xa) instead of +0xc; both are entries of the 0x7AF1B0 opcode table."
+ },
+ {
+  "address": "0x00511DC0",
+  "name": "maybe_Regex_OpCopySetAndPush",
+  "signature": "int maybe_Regex_OpCopySetAndPush(RegexCursor* cursor, RegexSet** out, RegexSet** source)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the created set node",
+   "source": "set the new node is derived from"
+  },
+  "summary": "Allocates a result set node (0x510E50), fills it from the instruction with 0x510EB8, pushes it into the source list, then merges it with the destination set (0x510EB8 again) and only reports success (0) if both steps worked; returns 2 otherwise.",
+  "confidence": 0.42,
+  "evidence": "Uses maybe_Regex_NodeAlloc (0x510E50), maybe_Regex_MatchNode (0x510EB8) and the value helpers 0x6E796C/0x6E78BC (tagged variant type 3 = set). Opcode-table entry; returns the VM's 0/2 status.)"
+ },
+ {
+  "address": "0x00511E70",
+  "name": "Regex_OpPushValue",
+  "signature": "u32 Regex_OpPushValue(RegexCursor* cursor, u32* out, u32* value_ptr, u32* out_value)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the copied value",
+   "value_ptr": "list the node is appended to",
+   "out_value": "value to store"
+  },
+  "summary": "Allocates one list node, copies a single scalar into it with tag type 1 (0x6E7890) and links it at the head of the given list; advances the instruction cursor and returns 0, or 2 when the allocation fails.",
+  "confidence": 0.5,
+  "evidence": "0x6E796C = push node onto the intrusive list, 0x6E7890 writes {type=1, *src} - the tag layout 0x6E78EC/0x6E7890/0x6E78BC/0x6E78A4 belongs to the value variant (0=empty, 1=int, 2=u16, 3=set, 4=byte). Return codes 0/2 are the VM's ok/fail."
+ },
+ {
+  "address": "0x00511ED8",
+  "name": "maybe_Regex_OpCopySetNormalized",
+  "signature": "int maybe_Regex_OpCopySetNormalized(RegexCursor* cursor, RegexSet** out, RegexSet** source)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the created set node",
+   "source": "source set"
+  },
+  "summary": "Like 0x511DC0, but after merging the set it normalises it with 0x513A38 so the interval list is gap-free; returns 2 if the normalisation fails.",
+  "confidence": 0.4,
+  "evidence": "Identical shape to 0x511DC0 plus an explicit 0x513A38 (maybe_Regex_Set_Normalize) call between the merge and the success path; called from maybe_Regex_MatchNode's class/range opcodes."
+ },
+ {
+  "address": "0x00511FB4",
+  "name": "maybe_Regex_OpPushValueFromRight",
+  "signature": "u32 maybe_Regex_OpPushValueFromRight(RegexCursor* cursor, u32* out, u32* left, u32* right)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the pushed value",
+   "left": "unused by this handler",
+   "right": "value list that supplies the value"
+  },
+  "summary": "Pushes the scalar currently held in the right-hand operand list into the output list (tag type 1) and advances the cursor. Returns 0/2.",
+  "confidence": 0.42,
+  "evidence": "Calls only 0x6E796C + 0x6E7890 with *arg4 as the source (the right-operand cursor), whereas 0x511E70 uses *arg3; both are opcode-table entries of the same family."
+ },
+ {
+  "address": "0x0051203C",
+  "name": "maybe_Regex_OpPushValueFromLeft",
+  "signature": "u32 maybe_Regex_OpPushValueFromLeft(RegexCursor* cursor, u32* out, u32* left, u32* right)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the pushed value",
+   "left": "value list that supplies the value",
+   "right": "unused by this handler"
+  },
+  "summary": "Pushes the scalar held in the left-hand operand list into the output list (tag type 1) and advances the cursor. Returns 0/2.",
+  "confidence": 0.42,
+  "evidence": "Byte-identical twin of 0x511FB4 except that it reads *arg3 (left operand) and copies *arg3 to the caller's out slot; both are opcode-table entries."
+ },
+ {
+  "address": "0x005120A4",
+  "name": "maybe_Regex_OpReplaceOutputList",
+  "signature": "u32 maybe_Regex_OpReplaceOutputList(RegexCursor* cursor, RegexValueList** out, RegexCursor* left, RegexCursor* right)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the rebuilt result node",
+   "left": "operand/value source",
+   "right": "operand/value source"
+  },
+  "summary": "Rewrites the destination value list: with a zero flag it clears the old node list (unlinking and freeing every entry via 0x6E7910/0x51435C) and pushes one value; otherwise it iterates the operands, computes each domain with 0x513FD4 and appends them. Returns 0/2.",
+  "confidence": 0.4,
+  "evidence": "Callee mix of 0x511774 (0x513FD4) and the list-clearing loop seen in 0x513FD4's allocator path; g_* literals absent; opcode-table entry."
+ },
+ {
+  "address": "0x00512338",
+  "name": "maybe_Regex_OpPushValueAndVariants",
+  "signature": "u32 maybe_Regex_OpPushValueAndVariants(RegexCursor* cursor, RegexSet** out, RegexSet** target)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the copied set",
+   "target": "set that receives the variants"
+  },
+  "summary": "Copies the current value into a node with the 16-bit tag from the instruction's +0xa field (0x6E78D4) and then, for each of the up-to-three case-fold alternatives that 0x513F78 returns for the value, allocates a node in the target set and stores the alternative code unit.",
+  "confidence": 0.45,
+  "evidence": "0x6E78D4 is the tag-type-2 writer (u16 at +6), 0x513F78 is the binary search over the 0x7B00EC case-fold table, 0x514390 allocates the extra nodes; entry of the 0x7AF1B0 opcode table."
+ },
+ {
+  "address": "0x00512464",
+  "name": "maybe_Regex_OpAdvanceAndMatchSub",
+  "signature": "int maybe_Regex_OpAdvanceAndMatchSub(RegexCursor* cursor, u32 arg2, u32* value)",
+  "params": {
+   "cursor": "instruction cursor",
+   "arg2": "value forwarded to the sub-matcher",
+   "value": "scalar value forwarded to the sub-matcher"
+  },
+  "summary": "Advances the cursor, increments the nesting counter at cursor+0x18, runs the sub-sequence matcher 0x51150C on the same value and returns 0 when the instruction that follows is the end marker (byte 0x0a) or 3 when it is not.",
+  "confidence": 0.45,
+  "evidence": "Only caller/callee: calls maybe_Regex_MatchSequence (0x51150C) recursively and inspects *(char*)(*cursor+8) == 0x0a (the end-of-alternative marker also used by maybe_Regex_MatchNode); result 3 is the VM's 'backtrack' code."
+ },
+ {
+  "address": "0x005124D8",
+  "name": "maybe_Regex_OpPushValueTaggedByte",
+  "signature": "u32 maybe_Regex_OpPushValueTaggedByte(RegexCursor* cursor, RegexSet** out, RegexSet** target)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the created node",
+   "target": "list the node is appended to"
+  },
+  "summary": "Pushes a value into the result list using tag type 4 (a 8-bit payload) taken from the instruction's +0xa byte; returns 0/2.",
+  "confidence": 0.42,
+  "evidence": "Calls 0x6E796C + 0x6E78A4 (tag 4, byte at +6) with *(u8*)(*cursor+0xa) - the same byte the class opcodes read as their class index."
+ },
+ {
+  "address": "0x00512568",
+  "name": "maybe_Regex_OpPushNamedClassNormalized",
+  "signature": "u32 maybe_Regex_OpPushNamedClassNormalized(RegexCursor* cursor, RegexSet** out, RegexSet** target)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the created node",
+   "target": "list the node is appended to"
+  },
+  "summary": "Pushes the current value, adds the ranges of the predefined character class selected by the instruction byte (0x514264) and normalises the set (0x513A38) before reporting success.",
+  "confidence": 0.48,
+  "evidence": "0x514264 indexes g_005142C4 (start/count pairs) and g_005142C8 ((start,end) pairs of every class), 0x513A38 merges gaps; 0x6E78BC stores the set reference (tag 3)."
+ },
+ {
+  "address": "0x00512624",
+  "name": "maybe_Regex_OpPushNamedClass",
+  "signature": "u32 maybe_Regex_OpPushNamedClass(RegexCursor* cursor, RegexSet** out, RegexSet** target)",
+  "params": {
+   "cursor": "instruction cursor",
+   "out": "receives the created node",
+   "target": "list the node is appended to"
+  },
+  "summary": "Same as 0x512568 but without the final normalisation pass: pushes the value, adds the predefined class ranges from 0x514264 and succeeds.",
+  "confidence": 0.48,
+  "evidence": "Identical callee sequence to 0x512568 minus maybe_Regex_Set_Normalize (0x513A38); both read the class index from the instruction's +0xa byte."
+ },
+ {
+  "address": "0x005126CC",
+  "name": "Regex_Match_StateInit",
+  "signature": "int Regex_Match_StateInit(RegexMatchState* state, u32 allocator, u32 program, u32* result)",
+  "params": {
+   "state": "matcher state to initialise",
+   "allocator": "allocator used for the node pool",
+   "program": "compiled pattern program",
+   "result": "value passed through to the matcher"
+  },
+  "summary": "Creates a matcher state: stores the allocator, allocates the list head and the first set, runs the compiled program through 0x51150C, and then numbers the produced nodes consecutively in field +0x14. Returns 0 or 2.",
+  "confidence": 0.5,
+  "evidence": "Uses the same node/list layout as maybe_Regex_MatchSequence (0x51150C) and maybe_Regex_Set_Normalize; called by 0x5145E8 (line matcher) with the allocator of the dictionary matcher."
+ },
+ {
+  "address": "0x005127B0",
+  "name": "Regex_State_FindOrCreate",
+  "signature": "void Regex_State_FindOrCreate(RegexState** out, RegexMatcher* m, u32 key_array, u32* key_count)",
+  "params": {
+   "out": "receives the state or 0",
+   "m": "matcher being built",
+   "key_array": "array of 32-bit keys identifying the state",
+   "key_count": "number of keys"
+  },
+  "summary": "Looks up the state whose key array equals the requested one (memcmp of key_count words via 0x1009DC) in the bucket chain; on a miss it allocates a new state node, copies the keys, creates its bitset (0x5108A4), fills the edges (0x51310C) and links it into the bucket.",
+  "confidence": 0.55,
+  "evidence": "State identity is the comparison helper 0x1009DC (a merged libc-style compare that returns non-zero when the key arrays differ); 0x51093C initialises a node's two intrusive list heads and zero fields, 0x5108A4 is the bitset constructor (maybe_Text_Buffer_Init), 0x116A14 is the word copy and 0x51310C builds the edges; the bucket array is m[5] and the key count m[4], the same layout 0x5133C8 fills."
+ },
+ {
+  "address": "0x00512928",
+  "name": "Regex_State_SplitOverlappingClasses",
+  "signature": "u32 Regex_State_SplitOverlappingClasses(RegexState* state, RegexState** slot)",
+  "params": {
+   "state": "matcher state list",
+   "slot": "in/out: current state"
+  },
+  "summary": "Makes the character classes of the matcher disjoint: for the current class node it collects the ranges of all its children into a temporary set, then for every other class node whose ranges overlap that set (0x6591EC) it intersects (0x513DA4) and removes the overlap (0x513648), marking the covered keys; class nodes whose set becomes empty are unlinked and freed.",
+  "confidence": 0.5,
+  "evidence": "0x6591EC is the interval-list overlap test, 0x513DA4 the intersection and 0x513648 the subtraction on the sorted (start,end) lists, 0x6E7910 destroys the embedded value list; the per-state bitset is sized by the key count arg1[4], and bits are indexed by node+0x1c. This is the class-partitioning step of the matcher construction."
+ },
+ {
+  "address": "0x00512E5C",
+  "name": "maybe_Regex_State_DeduplicateKeys",
+  "signature": "u32 maybe_Regex_State_DeduplicateKeys(RegexState* state, RegexState** slot)",
+  "params": {
+   "state": "matcher state list",
+   "slot": "in/out: current state"
+  },
+  "summary": "Ensures every code unit belongs to only one class: for the current key node (type 2) it removes all other key nodes with the same 16-bit key, and for every class node (type 3) that contains the key it removes that key from the class (0x513760) and frees the class if it becomes empty.",
+  "confidence": 0.45,
+  "evidence": "Type-2 nodes are compared by the halfword at +0xe, type-3 membership is tested with 0x712094 (returns 1 when the value's tag-3 range list contains the code unit) and the key is removed with 0x513760; called by the matcher builder 0x5133C8/0x5131E4."
+ },
+ {
+  "address": "0x0051310C",
+  "name": "maybe_Regex_State_CollectEdges",
+  "signature": "u32 maybe_Regex_State_CollectEdges(RegexMatcher* m, RegexState** state)",
+  "params": {
+   "m": "matcher (key array at +0x14, allocator at +0x1c, node count at +4)",
+   "state": "state whose marked class slots are expanded"
+  },
+  "summary": "For every class slot that the bitset marks, appends all child values that are not the trivial value 1 to the state's edge list, copying the value with 0x6E7874. Returns 1 on success, 0 on allocation failure.",
+  "confidence": 0.4,
+  "evidence": "m[5] is the per-key node array (indexed with i*4), *m+0x24 is the visited bit array, 0x6E7874 copies a value with the allocator; the same three fields 0x5133C8 fills before calling it."
+ },
+ {
+  "address": "0x005131E4",
+  "name": "maybe_Regex_State_BuildRecursive",
+  "signature": "u32 maybe_Regex_State_BuildRecursive(RegexMatcher* m, RegexState** slot, u32 key_list, u32* key)",
+  "params": {
+   "m": "matcher",
+   "slot": "in/out: state node",
+   "key_list": "list of keys to test",
+   "key": "key to mark"
+  },
+  "summary": "Recursive matcher builder for a sub-expression: allocates the key bitset, marks the state's own class, deduplicates keys/splits overlapping classes, collects the child edges (0x51310C) and then recurses into itself plus 0x512E5C/0x512928; finally sets each state's flag byte (+0xb) when its key is present in the requested list.",
+  "confidence": 0.35,
+  "evidence": "Body is partly destroyed by Ghidra ('bad instruction data' at 0x5132be/0x5138dc, unaff_r4 used as the output object), but the surviving calls 0x5108A4/0x51310C/0x512E5C/0x512928/itself are unambiguous; only caller is 0x5133C8."
+ },
+ {
+  "address": "0x005133C8",
+  "name": "Regex_Match_Build",
+  "signature": "u32 Regex_Match_Build(RegexMatcher* m, u32 allocator, u32 key_list, u32* key)",
+  "params": {
+   "m": "matcher to build",
+   "allocator": "allocator for the state tables",
+   "key_list": "list of keys (list head) to index",
+   "key": "single key to mark"
+  },
+  "summary": "Builds the whole pattern matcher: counts the keys in key_list, allocates the key array and the visited bitset, creates the root state and runs the class-partition/expand passes (0x51310C, 0x512E5C, 0x512928, 0x5131E4), then masks every state against the requested key. Returns 1 on success, 0 on failure.",
+  "confidence": 0.5,
+  "evidence": "Called by 0x5145E8 and 0x5150B4 (pattern/word matching); allocates count*4 bytes plus a count-bit bitmap via 0x514390/0x5108A4, initialises the root node with 0x51093C (list heads + zero fields) and the bitset with 0x5108A4 (maybe_Text_Buffer_Init)."
+ },
+ {
+  "address": "0x00513648",
+  "name": "Regex_Set_Subtract",
+  "signature": "u32 Regex_Set_Subtract(RegexSet* set, RegexSet* other)",
+  "params": {
+   "set": "sorted range list to modify",
+   "other": "ranges to remove"
+  },
+  "summary": "Removes every range of the second sorted interval list from the first: overlapping intervals are clamped or split, fully covered ones are unlinked and freed. Returns 1, or 0 when a split needs an allocation that fails.",
+  "confidence": 0.55,
+  "evidence": "Both arguments are the intrusive sorted (u16 start,u16 end) lists used by 0x51384C/0x513760; nodes are freed with 0x51435C and split with 0x514390; same node layout (+8 start, +0xa end) throughout the set primitives."
+ },
+ {
+  "address": "0x00513760",
+  "name": "Regex_Set_RemoveChar",
+  "signature": "u32 Regex_Set_RemoveChar(RegexSet* set, u32 ch)",
+  "params": {
+   "set": "sorted range list",
+   "ch": "code unit to remove"
+  },
+  "summary": "Removes one code unit from a sorted range list, shrinking the containing interval or splitting it in two; returns 0 only if the split allocation fails.",
+  "confidence": 0.6,
+  "evidence": "Pure interval arithmetic on (start,end) halfwords: exact match deletes the node, boundary match adjusts one end, interior match splits via 0x514390; called by the merge passes 0x512E5C/0x5131E4."
+ },
+ {
+  "address": "0x0051384C",
+  "name": "Regex_Set_AddRange",
+  "signature": "u32 Regex_Set_AddRange(RegexSet* set, u32 start, u32 end)",
+  "params": {
+   "set": "sorted range list",
+   "start": "first code unit of the range",
+   "end": "last code unit of the range"
+  },
+  "summary": "Inserts a code range into a sorted list of disjoint ranges, merging it with the neighbours it touches or overlaps; the literal at 0x5139EC is the 0xFFFF end sentinel. Returns 1 on success, 0 on allocation failure.",
+  "confidence": 0.65,
+  "evidence": "Core primitive of the whole character-class code: called by maybe_Regex_MatchNode (0x510EB8), 0x511ABC, 0x514264 and itself; the list nodes are the same intrusive list with u16 start at +8 / u16 end at +0xa, freed with 0x51435C."
+ },
+ {
+  "address": "0x005139F0",
+  "name": "Regex_Set_AddList",
+  "signature": "u32 Regex_Set_AddList(RegexSet* set, RegexSet* source)",
+  "params": {
+   "set": "destination range set",
+   "source": "range list to merge in"
+  },
+  "summary": "Merges every (start,end) pair of a range list into the destination set via 0x51384C and stops at the first allocation failure.",
+  "confidence": 0.55,
+  "evidence": "One loop over the intrusive list (head = arg2, next at +4) calling 0x51384C with *(u16*)(node+8)/*(u16*)(node+0xa); sibling of 0x51384C/0x514264."
+ },
+ {
+  "address": "0x00513A38",
+  "name": "Regex_Set_Normalize",
+  "signature": "u32 Regex_Set_Normalize(RegexSet* set)",
+  "params": {
+   "set": "sorted range list to normalise"
+  },
+  "summary": "Rebuilds a range list so that it covers the whole 0..0xFFFF code space with contiguous, merged intervals (the 0xFFFF sentinel comes from 0x513DA0); the list is built in a temporary list first so an allocation failure leaves the original intact. Returns 1/0.",
+  "confidence": 0.6,
+  "evidence": "Fills the gaps between consecutive intervals with new nodes (0x514390) and always appends a final 0..0xFFFF-ish range; the u16 read from g_00513DA0 is 0xFFFF; called wherever an exact complement is needed (0x511ED8, 0x512568, 0x511ABC)."
+ },
+ {
+  "address": "0x00513DA4",
+  "name": "maybe_Regex_Set_Intersect",
+  "signature": "u32 maybe_Regex_Set_Intersect(RegexSet* set, RegexSet* other)",
+  "params": {
+   "set": "sorted range list to modify",
+   "other": "range list to intersect with"
+  },
+  "summary": "Intersects two sorted range lists in place: keeps only the overlapping parts of the first list, trimming or dropping intervals that the second list does not cover. Returns 1/0.",
+  "confidence": 0.48,
+  "evidence": "Same interval representation as 0x513648 (subtract) but keeps the overlap instead of removing it; called from the class-merge pass 0x512928 right next to 0x513648."
+ },
+ {
+  "address": "0x00513FD4",
+  "name": "maybe_Regex_BuildSuccessorList",
+  "signature": "u32 maybe_Regex_BuildSuccessorList(RegexValue* node, RegexValueList** out, RegexList* operands, RegexList* visited)",
+  "params": {
+   "node": "instruction/node whose operands are walked",
+   "out": "receives the built value list",
+   "operands": "list of operand cursors",
+   "visited": "list of already visited node values (memo)"
+  },
+  "summary": "Builds, for one expression node, the list of values produced by its operands: for every operand cursor it looks for an already visited node with the same key, recurses into the operand when it is new (copying the operand's value into the new list) and otherwise copies the memoised value; the recursion terminates through the visited list.",
+  "confidence": 0.4,
+  "evidence": "Callees are 0x514390/0x51435C (intrusive-list alloc/free), 0x6E78EC/0x6E7744 (tagged value copy, with the allocator at arg1[4]) and itself; the operand walks are the same {next,+0; prev,+4; key,+8} nodes used by 0x514244/0x5141FC, and the memo is the little `(&local_28,&local_28)` circular list. Called by every opcode handler (0x511774/0x511B44/0x5120A4) and by maybe_Regex_MatchSequence's driver."
+ },
+ {
+  "address": "0x00514264",
+  "name": "Regex_Set_AddPredefinedClass",
+  "signature": "u32 Regex_Set_AddPredefinedClass(RegexSet* set, u32 class_id)",
+  "params": {
+   "set": "destination range set",
+   "class_id": "index into the predefined class table"
+  },
+  "summary": "Adds the ranges of a named character class to a set: g_005142C4 holds {first_index,count} pairs into the (start,end) run table at g_005142C8, whose runs are inserted with 0x51384C. The class ids are the ones parsed from the '{Name}' table: Lower, Upper, ASCII, Alpha, Alnum, Punct, Graph, Print, Blank, Cntrl, XDigit and the Unicode block names (InLatin-1Supplement, InGreek, InCJKUnifiedIdeographs, ...).",
+  "confidence": 0.6,
+  "evidence": "Two-level table walk: `piVar5 = g_005142C4 + class_id*8; for (i = piVar5[0]; i < piVar5[1]+piVar5[0]; i++) 0x51384C(set, g_005142C8[i*4], g_005142C8[i*4+2])`; called by 0x512568/0x512624 (class opcodes) and 0x510EB8. The class-name table at 0x757C20 (entry 4 = 'Lower}', 6 = 'ASCII}', 15 = 'InLatin-1Supplement}', ...) shows exactly which classes exist."
+ },
+ {
+  "address": "0x005142CC",
+  "name": "Regex_ParsePredefinedClass",
+  "signature": "u32 Regex_ParsePredefinedClass(u32 text, u32 avail, u32* out_len)",
+  "params": {
+   "text": "UTF-16 text to match",
+   "avail": "number of code units available",
+   "out_len": "receives the matched length"
+  },
+  "summary": "Parses a '{Name}' character-class reference: compares the text against the 0x84-entry class-name table g_00514338 (entries are {name,len} and the names include the closing brace, e.g. 'Lower}', 'ASCII}', 'InLatin-1Supplement}'), returning the class number (0..0x83), the matched length and 0x85 when no name matches.",
+  "confidence": 0.6,
+  "evidence": "The table at 0x757C20 (loaded through g_00514338) has 0x84 8-byte {name,len} entries - 4='Lower}', 5='Upper}', 6='ASCII}', 14='XDigit}', 15..='InLatin-1Supplement}', 'InGreek}', 'InCJKUnifiedIdeographs}' ...; the comparison uses 0x100AD6 with r1 = the entry name, and the 0x85 return is the 'no match' code also used by the parser at 0x50F9A8."
+ },
+ {
+  "address": "0x005145E8",
+  "name": "Text_NgWord_MatchWord",
+  "signature": "u8* Text_NgWord_MatchWord(TextFilter* self, int* field_flags, u16* word, u32 word_len, void* fields, u32 field_count)",
+  "params": {
+   "self": "filter object (field +0x1b is the current dictionary index)",
+   "field_flags": "per-field bitmask, one bit per input field",
+   "word": "dictionary word (UTF-16) to compile",
+   "word_len": "word length in code units",
+   "fields": "16 normalised input strings",
+   "field_count": "number of input fields"
+  },
+  "summary": "Compiles one NG-word dictionary word into a matcher (0x50F9A8 parse run, 0x510A28 copy, 0x5126CC state init, 0x5133C8 build) and tests it against every input field with 0x50F6C8, setting that field's bit in field_flags for every hit.",
+  "confidence": 0.55,
+  "evidence": "Calls the text/regex pipeline maybe_Text_ParseRun (0x50F9A8), 0x510A28, Regex_Match_StateInit (0x5126CC), Regex_Match_Build (0x5133C8) and 0x50F6C8 (single-line match); the per-field loop is bounded by the same field_count that 0x514ABC passes in, and hits are OR'd into the per-field bitmask."
+ },
+ {
+  "address": "0x0051482C",
+  "name": "Text_NgWord_ValidateAll",
+  "signature": "int Text_NgWord_ValidateAll(TextFilter* self, u32* field_flags, u32 kind, u32 fields, u32 field_count)",
+  "params": {
+   "self": "filter object",
+   "field_flags": "per-field bitmask written by the matcher",
+   "kind": "text source passed to the dictionary-index classifier",
+   "fields": "array of field pointers",
+   "field_count": "number of fields"
+  },
+  "summary": "Loads the NG-word dictionary files 'ngword:/%d.txt' for every dictionary index that 0x5159F8 derives from the input text, and applies each file to all fields with 0x514ABC; returns the first negative file error or 0.",
+  "confidence": 0.6,
+  "evidence": "Literal 'ngword:/%d.txt' is formatted with 0x1002AC and opened with 0x504DB4; the dictionary indices come from 0x5159F8, and each pass sets self+0x1b to the dictionary id before calling 0x514ABC. Part of the text-validation worker 0x1DBD58."
+ },
+ {
+  "address": "0x00514ABC",
+  "name": "Text_NgWord_ApplyDictionary",
+  "signature": "u32 Text_NgWord_ApplyDictionary(TextFilter* self, u32* field_flags, u32 dict_file, u32 fields, u32 field_count)",
+  "params": {
+   "self": "filter object",
+   "field_flags": "per-field bitmask written by the matcher",
+   "dict_file": "opened ngword file object (vtable: line count +0x24, text +0x2c)",
+   "fields": "array of field strings",
+   "field_count": "number of fields"
+  },
+  "summary": "Applies one NG-word dictionary file to all input fields: prepares the 16 scratch buffers (self+0x2c, 0x80 halfwords each), normalises each field (0x51577C), optionally pre-tests it (0x515490), then fetches the file's UTF-16 text through its vtable, checks the 0xFEFF BOM and runs Text_NgWord_MatchWord for every newline-separated dictionary line.",
+  "confidence": 0.55,
+  "evidence": "0x51577C is the fullwidth/kana folder, 0x515490 the pre-test, the vtable slots +0x24 (line count) and +0x2c (fetch text) belong to the opened ngword file (0x504DB4), the BOM check is `*text == 0xfeff`, and Text_NgWord_MatchWord (0x5145E8) is called per 0x0a-separated line; caller 0x51482C formats the same 'ngword:/%d.txt' path."
+ },
+ {
+  "address": "0x00514CB4",
+  "name": "Text_NgWord_ValidateOne",
+  "signature": "int Text_NgWord_ValidateOne(TextFilter* self, u32* out, u32 pattern, u32 fields)",
+  "params": {
+   "self": "filter object (flag +0x1c selects the fast path)",
+   "out": "optional output pointer cleared on entry",
+   "pattern": "pattern object",
+   "fields": "UTF-16 field to validate"
+  },
+  "summary": "Validates one UTF-16 field against the NG-word dictionary: clamps the 0x200-byte working buffer (0x5154DC), splits it into dictionary indices (0x5159F8) and runs the line masker 0x514EBC for each of them; returns the first negative error or 0.",
+  "confidence": 0.55,
+  "evidence": "Mirror of 0x51482C but single-field: calls 0x5154DC/0x5159F8/0x514EBC, formats the same 'ngword:/%d.txt' literal and is called from the text-validation worker 0x1DBD58 with self+0x10 as the filter."
+ },
+ {
+  "address": "0x00514EBC",
+  "name": "Text_NgWord_MaskField",
+  "signature": "u32 Text_NgWord_MaskField(TextFilter* self, u32 flags, u32 a, u32 b, u32 pattern_list, int* dict_object)",
+  "params": {
+   "self": "filter object (flag at +0x1a disables the default pattern)",
+   "flags": "in/out flag block",
+   "a": "destination buffer",
+   "b": "destination buffer 2",
+   "pattern_list": "list of patterns to apply",
+   "dict_object": "opened dictionary object that supplies the words"
+  },
+  "summary": "Masks one field for one dictionary: when no dictionary id is active it first applies the default e-mail-style pattern (the UTF-16 regex at 0x730C68, loaded through the literal at 0x51504C), then reads every newline-separated word of the dictionary object and applies it with 0x515C60/0x5150B4 so each match is replaced by '*'.",
+  "confidence": 0.55,
+  "evidence": "The instruction at 0x514EDC loads the literal 0x51504C, which holds the UTF-16 regex '[a-zA-Z0-9][a-zA-Z0-9_.-]+@[a-zA-Z0-9][a-zA-Z0-9_.-]+\\.[a-zA-Z0-9]+' at 0x730C68; the dictionary text is read through vtable +0x24/+0x2c exactly as in 0x514ABC and masked by 0x5150B4."
+ },
+ {
+  "address": "0x005150B4",
+  "name": "Text_MaskPatternMatches",
+  "signature": "u8* Text_MaskPatternMatches(TextFilter* self, int* match_count, u32 dst1, u32 dst2, u8* mask, u32 pattern, u32 applied)",
+  "params": {
+   "self": "filter object",
+   "match_count": "incremented for every masked span",
+   "dst1": "UTF-16 output buffer",
+   "dst2": "second UTF-16 output buffer",
+   "mask": "per-character mask",
+   "pattern": "UTF-16 pattern string to apply",
+   "applied": "0 = first (default) pattern, 1 = dictionary word"
+  },
+  "summary": "Compiles/applies one pattern string to a field and masks every match: it walks the match spans reported by 0x50F3B4 and replaces each span with '*' (U+002A) in the output buffer, either the whole span or only its first/last character depending on self+0x30, maintaining the parallel character mask.",
+  "confidence": 0.6,
+  "evidence": "The replacement value is the literal 0x2a in both branches (`*(u16*)(arg3 + ...) = 0x2a`), match spans come from 0x50F3B4, and the helper builds the same 16-buffer layout as 0x514ABC; called by 0x514EBC."
+ },
+ {
+  "address": "0x005154DC",
+  "name": "Text_NormalizeFullwidth",
+  "signature": "void Text_NormalizeFullwidth(u16* dst, u8* mask, int dst_len, u16* src)",
+  "params": {
+   "dst": "normalised UTF-16 output",
+   "mask": "per-character flag (1 = mapped, 2 = combined kana)",
+   "dst_len": "capacity of dst in code units",
+   "src": "input UTF-16 text"
+  },
+  "summary": "Folds a UTF-16 string for dictionary matching: fullwidth Latin/ASCII (U+FF01..FF5A) to ASCII by +0x120, hiragana to katakana by +0x60, and small kana + dakuten/handakuten to their combined forms using the tables at 0x7418EA/0x741A02/0x741A56/0x74191A; the mask records which output units were folded/merged.",
+  "confidence": 0.65,
+  "evidence": "Range tests 0xff41/0xff21/0xff10 (+0x120), 0x3041 (+0x60), 0x30a1, 0xff66 + the 0xff9e/0xff9f combination tables; four literal pools point at u16 pair tables; the same folding appears in 0x51577C and in the NG-word dictionary loader."
+ },
+ {
+  "address": "0x0051577C",
+  "name": "Text_NormalizeFullwidthTrimmed",
+  "signature": "void Text_NormalizeFullwidthTrimmed(u16* dst, int dst_len, u16* src)",
+  "params": {
+   "dst": "normalised UTF-16 output",
+   "dst_len": "capacity in code units",
+   "src": "input UTF-16 text"
+  },
+  "summary": "Same fullwidth/kana folding as 0x5154DC but skips leading spaces (U+0020 and U+3000) so leading blanks cannot hide a dictionary match; used by the field masker before matching.",
+  "confidence": 0.6,
+  "evidence": "Identical table-driven folding code to 0x5154DC (same four literal pools 0x7418EA/0x741A02/0x741A56/0x74191A) plus an explicit skip loop `while (*src == 0x20 || *src == 0x3000) src++`; called by 0x514ABC."
+ },
+ {
+  "address": "0x005159F8",
+  "name": "maybe_Text_ClassifyInput",
+  "signature": "void maybe_Text_ClassifyInput(u32 stream, u8* out, int* out_count)",
+  "params": {
+   "stream": "input text stream",
+   "out": "receives one class byte per character",
+   "out_count": "in/out character count"
+  },
+  "summary": "Classifies the input text stream into the 0..16 character classes the NG-word validator uses (0 terminates), writing one class byte per character and counting them; the mapping comes from repeated reads of 0x50D9F8/0x50D738 (stream peek/read).",
+  "confidence": 0.45,
+  "evidence": "Switch over 0x50D9F8's return value with cases mapping to class bytes 0..0x10 and 0xD/0xE for the special markers; the reader pair 0x50D9F8/0x50D738 is the same one used by the UTF-8/UTF-16 helpers at 0x50DDAC/0x50DECC; callers are the NG-word validators 0x51482C/0x514CB4."
+ },
+ {
+  "address": "0x005164FC",
+  "name": "maybe_Sound_Channel_ApplyFlagRamp",
+  "signature": "int maybe_Sound_Channel_ApplyFlagRamp(SoundChannel* self, u32 slot)",
+  "params": {
+   "self": "channel parameter object (state +0xc, owner slot +0xd)",
+   "slot": "slave slot (0 or 1)"
+  },
+  "summary": "When the parameter block is initialised and no slot is owned yet, asks the sound driver to apply a masked 0x14-byte channel block that carries the byte-swapped 32-bit value from self+4, then records the slot in +0xd.",
+  "confidence": 0.4,
+  "evidence": "Sequence: 0x516ECC(driver,0,slot) acquires, builds `local_20[0]=2` (mask bit 1 = one word) with a byteswapped value, 0x5182CC writes it and returns the accepted mask; the same mask convention as 0x51658C/0x5166E4."
+ },
+ {
+  "address": "0x0051658C",
+  "name": "maybe_Sound_Channel_ApplyMaskedParam",
+  "signature": "u32 maybe_Sound_Channel_ApplyMaskedParam(SoundChannel* self, u32 value)",
+  "params": {
+   "self": "channel parameter object",
+   "value": "16-bit parameter value"
+  },
+  "summary": "Applies a single 16-bit channel parameter through 0x5182CC, keeps the mask of applied fields in +0xe and falls back to the driver's default volume in +0xf when nothing was applied; returns the accepted mask.",
+  "confidence": 0.45,
+  "evidence": "Builds {mask=1, value}; calls 0x5182CC (masked DSP parameter write) and stores the returned mask in +0xe; the fallback reads g_00516614->f_1d - the same 'default parameter' pattern as 0x516618."
+ },
+ {
+  "address": "0x00516618",
+  "name": "maybe_Sound_Channel_ClearParamRamp",
+  "signature": "void maybe_Sound_Channel_ClearParamRamp(SoundChannel* self)",
+  "params": {
+   "self": "channel parameter object"
+  },
+  "summary": "Stops all parameter ramps of the channel: submits an empty (zero-mask) 0x14-byte block through 0x5182CC, clears the owner slot, releases the driver slot with 0x516EEC and zeroes the embedded parameter block.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x5182CC with mask 0, 0x516EEC(driver,0,slot), sets the state byte +0xd to 0xff and clears +0/+4/+8/+0xc; the wide-block twin is 0x51698C."
+ },
+ {
+  "address": "0x005166E4",
+  "name": "maybe_Sound_Channel_ApplyFade",
+  "signature": "u32 maybe_Sound_Channel_ApplyFade(SoundChannel* self, float* fade, u32 avail, u32 buf_size)",
+  "params": {
+   "self": "channel parameter object",
+   "fade": "4 floats: volume, pitch/pan, fade fraction, is-long",
+   "avail": "free bytes in the channel buffer",
+   "buf_size": "usable buffer size"
+  },
+  "summary": "Converts a 4-float fade request (volumes clamped to 0..1, duration in ms) into the driver's 16-bit channel block and submits it; the required size (2 or 4 channels * ms * 0x280 bytes) must fit the remaining buffer.",
+  "confidence": 0.45,
+  "evidence": "Clamps with the 1.0f constants at 0x516834/0x51683C, converts milliseconds via the 1000 multiplier and 0x516838, calls VectorFloatToUnsigned(...,3), then 0x5182CC with mask 4 (five words); the 0x280-byte DSP frame stride is the one used by 0x519490/0x519674."
+ },
+ {
+  "address": "0x0051698C",
+  "name": "maybe_Sound_Channel_ClearWideParamRamp",
+  "signature": "void maybe_Sound_Channel_ClearWideParamRamp(SoundChannel* self)",
+  "params": {
+   "self": "channel parameter object"
+  },
+  "summary": "Wide-block variant of 0x516618: submits a zero mask through 0x518368 (0x34-byte DSP channel block), clears the owner slot and releases the driver slot.",
+  "confidence": 0.42,
+  "evidence": "Same body as 0x516618 but calls 0x518368 and 0x516EEC with bank 1; the mask/owner fields are the same (+0xd..+0xf)."
+ },
+ {
+  "address": "0x00516F1C",
+  "name": "Sound_Channel_Allocate",
+  "signature": "SoundChannelNode* Sound_Channel_Allocate(SoundChannelPool* pool, int time, SoundCallback callback, u32 arg)",
+  "params": {
+   "pool": "24-slot channel pool",
+   "time": "start time / priority (0x7fff = never)",
+   "callback": "called when the channel's time expires",
+   "arg": "callback argument"
+  },
+  "summary": "Allocates one of the 24 channel slots: preempts the lowest-priority entry when all 24 bits are set ('popcount(*pool) == 0x18'), takes the first free bit, initialises the slot object (0x518860), sorts it into the time-ordered list by its timestamp and stores the callback/argument.",
+  "confidence": 0.55,
+  "evidence": "Bit search uses the popcount helper at 0x51B66C (SWAR count compared with 0x18) and the CLZ idiom; slot objects live in pool[0x656+i] and their time field +0x20 is compared on insert; 0x518860 initialises a slot and 0x51A4D8/0x518D04 start it."
+ },
+ {
+  "address": "0x005170A0",
+  "name": "maybe_Sound_Channel_Reinsert",
+  "signature": "void maybe_Sound_Channel_Reinsert(SoundChannelPool* pool, SoundChannelNode* node, int time)",
+  "params": {
+   "pool": "channel pool",
+   "node": "channel node to move",
+   "time": "new timestamp"
+  },
+  "summary": "Unlinks a channel node from the time-ordered list and re-inserts it at the position matching its new timestamp, under the pool lock.",
+  "confidence": 0.48,
+  "evidence": "Pure list surgery on the same {next,+0x24; prev,+0x28; time,+0x20} nodes as 0x516F1C, wrapped in the 0x117E50/0x117ED0 reference-count lock (pool+0x10)."
+ },
+ {
+  "address": "0x0051717C",
+  "name": "Sound_Channel_ReleaseAll",
+  "signature": "void Sound_Channel_ReleaseAll(SoundChannelPool* pool)",
+  "params": {
+   "pool": "channel pool"
+  },
+  "summary": "Releases the driver resources of all 24 channel slots (calls the per-slot release helper 0x11EE78 on each slot's descriptor at +0x68).",
+  "confidence": 0.5,
+  "evidence": "Fixed loop `for (i=0;i<0x18;i++) 0x11EE78(pool[i+0x18dc]->f_68)` - the 0x18dc array is the per-slot descriptor table; 0x11EE78 is the DSP slot release used by the audio driver."
+ },
+ {
+  "address": "0x005171B0",
+  "name": "Sound_Channel_UpdateScheduler",
+  "signature": "void Sound_Channel_UpdateScheduler(SoundChannelPool* pool, int elapsed, u32 frame)",
+  "params": {
+   "pool": "channel pool",
+   "elapsed": "remaining time in the current frame",
+   "frame": "current frame/sequence id"
+  },
+  "summary": "Advances the channel scheduler: for every active node, if its time has expired and it is not the 'already fired' node it calls the node's callback, removes it from the list, clears its slot bit and then advances/releases the underlying DSP channel; nodes whose time has not come are progressed by the elapsed amount.",
+  "confidence": 0.55,
+  "evidence": "Iterates the time-sorted list (node+0x50 next), uses the 0x117E50/0x117ED0 lock, calls 0x51A4AC/0x51A45C/0x519D90/0x51A4D8 on the channel, and the same 'remaining time' arithmetic appears in 0x518A7C."
+ },
+ {
+  "address": "0x00517328",
+  "name": "Sound_Channel_StopAll",
+  "signature": "void Sound_Channel_StopAll(SoundChannelPool* pool)",
+  "params": {
+   "pool": "channel pool"
+  },
+  "summary": "Stops all 24 channel slots by calling the DSP channel reset (0x51A3C4) on each slot descriptor.",
+  "confidence": 0.5,
+  "evidence": "Fixed 0x18 loop over pool[i+0x18dc]->f_68 calling 0x51A3C4, the counterpart of 0x51717C (which calls 0x11EE78 instead)."
+ },
+ {
+  "address": "0x0051735C",
+  "name": "Sound_Channel_Free",
+  "signature": "void Sound_Channel_Free(SoundChannelPool* pool, SoundChannelNode* node)",
+  "params": {
+   "pool": "channel pool",
+   "node": "channel node to free"
+  },
+  "summary": "Frees one channel: clears its bit in the slot mask, decrements the count, unlinks the node and, if it was still playing, stops the DSP channel through 0x51A4AC(..,1); the node itself is not returned to a heap.",
+  "confidence": 0.5,
+  "evidence": "Bit clear `*pool &= ~(1 << (*node & 0xff))`, count--, the same unlink sequence as 0x5171B0, and the 0x51A4AC state call; symmetric to 0x516F1C."
+ },
+ {
+  "address": "0x00517418",
+  "name": "maybe_Sound_Channel_ReleaseBuffers",
+  "signature": "void maybe_Sound_Channel_ReleaseBuffers(SoundChannel* self, u32 sub)",
+  "params": {
+   "self": "channel object (buffers at +0x34/+0x38, driver slot +0x44)",
+   "sub": "sub-channel index"
+  },
+  "summary": "Drops both wave buffers of one sub-channel (0x519628/0x519BA4 release them), zeroes the pointers and clears the channel's active flag in the driver.",
+  "confidence": 0.48,
+  "evidence": "Calls the two buffer destructors, then 0x5185E4(driver, sub, 0) - the per-channel 'active' setter; the 8-byte stride `self + sub*8` matches the two-wave-buffer layout used by 0x51765C/0x517700."
+ },
+ {
+  "address": "0x00517478",
+  "name": "maybe_Sound_Channel_GetBaseTime",
+  "signature": "int maybe_Sound_Channel_GetBaseTime(SoundChannel* self)",
+  "params": {
+   "self": "channel object (mode bytes +2/+3)"
+  },
+  "summary": "Returns the driver time base for the channel's playback mode: one of the four constants at 0x5174E4/0x5174E8/0x5174EC/0x5174F0 selects the sync mode (checked with 0x518660) and 1500 or 10000 is added when the channel uses the short/long frame mode.",
+  "confidence": 0.4,
+  "evidence": "Four literal constants selected by *(char*)(self+3) and a mode query 0x518660, then +0x5dc (1500) or +10000 depending on *(char*)(self+2); the result is used as the time base of the frame clock in 0x518A7C."
+ },
+ {
+  "address": "0x005174F8",
+  "name": "maybe_Sound_Channel_MixBuffers",
+  "signature": "void maybe_Sound_Channel_MixBuffers(SoundChannel* self, u32 sub, u32 buf)",
+  "params": {
+   "self": "channel object (waves at +0x34/+0x38)",
+   "sub": "sub-channel",
+   "buf": "4-chunk sample buffer"
+  },
+  "summary": "Mixes one sub-channel into a 4-chunk sample buffer (chunks at +0, +0x280, +0x500, +0x780) by delegating to the active wave buffer's mixer (0x519538 or 0x519780).",
+  "confidence": 0.45,
+  "evidence": "Builds the 4 pointers buf+0x280*n exactly like 0x518E58..0x519490 do and calls 0x519538/0x519780 depending on which of the two wave slots is set; called from the frame update 0x518A7C."
+ },
+ {
+  "address": "0x00517624",
+  "name": "maybe_Sound_Channel_AddPlayPosition",
+  "signature": "void maybe_Sound_Channel_AddPlayPosition(SoundChannel* self)",
+  "params": {
+   "self": "channel object (elapsed counter at +0x30)"
+  },
+  "summary": "Adds the DSP's current playback position (0x518E58) to the channel's elapsed/sample counter when the query succeeds.",
+  "confidence": 0.42,
+  "evidence": "`i = 0x518E58(driver); if (i >= 0) self->f_30 += i;` - the same play-position query 0x518F10/0x518A7C use."
+ },
+ {
+  "address": "0x0051765C",
+  "name": "Sound_Channel_SetWaveBufferMain",
+  "signature": "u32 Sound_Channel_SetWaveBufferMain(SoundChannel* self, u32 sub, u32 wave)",
+  "params": {
+   "self": "channel object",
+   "sub": "sub-channel",
+   "wave": "wave buffer handle"
+  },
+  "summary": "Replaces the main wave buffer of a sub-channel: releases the old buffers, stores the new handle, initialises it with 0x519490 and marks the channel as using it.",
+  "confidence": 0.5,
+  "evidence": "Same release+install sequence as 0x517418 followed by `f_34 = wave; 0x519490(wave); 0x5185E4(driver, sub, 1)`."
+ },
+ {
+  "address": "0x00517700",
+  "name": "maybe_Sound_Channel_SetWaveBufferAux",
+  "signature": "u32 maybe_Sound_Channel_SetWaveBufferAux(SoundChannel* self, u32 sub, u32 wave)",
+  "params": {
+   "self": "channel object",
+   "sub": "sub-channel",
+   "wave": "aux wave buffer handle"
+  },
+  "summary": "Same as 0x51765C for the auxiliary wave buffer (0x519674), used for the second half of the double-buffered sample set.",
+  "confidence": 0.48,
+  "evidence": "Identical release+install code to 0x51765C but writes +0x38 and calls 0x519674 instead of 0x519490; 0x5174F8 later mixes whichever of the two is present."
+ },
+ {
+  "address": "0x0051779C",
+  "name": "Sound_RingBuffer_Write",
+  "signature": "void Sound_RingBuffer_Write(SoundRing* self, u32 src, int count)",
+  "params": {
+   "self": "ring buffer (base +0, size +4, cursor +0xc)",
+   "src": "source words",
+   "count": "word count"
+  },
+  "summary": "Copies count words from src into the circular sample buffer at the write cursor and wraps the cursor back to 0 at the end of the buffer.",
+  "confidence": 0.55,
+  "evidence": "One 0x116A14 memcpy of count*4 bytes to `*self + self[3]*4`, then `self[3] += count; if (self[3] >= self[1]) self[3] = 0` - a plain ring buffer; used to feed the DSP sample chunks."
+ },
+ {
+  "address": "0x00517942",
+  "name": "maybe_Sound_MixerThread_MainThumb",
+  "signature": "void maybe_Sound_MixerThread_MainThumb(u32 arg1, u32 arg2, int arg3, u32 arg4, int arg5)",
+  "params": {
+   "arg1": "thread argument",
+   "arg2": "thread argument",
+   "arg3": "thread argument",
+   "arg4": "thread argument",
+   "arg5": "frame time"
+  },
+  "summary": "Thumb-mode copy of the mixer thread body (same code as 0x517B6C): waits on the DSP events (0x51756C x2), runs the per-frame update (0x51867C), advances the 64-bit frame clock with svcGetSystemTick (svc 0x28) and loops while the run flag is set.",
+  "confidence": 0.42,
+  "evidence": "Thumb prologue and the same call set (0x51756C/0x518010/0x517E7C/0x51867C/0x117E50/0x117ED0/0x117B78) as 0x517B6C; the asm tree decodes this range as ARM, so only Ghidra's Thumb body is authoritative; no direct caller (thread entry)"
+ },
+ {
+  "address": "0x00517A38",
+  "name": "maybe_Sound_StartMixerThread",
+  "signature": "void maybe_Sound_StartMixerThread(void)",
+  "params": {},
+  "summary": "Thread entry that jumps into the mixer thread main loop (0x5177DC); installed as the sound thread start routine.",
+  "confidence": 0.45,
+  "evidence": "Tail call to 0x5177DC only; 0x5177DC is the non-returning thread body (same target as 0x51864C and 0x517A60); called once from the sound init path 0x54D8C0."
+ },
+ {
+  "address": "0x00517A60",
+  "name": "maybe_Sound_StartMixerThreadAlt",
+  "signature": "void maybe_Sound_StartMixerThreadAlt(void)",
+  "params": {},
+  "summary": "Second thread entry into the same mixer main loop; used by the decoder start/resume paths (0x54DF34/0x54DF60) instead of 0x517A38.",
+  "confidence": 0.42,
+  "evidence": "Second tail call to 0x5177DC, called from the sound decoder's start/shutdown helpers; identical to 0x517A38 apart from the caller set."
+ },
+ {
+  "address": "0x00517B6C",
+  "name": "Sound_MixerThread_Main",
+  "signature": "void Sound_MixerThread_Main(SoundMixer* self)",
+  "params": {
+   "self": "mixer/driver object (run flag +0xd, event flag +0xe, callback +0x28/0x2c)"
+  },
+  "summary": "The mixer thread: loops while the run flag is set, sleeps until the next frame (svcSleepThread via 0x518010 or the tick helper 0x517E7C), polls the two DSP event counters (0x51756C), calls the registered frame callback +0x28/0x2c and the per-frame update 0x51867C, and advances the 64-bit frame clock.",
+  "confidence": 0.55,
+  "evidence": "Same structure as the Thumb twin 0x517942; the callback slots +0x28/+0x2c and the mutex at +0x48 are the ones 0x5184AC/0x518550 register; 0x51867C is the frame update."
+ },
+ {
+  "address": "0x005182CC",
+  "name": "Sound_Channel_WriteParamBlock",
+  "signature": "void Sound_Channel_WriteParamBlock(u32 driver, int channel, u16* block)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "channel index (0..7)",
+   "block": "masked parameter block (mask, value, five words)"
+  },
+  "summary": "Copies a masked 0x14-byte DSP channel parameter block into the driver's per-channel table: mask bit0 = one halfword, bit1 = one word, bit2 = five words (filter/loop data), then marks the channel dirty and flushes the DSP cache.",
+  "confidence": 0.5,
+  "evidence": "Writes `func_001129F4() + channel*0x14` (the same table maybe_Snd_SetChannelFilterInfo 0x118E58 writes) and calls 0x118E58 to publish the dirty flags; the mask/field layout is identical to 0x118E58's."
+ },
+ {
+  "address": "0x005184AC",
+  "name": "maybe_Sound_Channel_InvokeCallback",
+  "signature": "void maybe_Sound_Channel_InvokeCallback(SoundChannel* self, u32 sub, u32 buf)",
+  "params": {
+   "self": "channel object (hook +0x14, arg +0x1c)",
+   "sub": "hook slot",
+   "buf": "4-chunk sample buffer"
+  },
+  "summary": "Calls the decode/mix hook registered for one of the channel's slots with the 4-chunk sample buffer (buf, buf+0x280, buf+0x500, buf+0x780) and the hook argument, under the driver lock.",
+  "confidence": 0.45,
+  "evidence": "`(**(code**)(self + sub*4 + 0x14))(&local_28, 0xa0, *(u32*)(self + sub*4 + 0x1c))` with the four chunk pointers; the same hook is installed by 0x518550."
+ },
+ {
+  "address": "0x00518550",
+  "name": "Sound_Channel_SetDecodeHook",
+  "signature": "void Sound_Channel_SetDecodeHook(SoundChannel* self, u32 sub, int hook, u32 arg)",
+  "params": {
+   "self": "channel object",
+   "sub": "hook slot",
+   "hook": "callback or 0",
+   "arg": "callback argument"
+  },
+  "summary": "Installs or removes the decode/mix hook of one channel slot and tells the driver whether the slot is active (0x118BAC).",
+  "confidence": 0.5,
+  "evidence": "Stores hook/arg at +0x14/+0x1c of the slot and calls maybe_Snd_SetUnitAdpcmWord (0x118BAC) with 0/1 - the same activation helper 0x5185E4 uses."
+ },
+ {
+  "address": "0x005185E4",
+  "name": "Sound_Channel_SetActive",
+  "signature": "void Sound_Channel_SetActive(SoundChannel* self, u32 sub, u8 active)",
+  "params": {
+   "self": "channel object (flags at +0x30)",
+   "sub": "slot",
+   "active": "new flag"
+  },
+  "summary": "Sets the per-slot active byte and publishes it to the driver through 0x118BAC(bank, slot).",
+  "confidence": 0.5,
+  "evidence": "`*(u8*)(self + sub + 0x30) = active; 0x118BAC(0x518644, sub)` - the flag byte read by 0x518550 and the driver helper 0x118BAC."
+ },
+ {
+  "address": "0x0051864C",
+  "name": "maybe_Sound_StartThread",
+  "signature": "void maybe_Sound_StartThread(void)",
+  "params": {},
+  "summary": "Entry point used by the DSP frame callback to (re)enter the mixer thread main loop 0x5177DC.",
+  "confidence": 0.4,
+  "evidence": "Single tail call to 0x5177DC, same as 0x517A38/0x517A60; the caller set (0x4FC230, 0x4FC4CC, 0x4FC598, 0x4FC8A8, 0x4FCC28, 0x4FCEA0, 0x4FCF9C, 0x4FD0C4) is the movie track start/pause family from N_033."
+ },
+ {
+  "address": "0x0051867C",
+  "name": "maybe_Sound_Frame_BeginUpdate",
+  "signature": "void maybe_Sound_Frame_BeginUpdate(void)",
+  "params": {},
+  "summary": "Starts a frame update: atomically bumps the frame counter, and when the driver is idle processes the pending start request (0x518010) and the per-frame channel table update (0x518A7C), then sets the 'frame in progress' state.",
+  "confidence": 0.45,
+  "evidence": "Increments the atomic word at g_0051870C+0x14, calls 0x518010 (frame start), 0x518A7C (channel update) and 0x112834; the same state bytes (+1,+3,+5) are read by 0x518A7C/0x518BE0."
+ },
+ {
+  "address": "0x00518860",
+  "name": "Sound_Channel_InitSlot",
+  "signature": "void Sound_Channel_InitSlot(SoundChannelNode* node)",
+  "params": {
+   "node": "newly allocated channel node"
+  },
+  "summary": "Initialises a channel slot: state byte = 2, default timing/list/callback fields cleared, the DSP volume/frequency defaults installed, and the slot's wave-buffer descriptor reset (0x519C1C).",
+  "confidence": 0.55,
+  "evidence": "Writes the same field block 0x518A7C/0x518BE0 later read (state +4, times +0x18/+0x1c, callbacks +0x2c/+0x30, descriptor +0x68) and calls maybe_Sound_WaveBuffer_Reset (0x519C1C); called by 0x516F1C."
+ },
+ {
+  "address": "0x00518A7C",
+  "name": "Sound_Frame_UpdateChannels",
+  "signature": "void Sound_Frame_UpdateChannels(SoundDriver* self)",
+  "params": {
+   "self": "sound driver (frame counter +0x131e, channel table halves at +0x109c/+0x10ac and +0x1174)"
+  },
+  "summary": "Per-frame channel update: reads the system tick, computes the frame delta (0x517478/0x516E58), mixes both sub-channels of the current half (0x5174F8), runs the channel scheduler (0x5171B0) with the remaining time and switches the published buffer half.",
+  "confidence": 0.5,
+  "evidence": "Reads the 24-entry channel pointer tables at +0x109c/+0x10ac/+0x1174 (0x60-byte halves) and calls 0x5174F8, 0x5171B0, 0x51717C, 0x517328; wrapped in the 0x11E99C/0x11E9B4/0x11E9A8 critical section."
+ },
+ {
+  "address": "0x00518BE0",
+  "name": "Sound_Frame_PublishChannelTable",
+  "signature": "void Sound_Frame_PublishChannelTable(SoundDriver* self)",
+  "params": {
+   "self": "sound driver (double-buffered channel table)"
+  },
+  "summary": "Publishes the next frame's channel table: reads the free-running frame counter, copies the 24 channel descriptors of the new half (0x519DCC), copies the 0x260-byte DSP parameter block (0x116C10) and advances the buffer index.",
+  "confidence": 0.5,
+  "evidence": "0x18-iteration copy of `self + half*0x60 + ch*4 + 0x1174`, a 0x260-byte 0x116C10 copy from +0x1314/+0x1328 and 0x51779C for the sample ring; the half index is `counter & 1` as in 0x518A7C."
+ },
+ {
+  "address": "0x00518D04",
+  "name": "Sound_DspChannel_Start",
+  "signature": "u32 Sound_DspChannel_Start(u32 driver, int channel)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index"
+  },
+  "summary": "Starts a DSP channel: clears the low byte of its status word and raises command bit 0x10000 in the channel's DSP command word (the 'key on' bit).",
+  "confidence": 0.55,
+  "evidence": "`puVar2->f_28 = (u16)puVar2[0x28] & 0xff00; *puVar2 |= 0x10000;` on `driver + (half&1)*0x60 + channel*4 + 0x10b4`; called by 0x51A4AC/0x51A4D8 when a channel enters state 1."
+ },
+ {
+  "address": "0x00518D78",
+  "name": "Sound_DspChannel_Stop",
+  "signature": "u32 Sound_DspChannel_Stop(u32 driver, int channel)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index"
+  },
+  "summary": "Stops a DSP channel: sets its status word to 1 and raises the same 0x10000 command bit.",
+  "confidence": 0.5,
+  "evidence": "Same access pattern as 0x518D04 with `puVar2->f_28 = 1`; used by the pause path 0x51A45C."
+ },
+ {
+  "address": "0x00518DE8",
+  "name": "maybe_Sound_DspChannel_SetLoopCount",
+  "signature": "u32 maybe_Sound_DspChannel_SetLoopCount(u32 driver, int channel, u16 count)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index",
+   "count": "loop count / sample offset"
+  },
+  "summary": "Writes the 16-bit loop count at +0xa2 of the channel's DSP state and raises command bit 0x10000000.",
+  "confidence": 0.45,
+  "evidence": "`*(u16*)((int)puVar2 + 0xa2) = arg3; *puVar2 |= 0x10000000;` - the same command-word convention as 0x518D04/0x51914C."
+ },
+ {
+  "address": "0x00518E58",
+  "name": "Sound_DspChannel_GetPlayPosition",
+  "signature": "u32 Sound_DspChannel_GetPlayPosition(u32 driver)",
+  "params": {
+   "driver": "sound driver singleton"
+  },
+  "summary": "Returns the current playback position (16-bit counter at +2 of the DSP channel state selected by the frame half), or 0xFFFFFFFF when the DSP is not running.",
+  "confidence": 0.5,
+  "evidence": "Reads `*(u16*)(*(int*)(driver + (half)*4 + 0x10ac) + 2)`; the same 'position' value is added to the channel clock by 0x517624 and used by the frame update 0x518A7C."
+ },
+ {
+  "address": "0x00518EA8",
+  "name": "maybe_Sound_DspChannel_Pause",
+  "signature": "u32 maybe_Sound_DspChannel_Pause(u32 driver, int channel)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index"
+  },
+  "summary": "Sets the DSP channel's pause command bit (0x10) in its command word.",
+  "confidence": 0.45,
+  "evidence": "`*puVar2 |= 0x10;` on the channel state; called by the refill path 0x519FCC when a channel is starved."
+ },
+ {
+  "address": "0x00518F10",
+  "name": "maybe_Sound_DspChannel_SetWaveBuffer",
+  "signature": "u32 maybe_Sound_DspChannel_SetWaveBuffer(u32 driver, int channel, u32* wave, u32 sub)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index",
+   "wave": "wave descriptor (length at +4, flags at +4/+0x12)",
+   "sub": "sub-wave index (0..3)"
+  },
+  "summary": "Programs one of the four sub-waves of a DSP channel: converts the sample count to bytes for the channel's format bits (8/16/32-bit, mono/stereo by shifting), byte-swaps the addresses, stores loop points and raises the wave-buffer update bit 0x80000.",
+  "confidence": 0.45,
+  "evidence": "Format decode `(state & 0xf) >> 2` with shifts of 1/2 and the 0xd/8 rounding, byte-swap `x>>16 | x<<16`, fields at +0x4a/+0x5a/+0xbe and command bit 0x80000 - the same 5-word stride as 0x51927C."
+ },
+ {
+  "address": "0x0051908C",
+  "name": "maybe_Sound_DspChannel_UpdateSampleInfo",
+  "signature": "u32 maybe_Sound_DspChannel_UpdateSampleInfo(u32 driver, int channel, u32* wave)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index",
+   "wave": "wave descriptor"
+  },
+  "summary": "If the queued wave's id matches the channel's sample id, copies its sample rate/loop flag/address into the DSP state and raises command bit 8.",
+  "confidence": 0.42,
+  "evidence": "Compares `*(short*)(*(int*)(driver + half*0x60 + channel*4 + 0x1174) + 8)` with wave+0x12, writes +0xbe/+0x2c and `*puVar2 |= 8`; called from 0x519FCC."
+ },
+ {
+  "address": "0x0051914C",
+  "name": "maybe_Sound_DspChannel_Flush",
+  "signature": "u32 maybe_Sound_DspChannel_Flush(u32 driver, int channel)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index"
+  },
+  "summary": "Raises the DSP channel's flush/stop command bit 0x20000000 in its command word.",
+  "confidence": 0.45,
+  "evidence": "`*puVar2 |= 0x20000000;` on the channel state; called by 0x51A4AC/0x51A4D8 after a key-on and by 0x51914C."
+ },
+ {
+  "address": "0x0051927C",
+  "name": "maybe_Sound_DspChannel_SetupSample",
+  "signature": "u32 maybe_Sound_DspChannel_SetupSample(u32 driver, int channel, u32* wave, u32 flags)",
+  "params": {
+   "driver": "sound driver singleton",
+   "channel": "DSP channel index",
+   "wave": "wave descriptor",
+   "flags": "format/loop flags"
+  },
+  "summary": "Full DSP channel sample setup: converts size/length according to the format bits, aligns through 0x123E18, stores the sample and loop addresses, copies up to two loop halfwords and raises bits 0x40200000.",
+  "confidence": 0.45,
+  "evidence": "Same format math as 0x518F10 but writes +0x2b/+0x2c/0x2d/+0x2f and +0xb6, calls 0x123E18 (size align) and 0x11FFD8; called by 0x519FCC when a channel starts a new wave."
+ },
+ {
+  "address": "0x00519490",
+  "name": "Sound_WaveBuffer_Init",
+  "signature": "u32 Sound_WaveBuffer_Init(SoundWaveBuffer* self)",
+  "params": {
+   "self": "wave buffer (7 sample chunks, base +0x14/+0x18, count +0x55)"
+  },
+  "summary": "Initialises a wave buffer: lays out the 0x280-byte sample chunks after the aligned buffer base, zero-fills the buffer (0x1113EC) and resets the per-chunk write offsets; returns 1 the first time and 0 if already initialised.",
+  "confidence": 0.5,
+  "evidence": "`*(u32*)(self + i*4 + 0x1c) = i*0x280*self->f_3c + (base+0x1f & ~0x1f)` for i < count, then 0x1113EC memset and the per-chunk zero loop; the 0x280-byte DSP frame stride is also used by 0x519674/0x5174F8."
+ },
+ {
+  "address": "0x00519674",
+  "name": "maybe_Sound_WaveBuffer_ComputeLayout",
+  "signature": "void maybe_Sound_WaveBuffer_ComputeLayout(SoundWaveBuffer* self)",
+  "params": {
+   "self": "wave buffer descriptor (sizes at +4/+0xc, chunk pointers at +0x3c..+0x80)"
+  },
+  "summary": "Computes the chunk pointers of a wave buffer from its sample rate/size: converts the two float-derived counts with VectorFloatToUnsigned(...,3), spaces the chunks 0x280 bytes apart, then derives the four mix-buffer pointers and calls 0x5199B0 to finish the setup.",
+  "confidence": 0.45,
+  "evidence": "Ceil/convert pairs through VectorUnsignedToFloat/VectorFloatToUnsigned with the 0x1f alignment, 0x280-byte chunk spacing and the 4 pointer pairs +0x3c/+0x40/+0x4c/+0x5c/+0x60/+0x68/+0x7c/+0x80; result flag +0x104."
+ },
+ {
+  "address": "0x00519C1C",
+  "name": "maybe_Sound_WaveBuffer_Reset",
+  "signature": "void maybe_Sound_WaveBuffer_Reset(SoundWaveBuffer* self)",
+  "params": {
+   "self": "wave buffer / sub-channel descriptor"
+  },
+  "summary": "Resets a wave-buffer descriptor to its default state: state byte 2, default addresses and command word, counters and the list head cleared, and the embedded sync primitive reinitialised (0x6722C4).",
+  "confidence": 0.42,
+  "evidence": "Writes state +0xd = 2, the default command word +0x6c (bits 1/0x22/4 set), the default pointer block +0x38..+0x64 and calls 0x6722C4; called by 0x518860 with node->f_68."
+ },
+ {
+  "address": "0x00519D90",
+  "name": "maybe_Sound_Channel_FlushPriority",
+  "signature": "void maybe_Sound_Channel_FlushPriority(SoundChannelNode* node)",
+  "params": {
+   "node": "channel node (command word +0x6c, id +0/+2)"
+  },
+  "summary": "If the channel's command word has the 0x8000 'priority expired' bit set, tells the DSP to release the channel (0x518DE8) and clears the bit.",
+  "confidence": 0.4,
+  "evidence": "`if ((node[0x1b] & 0x8000) != 0) { 0x518DE8(driver, *node & 0xff, (short)node[1]); node[0x1b] &= 0x7fff; }`; called by the scheduler 0x5171B0."
+ },
+ {
+  "address": "0x00519DE8",
+  "name": "maybe_Sound_Channel_ApplyCommand",
+  "signature": "void maybe_Sound_Channel_ApplyCommand(SoundChannelNode* self, u16* packet)",
+  "params": {
+   "self": "channel node (stream id +4, command word +8, buffer list +0x30)",
+   "packet": "6-halfword command packet"
+  },
+  "summary": "Applies a command packet to a channel: if the packet's stream id matches, it stores the packet's byte-swapped word, walks the buffer list until the packet's start id and marks the skipped buffers state 3, and derives the running state from the packet's low byte.",
+  "confidence": 0.45,
+  "evidence": "Compares packet[1] with *(u16*)(self+4), byte-swaps packet+2, uses the buffer states 1/2/3/4 and the DMB (`coproc_moveto_Data_Memory_Barrier`) before publishing; the same protocol appears in 0x519FCC."
+ },
+ {
+  "address": "0x00519FCC",
+  "name": "Sound_Channel_Refill",
+  "signature": "void Sound_Channel_Refill(SoundChannelNode* self)",
+  "params": {
+   "self": "channel node (buffer list +0x30, cursor +0x34, state +0x6f)"
+  },
+  "summary": "Refills a channel's wave buffers: releases exhausted buffers, starts up to five queued buffers (0x518F10/0x51908C) and advances the packet cursor; when the queue is empty it pauses the channel (0x518EA8) and stops it.",
+  "confidence": 0.5,
+  "evidence": "Walks the buffer list, calls 0x518EA8/0x51908C/0x518F10/0x51927C, uses the 5-slot limit at +0x34 and the DMB before state changes; called from the frame update."
+ },
+ {
+  "address": "0x0051A218",
+  "name": "Sound_Channel_QueueBuffer",
+  "signature": "void Sound_Channel_QueueBuffer(SoundChannelNode* self, SoundWaveBuffer* buf)",
+  "params": {
+   "self": "channel node (queue head +0x30, queue count +6)",
+   "buf": "wave buffer to enqueue"
+  },
+  "summary": "Queues a wave buffer on a channel: rejects buffers without data, unlinks it from any other list, marks it state 1, appends it to the channel's buffer list and gives it the next sequence id.",
+  "confidence": 0.5,
+  "evidence": "`if (*(int*)(buf+4) == 0) { buf->f_11 = 3; return; }`, then list append at self->f_30 and `buf->f_12 = self[6]++`; same node layout as 0x51A2BC/0x519FCC."
+ },
+ {
+  "address": "0x0051A2BC",
+  "name": "maybe_Sound_Channel_CancelBuffer",
+  "signature": "void maybe_Sound_Channel_CancelBuffer(SoundChannelNode* self, SoundWaveBuffer* buf)",
+  "params": {
+   "self": "channel node",
+   "buf": "buffer to cancel"
+  },
+  "summary": "Marks a specific queued buffer as cancelled so the refill path drops it; the channel's cancel flag (+0x6f bit 1) is set when the buffer was not already released.",
+  "confidence": 0.45,
+  "evidence": "Walks the same buffer list as 0x51A218/0x51A31C and sets `self->f_6f |= 2` when `buf->f_11 != 3`."
+ },
+ {
+  "address": "0x0051A31C",
+  "name": "Sound_Channel_FlushBuffers",
+  "signature": "void Sound_Channel_FlushBuffers(SoundChannelNode* self)",
+  "params": {
+   "self": "channel node"
+  },
+  "summary": "Flushes the channel: marks every queued buffer state 3, clears the queue head/pointers, sets the lock-out bit 0x8000, bumps the stream id and clears the buffer list.",
+  "confidence": 0.5,
+  "evidence": "Loop `buf->f_11 = 3` over self->f_30, then zeroes +0x30/+0x34/+0x36, sets `self->f_6c |= 0x8000` and increments *(short*)(self+4); called by 0x51A4AC on start."
+ },
+ {
+  "address": "0x0051A45C",
+  "name": "Sound_Channel_Pause",
+  "signature": "void Sound_Channel_Pause(SoundChannelNode* self)",
+  "params": {
+   "self": "channel node (id +0)"
+  },
+  "summary": "Pauses a channel by sending the DSP pause command for its channel index and setting the paused byte.",
+  "confidence": 0.5,
+  "evidence": "`0x518D78(driver, *self & 0xff); *(u8*)(self+0xc) = 1;`; called by the scheduler 0x5171B0 and by 0x51A4AC."
+ },
+ {
+  "address": "0x0051A4AC",
+  "name": "Sound_Channel_SetState",
+  "signature": "void Sound_Channel_SetState(SoundChannelNode* self, int state)",
+  "params": {
+   "self": "channel node (descriptor +0x68)",
+   "state": "0 = stop, 1 = play, 2 = pause"
+  },
+  "summary": "Sets a channel's playback state: writes the state byte, and for play/pause sends the matching DSP key-on (0x518D04) / flush (0x51914C) command for the channel index stored in the descriptor, mirroring the state there.",
+  "confidence": 0.5,
+  "evidence": "`*(u8*)(self+4) = state; if (state == 1) 0x51A31C(self->f_68); *(u8*)(f68+0xd) = state; ... 0x518D04/0x51914C(driver, *f68 & 0xff)`; called by the movie/audio track start-pause-resume helpers and the scheduler."
+ },
+ {
+  "address": "0x0051A4D8",
+  "name": "maybe_Sound_Channel_SetStateSimple",
+  "signature": "void maybe_Sound_Channel_SetStateSimple(SoundChannelPage* self, int state)",
+  "params": {
+   "self": "channel page (DSP descriptor pointer at +0x68)",
+   "state": "0 = stop, 1 = play, 2 = pause"
+  },
+  "summary": "Same state change as 0x51A4AC but without the outer node: it sets the state byte of the DSP descriptor and issues the key-on/flush command for its channel.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the second half of 0x51A4AC (0x518D04 + 0x51914C), called by 0x516F1C when a newly allocated channel is started."
+ },
+ {
+  "address": "0x0051A5E4",
+  "name": "maybe_Os_ReleaseSharedResource",
+  "signature": "void* maybe_Os_ReleaseSharedResource(u32 handle)",
+  "params": {
+   "handle": "handle/owner id stored in the entry's +0xc"
+  },
+  "summary": "Searches the global shared-resource list at 0x7F2358 for the entry whose owner field (+0xc) equals the handle, unlinks it and clears its links; returns the entry or NULL.",
+  "confidence": 0.45,
+  "evidence": "Intrusive list walk at g_0051A6C0+0x18 with the 0x117E50/0x117ED0 lock; called by maybe_Svc_ReleaseSharedState (0x5042F8) / maybe_Svc_ReleaseAllSharedState (0x504324) right after the matching 0x51A6C4/0x51A6FC IPC command."
+ },
+ {
+  "address": "0x0051A734",
+  "name": "Gfx_Y2r_SetRotation",
+  "signature": "void Gfx_Y2r_SetRotation(u8 rotation)",
+  "params": {
+   "rotation": "rotation mode (0 = none)"
+  },
+  "summary": "Checked Y2R IPC wrapper: sends command 0x00050040 (set rotation) and aborts on a negative result.",
+  "confidence": 0.55,
+  "evidence": "Wrapper around 0x51AC78, whose literal pool holds 0x00050040; the whole cluster is the 'y2r:u' session opened by Gfx_Y2r_Init (0x5012BC) and driven by Gfx_Y2r_Convert (0x501300) - see N_033."
+ },
+ {
+  "address": "0x0051A750",
+  "name": "Gfx_Y2r_SetSrcParamsU",
+  "signature": "void Gfx_Y2r_SetSrcParamsU(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "physical U-plane address",
+   "size": "plane size in bytes",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Checks that the U-plane address is inside the linear heap (0x1180F0/0x1180E0) or the FCRAM region (0x123DB4/0x124CEC/0x124CDC), then sends Y2R command 0x00110102 with the four parameters.",
+  "confidence": 0.5,
+  "evidence": "Two address-range checks followed by 0x51ACB4 (command 0x00110102); Gfx_Y2r_Convert calls it with the half-resolution chroma plane."
+ },
+ {
+  "address": "0x0051A808",
+  "name": "Gfx_Y2r_SetSrcParamsV",
+  "signature": "void Gfx_Y2r_SetSrcParamsV(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "physical V-plane address",
+   "size": "plane size in bytes",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Same range check as 0x51A750 followed by Y2R command 0x00120102 for the V plane.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x51A750 with 0x51AD10 (command 0x00120102); third of the three plane setups in Gfx_Y2r_Convert."
+ },
+ {
+  "address": "0x0051A8C0",
+  "name": "Gfx_Y2r_SetSrcParamsY",
+  "signature": "void Gfx_Y2r_SetSrcParamsY(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "physical Y-plane address",
+   "size": "plane size in bytes",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Range-checks the luma plane address and sends Y2R command 0x00100102 with the four parameters; this is the first plane Gfx_Y2r_Convert programs.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51AD6C (command 0x00100102) after the linear-heap check; called with (arg6, w*h, w, arg9) by 0x501300."
+ },
+ {
+  "address": "0x0051A9B4",
+  "name": "Gfx_Y2r_SetDstParams",
+  "signature": "void Gfx_Y2r_SetDstParams(u32 addr, u32 size, u32 line_bytes, u32 lines)",
+  "params": {
+   "addr": "physical RGB destination address",
+   "size": "byte size",
+   "line_bytes": "bytes per line",
+   "lines": "line count"
+  },
+  "summary": "Range-checks the RGB destination address and sends Y2R command 0x00180102 with (address, byte size, line bytes, lines); the size is width*height*bytes-per-pixel for the selected output format.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51ADC8 (command 0x00180102); 0x501300 computes the three sizes from the output format (4/3/2 bytes per pixel)."
+ },
+ {
+  "address": "0x0051AA6C",
+  "name": "Gfx_Y2r_SetInputLines",
+  "signature": "void Gfx_Y2r_SetInputLines(u16 lines)",
+  "params": {
+   "lines": "input line count"
+  },
+  "summary": "Checked wrapper for Y2R command 0x001C0040 (input line count).",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51AE24, whose pool holds 0x001C0040; invoked with the picture height in Gfx_Y2r_Convert."
+ },
+ {
+  "address": "0x0051AA88",
+  "name": "Gfx_Y2r_OpenSession",
+  "signature": "u32 Gfx_Y2r_OpenSession(u32* handle, const char* service)",
+  "params": {
+   "handle": "receives the session handle",
+   "service": "service name ('y2r:u')"
+  },
+  "summary": "Opens the colour-conversion service: 0x113430 init, strlen, then srvGetServiceHandle (0x1192C0) into the caller's handle, sends the Y2R initialise command (0x51AF68) and caches an 'already open' flag.",
+  "confidence": 0.55,
+  "evidence": "Matches N_033's Gfx_Y2r_Init evidence: the 'y2r:u' literal at 0x005012F4 is passed to 0x001192C0 after 0x0011CCA0(strlen); 0x51AF68 issues command 0x002B0000 on the new handle."
+ },
+ {
+  "address": "0x0051AB30",
+  "name": "Gfx_Y2r_SetInputFormat",
+  "signature": "void Gfx_Y2r_SetInputFormat(u8 format)",
+  "params": {
+   "format": "input YUV format (1 = YUV420 planar)"
+  },
+  "summary": "Checked wrapper for Y2R command 0x00010040 (set input format); Gfx_Y2r_Convert calls it with 1.",
+  "confidence": 0.6,
+  "evidence": "Calls 0x51AE90 whose literal pool holds 0x00010040, the documented Y2R 'SetInputFormat' command; the value 1 matches the planar YUV420 source planes used by the movie presenter."
+ },
+ {
+  "address": "0x0051AB4C",
+  "name": "Gfx_Y2r_StopConversion",
+  "signature": "void Gfx_Y2r_StopConversion(void)",
+  "params": {},
+  "summary": "Checked wrapper for Y2R command 0x00270040 (stop conversion); called before programming a new frame.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51AECC whose pool holds 0x00270040; first call of Gfx_Y2r_Convert."
+ },
+ {
+  "address": "0x0051AB68",
+  "name": "Gfx_Y2r_SetOutputFormat",
+  "signature": "void Gfx_Y2r_SetOutputFormat(u8 format)",
+  "params": {
+   "format": "output pixel format (0 = RGBA8, 1 = RGB8, 2/3 = 16-bit)"
+  },
+  "summary": "Checked wrapper for Y2R command 0x00030040 (set output format); the caller's format byte also selects the destination bytes per pixel (4/3/2).",
+  "confidence": 0.6,
+  "evidence": "Calls 0x51AEFC whose pool holds 0x00030040 (the documented Y2R SetOutputFormat command); 0x501300 maps the same byte to 4/3/2 bytes per pixel for the destination size."
+ },
+ {
+  "address": "0x0051AB84",
+  "name": "maybe_Gfx_Y2r_WaitForCompletion",
+  "signature": "u32 maybe_Gfx_Y2r_WaitForCompletion(void)",
+  "params": {},
+  "summary": "Polls the Y2R status command (0x00260040) and returns non-zero when the unit reports the 'conversion finished' code kept in g_0051ABA8.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x51AF38 (command 0x00260040) and compares with the literal at 0x51ABA8; Gfx_Y2r_Convert calls it as the last step of a frame."
+ },
+ {
+  "address": "0x0051ABAC",
+  "name": "Gfx_Y2r_IsBusy",
+  "signature": "u32 Gfx_Y2r_IsBusy(void)",
+  "params": {},
+  "summary": "Reads the Y2R busy flag (command 0x00280040) and returns it as a byte; Gfx_Y2r_IsDone inverts it.",
+  "confidence": 0.55,
+  "evidence": "Calls 0x51AF98 (command 0x00280040, returns the command buffer's first byte); Cf. N_033's Gfx_Y2r_IsDone (0x501470) which calls this and XORs with 1, and the wait loop at the start of Gfx_Y2r_Convert."
+ },
+ {
+  "address": "0x0051ABC8",
+  "name": "Gfx_Y2r_SetBlockAlignment",
+  "signature": "void Gfx_Y2r_SetBlockAlignment(u8 alignment)",
+  "params": {
+   "alignment": "block alignment mode"
+  },
+  "summary": "Checked wrapper for Y2R command 0x00070040 (set block alignment).",
+  "confidence": 0.55,
+  "evidence": "Calls 0x51AFD4 whose pool holds 0x00070040, the documented Y2R SetBlockAlignment command."
+ },
+ {
+  "address": "0x0051ABE4",
+  "name": "Gfx_Y2r_SetInputLineWidth",
+  "signature": "void Gfx_Y2r_SetInputLineWidth(u16 width)",
+  "params": {
+   "width": "input line width in bytes"
+  },
+  "summary": "Checked wrapper for Y2R command 0x001A0040 (input line width); called with the luma width.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51B010 whose pool holds 0x001A0040; Gfx_Y2r_Convert passes the picture width (short arg)."
+ },
+ {
+  "address": "0x0051AC00",
+  "name": "maybe_Gfx_Y2r_GetSessionHandle",
+  "signature": "void maybe_Gfx_Y2r_GetSessionHandle(u32* out)",
+  "params": {
+   "out": "receives the session handle"
+  },
+  "summary": "Reads the colour-conversion session handle (command 0x000F0000), closing the previous handle first.",
+  "confidence": 0.45,
+  "evidence": "Calls 0x51B04C (command 0x000F0000, returns the third command word) and closes the old handle with svc 0x23; used by Gfx_Y2r_Init."
+ },
+ {
+  "address": "0x0051AC40",
+  "name": "Gfx_Y2r_StartConversion",
+  "signature": "void Gfx_Y2r_StartConversion(u8 mode)",
+  "params": {
+   "mode": "conversion start parameter"
+  },
+  "summary": "Checked wrapper for Y2R command 0x00200040 (start conversion); Gfx_Y2r_Convert calls it once after programming the planes.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51B088 whose pool holds 0x00200040 (documented Y2R StartConversion); invoked after the plane setup in 0x501300."
+ },
+ {
+  "address": "0x0051AC5C",
+  "name": "Gfx_Y2r_DriverInit",
+  "signature": "void Gfx_Y2r_DriverInit(u8 mode)",
+  "params": {
+   "mode": "driver state (1 = initialise)"
+  },
+  "summary": "Checked wrapper for Y2R command 0x000D0040 (driver initialise/finalise); called by Gfx_Y2r_Init and again at the end of each conversion.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51B0C4 whose pool holds 0x000D0040, the documented Y2R DriverInitialize command; the two call sites are 0x5012BC and 0x501300."
+ },
+ {
+  "address": "0x0051AC78",
+  "name": "Gfx_Y2r_SendSetRotation",
+  "signature": "u32 Gfx_Y2r_SendSetRotation(u8 rotation)",
+  "params": {
+   "rotation": "rotation mode"
+  },
+  "summary": "Raw Y2R IPC: writes command 0x00050040 and one byte into the thread command buffer and executes svcSendSyncRequest (svc 0x32).",
+  "confidence": 0.5,
+  "evidence": "`tls->f_80 = *(0x51ACAC) = 0x00050040; tls->f_84 = arg; svc 0x32` - the standard 3DS IPC writer; the handle is the global at 0x7AEAAC."
+ },
+ {
+  "address": "0x0051ACB4",
+  "name": "Gfx_Y2r_SendSrcParamsU",
+  "signature": "u32 Gfx_Y2r_SendSrcParamsU(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "plane address",
+   "size": "plane size",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Raw Y2R IPC: command 0x00110102 with four words (address, size, width, stride).",
+  "confidence": 0.5,
+  "evidence": "Command word 0x00110102 at 0x51AD08; four parameters written at tls+0x84..+0x90."
+ },
+ {
+  "address": "0x0051AD10",
+  "name": "Gfx_Y2r_SendSrcParamsV",
+  "signature": "u32 Gfx_Y2r_SendSrcParamsV(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "plane address",
+   "size": "plane size",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Raw Y2R IPC: command 0x00120102 with four words.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x00120102 at 0x51AD64; same parameter layout as 0x51ACB4."
+ },
+ {
+  "address": "0x0051AD6C",
+  "name": "Gfx_Y2r_SendSrcParamsY",
+  "signature": "u32 Gfx_Y2r_SendSrcParamsY(u32 addr, u32 size, u32 width, u32 stride)",
+  "params": {
+   "addr": "plane address",
+   "size": "plane size",
+   "width": "line width",
+   "stride": "line stride"
+  },
+  "summary": "Raw Y2R IPC: command 0x00100102 with four words.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x00100102 at 0x51ADC0; same parameter layout as 0x51ACB4."
+ },
+ {
+  "address": "0x0051ADC8",
+  "name": "Gfx_Y2r_SendDstParams",
+  "signature": "u32 Gfx_Y2r_SendDstParams(u32 addr, u32 size, u32 line_bytes, u32 lines)",
+  "params": {
+   "addr": "destination address",
+   "size": "byte size",
+   "line_bytes": "bytes per line",
+   "lines": "line count"
+  },
+  "summary": "Raw Y2R IPC: command 0x00180102 with four words.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x00180102 at 0x51AE1C; same parameter layout as 0x51ACB4."
+ },
+ {
+  "address": "0x0051AE24",
+  "name": "Gfx_Y2r_SendInputLines",
+  "signature": "u32 Gfx_Y2r_SendInputLines(u16 lines)",
+  "params": {
+   "lines": "input line count"
+  },
+  "summary": "Raw Y2R IPC: command 0x001C0040 with one halfword.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x001C0040 at 0x51AE58, one 16-bit parameter."
+ },
+ {
+  "address": "0x0051AE90",
+  "name": "Gfx_Y2r_SendInputFormat",
+  "signature": "u32 Gfx_Y2r_SendInputFormat(u8 format)",
+  "params": {
+   "format": "input YUV format"
+  },
+  "summary": "Raw Y2R IPC: command 0x00010040 with one byte.",
+  "confidence": 0.55,
+  "evidence": "Command word 0x00010040 at 0x51AEC4 - the documented Y2R SetInputFormat; one byte parameter."
+ },
+ {
+  "address": "0x0051AECC",
+  "name": "Gfx_Y2r_SendStopConversion",
+  "signature": "u32 Gfx_Y2r_SendStopConversion(void)",
+  "params": {},
+  "summary": "Raw Y2R IPC: command 0x00270040 without parameters.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x270000 at 0x51AE?? (pool 0x51AEF4), written with zero parameter count."
+ },
+ {
+  "address": "0x0051AEFC",
+  "name": "Gfx_Y2r_SendOutputFormat",
+  "signature": "u32 Gfx_Y2r_SendOutputFormat(u8 format)",
+  "params": {
+   "format": "output pixel format"
+  },
+  "summary": "Raw Y2R IPC: command 0x00030040 with one byte.",
+  "confidence": 0.55,
+  "evidence": "Command word 0x00030040 at 0x51AF30 - the documented Y2R SetOutputFormat; one byte parameter."
+ },
+ {
+  "address": "0x0051AF38",
+  "name": "maybe_Gfx_Y2r_SendGetStatus",
+  "signature": "u32 maybe_Gfx_Y2r_SendGetStatus(void)",
+  "params": {},
+  "summary": "Raw Y2R IPC: command 0x00260040 without parameters; returns the status word.",
+  "confidence": 0.45,
+  "evidence": "Command word 0x260000 at 0x51AF64, written with zero parameter count; consumed by 0x51AB84."
+ },
+ {
+  "address": "0x0051AF68",
+  "name": "maybe_Gfx_Y2r_SendInitialize",
+  "signature": "u32 maybe_Gfx_Y2r_SendInitialize(void)",
+  "params": {},
+  "summary": "Raw Y2R IPC: command 0x002B0000 without parameters; sent once by Gfx_Y2r_OpenSession after the session handle is obtained.",
+  "confidence": 0.45,
+  "evidence": "Command word 0x2b0000 at 0x51AF94, zero parameters; the only caller is the session opener 0x51AA88."
+ },
+ {
+  "address": "0x0051AF98",
+  "name": "Gfx_Y2r_SendIsBusy",
+  "signature": "u32 Gfx_Y2r_SendIsBusy(void)",
+  "params": {},
+  "summary": "Raw Y2R IPC: command 0x00280040; returns the busy byte written by the service.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x280000 at 0x51AFD0; reads tls+0x88 into the caller's byte like the other 'get' stubs."
+ },
+ {
+  "address": "0x0051AFD4",
+  "name": "Gfx_Y2r_SendSetBlockAlignment",
+  "signature": "u32 Gfx_Y2r_SendSetBlockAlignment(u8 alignment)",
+  "params": {
+   "alignment": "block alignment mode"
+  },
+  "summary": "Raw Y2R IPC: command 0x00070040 with one byte.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x00070040 at 0x51B008 - the documented Y2R SetBlockAlignment command."
+ },
+ {
+  "address": "0x0051B010",
+  "name": "Gfx_Y2r_SendInputLineWidth",
+  "signature": "u32 Gfx_Y2r_SendInputLineWidth(u16 width)",
+  "params": {
+   "width": "line width in bytes"
+  },
+  "summary": "Raw Y2R IPC: command 0x001A0040 with one halfword.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x1a0040 at 0x51B044; one 16-bit parameter."
+ },
+ {
+  "address": "0x0051B04C",
+  "name": "maybe_Gfx_Y2r_SendGetHandle",
+  "signature": "u32 maybe_Gfx_Y2r_SendGetHandle(u32* out)",
+  "params": {
+   "out": "receives the value of the command buffer's third word"
+  },
+  "summary": "Raw Y2R IPC: command 0x000F0000; on success returns the 32-bit word the service wrote at tls+0x8c.",
+  "confidence": 0.42,
+  "evidence": "Command word 0xf0000 at 0x51B084; returns tls->f_8c, the same offset 0x1125C8 reads for service handles."
+ },
+ {
+  "address": "0x0051B088",
+  "name": "Gfx_Y2r_SendStartConversion",
+  "signature": "u32 Gfx_Y2r_SendStartConversion(u8 mode)",
+  "params": {
+   "mode": "conversion start parameter"
+  },
+  "summary": "Raw Y2R IPC: command 0x00200040 with one byte.",
+  "confidence": 0.5,
+  "evidence": "Command word 0x200040 at 0x51B0BC - the documented Y2R StartConversion command."
+ },
+ {
+  "address": "0x0051B0C4",
+  "name": "Gfx_Y2r_SendDriverInit",
+  "signature": "u32 Gfx_Y2r_SendDriverInit(u8 mode)",
+  "params": {
+   "mode": "driver state"
+  },
+  "summary": "Raw Y2R IPC: command 0x000D0040 with one byte.",
+  "confidence": 0.5,
+  "evidence": "Command word 0xd0040 at 0x51B0F8 - the documented Y2R DriverInitialize command."
+ },
+ {
+  "address": "0x0051B100",
+  "name": "maybe_Gfx_Y2r_SendSetAlpha",
+  "signature": "u32 maybe_Gfx_Y2r_SendSetAlpha(u16 alpha)",
+  "params": {
+   "alpha": "alpha value (0xFF = opaque)"
+  },
+  "summary": "Raw Y2R IPC: command 0x00220040 with one halfword; the checked wrapper 0x51B13C calls it with 0xFF.",
+  "confidence": 0.45,
+  "evidence": "Command word 0x220040 at 0x51B134, one 16-bit parameter; call site `0x51B13C(0xff)` in Gfx_Y2r_Convert."
+ },
+ {
+  "address": "0x0051B13C",
+  "name": "Gfx_Y2r_SetAlpha",
+  "signature": "void Gfx_Y2r_SetAlpha(u16 alpha)",
+  "params": {
+   "alpha": "alpha value"
+  },
+  "summary": "Checked wrapper for Y2R command 0x00220040 (set alpha); Gfx_Y2r_Convert calls it with 0xFF so the converted frame is opaque.",
+  "confidence": 0.5,
+  "evidence": "Calls 0x51B100 (command 0x00220040) and aborts on error, exactly like the other checked wrappers 0x51AB30/0x51AB68."
+ },
+ {
+  "address": "0x0051BAA0",
+  "name": "std_FormatV",
+  "signature": "int std_FormatV(char* dst, u32 size, const char* fmt, u32* va_list)",
+  "params": {
+   "dst": "destination buffer",
+   "size": "buffer size",
+   "fmt": "format string",
+   "va_list": "argument list"
+  },
+  "summary": "Variadic tail-call thunk to the printf-style formatter 0x708BE4, forwarding the extra stack arguments; formats into dst and returns the number of characters written.",
+  "confidence": 0.6,
+  "evidence": "Single `b 0x708BE4` with the same four first arguments; 0x708BE4 implements the full '%' format language (flags/width/precision/va_list walk) and returns the length, i.e. a vsnprintf."
+ },
+ {
+  "address": "0x0051BCE0",
+  "name": "maybe_Sound_OpenDriverSession",
+  "signature": "void maybe_Sound_OpenDriverSession(void)",
+  "params": {},
+  "summary": "Lazily opens the audio driver session: takes the driver lock, resolves the service name (0x11CCA0) and calls srvGetServiceHandle (0x1192C0) into 0x7AF18C, then sends the audio init IPC command 0x000B0040 and marks the session open.",
+  "confidence": 0.48,
+  "evidence": "Mirrors Gfx_Y2r_OpenSession but for the audio handle at 0x7AF18C: g_0051BD64 is a 0x14-byte state record, 0x119764 (maybe_Snd_SendIpc1, command 0x000B0040 per N_032) is called on it, and the caller 0x51C254 is the DSP worker thread that retries on WouldBlock and exits with svc 3."
+ },
+ {
+  "address": "0x00541FDC",
+  "name": "Sound_Stream_FreeBufferList",
+  "signature": "void Sound_Stream_FreeBufferList(SoundStreamBuffers* self, u32 policy)",
+  "params": {
+   "self": "list head at +4",
+   "policy": "free policy forwarded to the buffer destructor"
+  },
+  "summary": "Walks the stream's doubly linked buffer list and frees every entry with the given policy (0x114CFC on the 0x40-byte-aligned object base).",
+  "confidence": 0.5,
+  "evidence": "List head/next are the same intrusive pattern as the rest of the sound code; each node is released through 0x114CFC(piVar1-0x40, arg2) - the object header sits 0x40 bytes before the link. Called by the stream player teardown 0x546220."
+ },
+ {
+  "address": "0x00542580",
+  "name": "Sound_System_Shutdown",
+  "signature": "void Sound_System_Shutdown(void)",
+  "params": {},
+  "summary": "Shuts the sound system down: releases the stream players, voice pool, decoders, sequencer and archives in order (0x54773C/0x547884/0x54D868/0x54DF34/0x54DE68/0x54EF90/0x54F130/0x550B78/0x550E04/0x54FA84/0x5481F4/0x54B70C/0x54B6B0) and clears the initialised flags.",
+  "confidence": 0.6,
+  "evidence": "Gated on *(char*)(g_00542604+1) and calls the whole sound subsystem teardown set; the anchors next to it are Sound_VoicePool_AllocateBuffers (0x5422AC) and Sound_Decoder_Init (0x54B608); called from the game shutdown path 0x1EE09C."
+ },
+ {
+  "address": "0x00542A00",
+  "name": "Sound_Archive_OpenEntryStream",
+  "signature": "u32 Sound_Archive_OpenEntryStream(SoundStreamPlayer* self, u32 name, u32 out_handle, u32 offset, u64 size, u32 sub, u32 flags)",
+  "params": {
+   "self": "stream player owning the archive",
+   "name": "entry name",
+   "out_handle": "receives the stream handle",
+   "offset": "start offset inside the entry",
+   "size": "requested size",
+   "sub": "sub-entry index",
+   "flags": "open flags"
+  },
+  "summary": "Resolves a sound-archive entry (0x660B20, plus the entry's own resolution callback at vtable +0x30), then opens a streaming handle for the entry or, when the caller asks for a sub-range, for a relative file inside it (Sound_ArchiveStream_OpenRelativeFile 0x65E1D8).",
+  "confidence": 0.55,
+  "evidence": "Calls 0x660B20 (archive entry lookup returning offset/size), a vtable +0x30 resolver, its own vtable +0x10 stream opener, and 0x65E1D8 = Sound_ArchiveStream_OpenRelativeFile; the offsets are added to self[0x43] (the archive base)."
+ },
+ {
+  "address": "0x00543130",
+  "name": "maybe_Sound_StreamPlayer_IsBusy",
+  "signature": "u8 maybe_Sound_StreamPlayer_IsBusy(SoundStreamPlayer* self)",
+  "params": {
+   "self": "stream player object"
+  },
+  "summary": "Returns the player's state byte through its vtable slot +8.",
+  "confidence": 0.45,
+  "evidence": "Single indirect call `(**(code**)(*self + 8))()` returning a byte; called by the top-level sound query paths 0x1EB8C8/0x1EC088/0x1ECADC."
+ },
+ {
+  "address": "0x00543CFC",
+  "name": "Sound_StreamPlayer_AllocBuffers",
+  "signature": "u32 Sound_StreamPlayer_AllocBuffers(SoundStreamPlayer* self, u32 voice_count, u32* cursor, u32 limit)",
+  "params": {
+   "self": "stream player",
+   "voice_count": "number of voices to allocate",
+   "cursor": "in/out: current offset in the memory block",
+   "limit": "end offset of the block"
+  },
+  "summary": "Carves the player's working memory out of one block: voice_count 0x1e8-byte sample-buffer headers plus the 0x1e8-byte wave buffers they reference, and voice_count 0x4c-byte job/decoder records; fails (returns 0) when the block is too small.",
+  "confidence": 0.5,
+  "evidence": "Stride math `count*0x1e8` and `count*0x4c` aligned to 0x20, buffers linked with 0x11FCF8, records created with 0x54BFF4 and the list heads at self+0x8c; the same strides are freed by 0x546220."
+ },
+ {
+  "address": "0x00546220",
+  "name": "Sound_StreamPlayer_Shutdown",
+  "signature": "void Sound_StreamPlayer_Shutdown(SoundStreamPlayer* self)",
+  "params": {
+   "self": "stream player (sub-tables at +0x18/+0x20/+0x4c/+0x6c/+0x98/+0xb8)"
+  },
+  "summary": "Releases everything the stream player owns: per-stream buffer lists (0x541FDC), the voice/decoder tables with strides 0xb6/0x88/0x7a/0x4c/0xca6, the queue objects and the DSP/decoder helper state; the object is left reusable.",
+  "confidence": 0.55,
+  "evidence": "Called by Sound_StreamPlayer_Release (0x5EA950) before the vtable delete; it frees each stride table (`piVar5 += 0xb6`, `0x88`, `0x7a`, `0xca6`) and calls 0x54DF04/0x5509F4/0x556BFC, all of which are decoder/voice helpers."
+ },
+ {
+  "address": "0x00546AC8",
+  "name": "maybe_Sound_Voice_QueueParams",
+  "signature": "void maybe_Sound_Voice_QueueParams(SoundVoice* self)",
+  "params": {
+   "self": "3D voice (sound source at +0x10, volume/pitch/pan factors at +0x30..+0x3a, position +0x3c..+0x40)"
+  },
+  "summary": "Builds and queues the voice's per-frame parameter command (id 8, 9 words): the effective volume (global * channel * source volume * fade curve), pitch/pan and the 3D position/velocity taken from the attached sound source.",
+  "confidence": 0.45,
+  "evidence": "Reads the sound command ring (0x11B7E8/0x11B57C/0x11B89C = maybe_Snd_QueueCommandBuffer), writes type 8 and the nine floats; the volume chain multiplies four float factors and the 3x3 value pairs are position/velocity, matching the 3D voice record the movie/field sound code uses."
+ },
+ {
+  "address": "0x00546D84",
+  "name": "maybe_Sound_Voice_ResetQueueLinks",
+  "signature": "void maybe_Sound_Voice_ResetQueueLinks(SoundVoice* voice, SoundQueue* queue)",
+  "params": {
+   "voice": "voice object",
+   "queue": "queue owning the two links"
+  },
+  "summary": "Clears the voice's two queue links (+0x100/+0x108) and its pending counter so it can be linked into a queue again.",
+  "confidence": 0.4,
+  "evidence": "Two 0x11FCBC link-clears and `f_10 = 0`; the same link fields are used by 0x547E7C/0x547EB0/0x5480C4."
+ },
+ {
+  "address": "0x00546EA0",
+  "name": "maybe_Sound_Voice_Release",
+  "signature": "void maybe_Sound_Voice_Release(SoundVoice* self)",
+  "params": {
+   "self": "3D voice (state +0x9f, source +4, decoder +6, queue +9)"
+  },
+  "summary": "Releases a 3D voice: stops the stream, detaches it from the source/decoder/queue, frees the attached buffers and posts the 'voice finished' notification (ids 4/6) to the sound thread; the state byte moves to 2.",
+  "confidence": 0.48,
+  "evidence": "State check `+0x9f in (1,2)`, the notification writes `*(u8*)(cmd+4) = 6 / 4` via 0x11B7E8/0x11B57C/0x11B89C, vtable +0x18/+0x1c calls to stop the stream and 0x546D84 to clear the queue links; called by the stream end path and the voice pool teardown."
+ },
+ {
+  "address": "0x005476B0",
+  "name": "Sound_StreamThread_Main",
+  "signature": "void Sound_StreamThread_Main(SoundStreamThread* self)",
+  "params": {
+   "self": "stream thread (run flag +0x14, lock +8)"
+  },
+  "summary": "Main loop of the streaming/decoding worker: while the run flag stays clear it drains the two work halves (0x547FB0 -> 0x548150 / 0x547F08), feeds the decoder (0x54B6B0) and sleeps (0x114FAC) between iterations.",
+  "confidence": 0.55,
+  "evidence": "Classic worker loop with `while (self->f_14 == 0) { ... 0x547F08(); 0x54B6B0(); 0x114FAC(); }`; 0x547FB0 is the sound engine singleton getter (same mid-function entry every sound function calls) and 0x547F08 is the job dispatcher."
+ },
+ {
+  "address": "0x005479EC",
+  "name": "maybe_Sound_Stream_UpdateSubVoiceVolumes",
+  "signature": "void maybe_Sound_Stream_UpdateSubVoiceVolumes(SoundStream* self)",
+  "params": {
+   "self": "stream (4 sub-voice flags at g_00547AB0+self, fade start/end at +0x3048..+0x3054)"
+  },
+  "summary": "Per-frame update of the stream's four sub-voices: for each active bit it queues a sub-voice command (id 0x2d) with an interpolated float between the start and end volume, then queues the voice parameters (0x546AC8).",
+  "confidence": 0.45,
+  "evidence": "Loops 4 bits of `*(u16*)(g_00547AB0 + self)`, commands carry `1 << i` and the interpolated value `((end-start)*t)/frames + start`, built via 0x11B7E8/0x11B57C/0x11B89C; first call is maybe_Sound_Voice_QueueParams (0x546AC8)."
+ },
+ {
+  "address": "0x00547AB4",
+  "name": "maybe_Sound_Stream_SubmitVoiceParamsA",
+  "signature": "void maybe_Sound_Stream_SubmitVoiceParamsA(SoundStream* self, u32 id, u32* params)",
+  "params": {
+   "self": "stream",
+   "id": "parameter set id",
+   "params": "four parameter words"
+  },
+  "summary": "Queues command 0x29 with the stream id, its voice base (+0x118) and four caller-supplied parameter words to the sound thread.",
+  "confidence": 0.45,
+  "evidence": "Writes type 0x29 and params at +0x14/+0x18/+0x1c/+0x20/+0x24 via the 0x11B57C ring; called from the stream update paths 0x545520/0x546D3A."
+ },
+ {
+  "address": "0x00547CF0",
+  "name": "maybe_Sound_Stream_SubmitVoiceParamsB",
+  "signature": "void maybe_Sound_Stream_SubmitVoiceParamsB(SoundStream* self, u32 id, u32* params)",
+  "params": {
+   "self": "stream",
+   "id": "parameter set id",
+   "params": "four parameter words"
+  },
+  "summary": "Queues command 0x28 with the stream id, the second voice block (+0x2314) and four parameter words, and stores the id in the pending slot at +0x2328.",
+  "confidence": 0.42,
+  "evidence": "Writes type 0x28, `*(u32*)(self+0x2328) = arg2` and params at +0x18..+0x24; called from the same stream update paths as 0x547AB4."
+ },
+ {
+  "address": "0x00547D54",
+  "name": "maybe_Sound_Stream_OnEnd",
+  "signature": "void maybe_Sound_Stream_OnEnd(SoundStream* self)",
+  "params": {
+   "self": "stream (end flag +0x328e, queue +0x8c5, decoder +0xc11)"
+  },
+  "summary": "Handles the end of a stream: clears the pending flag, cancels the outstanding jobs (0x551B58/0x546EA0), detaches the queue link and re-queues the stream's completion on the decoder.",
+  "confidence": 0.45,
+  "evidence": "`if (*(char*)(self+0x328e)) { self+0x328e=0; 0x551B58(self+0x8c5); 0x546EA0(self); ... vtable +0x10; 0x11FCF8(...) }` - the cancel helper 0x551B58 is the same one that walks the 3 job lanes of 0x5480C4."
+ },
+ {
+  "address": "0x00547E7C",
+  "name": "maybe_Sound_Stream_QueueWork",
+  "signature": "void maybe_Sound_Stream_QueueWork(SoundWorkItem* item, u32 a, u32 b, u32 arg)",
+  "params": {
+   "item": "work item",
+   "a": "unused parameter",
+   "b": "unused parameter",
+   "arg": "context passed to the waiter"
+  },
+  "summary": "Initialises a work item and pushes it into the current half's job queue (0x11FCF8) with the caller's context, then signals the queue's condition variable (0x11C96C).",
+  "confidence": 0.45,
+  "evidence": "`self[0x1f]=self; self[0x20]=self; *self=self[5]` list init, 0x117E50 lock on the engine singleton +0x2c, 0x117C58 addref, 0x11FCF8 enqueue and 0x11C96C signal - the same queue primitives as 0x548060/0x548150."
+ },
+ {
+  "address": "0x00547EB0",
+  "name": "maybe_Sound_Stream_QueueWorkLane",
+  "signature": "void maybe_Sound_Stream_QueueWorkLane(SoundEngine* engine, SoundWorkItem* item, u32 lane)",
+  "params": {
+   "engine": "sound engine singleton",
+   "item": "work item",
+   "lane": "lane index (0..2)"
+  },
+  "summary": "Pushes a work item onto one of the three per-lane job lists of the sound engine, under the engine lock, and signals completion.",
+  "confidence": 0.45,
+  "evidence": "Same primitives as 0x547E7C with `engine + lane*0xc` as the list head (the 3-lane layout read by 0x5480C4/0x548150); called by the decoder job paths 0x550254/0x5514CC/0x555308."
+ },
+ {
+  "address": "0x00547F08",
+  "name": "Sound_Stream_ProcessWork",
+  "signature": "void Sound_Stream_ProcessWork(SoundEngine* engine)",
+  "params": {
+   "engine": "sound engine singleton"
+  },
+  "summary": "Pops the next ready job from the three lanes (priority 2, then 1, then 0) and runs it through its vtable (+8), marks it state 3, signals the waiter (0x111D50) and clears the current-job pointer.",
+  "confidence": 0.5,
+  "evidence": "Three 0x548060 lookups with priorities 2/1/0, `(**(code**)(*item + 8))(item)`, `*(u8*)(item+5) = 3`, 0x111D50 signal on item+3 - the mirror image of 0x5480C4's cancellation."
+ },
+ {
+  "address": "0x00548060",
+  "name": "Sound_Stream_GetWorkItem",
+  "signature": "int Sound_Stream_GetWorkItem(SoundEngine* engine, u32 lane, int pop)",
+  "params": {
+   "engine": "sound engine singleton",
+   "lane": "lane index",
+   "pop": "non-zero = unlink the returned item"
+  },
+  "summary": "Returns the job at the head of the given lane, optionally unlinking it, or 0 when the lane is empty; the returned pointer is biased by -4 (the link node is not the object start).",
+  "confidence": 0.5,
+  "evidence": "`if (engine[lane*3] != 0) { item = engine[lane*3+1]; if (pop) 0x11AD60(...); return item-4; }` under the engine lock 0x117E50; called by 0x547F08/0x548150."
+ },
+ {
+  "address": "0x005480C4",
+  "name": "maybe_Sound_Stream_CancelWorkByOwner",
+  "signature": "void maybe_Sound_Stream_CancelWorkByOwner(SoundEngine* engine, u32 owner)",
+  "params": {
+   "engine": "sound engine singleton",
+   "owner": "owner id stored at item+0x14"
+  },
+  "summary": "Marks every queued job whose owner field matches as cancelled (state 4) across the three lanes and signals the waiting thread.",
+  "confidence": 0.48,
+  "evidence": "Three-lane loop identical to 0x548150 but only tests `piVar1[5] == arg2`, sets `*(u8*)(item+4)=4` and signals 0x111D50; called by the stream end path."
+ },
+ {
+  "address": "0x00548150",
+  "name": "maybe_Sound_Stream_WaitLanes",
+  "signature": "void maybe_Sound_Stream_WaitLanes(SoundEngine* engine)",
+  "params": {
+   "engine": "sound engine singleton"
+  },
+  "summary": "Drains the job lanes: if lanes 2 and 1 are empty it waits on the job condition (0x11C9EC) until work arrives or the stream shuts down.",
+  "confidence": 0.45,
+  "evidence": "`while (true) { if (0x548060(engine,2,0) || 0x548060(engine,1,0)) return; if (!0x548060(engine,0) && ...) break; if (!0x11C9EC(engine+0x38)) return; }` - the wait side of the 3-lane queue."
+ }
+]

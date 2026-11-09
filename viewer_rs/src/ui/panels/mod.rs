@@ -6,8 +6,10 @@ pub mod dialogues;
 pub mod editor;
 pub mod layouts;
 pub mod maps;
+pub mod model_anim;
 pub mod models;
 pub mod overview;
+pub mod playtest;
 pub mod scripts;
 pub mod search;
 pub mod tables;
@@ -29,6 +31,7 @@ pub struct Panels {
     pub dialogues: dialogues::DialoguesPanel,
     pub maps: maps::MapsPanel,
     pub editor: editor::EditorPanel,
+    pub playtest: playtest::PlaytestPanel,
 }
 
 impl Panels {
@@ -55,6 +58,7 @@ impl Panels {
             Section::Dialogues => self.dialogues.reset(),
             Section::Maps => self.maps.reset(),
             Section::Editor => self.editor.reset(),
+            Section::Playtest => self.playtest.reset(),
             Section::Overview => {}
         }
     }

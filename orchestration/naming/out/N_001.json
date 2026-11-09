@@ -1,0 +1,1413 @@
+[
+  {
+    "address": "0x001003f8",
+    "name": "std_PrintfFormatInt",
+    "signature": "void std_PrintfFormatInt(PrintfStream* out, int conv, s64 value)",
+    "params": {
+      "param_1": "out",
+      "param_2": "conv",
+      "param_3": "value"
+    },
+    "summary": "Emits one integer conversion for printf: writes the decimal digits of the 64-bit value into the stream buffer at out+0x24, chooses the sign prefix from the stream flags (minus / plus / space) and hands it to the padding writer. Used by the %d/%i/%u family; conv == 0xf5 skips sign handling.",
+    "confidence": 0.7,
+    "evidence": "Stream layout matches the CRT printf state: [0]=flags (bit1 = negative, bit2 = plus), [4]=putc callback, [0x18]=field width, [0x1c]=precision, [0x20]=chars written, +0x24=digit buffer. Tail call to std_PrintfEmitPadded (0x002FF7C4); digit loop calls 0x002FF874 (u64 divide by 10); sign strings \"-\" \"+\" \" \" live at 0x0010045C/0x00100460/0x00100464."
+  },
+  {
+    "address": "0x00100c16",
+    "name": "std_SetErrno",
+    "signature": "void std_SetErrno(int err)",
+    "params": {
+      "param_1": "err"
+    },
+    "summary": "Stores err into the C library errno cell. Called by the soft-float and libm routines when they detect a domain/range error, so the value is what the caller sees in errno afterwards.",
+    "confidence": 0.88,
+    "evidence": "func_002FF9C4 returns the address of the per-process errno word (ldr r0,[pc,#0] -> 0x007F3020); this wrapper just does *errno_location() = arg1. 11 callers, all math/format helpers (sqrt, atan family, printf float formatting)."
+  },
+  {
+    "address": "0x00101100",
+    "name": "std_StrtofCore",
+    "signature": "float std_StrtofCore(FloatResult* result, const char* digits, const char* exponent, int exp2)",
+    "params": {
+      "param_1": "result",
+      "param_2": "digits",
+      "param_3": "exponent",
+      "param_4": "exp2"
+    },
+    "summary": "Turns the already-scanned decimal digit string plus its decimal exponent into a float: builds the 64-bit mantissa, normalises it, scales by the power of ten, applies the current rounding mode and stores the 32-bit result, setting ERANGE when the value overflows.",
+    "confidence": 0.78,
+    "evidence": "Called only from std_Strtod (0x00101314). Digit strings are 0xff terminated; sign/exponent computed with a shift-subtract loop; uses 0x002FFDC0 (rounding mode), 0x00126848/0x00126878 (double mul/div by 10^k), 0x00300D50 (double->float narrowing). Result is a 2-word struct (value + status) exactly like the RVCT strtod worker."
+  },
+  {
+    "address": "0x00101314",
+    "name": "std_Strtod",
+    "signature": "double std_Strtod(const char* text, char** end, int* status, ScanCtx* ctx)",
+    "params": {
+      "param_1": "text",
+      "param_2": "end",
+      "param_3": "status",
+      "param_4": "ctx"
+    },
+    "summary": "The C library strtod: reads sign, digits, decimal separator (from the locale block), \"0x\" hex floats and an exponent through the ctx getc/ungetc callbacks and returns the parsed double, updating the end pointer and the conversion status.",
+    "confidence": 0.88,
+    "evidence": "Uses ctx callbacks at +0x18/+0x20/+0x1c/+0x10 (getc, peek, ungetc, locale); accepts i/n (inf/nan), 0x (calls 0x001015D8 hex path), decimal point from locale block (*ctx[0])->+0xc; ends in std_StrtofCore/std_DoubleConvert. Only caller 0x00300714 is the scanf float handler."
+  },
+  {
+    "address": "0x001015e0",
+    "name": "std_ParseHexFloat",
+    "signature": "int std_ParseHexFloat(char* buf, char** end, u16* out, ScanCtx* ctx, int pos, u32 flags, int len)",
+    "params": {
+      "param_1": "buf",
+      "param_2": "end",
+      "param_3": "out",
+      "param_4": "ctx",
+      "param_5": "pos",
+      "param_6": "flags",
+      "param_7": "len"
+    },
+    "summary": "Parses the significand of a hexadecimal float literal (\"0x1.8p3\") into a double and applies the binary exponent; returns the number of characters consumed or -2 on a malformed literal.",
+    "confidence": 0.82,
+    "evidence": "Collects up to 16 mantissa nibbles with func_003006F0(ch,16) (digit value), keeps a 6-bit shift counter, handles \"p\"/\"P\" binary exponents with +/- and calls 0x006B8138 (ldexp) plus the rounding mode from 0x002FFDC0. Reached from strtod through the 0x001015D8 alias."
+  },
+  {
+    "address": "0x00124fa0",
+    "name": "maybe_Pack_GetManager",
+    "signature": "void** maybe_Pack_GetManager(void** out)",
+    "params": {
+      "param_1": "out"
+    },
+    "summary": "Returns (through out) the lazily created global pack/resource manager: an array of 0x220-byte manager objects, one per registered pack slot, whose first element gets a vtable installed at creation time. Every pack load goes through the pointer this returns.",
+    "confidence": 0.45,
+    "evidence": "First-call-only init flag 0x007BE32C, cached pointer 0x007BE330, slot count 0x00833D28, vtable 0x007829E0 installed by 0x00122120. Callers do func_00388320(*mgr, 1, \"s_gamecmn.pack\") and func_003882F0(out, *mgr, id, buf) i.e. register/lookup a pack. 43 callers."
+  },
+  {
+    "address": "0x00126848",
+    "name": "std_DoubleDivide",
+    "signature": "void std_DoubleDivide(const double* lhs, const double* rhs, int mode, double* out)",
+    "params": {
+      "param_1": "lhs",
+      "param_2": "rhs",
+      "param_3": "mode",
+      "param_4": "out"
+    },
+    "summary": "Soft-float double divide wrapper: if both operands are finite normal numbers it runs the mantissa divide core (exponent subtraction) and returns the packed double; special values are left to the caller.",
+    "confidence": 0.55,
+    "evidence": "Checks (a[1] & ~(a[0]<<1)) < 0 for both operands = exponent neither 0 nor 0x7ff, then calls 0x001263C8 (mantissa divide: subtracts exponent fields) and 0x00126710 (pack/return). Used by std_StrtofCore to scale by a negative power of ten."
+  },
+  {
+    "address": "0x00126878",
+    "name": "std_DoubleMultiply",
+    "signature": "void std_DoubleMultiply(const double* lhs, const double* rhs, int mode, double* out)",
+    "params": {
+      "param_1": "lhs",
+      "param_2": "rhs",
+      "param_3": "mode",
+      "param_4": "out"
+    },
+    "summary": "Soft-float double multiply wrapper: for two finite normal operands it runs the mantissa multiply core (exponent addition) and returns the packed double.",
+    "confidence": 0.55,
+    "evidence": "Same shape as 0x00126848 but tests bit 0x40000000 (non-zero significand) and calls 0x001268A8, which adds the exponent fields (`add r3,r7,ip; sub r3,r3,#0x3f00`). Used by std_StrtofCore for a positive decimal exponent."
+  },
+  {
+    "address": "0x0015c720",
+    "name": "Script_ReportParseError",
+    "signature": "void Script_ReportParseError(void* vm, const char* source, int line, int column, const char* message)",
+    "params": {
+      "param_1": "vm",
+      "param_2": "source",
+      "param_3": "line",
+      "param_4": "column",
+      "param_5": "message"
+    },
+    "summary": "Reports a Squirrel script compile/parse error in the standard form \"%s line = (%d) column = (%d) : error %s\" using the printer installed in the script VM.",
+    "confidence": 0.78,
+    "evidence": "Format string at 0x0015C774 = \"%s line = (%d) column = (%d) : error %s\\n\"; printer obtained from 0x006BBBE4 (script VM accessor) and invoked with the five arguments. Sits in the script-native block next to SetMessageArgItemName / SetupLocatorFromActor."
+  },
+  {
+    "address": "0x0015ec8c",
+    "name": "maybe_Field_CheckGimmickItemGetFlag",
+    "signature": "bool maybe_Field_CheckGimmickItemGetFlag(int handle)",
+    "params": {
+      "param_1": "handle"
+    },
+    "summary": "Resolves a game-object handle and returns its status byte at +0x2B4, or true when the handle does not resolve. Reached as a branch-target block of the script native IsGimmickItemGetTimming (0x0015EBFC), which uses it to decide whether the gimmick item has already been taken.",
+    "confidence": 0.35,
+    "evidence": "Not a stand-alone function: asm/text_00140048.s shows it is the tail block of IsGimmickItemGetTimming (0x0015EBFC, symbol name known). The block at 0x0015EC8C is ARM: bl 0x0044C3D0 (handle->object table lookup, key = handle>>11), if null -> return 1, else bl 0x0064E130 = ldrsb [obj+0x2B4]. The Ghidra readable C for this address (thumb float math) is a misdecompilation."
+  },
+  {
+    "address": "0x0015f0e4",
+    "name": "maybe_Ui_DispatchScriptEvent",
+    "signature": "void maybe_Ui_DispatchScriptEvent(void)",
+    "params": {},
+    "summary": "Fetches the UI/message subsystem object and, when present, sends it event 0x0E (vtable slot +0x38) with two zero arguments.",
+    "confidence": 0.4,
+    "evidence": "Recovered function: obj = 0x005E64E0() walks [ctx+8]->[+0x48] (the UI manager); then (**(code**)(*obj+0x38))(obj, 0xe, 0). No direct callers found, so it is likely a script-native entry (lives in the 0x0015F0xx script-native block next to SetRandomEnemyWorkValue)."
+  },
+  {
+    "address": "0x00162a98",
+    "name": "maybe_Anim_CopyPoseIfChanged",
+    "signature": "void maybe_Anim_CopyPoseIfChanged(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Compares the orientation matrix stored on self (+0x8C..+0x98) with the one of a related actor and, when the rotation differs by more than the epsilon constants, recomputes the shared angle/scale and copies the pose across.",
+    "confidence": 0.4,
+    "evidence": "Recovered function: 0x005B1208() fetches the partner object; dot products of the two 2x2 rotation blocks are compared against 0.0/2.0 (0x00162D84/0x00162D88); on mismatch calls 0x00672A14 (acos), 0x006731EC (cos) and 0x00672E44 (sin) then 0x005F56A0(partner, self) (copy transform)."
+  },
+  {
+    "address": "0x00178dd0",
+    "name": "Field_IsPointInActorViewCone",
+    "signature": "u32 Field_IsPointInActorViewCone(Actor* self, float* point, int allowHeightCheck, int scaleRadius)",
+    "params": {
+      "param_1": "self",
+      "param_2": "point",
+      "param_3": "allowHeightCheck",
+      "param_4": "scaleRadius"
+    },
+    "summary": "Tests whether a world point lies inside an actor's sight cone: it checks the height band (+0x308), the radius (+0x304, optionally scaled by +0x2FC), the angle against the facing vector using the cosine threshold at +0x300, and if everything matches queues an event through the 0x002E7F08 curve manager. Returns 1 when the point is visible.",
+    "confidence": 0.58,
+    "evidence": "Geometry: f_94/8C/90/98 = facing basis, f_9C/A0 = position, f_300 = cos limit, f_304 = radius, f_308 = height. Uses 0x00672A14 (acos) for the angle and 0x0011CB38/0x002E7F08 for the event queue. Both callers (0x0017843C, NPC range logic and 0x004C5F48) are field/NPC code."
+  },
+  {
+    "address": "0x0019f17c",
+    "name": "Battle_SetupUnitFromMonsterData",
+    "signature": "void Battle_SetupUnitFromMonsterData(BattleUnit* self, u16* data)",
+    "params": {
+      "param_1": "self",
+      "param_2": "data"
+    },
+    "summary": "Copies a monster/battle data record (species id, palette bytes and ~50 u16 statistics) into the unit's monster sub-struct at self+0xB0, resolves the species link through the current context table and derives the AI/behaviour flags (+0x14a) from the species record.",
+    "confidence": 0.55,
+    "evidence": "Caller 0x001471B0 is the script native LoadBattleFunc. Field-by-field copy into self->f_b0 (f_90..f_10a); looks up func_0063CC1C(ctx, id) and tests 0x200/0x400 of its +0x1a flags to pick f_14a; finally sets state self->f_1c = 0x0b and calls 0x0062AB4C (unit notify)."
+  },
+  {
+    "address": "0x001e7b70",
+    "name": "maybe_Event_UpdateStoryFlag",
+    "signature": "void maybe_Event_UpdateStoryFlag(u32 arg1, u32 arg2, u32 arg3, u32 ctx)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "ctx"
+    },
+    "summary": "If story flag 0x39 is still unset and the related scenario value matches the expected id, sets flag 0x39. Used by the script native CheckSkillPanelOpenedQ590 to advance that quest step.",
+    "confidence": 0.45,
+    "evidence": "func_0066AF08(ctx+0x24A98, 0x39) reads the flag (0xff/0 = unset); func_0035EB98(ctx, 7) returns the scenario value compared through func_00629988(..., g_001E7BDC); func_001E7660(arg1, 0x39, 1) writes it. Sole caller is CheckSkillPanelOpenedQ590 (0x00160940)."
+  },
+  {
+    "address": "0x00222d48",
+    "name": "maybe_Gfx_UpdateEffectPosition",
+    "signature": "void maybe_Gfx_UpdateEffectPosition(Effect* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Recomputes the world position of an effect/attachment from its owner node (+0x38): it takes the node rotation+position, offsets it by a constant, transforms the two and stores the result in the float triple at self+0x1D4, clearing the dirty flag +0x4D2.",
+    "confidence": 0.45,
+    "evidence": "Virtual call (*(*self->f_38+0x90))(&vec) fetches the node matrix; 0x00574548 = quaternion/matrix rotate+translate; constants at g_00222DF8. Caller 0x005F7298 belongs to the effect/particle code."
+  },
+  {
+    "address": "0x0022486c",
+    "name": "maybe_Gfx_ResetTrailTransform",
+    "signature": "u32 maybe_Gfx_ResetTrailTransform(Trail* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Resets a trail/curve object: walks the pending point list (+0x6B4, count +0x6B0) resetting each entry and, when the pending flag +0x598 is set, rebuilds the base transform from a default constant and re-applies it to the curve manager.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x00222468 per list entry, 0x00574428(default_const) then 0x002230C4 and 0x00224AB0 (both in this batch) with the same default constant, then clears self->f_598. 0x00224A5C is the same function with another default constant."
+  },
+  {
+    "address": "0x00224a5c",
+    "name": "maybe_Gfx_ResetTrailTransformAlt",
+    "signature": "u32 maybe_Gfx_ResetTrailTransformAlt(Trail* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Same reset as 0x0022486C but restores the alternate default orientation constant at 0x00224AAC, used when the trail is re-attached to a different node.",
+    "confidence": 0.4,
+    "evidence": "Identical body to 0x0022486C except the constant passed to 0x00574428 (g_00224AAC instead of g_002248F8); both clear +0x598 and call 0x002230C4 / 0x00224AB0."
+  },
+  {
+    "address": "0x00224ab0",
+    "name": "maybe_Gfx_UpdateTrailTransform",
+    "signature": "void maybe_Gfx_UpdateTrailTransform(Trail* self, float* targetPoint)",
+    "params": {
+      "param_1": "self",
+      "param_2": "targetPoint"
+    },
+    "summary": "Per-frame update of a trail/ribbon object: bends the reference frame toward the target point, clamps the turn to the configured rate, rebuilds the orientation quaternion and pushes the new points into the curve manager, then writes the resulting transform into the render node (self+0x118).",
+    "confidence": 0.45,
+    "evidence": "Uses the quaternion helpers 0x005754C0 (multiply), 0x005742D8 (from axis/angle), 0x00574548 (rotate vector), 0x00574428 (normalise) plus the trig trio 0x00672A14/0x006731EC/0x00672E44; inserts points with 0x002E7F08 and finally stores scale = f_5b4*f_5c8*f_5dc in node+0x40. Callers are the two reset functions in this batch."
+  },
+  {
+    "address": "0x002300ac",
+    "name": "maybe_Actor_CheckCollisionLanding",
+    "signature": "void maybe_Actor_CheckCollisionLanding(Actor* self, int hitType, u32* hitRecord)",
+    "params": {
+      "param_1": "self",
+      "param_2": "hitType",
+      "param_3": "hitRecord"
+    },
+    "summary": "Collision callback: for hit type 4 with a flat surface (record halfword +6 == 0) it normalises the actor's velocity (+0x10C) and compares it with the hit normal; if the impact angle is within the limit it marks the actor as landed (+0x3F4) and remembers the surface id (+0x3F8).",
+    "confidence": 0.45,
+    "evidence": "hitRecord[7..9] is the surface normal; f_10C/110/114 = velocity; thresholds g_00230180/84/88; angle via 0x00672A14 (acos); 0x005E754C is the base-class update called first."
+  },
+  {
+    "address": "0x00238f48",
+    "name": "maybe_Battle_UpdateUnitPartMask",
+    "signature": "void maybe_Battle_UpdateUnitPartMask(BattleUnit* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Refreshes the per-bone/part visibility mask of a battle unit: builds the 0x80-byte mask from the unit state (+0x30C) or from the action-table lookup (0x0023E794), selects the branch for the unit's role (0x0062AB3C), expands the command bitfield at model+0xBC into mask bits and applies the result to the model (+0x288/+0x308).",
+    "confidence": 0.42,
+    "evidence": "Mask array copied with 0x00116C10 into +0x288 (0x80 bytes) and +0x30C; action id from 0x0023AE34; model handles f_14/f_18; 0x00635948/0x003DF8D8 resolve hit/effect tables from model+0x3C. Called from 0x0023D988; shares the mask logic with 0x00239D58/0x0023B2F0."
+  },
+  {
+    "address": "0x002399d4",
+    "name": "maybe_Battle_SetUnitPartState",
+    "signature": "void maybe_Battle_SetUnitPartState(u8* slot, u8 value, u32 arg3, u32 arg4)",
+    "params": {
+      "param_1": "slot",
+      "param_2": "value",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Specialised part/attachment switch used by the battle unit model: writes value into the part slot and picks the matching part slot index (0x9E0 / 0x9D6 / 0x600 / 0x6FE / 0x700 ranges) whose attachment table is then passed to 0x0017C054.",
+    "confidence": 0.32,
+    "evidence": "Regularised against its sibling 0x00239D58 with unaff registers (Ghidra could not recover the arguments) - the same id switch and the same 0x0017C054(target, handle, 0) call appear there."
+  },
+  {
+    "address": "0x00239d58",
+    "name": "maybe_Battle_UpdateUnitPartMaskFromAction",
+    "signature": "void maybe_Battle_UpdateUnitPartMaskFromAction(BattleUnit* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second half of the battle-unit part-mask update: compares the action id cached at +0x4B32 with the current one, resolves the attachment/model table for that id and feeds it to the model through 0x0017C054, setting the dirty byte for the part manager.",
+    "confidence": 0.42,
+    "evidence": "Same id switch (0x9E0/0x9D6/0x14/0x600/0x6FE/0x700) and same callees (0x00636038/0x003DF8D8/0x005F5818/0x002D18D4/0x005F36E0) as 0x00238F48; caches the id in self->f_4b32. Caller 0x0023D988."
+  },
+  {
+    "address": "0x0023b2f0",
+    "name": "maybe_Battle_ApplyUnitPartMask",
+    "signature": "void maybe_Battle_ApplyUnitPartMask(BattleUnit* self, u32 maskIn, u32 arg3, u32 flags)",
+    "params": {
+      "param_1": "self",
+      "param_2": "maskIn",
+      "param_3": "arg3",
+      "param_4": "flags"
+    },
+    "summary": "Applies a part/attachment selection to the battle unit: merges the caller mask with the model flag word (g_0023B604), tries the primary and secondary attachment tables and, on success, forwards the resulting transform to the render model; otherwise falls back to the default part update.",
+    "confidence": 0.38,
+    "evidence": "Mask merge `unaff_r6 & g_0023B604 | g_0023B604`; two table probes via 0x003DF8D8 and 0x002F2210; fallback calls 0x00253290(self->f_c->f_6c, 0/1); ends in 0x0023B6F4 or 0x0023A4DC. Called by 0x00238F48."
+  },
+  {
+    "address": "0x0023b6f4",
+    "name": "maybe_Battle_ApplyPartMaskToModel",
+    "signature": "void maybe_Battle_ApplyPartMaskToModel(BattleUnit* self, u32 mask, u32* partState)",
+    "params": {
+      "param_1": "self",
+      "param_2": "mask",
+      "param_3": "partState"
+    },
+    "summary": "Low-level worker that walks the attachment table of a battle unit, resolves each entry by handle and applies the part state to the model (Ghidra could not decompile this block).",
+    "confidence": 0.3,
+    "evidence": "Ghidra emitted halt_baddata (bad instruction) for 0x0023B6F4; ARM disassembly shows a normal function (push {r4..fp,lr}, 0x8C-byte frame, handle mask table at g_0023B5FC/g_0023B618, lookup loop over self+0x300). Only caller 0x0023B2F0. Cannot confirm the exact per-entry call."
+  },
+  {
+    "address": "0x002ab37c",
+    "name": "maybe_Model_SetupPartsFromTable",
+    "signature": "void maybe_Model_SetupPartsFromTable(Model* self, int useAltTable, u32 arg3, u32 ctx)",
+    "params": {
+      "param_1": "self",
+      "param_2": "useAltTable",
+      "param_3": "arg3",
+      "param_4": "ctx"
+    },
+    "summary": "Looks up one of the four part ids at self+0x3C in the model's part table and, if the table row is within range, resets the four part slots and registers the row entries (three or two ids depending on useAltTable) as model parts.",
+    "confidence": 0.42,
+    "evidence": "Row lookup func_002D7270(ctx, u16 id); row[0] compared with the limit g_002AB470; the four 4-byte slots at +0x3C..+0x4B are cleared to the sentinel g_002AB46C; func_002AB474(self, id) appends a part (called 3x for the primary and 2x for the alternate row). Caller 0x003DAF30."
+  },
+  {
+    "address": "0x002bdff8",
+    "name": "Actor_DisableForNpcScript",
+    "signature": "void Actor_DisableForNpcScript(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Disables an NPC/enemy from script: clears the work words +0x2F4 and +0x290, turns off the actor bits through the vtable hooks (+0x40 and +0x58), releases its attached effects and raises the \"disabled\" flag bit 4 in +0x14.",
+    "confidence": 0.55,
+    "evidence": "Sole caller is the script native NPCEnemyDisable (0x00150368). self[0xBD]=0, self[0xA4]=0 then (*vtable+0x40)(self,4), 0x00335A18(self) (release effect list), (*vtable+0x58)(self,4), self->f_14 |= 4."
+  },
+  {
+    "address": "0x002be7e4",
+    "name": "Actor_DisableForNpcScriptAlt",
+    "signature": "void Actor_DisableForNpcScriptAlt(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Alternate NPC/enemy disable path: clears the work word +0x2A4, runs the same vtable disable hooks and releases the second attached-object list (0x00335EB0) before setting the disabled flag.",
+    "confidence": 0.52,
+    "evidence": "Sole caller NPCEnemyDisable (0x00150368); identical to 0x002BDFF8 but clears self[0xA9] and calls 0x00335EB0 instead of 0x00335A18 (the other attached-object list)."
+  },
+  {
+    "address": "0x002d183c",
+    "name": "Actor_ClassifyDirection4",
+    "signature": "u32 Actor_ClassifyDirection4(float* delta)",
+    "params": {
+      "param_1": "delta"
+    },
+    "summary": "Classifies a 2D direction delta into four facing sectors (0, 2, 4, 6 = north/east/south/west as used by the 8-way direction set), based on the angle against the reference forward vector and the sign of the cross product.",
+    "confidence": 0.68,
+    "evidence": "dot with -g_002d18c4 (reference forward) compared against the sector limits g_002d18c8/CC/D0; cross product `ref[2]*x - ref[0]*z` picks left/right; angle via 0x00672A14 (acos). Callers Actor2DTurnTarget (0x00153F74) and Actor2DTurnLocator (0x00155728) confirm the facing use."
+  },
+  {
+    "address": "0x002d18d4",
+    "name": "Actor_ClassifyDirection8",
+    "signature": "u32 Actor_ClassifyDirection8(float* delta)",
+    "params": {
+      "param_1": "delta"
+    },
+    "summary": "Classifies a direction delta into the 8-way facing set (0..7, even = axis aligned, odd = diagonal) by comparing the angle against the reference forward vector with four thresholds and the sign of the cross product for left/right.",
+    "confidence": 0.7,
+    "evidence": "Same structure as 0x002D183C with an extra 0x22.5/0x67.5 degree band (g_002d19b8..c4); 7 callers, all facing/rotation code (Actor2DTurnTarget, Actor2DTurnLocator, 0x00238F48, 0x002399D4, 0x00239D58, 0x0023B2F0, 0x002B5994)."
+  },
+  {
+    "address": "0x002e4618",
+    "name": "Anim_UpdatePoseBlend",
+    "signature": "void Anim_UpdatePoseBlend(BlendState* self, float step)",
+    "params": {
+      "param_1": "self",
+      "param_2": "step"
+    },
+    "summary": "Advances a keyframe blend by step (the parameter arrives in s0), rebuilds the 10-float pose from the two endpoint poses at +0x40 and +0x04 and writes the blended pose to the target node (self+0x68).",
+    "confidence": 0.7,
+    "evidence": "self->f_3c += step (blend timer); calls 0x002E465C to interpolate; result fed to 0x001CEE24 (node pose setter). Callers 0x00405398 and 0x0049F728 are motion/camera update paths."
+  },
+  {
+    "address": "0x002e465c",
+    "name": "Anim_InterpolatePose",
+    "signature": "void Anim_InterpolatePose(float* out, BlendState* self, float* poseA, float* poseB)",
+    "params": {
+      "param_1": "out",
+      "param_2": "self",
+      "param_3": "poseA",
+      "param_4": "poseB"
+    },
+    "summary": "Interpolates two 10-float keyframe poses (three float3 blocks plus a scalar) at the blend factor self+0x3C, using angular interpolation for the orientation block and lerp for positions; copies pose B when the blend weight is below the epsilon.",
+    "confidence": 0.72,
+    "evidence": "0x005753BC = vector lerp, 0x00575864 = quaternion slerp/nlerp; 0x002E44D4 reads the blend weight; 0x001CEDA4 initialises the output pose; the 0x002E4934/38/3C constants are the epsilon/unit values."
+  },
+  {
+    "address": "0x002ff874",
+    "name": "std_DivideU64",
+    "signature": "u64 std_DivideU64(u32 lo, u32 hi)",
+    "params": {
+      "param_1": "lo",
+      "param_2": "hi"
+    },
+    "summary": "Unsigned 64-bit divided by 10 with the remainder returned in the high word: the shift/add division sequence used by the itoa/printf digit loops to peel one decimal digit per call.",
+    "confidence": 0.85,
+    "evidence": "Body is the classic reciprocal multiply-by-0xCCCCCCCC/0x51EB851F expansion; callers 0x001003F8 and 0x002FFEFA both do `q = std_DivideU64(n); digit = (char)q + '0'` in a loop and keep the returned remainder in the high half."
+  },
+  {
+    "address": "0x002ffdc8",
+    "name": "std_ScaleByPowerOfTen",
+    "signature": "void std_ScaleByPowerOfTen(double* out, int exponent, int roundMode)",
+    "params": {
+      "param_1": "out",
+      "param_2": "exponent",
+      "param_3": "roundMode"
+    },
+    "summary": "Multiplies/divides a double by 10^exponent by splitting the exponent into base-55 chunks and using a table of pre-scaled 10^k constants, i.e. the power-of-ten scaling step of strtod/dtoa.",
+    "confidence": 0.75,
+    "evidence": "Splits exponent with func_0011CD80(n+0x1B9B, 0x37) (n/55), walks the 16-byte 10^k table at 0x002FFE50/0x002FFDD4 and combines the parts with 0x002FFEC8 (double multiply) and 0x002FFE98 (divide); callers 0x00101100 (strtof core) and 0x002FFEFA (dtoa)."
+  },
+  {
+    "address": "0x002ffe98",
+    "name": "std_DoubleDivideAlt",
+    "signature": "void std_DoubleDivideAlt(const double* lhs, const double* rhs)",
+    "params": {
+      "param_1": "lhs",
+      "param_2": "rhs"
+    },
+    "summary": "Registers-in/registers-out variant of the soft-float double divide: same normal-number test, mantissa divide core and result packing as std_DoubleDivide.",
+    "confidence": 0.55,
+    "evidence": "Calls 0x001263C8 (divide core) then 0x0012676C (pack, register variant of 0x00126710). Used by 0x002FFDC8 and 0x002FFEFA."
+  },
+  {
+    "address": "0x002ffec8",
+    "name": "std_DoubleMultiplyAlt",
+    "signature": "void std_DoubleMultiplyAlt(const double* lhs, const double* rhs)",
+    "params": {
+      "param_1": "lhs",
+      "param_2": "rhs"
+    },
+    "summary": "Registers-in/registers-out variant of the soft-float double multiply: tests for non-zero significands, runs the mantissa multiply core and packs the result.",
+    "confidence": 0.55,
+    "evidence": "Calls 0x001268A8 (mantissa multiply / exponent add) then 0x0012676C; sibling of 0x00126878. Used by 0x002FFDC8 and 0x002FFEFA."
+  },
+  {
+    "address": "0x002ffefa",
+    "name": "std_DoubleToDecimal",
+    "signature": "char* std_DoubleToDecimal(DtoaResult* result, char* digits, double* value, int ndigits, int mode)",
+    "params": {
+      "param_1": "result",
+      "param_2": "digits",
+      "param_3": "value",
+      "param_4": "ndigits",
+      "param_5": "mode"
+    },
+    "summary": "Converts a double to a decimal digit string for printf %e/%f/%g: scales by powers of ten until the digit count fits, emits digits (reversing them), trims leading zeros or rounds up one digit and reports the decimal point position plus the final digit count through result.",
+    "confidence": 0.8,
+    "evidence": "Digit loop divides by 10 with std_DivideU64; scaling with std_ScaleByPowerOfTen; rounding mode from 0x002FFDC0 and ERANGE handling; result struct layout {decpt, ndigits, sign} consumed by 0x00300090 (printf float formatter)."
+  },
+  {
+    "address": "0x00300090",
+    "name": "std_PrintfFormatFloat",
+    "signature": "u32 std_PrintfFormatFloat(PrintfStream* out, int conv, int width)",
+    "params": {
+      "param_1": "out",
+      "param_2": "conv",
+      "param_3": "width"
+    },
+    "summary": "Handles the %e / %f / %g float conversions for printf: takes the double from the varargs, asks std_DoubleToDecimal for digits plus decimal point, builds the exponent part, and emits the sign, padding and digits through the stream putc callback.",
+    "confidence": 0.82,
+    "evidence": "conv compared with 0x65 ('e'), 0x66 ('f'), 0x67 ('g'); calls 0x002FFEFA (dtoa), 0x002FF798 (digit helper), 0x002FF71C/0x002FF748 (pad start/end), 0x00300308 (locale decimal point), 0x00100F24 (fallback for long double / invalid modes); stream fields [1]=putc, [2]=cookie, [6]=width, [8]=count. No callers because it is reached through the printf dispatch table."
+  },
+  {
+    "address": "0x00300714",
+    "name": "std_ScanfConvertFloat",
+    "signature": "void std_ScanfConvertFloat(u32 dst, int width, u32 arg3, u32 arg4, u32 arg5, ScanSource* src)",
+    "params": {
+      "param_1": "dst",
+      "param_2": "width",
+      "param_3": "arg3",
+      "param_4": "arg4",
+      "param_5": "arg5",
+      "param_6": "src"
+    },
+    "summary": "scanf %f/%e/%g conversion: fills the scan-source descriptor (getc/ungetc/char-class callbacks from the 0x003007A8 block) and runs strtod on the input to store the converted double.",
+    "confidence": 0.7,
+    "evidence": "Builds the ScanCtx on the stack (local_10/local_c/local_8 = 0x003007A8/AC/B4 relative pointers, field +0xC = arg4) and calls 0x00101314 (strtod). No callers because it is reached from the scanf conversion table."
+  },
+  {
+    "address": "0x00300d50",
+    "name": "std_DoubleToFloat",
+    "signature": "float std_DoubleToFloat(double* value)",
+    "params": {
+      "param_1": "value"
+    },
+    "summary": "Narrows a double to float with the C conversion semantics: returns HUGE_VALF/0 and sets ERANGE on overflow/underflow (checked against the exponent range of the unpacked double).",
+    "confidence": 0.88,
+    "evidence": "0x006B83D0 unpacks the double exponent into local_28; exponent +0x7E compared with 1 and 0xFF; 0x00100C16(2) sets errno = ERANGE (2); constants g_00300E00/0E0C/0E10/0E14 are the +-inf and HUGE_VALF values. Called from std_StrtofCore."
+  },
+  {
+    "address": "0x00303480",
+    "name": "maybe_Anim_EvaluateAimPose",
+    "signature": "void maybe_Anim_EvaluateAimPose(float* out, int mode, void* ctx)",
+    "params": {
+      "param_1": "out",
+      "param_2": "mode",
+      "param_3": "ctx"
+    },
+    "summary": "Aim/look-at pose evaluation: reads the actor basis at model+0x8C..0x98, builds the rotation that points at a target direction and converts the result through acos/cos/sin/floor before storing the pose and forwarding it to the sibling evaluator 0x003038CC.",
+    "confidence": 0.3,
+    "evidence": "Recovered C: virtual call (*(ctx+0x18))(ctx), then the orientation block f_8c/f_90/f_94/f_98 of arg2->f_28 is combined with the trig trio 0x00672A14 (acos), 0x00672E44 (cosf), 0x006731EC (floorf), 0x00673BC8 (sinf) and finally 0x003038CC. The f_8c..f_98 layout is the same 2x2 rotation basis used by 0x00162A98 and 0x002D183C. No direct callers found; name is a guess based on the trig usage."
+  },
+  {
+    "address": "0x00335a18",
+    "name": "maybe_Gfx_ReleaseEffectNodes",
+    "signature": "void maybe_Gfx_ReleaseEffectNodes(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "One-shot teardown of the first attached-object list: if the \"has children\" flag at +0x1F4 is set, calls the virtual destructor (vtable +0xC) of every element in the list at +0x204 (count +0x224) and clears the flag.",
+    "confidence": 0.5,
+    "evidence": "Loop: (*(*(*(self + i*4 + 0x204) + 0x3C) + 0xC))() for i < self->f_224; flag +0x1F4 cleared first so it can only run once. 11 callers, all actor/model teardown paths (0x002BDB4C, 0x002BDFF8, 0x002F8138, 0x0061AF68 ...)."
+  },
+  {
+    "address": "0x00335eb0",
+    "name": "maybe_Gfx_ReleaseModelNodes",
+    "signature": "void maybe_Gfx_ReleaseModelNodes(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "One-shot teardown of the second attached-object list: calls the virtual destructor of every element in the list at +0x230 (count +0x250) and clears the guard byte at +0x220.",
+    "confidence": 0.5,
+    "evidence": "Same shape as 0x00335A18 with flag +0x220, list +0x230, count f_250; 14 callers in actor/model teardown (0x002BE7E4, 0x0036BCDC, 0x003DD8E4, 0x003E091C, 0x004653E0 ...)."
+  },
+  {
+    "address": "0x0036bc5c",
+    "name": "maybe_Anim_SetNodeDirectionFromBasis",
+    "signature": "void maybe_Anim_SetNodeDirectionFromBasis(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Derives the facing direction of an actor from its 2x2 rotation basis and applies it to the attached render node: builds a float3 from the basis, classifies it into the 4-way direction set and calls the node direction setter.",
+    "confidence": 0.48,
+    "evidence": "Recovered C: f28 = self->f_28; node = f28->f_260; if node: local = { (f8c*f94 + f90*f98)*k, (f90*f94 - f8c*f98)*k, (f94^2+f98^2) - f90^2 - f8c^2 } with k = g_0036BCD8; then func_002D183C(&local) (Actor_ClassifyDirection4) and func_005F36E0(node, dir, 1). Byte-identical twin of 0x003E089C (different constant g_003E0918)."
+  },
+  {
+    "address": "0x0036bcdc",
+    "name": "maybe_Actor_UpdateTurnAnimation",
+    "signature": "void maybe_Actor_UpdateTurnAnimation(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Turn-toward-target visual update: compares the actor facing basis with the direction to its target, picks the TurnR or TurnL animation through vtable+0x84, and when the remaining angle is small enough blends the rotation back so the actor finishes the turn cleanly.",
+    "confidence": 0.55,
+    "evidence": "Recovered C (180 lines): string globals s_TurnR_0036c120 and s_TurnL_0036c128 passed to (**(self[10] + 0x84))(node, name) - the node animation-by-name call seen in 0x004F129C and 0x004653E0. Orientation math uses f_8c/f_90/f_94/f_98, acos (0x00672A14), normalization by sqrt and constants g_0036C10C..g_0036C130; ends with 0x00335EB0-style node access. No direct callers in the index (virtual or data-driven dispatch)."
+  },
+  {
+    "address": "0x0036ce94",
+    "name": "maybe_Actor_UpdateTurnBlend",
+    "signature": "void maybe_Actor_UpdateTurnBlend(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second stage of the actor turn update: recomputes the angle between the current facing basis and the target direction and interpolates the basis toward it, then hands the result to the node transform setter.",
+    "confidence": 0.4,
+    "evidence": "Recovered C (86 lines): same f_8c/f_90/f_94/f_98 basis reads as 0x0036BCDC, calls 0x005F5F54 (node transform setter), 0x00672A14 (acos) and 0x00673BC8 (sinf). Callers 0x0036C440 and 0x0036D2E8 (turn state machine)."
+  },
+  {
+    "address": "0x0036d2e8",
+    "name": "maybe_Actor_UpdateTurnState",
+    "signature": "void maybe_Actor_UpdateTurnState(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame turn state machine step: runs the turn helpers, queries the current state through vtable+0x34, forwards the state id to the actor event helper and clears the pending-turn counter at +0x290.",
+    "confidence": 0.42,
+    "evidence": "Recovered C: func_0036D0DC(); func_0036CCF0(self); func_0036CE94(self); uVar = (**(self + 0x34))(self); if (uVar != -1) func_005E7848(self[10], uVar & 0xff, 0); *(u32*)(self[10] + 0x290) = 0. The called trio is the turn-update family of 0x0036BC5C / 0x0036BCDC / 0x0036CE94."
+  },
+  {
+    "address": "0x00372cec",
+    "name": "maybe_Camera_TrackTargetRotation",
+    "signature": "void maybe_Camera_TrackTargetRotation(SceneObj* self, float dt)",
+    "params": {
+      "param_1": "self",
+      "param_2": "dt"
+    },
+    "summary": "Frame update for an object that rotates toward a target: derives the angular rate from self+0x2C / (self+0x34 * dt), clamps it against g_00372EA0, builds the delta rotation with the quaternion helpers and applies the resulting matrix through 0x00614930.",
+    "confidence": 0.32,
+    "evidence": "Recovered C (106 lines): f_2c/(f_34*in_s0) with a clamps against g_00372ea0; quaternion multiply 0x005754C0, 0x00575F68, basis builder 0x00614930 (in this batch) and acos 0x00672A14; a 76-byte stack matrix is filled and stored. Callers 0x00372F28 and 0x004137D0."
+  },
+  {
+    "address": "0x003d98c0",
+    "name": "maybe_Fx_InitGlobalPool",
+    "signature": "void maybe_Fx_InitGlobalPool(FxSystem* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "One-shot lazy initialisation of the shared effect pool: allocates a 0x1C-byte-stride block rounded up to 16 bytes, zeroes it, installs the pool pointer in the global and then runs the per-frame pool update.",
+    "confidence": 0.3,
+    "evidence": "Recovered C: if (*g_003D99E8 == 0) { *g_003D99E8 = 0; size = func_0011FE8C(0x1c, 0x10); n = func_0011CFAC(size + 0xf, 0x10); pool = n * size; zero 7 dwords ... } - the standard first-call-only singleton idiom. Calls 0x005F6558 (curve/trail geometry update) and 0x00293A00. Subsystem name is a guess: the pool objects are 0x1C bytes."
+  },
+  {
+    "address": "0x003daf30",
+    "name": "maybe_Battle_SetupUnitModelParts",
+    "signature": "void maybe_Battle_SetupUnitModelParts(BattleUnit* self, u16 modelId, u8 variant)",
+    "params": {
+      "param_1": "self",
+      "param_2": "modelId",
+      "param_3": "variant"
+    },
+    "summary": "Initialises a battle unit model from its data record: copies the model id, palette and part bytes from the record looked up for the current context, resolves the default variant when none is given and registers the model parts through the part table.",
+    "confidence": 0.55,
+    "evidence": "Recovered C: ctx = func_0011CB38(&local); rec = func_0063F1E0(*ctx, modelId); *self = *(u16*)(rec+0x26); self->f_3b = rec[0x32] != 0xff ? rec[0x32] : variant; self->f_3d = rec[0x3e]; self[0x30] = modelId; self->f_32 = rec[8]; then loops over *rec calling 0x002AB37C (Model_SetupPartsFromTable). Callers include LoadBattleFunc (0x001471B0) plus 0x003DB0A4, 0x00591B08, 0x0059A8A4."
+  },
+  {
+    "address": "0x003db0a4",
+    "name": "maybe_Battle_SetUnitModelVariant",
+    "signature": "void maybe_Battle_SetUnitModelVariant(BattleUnit* self, u32 setId, int index, u8* colors, u32 arg5)",
+    "params": {
+      "param_1": "self",
+      "param_2": "setId",
+      "param_3": "index",
+      "param_4": "colors",
+      "param_5": "arg5"
+    },
+    "summary": "Applies one variant entry of a monster/battle model set: looks the set up, picks the model id at the requested index, calls the part setup and stores the colour overrides plus the index/flag bytes used later to detect the last variant.",
+    "confidence": 0.5,
+    "evidence": "Recovered C: ctx = func_0011CB38(&local); set = func_0063F108(*ctx, setId); table = set->f_14 ? set + 0x14 + set->f_14 : 0; func_003DAF30(self, *(u16*)(table + index*8), 0xff); *(u32*)(self+100) = arg5; self->f_69 = setId; self->f_6a = index; self->f_6b = (set->f_10 - 1 == index); self->f_6c..6e = colors[0..2]."
+  },
+  {
+    "address": "0x003dd3e0",
+    "name": "maybe_Actor_UpdateFollowTargetMotion",
+    "signature": "u32 maybe_Actor_UpdateFollowTargetMotion(Actor* self, u32 targetHandle)",
+    "params": {
+      "param_1": "self",
+      "param_2": "targetHandle"
+    },
+    "summary": "Moves an actor towards the object referenced by a handle: resolves the handle through the global object table, requires the target class mask 0x20000001, computes the offset and facing angle, applies the allowed turn and writes the new position/orientation.",
+    "confidence": 0.38,
+    "evidence": "Recovered C (160 lines): handle lookup `g_003DD7F0 != handle>>0xb`, slot = g_003DD7F4 + (handle & (int)g_003DD7F0>>10)*8, then (obj->f_30 & g_003DD7F8) == 0x20000001 - the same table idiom as 0x0062AA08. Distance via sqrt, angle via 0x00672A14 (acos), forward vector via 0x00669D88(&vec, self), motion applied through 0x00231A9C and 0x003725A8. Returns u32 status."
+  },
+  {
+    "address": "0x003dd8e4",
+    "name": "maybe_Actor_DispatchEvent",
+    "signature": "void maybe_Actor_DispatchEvent(Actor* self, int event, u32 arg3)",
+    "params": {
+      "param_1": "self",
+      "param_2": "event",
+      "param_3": "arg3"
+    },
+    "summary": "Actor event hook: handles the three state events 2, 0x1D and 0x2A (0x1D sets the lock byte +0x2C8, 0x2A releases the attached model nodes and clears it), forwards every event to the base handler and then to the child object registered at +0x270.",
+    "confidence": 0.45,
+    "evidence": "Recovered C: if (event != 2) { if (event == 0x1d) uVar = 1; else if (event == 0x2a) { func_00335EB0(); uVar = 0; } self->f_2c8 = uVar; } func_005E754C(self, event, arg3); child = self->f_270; if (child) (**(child + 0x38))(child, event, arg3). The 0x1D/0x2A event ids and the base call shape match the other actor event hooks in this range."
+  },
+  {
+    "address": "0x003e089c",
+    "name": "maybe_Anim_SetNodeDirectionFromBasisAlt",
+    "signature": "void maybe_Anim_SetNodeDirectionFromBasisAlt(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Alternate copy of 0x0036BC5C: builds the direction vector from the actor 2x2 basis with a different scale constant, classifies it and applies it to the render node.",
+    "confidence": 0.48,
+    "evidence": "Recovered C: byte-identical to 0x0036BC5C except the scale constant g_003E0918 instead of g_0036BCD8; same callees 0x002D183C (Actor_ClassifyDirection4) and 0x005F36E0."
+  },
+  {
+    "address": "0x003e091c",
+    "name": "maybe_Actor_UpdateAimPoseIK",
+    "signature": "void maybe_Actor_UpdateAimPoseIK(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Aim/IK style pose update: takes an angle from the target (clamped against +0x304 and the g_003E0C.. limits), builds three successive rotations around the g_003E0C44/48/4C axes with sin/cos and acos, composes them into a quaternion and finally converts the result into the actor basis.",
+    "confidence": 0.35,
+    "evidence": "Recovered C (173 lines): repeated (angle -> acos/cos/sin -> axis * sin -> quaternion) blocks with axis constants g_003E0C44, g_003E0C48, g_003E0C4C, unit 1.0 at g_003E0C3C/40, and the final composition projected onto f_28->f_8c..f_98. Callees 0x00672A14/0x00672E44/0x006731EC plus the 0x005F59E4 / 0x005F5F54 node helpers and 0x00335EB0. Shares the callee set with 0x0036BCDC."
+  },
+  {
+    "address": "0x003f44e4",
+    "name": "maybe_Node_SyncTransformFromAttached",
+    "signature": "void maybe_Node_SyncTransformFromAttached(Node* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "If an attached child object exists at +0x174, runs its transform update and copies the resulting transform word from the child (+0x88) back into self (+0x88).",
+    "confidence": 0.5,
+    "evidence": "Recovered C: if (self->f_174 != 0) { func_005F79E0(self); self->f_88 = self->f_174->f_88; } 0x005F79E0 (in this batch) is the heavy trail/curve update that also calls 0x00614930."
+  },
+  {
+    "address": "0x00405398",
+    "name": "maybe_Anim_UpdateBlendLerp",
+    "signature": "void maybe_Anim_UpdateBlendLerp(BlendState* self, float step)",
+    "params": {
+      "param_1": "self",
+      "param_2": "step"
+    },
+    "summary": "Advances the keyframe blend and lerps the two stored poses: clamps the blend weight between the g_00405454..g_0040545C limits and writes the interpolated position triple into +0x74..+0x7C.",
+    "confidence": 0.5,
+    "evidence": "Recovered C: func_002E4618() (Anim_UpdatePoseBlend, step arrives in s0), then weight = self->f_3c/self->f_30 clamped with g_00405454/58/5C and f_74 = f_98 + (f_10 - f_98)*weight, f_78 = f_9c + (f_14 - f_9c)*weight, ... - i.e. lerp of the pose stored at +0x98 and +0x10."
+  },
+  {
+    "address": "0x004104d0",
+    "name": "maybe_Camera_ComputeViewTransform",
+    "signature": "void maybe_Camera_ComputeViewTransform(float* out, int mode, float* src, float* target)",
+    "params": {
+      "param_1": "out",
+      "param_2": "mode",
+      "param_3": "src",
+      "param_4": "target"
+    },
+    "summary": "Builds a view/look-at transform: computes the direction between two float3 points, derives the yaw and pitch with acos/cos/sin, rotates the offset through the quaternion helper and stores the resulting matrix.",
+    "confidence": 0.3,
+    "evidence": "Recovered C (180 lines): two float3 inputs, many local float3 temporaries, callees 0x00574548 (rotate vector by quaternion) and the trig trio 0x00672A14/0x00672E44/0x006731EC. Sole caller 0x0059A4B4. Geometry matches a look-at/view matrix construction but the exact output layout was not verified."
+  },
+  {
+    "address": "0x00410928",
+    "name": "maybe_Camera_InitOrbitParams",
+    "signature": "void maybe_Camera_InitOrbitParams(Camera* self, float* params)",
+    "params": {
+      "param_1": "self",
+      "param_2": "params"
+    },
+    "summary": "Fills a camera parameter block from a float array: stores the mode ints and float limits (g_00410AAC..g_00410ABC), builds the base rotation with 0x00574548 and converts the element at +0x140 into a local matrix.",
+    "confidence": 0.3,
+    "evidence": "Recovered C: self[10] = *g_00410AA8; self[3] = g_00410AAC; self[4] = g_00410AB0; byte at +1 = 0xff; self[7] = params[0]; self[0xd] = params[1]; self[0xf] = params[2]; func_00665564(&local, *self + 0x140); scale = params[3] * g_00410AB8 * g_00410ABC; then 0x00574548 + acos/cos/sin. Sole caller 0x00410354 (the camera object constructor)."
+  },
+  {
+    "address": "0x00440a74",
+    "name": "maybe_Anim_UpdateBlendPoseAlt",
+    "signature": "void maybe_Anim_UpdateBlendPoseAlt(BlendState* self, float step)",
+    "params": {
+      "param_1": "self",
+      "param_2": "step"
+    },
+    "summary": "Variant of the blend-pose advance: adds the step to the blend timer, interpolates the two poses with 0x002E465C and pushes the blended pose into the node, plus an extra lerp when the loop flag +0x1E1 is set.",
+    "confidence": 0.5,
+    "evidence": "Recovered C: self->f_3c += in_s0; func_002E465C(&local, self, self+0x40, self+4); func_001CEE24(&self->f_68, &local); then if (self->f_90 == 0 && self->f_30 > k && self->f_1e1 && self->f_3c == in_s0) an extra interpolation using 0x005753BC (vector lerp). Same shape as 0x00405398 and 0x0049F728 but with a different node/field layout."
+  },
+  {
+    "address": "0x00456790",
+    "name": "maybe_Camera_LookAtPoint",
+    "signature": "void maybe_Camera_LookAtPoint(SceneObj* self, float* point)",
+    "params": {
+      "param_1": "self",
+      "param_2": "point"
+    },
+    "summary": "Computes the yaw/pitch needed to face a world point: derives the local basis with 0x00669D88, projects the point offset, clamps the angles with the g_00456.. limits and applies the rotation through the quaternion/matrix helpers.",
+    "confidence": 0.35,
+    "evidence": "Recovered C (102 lines): func_00669D88 (basis from self), 0x00574548 (rotate), 0x005736A0, 0x005AFF48 plus acos/cos/sin; float3 argument. Callers 0x0045671C and 0x00456A24."
+  },
+  {
+    "address": "0x004653e0",
+    "name": "maybe_Actor_ResetAnimationAndReleaseNodes",
+    "signature": "void maybe_Actor_ResetAnimationAndReleaseNodes(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Restores the default animation of the attached model (indexed by the model byte +0xBF), fires the model callback at vtable+0x98, clears the pending transform flag +0x2D8 and releases the attached model nodes.",
+    "confidence": 0.48,
+    "evidence": "Recovered C: table = g_00465454; node = self->f_28; i = (**(node+0x84))(node, table[node->f_bf]); if (i == 0) (**(node+0x84))(node, *table); (**(self->f_28 + 0x98))(); self->f_28->f_2d8 = 0; func_00335EB0(self->f_28) (release model nodes). The +0x84 vtable slot is the animation-by-name setter used in 0x0036BCDC / 0x004F129C."
+  },
+  {
+    "address": "0x0049b3e4",
+    "name": "maybe_Motion_BlendTransforms",
+    "signature": "void maybe_Motion_BlendTransforms(u32* out, Motion* a, Motion* b)",
+    "params": {
+      "param_1": "out",
+      "param_2": "a",
+      "param_3": "b"
+    },
+    "summary": "Blends two motion/transform samples by the blend factor in s0: lerps the position triples with 0x005753BC and slerps the orientation using acos and sin.",
+    "confidence": 0.4,
+    "evidence": "Recovered C (75 lines): func_005753BC (vector lerp) plus 0x00672A14 (acos) and 0x00673BC8 (sinf) for the angular interpolation; inputs are two objects with float3 at +0x14/+0x18. Callers 0x004D4350 (in this batch) and 0x004D4704."
+  },
+  {
+    "address": "0x0049ed7c",
+    "name": "maybe_Motion_ApplyRotationBlend",
+    "signature": "void maybe_Motion_ApplyRotationBlend(float* out, Motion* a, Motion* b)",
+    "params": {
+      "param_1": "out",
+      "param_2": "a",
+      "param_3": "b"
+    },
+    "summary": "Second half of the motion blend: rotates the blended offset with 0x005744DC, normalises it with 0x005755C8 and stores the resulting float3.",
+    "confidence": 0.32,
+    "evidence": "Recovered C (123 lines) with in_fpscr and s0 passes; callees 0x005744DC, 0x005755C8, 0x00672A14 (acos), 0x00673BC8 (sinf). Sole caller 0x0049FD4C. Field layout matches maybe_Motion_BlendTransforms but the exact role is inferred."
+  },
+  {
+    "address": "0x0049f728",
+    "name": "maybe_Anim_UpdateBlendPoseVariant",
+    "signature": "void maybe_Anim_UpdateBlendPoseVariant(BlendState* self, float step)",
+    "params": {
+      "param_1": "self",
+      "param_2": "step"
+    },
+    "summary": "Third variant of the blend-pose advance: calls 0x002E4618 then, while the flag +0x93 is set and the loop timer allows it, lerps the pose with a slightly different field mapping.",
+    "confidence": 0.45,
+    "evidence": "Recovered C: func_002E4618(); if (self->f_93) { if (g_0049F8D8 < self->f_30) { if (self->f_94 && self->f_3c == in_s0) { ... } } } with constants g_0049F8D8/g_0049F8DC. Structurally the same update as 0x00405398 and 0x00440A74."
+  },
+  {
+    "address": "0x004c5f48",
+    "name": "maybe_Actor_CheckVisibility",
+    "signature": "bool maybe_Actor_CheckVisibility(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Visibility/range test used by the field actor manager: combines a flag word at +0x15C with the global object-table mask, then walks a candidate list and tests each entry with the view-cone helper 0x00178DD0; returns whether any candidate is visible.",
+    "confidence": 0.4,
+    "evidence": "Recovered C (78 lines): self->f_27c = -1; i = func_0062AA08 & self->f_15c; globals g_004C60C8/g_004C60CC; the inner loop calls 0x00178DD0 (Field_IsPointInActorViewCone) and 0x0062AA08 (handle/flag test). Bool result. Matches the NPC range logic that also uses 0x00178DD0."
+  },
+  {
+    "address": "0x004d4350",
+    "name": "maybe_Motion_UpdateBlendTimer",
+    "signature": "u32 maybe_Motion_UpdateBlendTimer(Motion* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Advances the motion blend clock (+0xA4 plus +0x528), rebuilds the blended transform with 0x0049B3E4 and stores the interpolation offsets used by the next frame.",
+    "confidence": 0.35,
+    "evidence": "Recovered C: fVar2 = self->f_a4 + self->f_528; then 0x0049B3E4 (blend transforms), 0x00574548 (rotate), 0x005753BC (lerp); 17 local float/u32 slots hold two transform samples. Returns u32."
+  },
+  {
+    "address": "0x004f129c",
+    "name": "maybe_Actor_UpdateRunAnimation",
+    "signature": "void maybe_Actor_UpdateRunAnimation(Actor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Run-cycle update for a specific enemy model: switches the model to the animation named Skull_Run through vtable+0x84, then reads the model joint/scale block at +0x324 and drives the procedural leg motion with acos and 0x005AFF48.",
+    "confidence": 0.45,
+    "evidence": "Recovered C: (**(self->f_28 + 0x84))(self->f_28, s_Skull_Run_004f1564) - a literal animation name, so this is character-specific; then pf = &node->f_324, uses g_004F1570 and callees 0x005AFF48 + 0x00672A14. No callers found (likely a per-actor virtual update)."
+  },
+  {
+    "address": "0x0051b6b8",
+    "name": "maybe_Math_WrapFloatToU16",
+    "signature": "u32 maybe_Math_WrapFloatToU16(float value, int limit)",
+    "params": {
+      "param_1": "value",
+      "param_2": "limit"
+    },
+    "summary": "Reduces a float into the range [0, limit) with fmodf when it exceeds the limit and converts the result to an unsigned 16-bit value using the current FPSCR rounding mode.",
+    "confidence": 0.35,
+    "evidence": "Recovered C: if (limit <= value) func_00673288(); (fmodf) then VectorFloatToUnsigned(value, 3); VectorUnsignedToFloat(result & 0xffff, rounding). Callee 0x00673288 = std_Fmodf. The floating-point builtins are Ghidra VFP intrinsics, so the exact return type is inferred from the 0xffff mask."
+  },
+  {
+    "address": "0x0052ac80",
+    "name": "maybe_Fx_EmitterInitFromTemplate",
+    "signature": "void maybe_Fx_EmitterInitFromTemplate(FxEmitter* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Initialises an effect/particle emitter instance from its template: copies the spawn box, scale, colour and curve parameters from the template pointer at +0xDC, then builds the module pointer list from the module array at +0x100 and sets capability flags for module types 2, 5 and 8.",
+    "confidence": 0.42,
+    "evidence": "Recovered C (282 lines): tpl = self->f_dc; copies tpl->f_2c4/f_31c/f_2d8/f_2dc/f_2b0/f_290..298 /f_2a0..2a8/f_284..28c/f_208..228/f_188; then modules = self->f_100 and for each entry (stride at +0x10, type at +8) stores its pointer into self+0x108 and sets flag bits for types 8, 5 and 2. Callee 0x00125034 (rand()-style LCG helper used by 0x0052B354). The module-array layout is the main basis for reading this as an emitter."
+  },
+  {
+    "address": "0x0052b174",
+    "name": "maybe_Fx_EmitterUpdateModules",
+    "signature": "void maybe_Fx_EmitterUpdateModules(FxEmitter* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame module evaluation for the effect emitter: walks the module list built at +0x108, applies each module to the current particle parameters and clamps the results.",
+    "confidence": 0.32,
+    "evidence": "Recovered C (127 lines) with no calls (all module logic inlined), reading self->f_dc template fields, self->f_300 and self->f_dc; caller 0x0052B7F4 (emitter reset). Listed as bounds-checked loops over the module count at self+0x104."
+  },
+  {
+    "address": "0x0052b354",
+    "name": "maybe_Fx_EmitterRandomizeSpawn",
+    "signature": "void maybe_Fx_EmitterRandomizeSpawn(FxEmitter* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Computes the random spawn transform of an emitter particle: advances the LCG seed (seed*1103515245+12345) three times per axis, maps the values through the range table g_0052B758 into velocity/offset ranges and builds the 3x3 rotation+scale matrix written to +0x200..+0x22C.",
+    "confidence": 0.5,
+    "evidence": "Recovery is strong on the mechanics: func_00125034(x*scale) with the classic rand() LCG (multiplier 0x41C64E6D seen at 0x0052B9C0, increment 0x3039 = 12345), 16-byte range records {min, range, min, range} at g_0052B758 indexed by the top byte of the random value, and the result matrix self->f_200..f_22c combined with tpl->f_208..f_240 and self->f_b4..c4. Whether this is a particle emitter or another random-spawn system is inferred from the template pointer at +0xDC shared with 0x0052AC80."
+  },
+  {
+    "address": "0x0052b7f4",
+    "name": "maybe_Fx_EmitterReset",
+    "signature": "void maybe_Fx_EmitterReset(FxEmitter* self, int arg2)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2"
+    },
+    "summary": "Resets an emitter instance: clears the state words, stores the owner id at +0xDC, installs the default parameters from g_0052B9BC and calls the module and spawn-transform updates.",
+    "confidence": 0.42,
+    "evidence": "Recovered C: arg1[0x37] = arg2 (the template/owner pointer); *arg1 = arg1[1] = g_0052B9BC (0); arg1[2] = 0; arg1[3] = -1; arg1[4] = arg1[5] = 0; then g_0052B9C4 (1.0), func_0010009C, 0x001252C8 and both 0x0052B174 / 0x0052B354. Sole caller 0x0052FA9C."
+  },
+  {
+    "address": "0x0052ba7c",
+    "name": "maybe_Fx_SampleKeyframeCurve",
+    "signature": "float maybe_Fx_SampleKeyframeCurve(Curve* self, float time)",
+    "params": {
+      "param_1": "self",
+      "param_2": "time"
+    },
+    "summary": "Samples a keyframe curve at a given time: binary-searches the (time, value) pairs starting at +0x14, interpolates between the two bracketing keys and wraps the time with fmodf when the curve loops.",
+    "confidence": 0.48,
+    "evidence": "Recovered C (47 lines): pf = (float*)(self+5); if (self[0] != 1) { if (self[3] == 0) { if (time <= pf[0]) return; if (pf[self[0]*2 - 2] <= time) return; } ... } and callee 0x00673288 (std_Fmodf) for the looping case. The 2-floats-per-key layout and the pair count at self[0] identify a keyframe track."
+  },
+  {
+    "address": "0x0052bcf8",
+    "name": "maybe_Fx_UpdateEmitterTarget",
+    "signature": "void maybe_Fx_UpdateEmitterTarget(FxEmitter* self, int a, int b)",
+    "params": {
+      "param_1": "self",
+      "param_2": "a",
+      "param_3": "b"
+    },
+    "summary": "Updates the emitter target/owner transform: interpolates the stored target position and angles and recomputes the emitter basis before the draw.",
+    "confidence": 0.3,
+    "evidence": "Recovered C (85 lines) with no calls; reads f_34/f_44/f_54/f_98/fa0 and writes float triples. Callers 0x0052C26C and 0x0052F10C. Role inferred from the surrounding emitter functions only."
+  },
+  {
+    "address": "0x0052bf7c",
+    "name": "Fx_BuildEmitterTransformMatrices",
+    "signature": "void Fx_BuildEmitterTransformMatrices(FxManager* manager, FxEmitterInstance* emitter)",
+    "params": {
+      "param_1": "manager",
+      "param_2": "emitter"
+    },
+    "summary": "Rebuilds the two 3x4 orientation matrices an emitter uses while spawning (the local basis at +0x1D0 and the world basis at +0x200): converts the emitter's three rotation angles to sine/cosine through the shared fixed-point trig table, expands them into a scaled orthonormal basis, stamps the two 32-bit spawn values (+0x18C/+0x194) into the matrix and copies the emitter's current frame number into every live particle module so newly spawned particles start on the right frame.",
+    "confidence": 0.55,
+    "evidence": "Only caller 0x0052F10C (Fx_UpdateEmitterTransform) calls it right before copying both matrices to the template at +0x1D0/+0x1A0 through 0x0012515C. Matrix pair written at emitter+0x1D0 (indices 0x74..0x7F) and emitter+0x200 (0x80..0x8B); g_0052C260 scales the euler angles into table units, 0x00125034 is the fixed-point sincos table lookup (index in the top 8 bits, Q24 fraction below), g_0052C264 converts the Q24 fraction and g_0052C268 is the sin/cos table base. First loop walks emitter[0x41] live particle pointers and writes the frame stamp through the module pointer at particle+8."
+  },
+  {
+    "address": "0x0052c26c",
+    "name": "maybe_Fx_UpdateEmitterFrame",
+    "signature": "void maybe_Fx_UpdateEmitterFrame(u32 arg1, float* emitter)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "emitter"
+    },
+    "summary": "Frame update of an emitter driven by another object: reads the owner clock at owner+0x53C, advances the emitter timeline, and calls the target, curve and transform updates.",
+    "confidence": 0.32,
+    "evidence": "Recovered C (130 lines): fVar3 = emitter[0x37]; fVar7 = emitter[7]; checks *(char*)(fVar7+0x284) == 0; fVar12 = emitter[0x25] + *(float*)(fVar3+0x53C); callees 0x0012515C, 0x001252C8, 0x0052B354, 0x0052BCF8, 0x0052F4D4. Nearly the same body as 0x0052F10C."
+  },
+  {
+    "address": "0x0052f10c",
+    "name": "maybe_Fx_UpdateEmitterTransform",
+    "signature": "void maybe_Fx_UpdateEmitterTransform(u32 arg1, float* emitter)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "emitter"
+    },
+    "summary": "Variant of the emitter frame update that also rebuilds the emitter transform: same owner clock read at +0x53C, then the draw/list updates through 0x005209D8 and 0x00529B50.",
+    "confidence": 0.32,
+    "evidence": "Recovered C (186 lines): identical prologue to 0x0052C26C (emitter[0x37], emitter[7], +0x284, +0x53C) with additional callees 0x005209D8 and 0x00529B50; also calls 0x0052B354, 0x0052BCF8, 0x0052BF7C, 0x0052F4D4 and 0x0012515C. Global object g_0052F464 points at the class vtable 0x007AEB68."
+  },
+  {
+    "address": "0x0052f4d4",
+    "name": "Fx_DestroyEmitter",
+    "signature": "void Fx_DestroyEmitter(FxManager* manager, FxEmitterInstance* emitter)",
+    "params": {
+      "param_1": "manager",
+      "param_2": "emitter"
+    },
+    "summary": "Destroys one live emitter instance: drains its two child-object lists, drops the emitter's animation link, clears the active flag, decrements the template reference counter (and the manager's template count when it reaches zero) and unlinks the instance from the manager's per-type doubly-linked list, fixing the head/tail pointers. Called by the emitter update paths as soon as the remaining lifetime or the last particle reaches zero.",
+    "confidence": 0.55,
+    "evidence": "Callees 0x005209D8 (destroy/unlink a child node; looped while emitter+0xE0/+0xE4 are non-null) and 0x00529B50 (clear the 2-entry animation link at +0x18); the shared template pointer emitter->f_1C has its +4 word decremented (refcount), manager+0x474 the live-template count and manager+0x328 the released counter; list unlink uses emitter+0xD0/+0xD4 and the per-type head at `manager + emitter->f_18*4 + 0x20`. Callers 0x0052C26C and 0x0052F10C (both emitter frame updates) call it on lifetime <= 0 or when no particles remain."
+  },
+  {
+    "address": "0x0052fa9c",
+    "name": "Fx_SpawnEmitter",
+    "signature": "void Fx_SpawnEmitter(FxManager* manager, FxEmitterInstance* emitter, FxSpawnRequest* request, int slot, int entry, u32 seed, int useOwnerClock)",
+    "params": {
+      "param_1": "manager",
+      "param_2": "emitter",
+      "param_3": "request",
+      "param_4": "slot",
+      "param_5": "entry",
+      "param_6": "seed",
+      "param_7": "useOwnerClock"
+    },
+    "summary": "Instantiates one emitter from a spawn request: chooses the particle seed (fixed / drawn from the shared 32-bit LCG / explicit), optionally starts the emitter clock from the owner, resets the instance, copies the spawn position, colour and curve parameters of the requested entry into the emitter, attaches the request's animation references and resolves the two optional child nodes from the owner model's node table.",
+    "confidence": 0.55,
+    "evidence": "Callees Fx_EmitterReset 0x0052B7F4 and Fx_EmitterInitFromTemplate 0x0052AC80; request+8 selects the seed mode (-1 fixed, 0 LCG, else explicit), the LCG state is fetched with 0x0051D5A8; manager->f_c[slot] is the per-slot table, `entry*0x3C` indexes into it (spawn/curve block at +0x18); 0x005321F4 builds the spawn parameter block from request+0x18, 0x00529AB0/0x00529B3C attach the animation links, 0x0052BBB8 applies the owner-node pointer at request+0x190. No direct C callers: reached through the effect-manager function table, so the argument roles come from the body and from the sibling calls in 0x0052C26C/0x0052F10C."
+  },
+  {
+    "address": "0x005342d8",
+    "name": "Fx_BuildDistributionTable",
+    "signature": "void Fx_BuildDistributionTable(float* table, int mode, FxCurveCoefficients* curve, float outLo, float outHi, float exponent, float inLo, float inHi)",
+    "params": {
+      "param_1": "table",
+      "param_2": "mode",
+      "param_3": "curve",
+      "param_4": "outLo",
+      "param_5": "outHi",
+      "param_6": "exponent",
+      "param_7": "inLo",
+      "param_8": "inHi"
+    },
+    "summary": "Fills a 128-entry lookup table that describes how a random emitter parameter is distributed over its input domain: the input is normalised from [inLo,inHi] to 0..1, passed through a rational curve (curve+0x28/0x2C/0x38/0x3C) and then shaped by the selected mode (0 = rational/linear, 1 = exponential decay, 2 = gaussian exp(-x^2), 3/4 = mirrored exponential variants) and mapped onto [outLo,outHi]. The caller then packs the floats to 13-bit fixed point for the runtime random sampler.",
+    "confidence": 0.5,
+    "evidence": "Sole caller 0x0065973C stores the 512-byte table into a 0x218-byte per-spawn FX record and marks it valid; 0x00508C40 then converts it to packed 13-bit fixed-point pairs (`orr r2, r3, r2, lsl #13`). All five branches share the same normalisation by (inHi-inLo) and clamp to [outLo,outHi]; only the final transform differs and uses std_Expf (0x00672FBC) for modes 1-4. Loop bound 0x7F = 128 entries."
+  },
+  {
+    "address": "0x005614dc",
+    "name": "Model_SimulateSecondaryMotion",
+    "signature": "void Model_SimulateSecondaryMotion(SecondaryMotionChain* self, const float* ownerMatrix, ModelBoneMatrices* bones)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ownerMatrix",
+      "param_3": "bones"
+    },
+    "summary": "One physics substep of a secondary-motion chain (hair, skirt, cape): converts each particle into world space through the owner matrix, integrates velocity from the accumulated force offsets and damping, resolves the chain's joint constraints (type selected by psVar12[0]), and writes the updated particle positions and velocities back for the matrix rebuild.",
+    "confidence": 0.55,
+    "evidence": "Particle array at self+4 with 0x88-byte records (inverse mass at +0x10/+0x14, old position at +0x58.., velocity at +0x70..), constraint array at self+0xC with 0x16-short (0x2C-byte) entries holding a type, a point and a length; bones are written through bones+0x14 + index*0x30 (3x4 matrices). Called twice per frame by 0x00563010 (Model_UpdateSecondaryMotion), followed by 0x005626F4 which rebuilds the bone matrices."
+  },
+  {
+    "address": "0x005626f4",
+    "name": "Model_BuildSecondaryMotionBoneMatrices",
+    "signature": "void Model_BuildSecondaryMotionBoneMatrices(SecondaryMotionChain* self, const float* ownerMatrix, ModelBoneMatrices* bones)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ownerMatrix",
+      "param_3": "bones"
+    },
+    "summary": "Converts the simulated particles of a secondary-motion chain back into model bone matrices: for every second bone it derives the particle orientation from the rest direction and the simulated direction, slerps the two orientations by the chain's blend weight, rebuilds the 3x4 matrix in the bone table and blends it against the original bone transform.",
+    "confidence": 0.55,
+    "evidence": "Same particle stride 0x110 and bone output layout (bones+0x14 + index*0x30) as 0x005614DC; uses 0x00572F94 (matrix->quaternion), 0x005732F4 (matrix->quaternion), 0x005753EC (quaternion multiply), std_Acosf 0x00672A14 and 0x00673BC8, then writes the 3x4 rotation/translation words. Loop count self->f_1C/2. Called once per frame from 0x00563010 after the two simulation substeps."
+  },
+  {
+    "address": "0x00563010",
+    "name": "Model_UpdateSecondaryMotion",
+    "signature": "void Model_UpdateSecondaryMotion(SecondaryMotionChain* self, const float* ownerMatrix, ModelBoneMatrices* bones)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ownerMatrix",
+      "param_3": "bones"
+    },
+    "summary": "Per-frame driver for a secondary-motion chain: handles the enable/fade-in/fade-out blend weight (+0x20), runs the two physics substeps and then rebuilds the bone matrices, and clears the per-frame constraint state. Returns immediately when the chain is disabled or fully faded out.",
+    "confidence": 0.6,
+    "evidence": "Fields +0x1C (particle count), +0x1D (constraint count), +0x1E (unidentified count), +0x1F enable flag, +0x20 blend weight, +0x24 frame delta, +0x2C substep count; calls 0x00562424 (prepare), 0x005614DC twice and 0x005626F4; fade deltas g_00563100/0x00563104 and the 1.0 clamp 0x3F7FFFFF. Sole virtual slot of vtable 0x00782200 (slot 0 = deleting destructor 0x005631D8), so it is the class update."
+  },
+  {
+    "address": "0x00564620",
+    "name": "Anim_AdvanceTimelineValue",
+    "signature": "void Anim_AdvanceTimelineValue(AnimTimeline* value, AnimTimelineLimit* limit, float delta)",
+    "params": {
+      "param_1": "value",
+      "param_2": "limit",
+      "param_3": "delta"
+    },
+    "summary": "Advances one animation/effect clock by delta: saves the previous value at +8, keeps the new value inside [0, limit] when the limit's wrap flag is clear, or wraps it modulo the limit with fmodf when the flag is set. This is the shared clock advance used by the scene/timeline objects in the 0x55-0x5A range.",
+    "confidence": 0.55,
+    "evidence": "value+4 current, value+8 previous, limit+4 flag byte (bit 0 selects wrap), limit+8 upper bound; callees std_Fmodf 0x00673288 and 0x006731EC (floor-ish); callers 0x0057B0EC (Anim_UpdateBlendTracks), 0x005A95D0, 0x005A9990 plus the 3-instruction adapters 0x00564614 and 0x0055E61C which pass a sub-object's field and its own limit pointer."
+  },
+  {
+    "address": "0x0056bc20",
+    "name": "Model_CalcLookAtAngles",
+    "signature": "void Model_CalcLookAtAngles(LookAtController* self, Model* model, u32 unused, float* outYaw, float* outPitch)",
+    "params": {
+      "param_1": "self",
+      "param_2": "model",
+      "param_3": "unused",
+      "param_4": "outYaw",
+      "param_5": "outPitch"
+    },
+    "summary": "Computes the horizontal and vertical rotation ratios a model needs to face its look-at target: transforms the target into the model's space, projects the offset onto the horizontal and vertical planes, takes the acos of the normalised components and applies the controller's per-axis limits (+0x324/+0x328), smoothing (+0x32C/+0x330) and rate (+0x334).",
+    "confidence": 0.5,
+    "evidence": "Sole caller 0x0056BE48 (Model_UpdateLookAt) feeds the two ratios into the bone rotations; callees 0x005754C0 (transform reconstruction) and std_Acosf 0x00672A14; output is divided by the live-bone limit from g_0056BE44; self+0x32C/0x330 are the smoothed values and +0x334 the blend rate, mirrored by the constants g_0056BE38..BC."
+  },
+  {
+    "address": "0x0056be48",
+    "name": "Model_UpdateLookAt",
+    "signature": "u32 Model_UpdateLookAt(LookAtController* self, Model* model, ModelBoneMatrices* bones)",
+    "params": {
+      "param_1": "self",
+      "param_2": "model",
+      "param_3": "bones"
+    },
+    "summary": "Applies head/body look-at: computes the target yaw/pitch ratios (or reuses the smoothed ones while the controller fades out), slerps each of the two affected bone rotations toward the computed target orientation with its own blend factor, converts them into 3x4 matrices in the bone table and returns 0 once the blend and angles have settled, 1 while look-at is still running.",
+    "confidence": 0.5,
+    "evidence": "Two-slot loop (i<2) writing 0x40-byte matrix records into bones+0xC at indices self+0x31C; sets flag bit 2 in the record's first word; callees 0x0056BC20 (angle ratios), 0x00672A14 acos and 0x00673BC8 sin/cos; enable flag +0x33D, 'reuse stored blend' flag +0x33E, rate +0x334; returns 0 when the weights fall below g_0056C22C. No direct C callers, so it is invoked through the model's look-at callback."
+  },
+  {
+    "address": "0x0057569c",
+    "name": "Math_QuatSlerp",
+    "signature": "void Math_QuatSlerp(float* out, const float* q0, const float* q1, float t)",
+    "params": {
+      "param_1": "out",
+      "param_2": "q0",
+      "param_3": "q1",
+      "param_4": "t"
+    },
+    "summary": "Spherical linear interpolation of two unit quaternions: negates q1 when the dot product is negative (shortest arc), falls back to a normalised lerp when the quaternions are nearly parallel, otherwise blends with acos/sin and renormalises the result.",
+    "confidence": 0.85,
+    "evidence": "Callers 0x003CFFA8 and 0x004F8280 blend a model's start/end rotations (self+0x44 / self+0x54) during a turn; callees std_Acosf 0x00672A14 and 0x00673BC8 (sin); constant g_00575858 (0.0, used for the sign flip) and g_0057585C (cosine cutoff above which the lerp fallback is used); identical structure to the vec3 slerp 0x00575864."
+  },
+  {
+    "address": "0x00575864",
+    "name": "Math_Vec3Slerp",
+    "signature": "void Math_Vec3Slerp(float* out, const float* v0, const float* v1, float t)",
+    "params": {
+      "param_1": "out",
+      "param_2": "v0",
+      "param_3": "v1",
+      "param_4": "t"
+    },
+    "summary": "Spherical interpolation between two 3D direction vectors: normalised lerp when the directions are nearly parallel, otherwise acos/sin slerp, always producing a unit direction. Used wherever a direction has to change smoothly (animation pose blending at 0x002E465C, 0x00591490).",
+    "confidence": 0.8,
+    "evidence": "Callers Anim_InterpolatePose (0x002E465C), 0x003E8F84, 0x004406A8, 0x00441B24 and 0x00591490 (camera blend); the parallel case delegates to 0x005753BC (vec3 lerp), otherwise acos 0x00672A14 / sin 0x00673BC8; 3-component dot with epsilon g_00575974."
+  },
+  {
+    "address": "0x0057b0ec",
+    "name": "maybe_Anim_UpdateBlendTracks",
+    "signature": "void maybe_Anim_UpdateBlendTracks(AnimBlendGroup* self, float delta)",
+    "params": {
+      "param_1": "self",
+      "param_2": "delta"
+    },
+    "summary": "Advances one frame of an animation cross-fade group: moves the active fade timer (+0x11C) toward its duration (+0x120), swaps the current/next tracks when it completes, advances the two optional sub-track timers by delta and updates every linked interpolator slot (+0x150) and look-at slot (+0x158).",
+    "confidence": 0.45,
+    "evidence": "Fields +0x10C/+0x110 current/next track, +0x11C elapsed, +0x120 duration, +0x124 rate, +0x144/+0x148 callbacks; callees 0x0055E61C and 0x00564614/0x00564620 (clock advance) plus 0x0055E5B8; vtable 0x007822A0 slot 0, next to 0x0057BFF4 (apply) and destructor 0x00579FE4. Slot array lengths masked with 0x3FFFFFFF."
+  },
+  {
+    "address": "0x005929ec",
+    "name": "maybe_Battle_UpdateSkullRunAnchor",
+    "signature": "void maybe_Battle_UpdateSkullRunAnchor(BattleActionActor* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame update of a battle action built around the model's 'Skull_Run' animation node: forces that node, offsets the model position by the node's local offset, derives a forward/up basis and a direction from the node's simulated position, stores them on the action object and hands the aim to the model's rotation/direction helper.",
+    "confidence": 0.45,
+    "evidence": "Literal string s_Skull_Run_00592CE8 passed to model vtable+0x84 (set animation node) - the same pattern as 0x0045671C and 0x004F129C; reads the node position at model+0x324..+0x32C, builds the basis self+0x2C..+0x4C and direction self+0x50..+0x58, calls 0x005AFF48 (apply aim) and model vtable+0x9C; vtable entry 0x0077DA48 next to 0x00592D14/0x00592F58/0x00592FFC, which are the sibling action methods."
+  },
+  {
+    "address": "0x0059a8a4",
+    "name": "Battle_InitializeUnitDisplay",
+    "signature": "void Battle_InitializeUnitDisplay(BattleUnitDisplayTemplate* self, BattleUnitDisplay* unit)",
+    "params": {
+      "param_1": "self",
+      "param_2": "unit"
+    },
+    "summary": "Initialises a battle unit's display record from its template: sets up the model parts/palette through the shared battle model-part path, copies the default variant byte unless the model record forces one, creates the shared lookup context (heap block + vtable) on first use, resolves the model record and clears the per-frame flags.",
+    "confidence": 0.5,
+    "evidence": "Vtable slot at 0x0077E2A4; calls maybe_Battle_SetupUnitModelParts 0x003DAF30 with self->f_50 (model id), 0x004D70E8 (clears the 'visible' byte at unit+0x0A when a global mode is set), allocates via 0x0011FE8C/0x0011CFAC/0x00116AE0/0x0011CFDC (16-byte aligned block guarded by g_0059A99C), stores g_0059A9AC as its vtable, looks the record up with 0x0063F1E0(modelId) and picks the variant byte from self->f_48. Sibling slot 0x0059A9B0 removes the display again (0x00651954 + 0x005E74A0)."
+  },
+  {
+    "address": "0x0059ee14",
+    "name": "maybe_Model_SteerFacingToDirection",
+    "signature": "void maybe_Model_SteerFacingToDirection(Actor* self, const float* direction)",
+    "params": {
+      "param_1": "self",
+      "param_2": "direction"
+    },
+    "summary": "Turns an actor's model toward a world direction with a limited angular step: reads the model's current facing, clamps the angle against the model's turn speed, builds the rotation with acos/sin and stores it as the model's desired rotation. Used by enemy AI to face the party while moving.",
+    "confidence": 0.5,
+    "evidence": "Callers 0x0059DEEC and 0x0059E134 (enemy AI turn paths); model fetched through vtable+0x3C, facing via 0x00669D88, desired rotation stored by 0x005F5F54(model,&dir,0); limits g_0059F000..0x0059F00C and the model turn-speed field +0xA4 decide whether to rotate at all."
+  },
+  {
+    "address": "0x005a95d0",
+    "name": "maybe_Anim_UpdateLinkedSubBlends",
+    "signature": "void maybe_Anim_UpdateLinkedSubBlends(AnimDispatcher* self, AnimPlayer* anim)",
+    "params": {
+      "param_1": "self",
+      "param_2": "anim"
+    },
+    "summary": "Keeps an animated object's sub-blends in sync with its animation clock: when the animation time wraps past zero it re-links the three enabled sub-objects into the animator's blend slots and restarts their cross-fades, otherwise it just advances their timers, and finally notifies the animation player through its vtable.",
+    "confidence": 0.4,
+    "evidence": "Compares anim->f_34 (current time) with anim->f_58 (previous time, also tested as the wrapped bit pattern 0xC3000000); the three optional sub-objects at self+0x0C/0x38/0x6C, gated by the bytes at +0x2C/+0x60/+0x8C; callees 0x0057B9B0, 0x0057B988, 0x0057BFCC (link slot and start cross-fade), 0x0055E61C, 0x00564614, 0x00564620 (advance), then anim vtable+0x10."
+  },
+  {
+    "address": "0x005cc878",
+    "name": "maybe_Gfx_ReleaseNodeHandle",
+    "signature": "GfxNodeHandle* maybe_Gfx_ReleaseNodeHandle(GfxNodeHandle* out, GfxNodeRef* ref)",
+    "params": {
+      "param_1": "out",
+      "param_2": "ref"
+    },
+    "summary": "Destroys and clears a scene/effect node handle: installs the wrapper vtable (literal 0x005CC8E8) into the output object, unlinks the node from its owner's doubly-linked child list, releases the node through its virtual slot (+0x40 with reason 4) and runs the shared node cleanup, then returns the wrapper.",
+    "confidence": 0.4,
+    "evidence": "Writes the wrapper vtable literal 0x005CC8E8, unlinks ref[5]/ref[6] (prev/next), calls 0x002B3AC8 (release child objects), virtual slot +0x40(node, 4) and 0x00335A18 (maybe_Gfx_ReleaseEffectNodes); callers 0x005CA3C4 and 0x00671CEC run it on the member at object+0x70 during teardown."
+  },
+  {
+    "address": "0x005e890c",
+    "name": "Actor_SteerMoveDirection",
+    "signature": "void Actor_SteerMoveDirection(float* out, Model* model, const float* targetDir, float maxTurn)",
+    "params": {
+      "param_1": "out",
+      "param_2": "model",
+      "param_3": "targetDir",
+      "param_4": "maxTurn"
+    },
+    "summary": "Rotates a movement direction toward a target direction by at most maxTurn radians this frame: builds the rotation quaternion from the model's current facing to the target, clamps the angle, applies it, writes the new unit direction to out and stores it as the model's desired rotation.",
+    "confidence": 0.5,
+    "evidence": "Callers 0x005E7FA8 (builds the target vector from the tracked player position) and recovered 0x003306E8 (actor movement); callees 0x005F5F54 (store desired rotation, mode 0) plus acos 0x00672A14 / cos 0x00672E44 / sin 0x006731EC; falls back to the model turn-speed field +0x314 when maxTurn is 0, and normalises through the model rotation quaternion at model+0x8C..0x98."
+  },
+  {
+    "address": "0x005f605c",
+    "name": "maybe_Node_AttachEffectAlongAxis",
+    "signature": "void maybe_Node_AttachEffectAlongAxis(Node* self, u32 axis)",
+    "params": {
+      "param_1": "self",
+      "param_2": "axis"
+    },
+    "summary": "Positions an attached effect along one axis of the node basis: builds the offset from the f_8C..f_98 basis and the axis selector, rotates it into world space and refreshes the effect transform.",
+    "confidence": 0.38,
+    "evidence": "Recovered C (92 lines): reads f_8c/f_90/f_94/f_98/f_27 (basis + scalar), uses 0x00574548 (rotate vector) and 0x005F7298 (attached-effect transform update). No direct callers."
+  },
+  {
+    "address": "0x005f6248",
+    "name": "maybe_Node_AttachEffectAtPoint",
+    "signature": "void maybe_Node_AttachEffectAtPoint(Node* self, float* point)",
+    "params": {
+      "param_1": "self",
+      "param_2": "point"
+    },
+    "summary": "Attaches/positions an effect at an explicit local point: transforms the given float3 by the node basis and updates the attached effect transform.",
+    "confidence": 0.38,
+    "evidence": "Recovered C (59 lines): takes a float3 pointer, uses f_8c/f_90/f_94 and 0x00574548 (rotate) then 0x005F7298. Sibling of 0x005F605C which takes an axis index instead of a point."
+  },
+  {
+    "address": "0x005f6558",
+    "name": "maybe_Trail_UpdateGeometry",
+    "signature": "void maybe_Trail_UpdateGeometry(Trail* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Rebuilds the trail/ribbon geometry for the current frame: samples the owner transform, appends the new point through the shared curve manager, rebuilds the strip and uploads it through 0x006F202C.",
+    "confidence": 0.38,
+    "evidence": "Recovered C (229 lines): calls 0x002E7F08 (insert point into the shared curve/trail manager - same call used by 0x00178DD0 and 0x00224AB0), 0x00573144, 0x00614930 (basis from angles) and 0x006F202C. Callers 0x003D98C0 and 0x005F6018. Large float3/float4 stack arrays are the strip vertex buffers."
+  },
+  {
+    "address": "0x005f7298",
+    "name": "maybe_Node_UpdateAttachedEffectTransform",
+    "signature": "void maybe_Node_UpdateAttachedEffectTransform(Node* self, float* target)",
+    "params": {
+      "param_1": "self",
+      "param_2": "target"
+    },
+    "summary": "World transform of an effect/attachment on a node: takes the node basis, offsets it toward the target point, rotates it with 0x00574548 and writes the position/angle back through 0x00222D48 (Gfx_UpdateEffectPosition).",
+    "confidence": 0.5,
+    "evidence": "Recovered C (74 lines): reads f_27 (the node matrix pointer), float3 argument, callees 0x00222D48 (effect position update), 0x00574548 (rotate) and 0x00672A14 (acos). 5 callers (0x005F58D0, 0x005F59E4, 0x005F605C, 0x005F6248, 0x005F6384) are all node-attachment code, and 0x00222D48 is in the effect/attachment cluster."
+  },
+  {
+    "address": "0x005f79e0",
+    "name": "maybe_Trail_UpdateFromOwnerNode",
+    "signature": "void maybe_Trail_UpdateFromOwnerNode(Trail* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Heavy trail/curve update: rebuilds the point list from the owner node matrix (0x00573144/0x00574374/0x005754C0), recomputes the basis with 0x00614930 and refreshes the material/curve data through 0x00633C38 and 0x00633DCC.",
+    "confidence": 0.35,
+    "evidence": "Recovered C (268 lines): callees 0x0011CCA0, 0x00573144, 0x00574374, 0x005754C0, 0x00614930, 0x00633C38, 0x00633DCC, 0x00673468. Sole caller 0x003F44E4, which copies the resulting transform word from +0x88. Presumed trail/curve because of the shared 0x002E7F08-adjacent helpers used by 0x005F6558."
+  },
+  {
+    "address": "0x00614930",
+    "name": "maybe_Math_BuildBasisFromAngles",
+    "signature": "void maybe_Math_BuildBasisFromAngles(float* out)",
+    "params": {
+      "param_1": "out"
+    },
+    "summary": "Builds a 3x3 basis/rotation from an angle triple: evaluates cos and sin for the yaw and pitch components, fills the three axis vectors and stores them into the output block.",
+    "confidence": 0.42,
+    "evidence": "Recovered C (98 lines): callees 0x00574548 (rotate vector), 0x00672A14 (acos), 0x00672E44 (cosf), 0x006731EC (floorf); writes a 12-float block through the out pointer. Callers 0x00372CEC, 0x005F6558 and 0x005F79E0 all build node/trail transforms."
+  },
+  {
+    "address": "0x0062aa08",
+    "name": "maybe_Object_IsHandleAlive",
+    "signature": "bool maybe_Object_IsHandleAlive(u32 handle)",
+    "params": {
+      "param_1": "handle"
+    },
+    "summary": "Resolves an object handle through the global handle table and reports whether the object is alive: compares the two state values returned by 0x00669250 and 0x00669324.",
+    "confidence": 0.38,
+    "evidence": "Recovered C: uVar = *(u32*)(arg1+4); if (g_0062AA74 != uVar>>0xb && slot = g_0062AA78 + (uVar & (int)g_0062AA74>>10)*8, slot[1] == uVar>>0xb) { obj = *slot; return func_00669250(obj) == func_00669324(obj); } - the same global handle-table idiom as 0x003DD3E0. Sole caller 0x004C5F48."
+  },
+  {
+    "address": "0x0062ab4c",
+    "name": "maybe_Battle_RefreshUnitStats",
+    "signature": "void maybe_Battle_RefreshUnitStats(BattleUnit* self, int reason)",
+    "params": {
+      "param_1": "self",
+      "param_2": "reason"
+    },
+    "summary": "Recomputes the derived battle stats of a unit after a change: pulls the current battle context, then runs the stat recalculation helpers 0x006343FC/0x00634418/0x006344A0/0x0063451C and the modifier helpers 0x00635E88/0x00635EA0/0x00635EBC.",
+    "confidence": 0.45,
+    "evidence": "Recovered C: ctx = func_006F20C0(&local); iVar3 = *ctx; then the 0x00634xxx and 0x00635Exx calls with local float/u32 scratch. Callers are all battle setup / script unit functions (0x0019EE60, 0x0019F17C LoadBattleFunc path, 0x0019FAB8, 0x0019FF68)."
+  },
+  {
+    "address": "0x006347ec",
+    "name": "maybe_Battle_ComputeEffectTransform",
+    "signature": "u32 maybe_Battle_ComputeEffectTransform(u32 arg1, float* out, int a, int b, int c, int d)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "out",
+      "param_3": "a",
+      "param_4": "b",
+      "param_5": "c",
+      "param_6": "d"
+    },
+    "summary": "Computes the placement of a battle effect relative to a unit: takes the unit position/angle, applies the requested offsets, rotates the result with 0x00574548 and writes the float3 output.",
+    "confidence": 0.3,
+    "evidence": "Recovered C (106 lines) with 6 arguments, using in_s0, f_14 and the trig trio 0x00672A14/0x00672E44/0x006731EC. Sole caller 0x00635948 (battle effect/hit table resolve, also used by 0x00238F48). Role inferred from the caller and the float3 output."
+  },
+  {
+    "address": "0x00666328",
+    "name": "maybe_Node_ComputeAttachedTransform",
+    "signature": "void maybe_Node_ComputeAttachedTransform(float* out, int node, float* params)",
+    "params": {
+      "param_1": "out",
+      "param_2": "node",
+      "param_3": "params"
+    },
+    "summary": "Computes the transform of an object attached to a node: reads the node basis, combines it with the parameter float3, rotates with 0x00574548 and writes the matrix through 0x00665564 / 0x006F202C.",
+    "confidence": 0.35,
+    "evidence": "Recovered C (90 lines): reads f_164/f_294, callees 0x002E72C8, 0x00574548, 0x00665564 (matrix helper also used by 0x00410928) and 0x006F202C. Callers 0x005929EC and 0x00592D14 (both in this batch range)."
+  },
+  {
+    "address": "0x00672a14",
+    "name": "std_Acosf",
+    "signature": "float std_Acosf(float x)",
+    "params": {
+      "param_1": "x"
+    },
+    "summary": "Single-precision arccosine: for |x| <= 0.5 returns pi/2 - x - x^3*P(x^2); for 0.5 < |x| <= 1 uses the half-angle identity acos(x) = 2*asin(sqrt((1-|x|)/2)) (and pi minus that for negative x); sets EDOM and returns NaN when |x| > 1 and x*2 is not NaN.",
+    "confidence": 0.85,
+    "evidence": "ARM disassembly 0x00672A14: exponent-range test on x<<1 ([2^-27,1]), vabs/1.0-x/*0.5, bl 0x006BDF48 (sqrtf), polynomial coefficients at 0x00672B24..0x00672B38 (1/6, 3/40, 5/112 ...), pi/2 halves at 0x00672B20 (1.5708008) + 0x00672B24 (0.000484) and pi at 0x00672B14/0x00672B18, EDOM via 0x00100C16. 69 callers, all angle/facing code (ActorSetTurnSpeed*, Actor_ClassifyDirection*, 0x00178DD0 view-cone test). Ghidra C is unusable (VFP registers unmodelled)."
+  },
+  {
+    "address": "0x00672da0",
+    "name": "maybe_std_Ceilf",
+    "signature": "float maybe_std_Ceilf(float x)",
+    "params": {
+      "param_1": "x"
+    },
+    "summary": "Single-precision ceiling: |x| >= 2^23 is already integral so it is returned unchanged; for |x| < 1 returns 1.0 for positive x and -0.0 for negative x (0.0 for zero); otherwise adds one fraction unit and clears the fractional mantissa bits, i.e. rounds upward. NaN is passed through.",
+    "confidence": 0.55,
+    "evidence": "IMPORTANT: the listed address 0x00672DA0 is inside atan2f literal pool (values -1/3, 1/5, -1/7 at 0x672DA0/DA4/DA8, 2^32 and 2^-32 at 0x672DAC/DB0); the real entry is 0x00672DB4. There the ARM code does: e = exponent(x) - 127; if (e >= 23) return x; if (e < 0) return x>0 ? 1.0 : (x<0 ? -0.0 : x); mask = 0x007fffff >> e (pool 0x672E40); if (x & mask)==0 return x; if (x > 0) bits += 0x800000 >> e; bits &= ~mask; return bits. NaN handling: x + 0x7149F2CA (~8e29, pool 0x672E38) compares unordered and returns the original NaN. 22 real callers (0x0015F8DC, 0x001E388C, 0x003122F4, 0x00603D0C/18/5C..., 0x00644A6C, 0x0065DD34) all do `vmul/vcvt -> bl 0x672DB4 -> vcvt.u32.f32`, i.e. float-to-integer rounding. Named ceilf rather than roundf/floorf because of the |x|<1 -> 1.0/-0.0 and positive-only increment."
+  },
+  {
+    "address": "0x00672e4c",
+    "name": "std_Cosf",
+    "signature": "float std_Cosf(float x)",
+    "params": {
+      "param_1": "x"
+    },
+    "summary": "Single-precision cosine: reduces x by n*pi/2 using the round-to-nearest magic constant 2^23 and a three-part pi/2 (1.57031 + 0.000483751 + 7.54953e-08), then evaluates either the cosine kernel (1 - x^2/2 + x^4/24 ...) or the sine kernel and applies the quadrant sign from n mod 4. Returns +/-inf for huge arguments and NaN/EDOM for NaN.",
+    "confidence": 0.8,
+    "evidence": "ARM disassembly 0x00672E4C (real entry 0x00672E44: ldr r2,=0x7E921FB6; vmov r1,s0; then push): n = vcvt(x * 2/pi (0x3F22F983) +/- 0.5 (0x4B000000 magic)), quadrant = n&3, reduction constants 0x3FC90000/0x39FDA000/0x33A22000, cos coefficients -0.499999/0.0416563/-0.00135978, sin coefficients -0.166667/0.00833198/0.000194956; sign from (n&2); huge threshold 0x46490E49. Ghidra lists the entry at 0x672E4C, i.e. 8 bytes into the function (the two argument-setup instructions are missing from the C file)."
+  },
+  {
+    "address": "0x00672fbc",
+    "name": "std_Expf",
+    "signature": "float std_Expf(float x)",
+    "params": {
+      "param_1": "x"
+    },
+    "summary": "Single-precision exponential: n = round(x * 4/ln2), r = x - n*(ln2 split into 0.173279 + 7.98655e-06), evaluates 1 + r + r^2/2 + r^3/6 + r^4/24 and multiplies by 2^(n/4) taken from a four-entry table {1, 2^0.25, sqrt2, 2^0.75} plus hi/lo correction terms; the integer part is applied in two halves (2^(n/2) * 2^(n-n/2)) to avoid exponent overflow. Over/underflow sets ERANGE and returns +/-inf or 0/0.",
+    "confidence": 0.7,
+    "evidence": "ARM disassembly 0x00672FBC: constants 4/ln2 = 5.77078 (0x6731A4), +/-0.5 (0x6731A8/AC), ln2/4 = 0.173279 (0x6731B0), 7.98655e-06 (0x6731B4), 1/6 = 0.166729 (0x6731BC), 0.5 (0x6731C0), 1.0 (0x6731C4), 1/24 = 0.0416823 (0x6731B8). Tables at 0x75809C = {1.0, 1.18921, 1.41421, 1.68179} = 2^(k/4) plus corrections at 0x75807C/0x75808C. Range gates 0x1E500000/0x85A00000; ERANGE via 0x00100C16(2); overflow path 0x00673F90, underflow 0x006723D8. Sole caller 0x005342D8."
+  },
+  {
+    "address": "0x00673288",
+    "name": "std_Fmodf",
+    "signature": "float std_Fmodf(float x, float y)",
+    "params": {
+      "param_1": "x",
+      "param_2": "y"
+    },
+    "summary": "Single-precision floating remainder: fmod(x,y) = x - trunc(x/y)*y. Detects NaN operands and delegates to the soft-float remainder core, raises EDOM and returns NaN for fmod(inf,y), passes fmod(x,inf) = x through, and applies a one-step sign correction (result - copysign(|y|, result)) when the returned remainder sign disagrees with x.",
+    "confidence": 0.55,
+    "evidence": "ARM disassembly 0x00673288: |operand| > 0x7F800000 (NaN) test on both, bl 0x00723D80 (unanalysed RVCT soft-float helper region 0x6BE000-0x7C3000, exponent masks 0xFF000000/0x00FF0000), `vdiv s18/s18` + 0x00100C16(1) for the inf case, sign compare of x and result, then `vsub.f32 s0, s0, s1` with s1 = sign(result)|abs(y). Callers are all camera/scene float math (0x0051B158, 0x0051B6B8, 0x0052BA7C, 0x0053F62C, 0x00564620, 0x0057E9F4, 0x005BA074). remainderf would be the alternative reading."
+  },
+  {
+    "address": "0x006733c2",
+    "name": "maybe_std_ModfBlockA",
+    "signature": "void maybe_std_ModfBlockA(void)",
+    "params": {},
+    "summary": "Not a real function: 0x6733C2 falls in the middle of the ARM instruction `strlt r3,[r0,#4]` at 0x6733C0 inside std_Modf (0x00673360). Ghidra created a 4-byte Thumb function here because the byte pattern 0x80B5 (Thumb `push {r7,lr}`) occurs in the ARM encoding; its C body is a misdecompiled byte-swap stub.",
+    "confidence": 0.15,
+    "evidence": "ARM disassembly of the container: 0x6733BC cmp r1,#0; 0x6733C0 strlt r3,[r0,#4]; 0x6733C4 strlt r4,[r0]; 0x6733C8 blt 0x673430 - predicate setup for the \"exponent < 0\" branch of modf (store signed zero integer part). functions_merged.jsonl claims mode=thumb for 0x6733C2; 0x6733C2 is not 4-byte aligned, so it cannot be an ARM entry and the Thumb reading produces the `rev`-style garbage seen in FUN_006733C2_006733c2.c."
+  },
+  {
+    "address": "0x006733c6",
+    "name": "maybe_std_ModfBlockB",
+    "signature": "void maybe_std_ModfBlockB(void)",
+    "params": {},
+    "summary": "Not a real function either: 0x6733C6 is the continuation of std_Modf (0x00673360) after the predicated stores, covering the truncation/rounding of the fractional bits, the integer-part copy to *iptr and the `fraction = original - integral` return. Ghidra again saw a Thumb 0x80B5 push pattern (the second half of `strlt r4,[r0]`) and produced a bogus 0xA2-byte body.",
+    "confidence": 0.15,
+    "evidence": "ARM disassembly: 0x6733CC..0x67345C implements the tail of modf - mask 0x000FFFFF (pool 0x673464), bias 0xFFFFFC01 (0x673460), exponent > 0x33 -> integral, `bic` fractional bits, `vldr d0,[r0] / vldr d1,[sp] / vsub.f64 d0,d1,d0` = x - trunc(x) returned in d0 while the integral part is stored through iptr (r0). Ghidra reports mode=thumb and a byte-swap body for both 0x6733C2 and 0x6733C6: keep-as-block only."
+  },
+  {
+    "address": "0x006b8138",
+    "name": "std_Scalbn",
+    "signature": "void std_Scalbn(double* value, int exponent)",
+    "params": {
+      "param_1": "value",
+      "param_2": "exponent"
+    },
+    "summary": "Multiplies *value by 2^exponent in place with C99 overflow/underflow handling: results that overflow become +/-infinity and results that underflow are flushed to signed zero, both with errno=ERANGE (2); NaN/inf inputs are left untouched. This is the scaling step of the C library's hexadecimal float parser.",
+    "confidence": 0.7,
+    "evidence": "Sole caller 0x001015E0 (std_ParseHexFloat) calls it with the assembled mantissa double and the binary exponent; the body tests the 11 exponent bits against 0x7FF, calls the soft-float scaling core 0x00723F8C, compares the result with the infinity constants g_006B8218/g_006B8220, sets errno through std_SetErrno(2) and builds the overflow value from g_006B8228*g_006B8228 while preserving the sign bit."
+  },
+  {
+    "address": "0x006bdf4c",
+    "name": "std_Sqrtf",
+    "signature": "float std_Sqrtf(float x)",
+    "params": {
+      "param_1": "x"
+    },
+    "summary": "Single-precision square root using the VFP vsqrt instruction; sets EDOM when the argument is negative (or NaN) and returns the NaN produced by vsqrt.",
+    "confidence": 0.88,
+    "evidence": "Recovered C: sQRT = SQRT(in_s0) then a comparison against g_006BDF94 (+inf, used as the \"unordered/negative\" test) followed by func_00100C16(1) = errno = EDOM. Only caller in this batch is std_Acosf (0x00672A14), which calls 0x006BDF48, the same routine 4 bytes earlier."
+  }
+]

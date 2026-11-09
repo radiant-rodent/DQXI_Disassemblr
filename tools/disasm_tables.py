@@ -20,9 +20,9 @@ TABLES_OUT = PROJECT_ROOT / "game_tables"
 
 
 def read_romfs():
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     romfs = ncch.romfs()
     return f, romfs
 

@@ -7,7 +7,7 @@ Empirically validates:
 4. Failure modes and error exits on missing directories, missing components, and truncated files.
 5. Hash verification failure detection in tools/verify.py.
 6. Unexpected EOF handling during extraction of truncated ROMs in tools/extract_rom.py.
-7. Reference repository preservation (zero modifications to reference project).
+7. Reference repository preservation (zero modifications to 3DS_Translate).
 8. Failure mode on uncompressible custom code payloads (exposing blz.py IndexError defect).
 """
 
@@ -38,7 +38,7 @@ class TestM1ChallengerRomPipeline(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.ref_rom_path = Path(r"..\reference project\DQXI.3ds")
+        cls.ref_rom_path = Path(r"..\3DS_Translate\DQXI.3ds")
         cls.repack_tool = TOOLS_DIR / "repack_rom.py"
         cls.extract_tool = TOOLS_DIR / "extract_rom.py"
         cls.verify_tool = TOOLS_DIR / "verify.py"
@@ -218,11 +218,11 @@ class TestM1ChallengerRomPipeline(unittest.TestCase):
         self.assertIn("OVERALL VERIFICATION: PASS", stdout)
 
     def test_10_reference_repo_immutability(self):
-        r"""Verify ..\reference project git status confirms zero unexpected tracked file modifications beyond baseline."""
+        r"""Verify ..\3DS_Translate git status confirms zero unexpected tracked file modifications beyond baseline."""
         from tests.common import BASELINE_TRACKED_MODIFICATIONS
         res = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=r"..\reference project",
+            cwd=r"..\3DS_Translate",
             capture_output=True,
             text=True,
         )

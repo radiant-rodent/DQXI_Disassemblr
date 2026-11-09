@@ -1,7 +1,7 @@
 """Read-only access to the translation workspace dialogue database.
 
 The database lives in the (read-only) reference project
-``..\\reference project\\workspace\\project.db``.  Everything here
+``..\\3DS_Translate\\workspace\\project.db``.  Everything here
 opens with ``mode=ro`` so the translation project can never be modified.
 """
 

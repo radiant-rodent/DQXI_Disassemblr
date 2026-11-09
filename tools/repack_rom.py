@@ -17,9 +17,13 @@ info "filled size" are updated, the following partitions move by the size
 difference, and the trailing 0xFF padding shrinks so the image stays 4 GiB.
 The retail RSA signatures over the NCSD/NCCH headers cannot be regenerated.
 
+With --romfs <path> the image at <path> is embedded instead of
+<in>/romfs.bin, so callers can keep original/romfs.bin untouched.
+
 Usage:
     python tools/repack_rom.py [orig_dir] [out_rom]
     python tools/repack_rom.py [--in <dir>] [--out <path>] [--code <path>]
+                              [--romfs <image>] [--modified]
 """
 
 import argparse
@@ -68,7 +72,8 @@ def read_component(path: str, expected_size: int) -> bytes:
     return data
 
 
-def repack_rom(orig_dir: str, out_rom_path: str, custom_code_path: str = None, allow_modified: bool = False):
+def repack_rom(orig_dir: str, out_rom_path: str, custom_code_path: str = None, allow_modified: bool = False,
+               romfs_override: str = None):
     if not os.path.exists(orig_dir):
         raise FileNotFoundError(f"Input original directory not found: {orig_dir}")
 
@@ -86,7 +91,10 @@ def repack_rom(orig_dir: str, out_rom_path: str, custom_code_path: str = None, a
     ncsd_hdr = bytearray(read_component(os.path.join(orig_dir, "ncsd_header.bin"), 0x200))
     card_info = bytearray(read_component(os.path.join(orig_dir, "card_info.bin"), 0x3E00))
 
-    romfs_path = os.path.join(orig_dir, "romfs.bin")
+    # The RomFS image to embed.  --romfs lets a caller (tools/export_mod.py, the
+    # level patcher) hand over an already-built, already-hashed image instead of
+    # rewriting original/romfs.bin.
+    romfs_path = romfs_override or os.path.join(orig_dir, "romfs.bin")
     if not os.path.exists(romfs_path):
         raise FileNotFoundError(f"Required component file missing: {romfs_path}")
     romfs_size = os.path.getsize(romfs_path)
@@ -175,6 +183,22 @@ def repack_rom(orig_dir: str, out_rom_path: str, custom_code_path: str = None, a
     icon_size = len(icon_data)
     icon_pad_len = ((icon_size + 0x1FF) & ~0x1FF) - icon_size
     icon_pad = b"\x00" * icon_pad_len
+
+    # The RomFS offset in the NCCH header is not recomputed for ExeFS growth, so
+    # the rebuilt ExeFS must occupy exactly the retail region.  In practice the
+    # BLZ recompression of an edited .code lands on the same 0x200 boundary, but
+    # say so instead of writing a cartridge whose RomFS starts in the wrong place.
+    retail_exefs_size = struct.unpack_from("<I", ncch0_hdr, 0x1A4)[0] * MEDIA_UNIT
+    built_exefs_size = 0x200 + code_size + code_pad_len + banner_size + banner_pad_len \
+        + icon_size + icon_pad_len
+    if built_exefs_size != retail_exefs_size:
+        raise ValueError(
+            f"rebuilt ExeFS is {built_exefs_size:,} bytes but the retail region is "
+            f"{retail_exefs_size:,}.  The recompressed .code changed the layout; moving the "
+            "RomFS would need the NCCH header, NCSD partition table and every partition offset "
+            "rewritten (not implemented).  Use the Luma code.ips export for native edits, or "
+            "change the code without changing the compressed size."
+        )
 
     # Rebuild ExeFS header
     exefs_hdr = bytearray(0x200)
@@ -302,6 +326,8 @@ def main():
     parser.add_argument("--in", dest="opt_in", default=None, help="Directory containing extracted components")
     parser.add_argument("--out", dest="opt_out", default=None, help="Path for repacked .3ds ROM")
     parser.add_argument("--code", dest="code", default=None, help="Optional custom code.bin to inject")
+    parser.add_argument("--romfs", dest="romfs", default=None,
+                        help="RomFS image to embed instead of <in>/romfs.bin")
     parser.add_argument("--modified", action="store_true", help="Allow a non-retail output ROM (for asset/level mods)")
     args = parser.parse_args()
 
@@ -309,7 +335,7 @@ def main():
     out_rom = args.opt_out or args.pos_out or DEFAULT_OUT_ROM
 
     try:
-        repack_rom(orig_dir, out_rom, args.code, args.modified)
+        repack_rom(orig_dir, out_rom, args.code, args.modified, args.romfs)
         sys.exit(0)
     except Exception as e:
         print(f"Error repacking ROM: {e}", file=sys.stderr)

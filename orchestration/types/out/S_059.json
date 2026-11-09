@@ -1,0 +1,564 @@
+[
+  {
+    "class": "MoLive_StreamTable",
+    "type": "MoLiveStreamTable",
+    "summary": "Container and iterator interface for active MoLive streams; manages packet allocation, segment flushing, and stream retirement across the reader's stream map.",
+    "size": 5172,
+    "base": null,
+    "confidence": 0.85,
+    "evidence": "Accessed via MoLive_StreamTable_* (0x005ECCE0, 0x005EE398, 0x005ECD8C, 0x005ECEC4); walks the stream map tree at +0x1430 using in-order iteration",
+    "fields": [
+      {
+        "offset": 5148,
+        "name": "streamMap",
+        "type": "std_RbTree*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Pointer to red-black tree storing stream descriptors; passed to std_RbTree_EraseNodeRebalance in MoLive_StreamTable_ReleaseUnused (0x005ECEC4)"
+      },
+      {
+        "offset": 5168,
+        "name": "streamMapRoot",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Root/anchor node pointer of stream map red-black tree at +0x1430; traversed in in-order iteration loop in BeginPackets, CommitPackets, FlushSegments, and ReleaseUnused"
+      }
+    ]
+  },
+  {
+    "class": "MoLive_Stream",
+    "type": "MoLiveStream",
+    "summary": "Individual audio or data stream within a MoLive media container; maintains a circular packet/sample ring buffer and slot vectors for active and queued packets.",
+    "size": 64,
+    "base": null,
+    "confidence": 0.85,
+    "evidence": "Operated on by MoLive_Stream_PopPacket (0x005EBD2C), MoLive_Stream_BindPacket (0x006698AC), and maybe_MoLive_Stream_ReadPcm (0x006693B0)",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "bufferCapacity",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Capacity of stream sample ring buffer; read offset wraps modulo bufferCapacity in MoLive_Stream_PopPacket (0x005EBD2C) and ReadPcm"
+      },
+      {
+        "offset": 16,
+        "name": "queuedBytes",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Total pending unread byte count in stream; decremented by popped packet size in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 20,
+        "name": "readOffset",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Read byte offset into circular buffer, incremented by packet size modulo bufferCapacity in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 28,
+        "name": "activePackets",
+        "type": "std_SlotVector*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "std_SlotVector holding active committed packet slots; appended to via std_SlotVector_Append in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 44,
+        "name": "queuedPackets",
+        "type": "std_SlotVector*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "std_SlotVector holding pending queued packet slots; range destroyed via std_SlotVector_DestroyRangeRelease in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 48,
+        "name": "slotArray",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Base pointer to array of 0x10-byte packet descriptor slots; indexed by readSlotIndex in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 52,
+        "name": "slotCapacity",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Maximum slot capacity of packet descriptor ring buffer; slot index wraps at this limit in MoLive_Stream_PopPacket"
+      },
+      {
+        "offset": 56,
+        "name": "queuedPacketCount",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Number of pending packet slots currently queued in the ring; decremented on each MoLive_Stream_PopPacket call"
+      },
+      {
+        "offset": 60,
+        "name": "readSlotIndex",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Current read head index into packet descriptor slot array; incremented modulo slotCapacity in MoLive_Stream_PopPacket"
+      }
+    ]
+  },
+  {
+    "class": "MoLive_Reader",
+    "type": "MoLiveReader",
+    "summary": "Streaming reader and demuxer for MoLive media files; parses packet and EP headers, maintains stream and decoder trees, tracks timestamps, and feeds packets to stream decoders.",
+    "size": 5276,
+    "base": null,
+    "confidence": 0.7,
+    "evidence": "Constructed in MoLive_Reader_Ctor (0x005EEDBC), destroyed in MoLive_Reader_Dtor (0x005EEF10); drives packet decoding via MoLive_Reader_Process (0x005EC700)",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "currentTimeLo",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Low 32 bits of 64-bit current stream timestamp; incremented by packet duration in MoLive_Reader_ParseEpHeader (0x005ECF88)"
+      },
+      {
+        "offset": 4,
+        "name": "currentTimeHi",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "High 32 bits of 64-bit current stream timestamp; updated with carry addition in MoLive_Reader_ParseEpHeader"
+      },
+      {
+        "offset": 8,
+        "name": "timeBaseLo",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Low 32 bits of 64-bit packet duration factor; multiplied by stream count step in MoLive_Reader_ParseEpHeader"
+      },
+      {
+        "offset": 12,
+        "name": "timeBaseHi",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "High 32 bits of 64-bit packet duration factor; multiplied in MoLive_Reader_ParseEpHeader"
+      },
+      {
+        "offset": 24,
+        "name": "maybe_packetCounter",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "Cleared to 0 in MoLive_Reader_Ctor (param_1[6] = 0); optional packet counter"
+      },
+      {
+        "offset": 2584,
+        "name": "maybe_streamMapRoot_alias_1430",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.2,
+        "evidence": "Ghidra s64* indexing artifact of streamMapRoot at +0x1430 in MoLive_Reader_ReadEp: 0x286 * 8 = 0x1430; struct_db mapped to 0x286 * 4 = 0xA18"
+      },
+      {
+        "offset": 2624,
+        "name": "maybe_streamLimit_alias_1480",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.2,
+        "evidence": "Ghidra s64* indexing artifact of streamLimit at +0x1480 in MoLive_Reader_ReadEp: 0x290 * 8 = 0x1480; struct_db mapped to 0x290 * 4 = 0xA40"
+      },
+      {
+        "offset": 2628,
+        "name": "maybe_errorCallback_alias_1488",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.2,
+        "evidence": "Ghidra s64* indexing artifact of errorCallback at +0x1488 in MoLive_Reader_ReadEp: 0x291 * 8 = 0x1488; struct_db mapped to 0x291 * 4 = 0xA44"
+      },
+      {
+        "offset": 5148,
+        "name": "streamMapAllocator",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Allocator pointer at start of embedded std_RbTree stream map; initialized in MoLive_Reader_Ctor and passed to std_RbTree_AcquireNode"
+      },
+      {
+        "offset": 5152,
+        "name": "streamMapFreeList",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Singly-linked free node list pointer in std_RbTree stream map; traversed and freed in MoLive_Reader_Dtor (0x005EEF10)"
+      },
+      {
+        "offset": 5156,
+        "name": "streamMapNodePool",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Free node pool link in std_RbTree stream map; updated in MoLive_Reader_Dtor"
+      },
+      {
+        "offset": 5160,
+        "name": "maybe_streamMapUnk28",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "Zeroed in MoLive_Reader_Ctor at +0x1428 (param_1[0x50a] = 0)"
+      },
+      {
+        "offset": 5164,
+        "name": "maybe_streamMapUnk2C",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "Zeroed in MoLive_Reader_Ctor at +0x142c (param_1[0x50b] = 0)"
+      },
+      {
+        "offset": 5168,
+        "name": "streamMapRoot",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Root/anchor node pointer of std_RbTree stream map; initialized in Ctor and searched in MoLive_Reader_DecodePacket and ReadEp"
+      },
+      {
+        "offset": 5172,
+        "name": "streamMapNodeCount",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Active node count of std_RbTree stream map; cleared to 0 in MoLive_Reader_Ctor"
+      },
+      {
+        "offset": 5176,
+        "name": "isStreamMapInitialized",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.75,
+        "evidence": "Boolean initialization flag set to 1 in MoLive_Reader_Ctor (self->f_50e = 1)"
+      },
+      {
+        "offset": 5177,
+        "name": "allocatorType",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.75,
+        "evidence": "Allocator type/format byte copied from allocator+0x148c in MoLive_Reader_Ctor"
+      },
+      {
+        "offset": 5180,
+        "name": "segmentVectorAllocator",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Allocator pointer for std_SlotVector at +0x143c; passed to std_SlotVector_DestroyRangeDelete in DetachSource and Dtor"
+      },
+      {
+        "offset": 5184,
+        "name": "segmentVectorData",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Backing buffer pointer of segment std_SlotVector; freed via allocator virtual method in MoLive_Reader_Dtor"
+      },
+      {
+        "offset": 5188,
+        "name": "segmentVectorEnd",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "End pointer of segment std_SlotVector backing buffer; cleared to 0 in MoLive_Reader_Dtor"
+      },
+      {
+        "offset": 5192,
+        "name": "segmentVectorCount",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Element count of segment std_SlotVector; cleared to 0 in MoLive_Reader_DetachSource and passed to DestroyRangeDelete"
+      },
+      {
+        "offset": 5196,
+        "name": "decoderTree",
+        "type": "Container_AvlTree*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Container_AvlTree storing registered decoders; initialized in Ctor (0x00617638) and cleared via Container_AvlTree_Clear in Dtor"
+      },
+      {
+        "offset": 5200,
+        "name": "decoderTreeRoot",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Root node pointer of decoder Container_AvlTree at self+0x514 (offset 0x1450)"
+      },
+      {
+        "offset": 5236,
+        "name": "sourceAllocator",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Allocator pointer for attached data source; initialized in MoLive_Reader_Ctor at +0x1474"
+      },
+      {
+        "offset": 5240,
+        "name": "dataSource",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Attached MoLiveSource pointer; stored in MoLive_Reader_SetSource and invoked via vtable (+0x10, +0x14, +0x18, +0x28)"
+      },
+      {
+        "offset": 5244,
+        "name": "packetEndOffset",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Read end offset within source buffer; read in MoLive_Reader_ReadEp (*offset = *(u32*)((int)self + 0x147c))"
+      },
+      {
+        "offset": 5248,
+        "name": "streamLimit",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Maximum stream count limit; initialized to 0x40 (64) in MoLive_Reader_Ctor and compared against packet stream count in ParseEpHeader"
+      },
+      {
+        "offset": 5252,
+        "name": "maxPacketSize",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Maximum packet buffer size limit; initialized to 0x10000 (65536) in MoLive_Reader_Ctor and reset on packet boundaries"
+      },
+      {
+        "offset": 5256,
+        "name": "errorCallback",
+        "type": "void (*)(void)",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Diagnostic callback function pointer invoked with error messages in MoLive_Reader_ReadEp"
+      },
+      {
+        "offset": 5261,
+        "name": "isFirstPacket",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.9,
+        "evidence": "Packet header flag bit 0 parsed in MoLive_Reader_ParseEpHeader (*(self+0x148d) = bVar1 & 1)"
+      },
+      {
+        "offset": 5262,
+        "name": "maybe_hasPendingData",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.45,
+        "evidence": "Stream pending data state byte cleared in DetachSource and Process"
+      },
+      {
+        "offset": 5263,
+        "name": "isPacketActive",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.85,
+        "evidence": "Flag set while packet processing is active; tested in MoLive_Reader_Process and cleared on completion"
+      },
+      {
+        "offset": 5264,
+        "name": "sourceMode",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Source operating mode / status byte read from source vtable+4 in MoLive_Reader_SetSource and checked in Process"
+      },
+      {
+        "offset": 5265,
+        "name": "isLastPacket",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.9,
+        "evidence": "Packet header flag bit 1 parsed in MoLive_Reader_ParseEpHeader (*(self+0x1491) = (bVar1 & 2) >> 1)"
+      },
+      {
+        "offset": 5268,
+        "name": "filterTreeAllocator",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Allocator pointer for default decoder filter tree; initialized in MoLive_Reader_Ctor at +0x1494"
+      },
+      {
+        "offset": 5272,
+        "name": "filterTree",
+        "type": "Container_AvlTree*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Container_AvlTree of decoder filters populated by MoLive_StreamTable_RegisterDefaultDecoders; cleared in Dtor"
+      }
+    ]
+  },
+  {
+    "class": "MoLive_Decoder",
+    "type": "MoLiveDecoder",
+    "summary": "Polymorphic stream decoder/filter node created by the MoLive reader to process audio/video stream packets for a specific stream type.",
+    "size": 48,
+    "base": null,
+    "confidence": 0.85,
+    "evidence": "Allocated and configured in MoLive_Decoder_CreateFilter* (0x005EBF8C, 0x005EC078, 0x005EC35C, 0x005EC4E8); vtable 0x00784228/24C/270/294",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Vtable pointer initialized in MoLive_Decoder_CreateFilter* (0x00784228/0x0078424C/0x00784270/0x00784294)"
+      },
+      {
+        "offset": 4,
+        "name": "filterType",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Stream decoder/filter category (1, 2, 3, or 4) set in MoLive_Decoder_CreateFilter*"
+      },
+      {
+        "offset": 8,
+        "name": "filterSubtype",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Decoder sub-type (6, 0xC, 2, or 0xD) set in MoLive_Decoder_CreateFilter*"
+      },
+      {
+        "offset": 12,
+        "name": "factory",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Factory / reader instance pointer stored in puVar[3] in MoLive_Decoder_CreateFilter*"
+      },
+      {
+        "offset": 16,
+        "name": "streamId",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "Stream identifier argument passed to MoLive_Decoder_CreateFilter* and stored at puVar[4]"
+      },
+      {
+        "offset": 20,
+        "name": "packetIndex",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Initialized to -1 (0xFFFFFFFF) in all MoLive_Decoder_CreateFilter* variants"
+      },
+      {
+        "offset": 37,
+        "name": "maybe_filterActive",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.45,
+        "evidence": "Initialized to 0 in MoLive_Decoder_CreateFilterD at +0x25"
+      },
+      {
+        "offset": 38,
+        "name": "maybe_sampleCount",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.45,
+        "evidence": "Initialized to 0 in MoLive_Decoder_CreateFilterD at +0x26"
+      },
+      {
+        "offset": 42,
+        "name": "maybe_filterParam_2a",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.45,
+        "evidence": "Initialized to 0 in MoLive_Decoder_CreateFilterD at +0x2a"
+      },
+      {
+        "offset": 44,
+        "name": "maybe_filterParam_2c",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.45,
+        "evidence": "Initialized to 0 in MoLive_Decoder_CreateFilterD at +0x2c (puVar1->f_b = 0)"
+      }
+    ]
+  },
+  {
+    "class": "MoLive_BitReader",
+    "type": "MoLiveBitReader",
+    "summary": "MSB-first bitstream reader with a 64-bit accumulator and byte cursor used for decoding variable-length packet headers and entropy codes.",
+    "size": 16,
+    "base": null,
+    "confidence": 0.95,
+    "evidence": "Operated on by MoLive_BitReader_ReadBits (0x005EBDF4) called from MoLive_Reader_ReadEp",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "accumulatorLo",
+        "type": "u32",
+        "size": 8,
+        "confidence": 0.95,
+        "evidence": "Low 32 bits of 64-bit bit buffer accumulator updated by MoLive_BitReader_ReadBits (0x005EBDF4)"
+      },
+      {
+        "offset": 4,
+        "name": "accumulatorHi",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "High 32 bits of 64-bit bit buffer accumulator updated by MoLive_BitReader_ReadBits"
+      },
+      {
+        "offset": 8,
+        "name": "bitCount",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Number of valid bits currently held in accumulator; decremented by requested bit count in MoLive_BitReader_ReadBits"
+      },
+      {
+        "offset": 12,
+        "name": "readCursor",
+        "type": "u8*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Byte pointer into source packet buffer, advanced as bytes are pulled into accumulator in MoLive_BitReader_ReadBits"
+      }
+    ]
+  },
+  {
+    "class": "MoLive_StreamMap",
+    "type": "MoLiveStreamMap",
+    "summary": "Binary search tree map lookup context associating stream IDs with stream decoder callbacks.",
+    "size": 8,
+    "base": null,
+    "confidence": 0.9,
+    "evidence": "Traversed in MoLive_StreamMap_Find (0x00669820) called from MoLive_Reader_DecodePacket",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "rootNode",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Root pointer of stream map binary search tree; traversed in MoLive_StreamMap_Find (0x00669820)"
+      }
+    ]
+  }
+]

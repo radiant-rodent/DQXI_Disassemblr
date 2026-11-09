@@ -1,7 +1,7 @@
 # Install an ARMv6K-capable bare-metal toolchain for source replacement.
 #
 # This downloads the xPack ARM GNU toolchain into
-#   %LOCALAPPDATA%\Programs\dqxi-tools
+#   %LOCALAPPDATA%\Programs\opencode-tools
 # and prints the compiler path. It does not modify the retail ROM.
 #
 # Usage:
@@ -9,7 +9,7 @@
 
 $ErrorActionPreference = "Stop"
 $Version = "15.2.1-1.1"
-$Dest = Join-Path $env:LOCALAPPDATA "Programs\dqxi-tools"
+$Dest = Join-Path $env:LOCALAPPDATA "Programs\opencode-tools"
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 $Zip = Join-Path $Dest "xpack-arm-none-eabi-gcc-$Version-win32-x64.zip"
 $Url = "https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v$Version/xpack-arm-none-eabi-gcc-$Version-win32-x64.zip"

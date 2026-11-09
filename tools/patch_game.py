@@ -14,6 +14,7 @@ The retail image and the reference translation workspace are never touched.
 Usage:
     python tools/patch_game.py --map b001_101a
     python tools/patch_game.py --map b001_101a --no-rom
+    python tools/patch_game.py --map b001_101a --stage-mod      # -> mod/romfs/level3d/<map>.pack
 """
 from __future__ import annotations
 
@@ -64,6 +65,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--map", required=True)
     ap.add_argument("--no-rom", action="store_true", help="Only rebuild the PACK, do not repack the ROM")
+    ap.add_argument("--stage-mod", nargs="?", const="mod", default=None, metavar="DIR",
+                    help="copy the rebuilt PACK into this mod workspace (default mod/) and stop "
+                         "there; export it with tools/export_mod.py")
     args = ap.parse_args()
 
     map_id = args.map
@@ -82,6 +86,23 @@ def main() -> int:
     except Exception as exc:
         print(f"pack rebuild failed: {exc}", file=sys.stderr)
         return 2
+
+    if args.stage_mod:
+        # The mod workspace wants the pack itself, not a whole 4 GiB cartridge:
+        # mod/romfs/level3d/<map>.pack is exactly where tools/export_mod.py looks.
+        mod_pack = Path(args.stage_mod) / "romfs" / "level3d" / f"{map_id}.pack"
+        mod_pack.parent.mkdir(parents=True, exist_ok=True)
+        mod_pack.write_bytes(built)
+        print(f"Rebuilt level3d/{map_id}.pack ({len(built):,} bytes)")
+        print(f"  staged {mod_pack} for the mod workspace")
+        print("  next: python tools/export_mod.py --target luma   (or run_export.bat)")
+        (BUILD / "PATCH_REPORT.partial.json").write_text(json.dumps({
+            "map": map_id,
+            "patched_bxon": str(patched_bxon.relative_to(PROJECT_ROOT)),
+            "mod_pack": str(mod_pack),
+            "bytes": len(built),
+        }, indent=2), encoding="utf-8")
+        return 0
 
     manifest = json.loads((PROJECT_ROOT / "audit" / "romfs_manifest.json").read_text(encoding="utf-8"))
     rf = next((f for f in manifest["files"] if f["path"] == f"/level3d/{map_id}.pack"), None)
@@ -154,7 +175,10 @@ def main() -> int:
         "relocated": placed["relocated"],
         "rom": str((BUILD / "DQXI_patched.3ds").relative_to(PROJECT_ROOT)) if not args.no_rom else None,
     }
-    (BUILD / "PATCH_REPORT.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    # PATCH_REPORT.json describes the last *full* patched ROM (tools/verify_project.py
+    # reads it), so a --no-rom run must not overwrite it with rom=None.
+    report_path = BUILD / ("PATCH_REPORT.json" if not args.no_rom else "PATCH_REPORT.partial.json")
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return 0
 
 

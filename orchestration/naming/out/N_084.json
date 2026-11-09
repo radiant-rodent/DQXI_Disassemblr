@@ -1,0 +1,1103 @@
+[
+ {
+  "address": "0x005EBD2C",
+  "name": "MoLive_Stream_PopPacket",
+  "signature": "u32 MoLive_Stream_PopPacket(MoLiveStream* self)",
+  "params": {
+   "self": "stream whose pending-packet slot list is consumed"
+  },
+  "summary": "Moves the next pending packet slot into the stream's active packet vector and advances the read cursor; returns 1 when a packet was taken and 0 when none are pending. The 3DS sound driver calls it once per packet to walk a stream's queued packets.",
+  "confidence": 0.55,
+  "evidence": "Readable C decomp/readable/functions/FUN_005EBD2C_005ebd2c.c: if(self->f_38!=0) it calls func_007103E8(&self->f_2c, self->f_30 + self->f_3c*0x10) (std_SlotVector_Append of one 0x10-byte slot taken from the ring at f_30 indexed by f_3c), then advances f_3c (wrapping at f_34), decreases f_38 (pending count) and adds the slot payload size (slot[1]+0xC) to f_14 (bit position), returning 1. Callers are all sound-driver entry points: 0x006B98C0 loops it f_38 times (skip queued packets), 0x006B99C4 (MoLive_Decoder_GetPacket) and 0x006B9BC0 (MoLive_Decoder_NextPacket). Same 0x10-byte {owner,instance,prev,next} slot format as std_SlotVector_* (0x0070FC08/0x007103E8)."
+ },
+ {
+  "address": "0x005EBDF4",
+  "name": "MoLive_BitReader_ReadBits",
+  "signature": "u32 MoLive_BitReader_ReadBits(MoLiveBitReader* self, u32 count)",
+  "params": {
+   "self": "bit reader {acc_lo, acc_hi, bits_left, byte_ptr}",
+   "count": "number of bits to extract, 0..64"
+  },
+  "summary": "MSB-first bit reader: pulls bytes out of the stream until the 64-bit accumulator holds at least 'count' bits, then returns the top 'count' bits and drops them. Used by the MoLive packet/EP parser for its variable-length codes.",
+  "confidence": 0.8,
+  "evidence": "Readable C: asserts count<=0x40 via func_0011C810 (noreturn abort), keeps a 64-bit accumulator in *self/self[1], a bit count in self[2] and a byte cursor in self[3]; while (bits<count) { b=*cursor++; acc = func_00300E18(b,0,0x38-bits) | acc; bits+=8; } then result = func_00126148(acc, count) (64-bit shift) and acc = func_00300E18(acc,count). func_00300E18 is the ARM 64-bit left-shift helper and func_00126148 the right-shift helper. Called from MoLive_Reader_ReadEp (0x005EE58C, where it reads a unary run of zero bits and then a stream id: 'while (func_005EBDF4(&br,1)==0) i++; uVar1 = func_005EBDF4(&br,i)') and from MoLive_Reader_DecodePacket (0x005ED154)."
+ },
+ {
+  "address": "0x005EC1A0",
+  "name": "MoLive_StreamTable_RegisterDefaultDecoders",
+  "signature": "void MoLive_StreamTable_RegisterDefaultDecoders(MoLiveStreamTable* self, u32 stream_type, u32 flags)",
+  "params": {
+   "self": "stream-descriptor tree",
+   "stream_type": "stream type id to register",
+   "flags": "flags stored with the entry (default 1 via the 0x005EC19C entry point)"
+  },
+  "summary": "Populates the MoLive stream-descriptor tree with the built-in stream types (3, 2 and 4) plus the caller-supplied type, each pointing at its static descriptor/callback table. Called once when a reader is constructed.",
+  "confidence": 0.5,
+  "evidence": "Readable C: four calls to func_005EC204(self, key, value, &table) with keys arg3, 3, 2, 4 and static tables g_005EC1F4/1F8/1FC/200. The real entry point is 0x005EC19C which is a 4-byte ARM default-argument stub ('mov r2,#1' then falls through, confirmed by disassembly), which is why MoLive_Reader_Ctor (0x005EEDBC) calls 0x005EC19C. Only caller of 0x005EC1A0 is that ctor path; func_005EC204 is Container_AvlTree_Insert."
+ },
+ {
+  "address": "0x005EC204",
+  "name": "Container_AvlTree_Insert",
+  "signature": "bool Container_AvlTree_Insert(AvlTree* self, u32 key, u32 value, void* payload)",
+  "params": {
+   "self": "tree header (root at self+4, sentinel/header node at self+8)",
+   "key": "u32 key (stored at node+0x10)",
+   "value": "value word (node+0x14)",
+   "payload": "pointer stored at node+0x18"
+  },
+  "summary": "Inserts one key into the game's height-augmented (AVL) ordered tree, allocating a 0x1C-byte node from the tree's allocator and rebalancing through Container_AvlTree_InsertFixup. Returns true if the key was newly inserted, false if it already existed.",
+  "confidence": 0.65,
+  "evidence": "Readable C: classic lower_bound walk from *(self+4) comparing piVar2[4] (node+0x10 = key) with arg2, then node allocation of 0x1C bytes through the allocator vtable at self->f_28 ([0]=alloc, [2]=error) with the string 'MoLive::Allocator: not enough memory to allocate %d bytes !!!' (0x005EC31C), links the node and finally calls func_006172CC(self+4, node) = Container_AvlTree_InsertFixup. Node layout matches 0x006172CC: +0 left, +4 right, +8 parent, +0xC height byte, +0x10 key, +0x14 value, +0x18 payload. Called by MoLive_StreamTable_RegisterDefaultDecoders (0x005EC1A0) and the MoLive stream map code."
+ },
+ {
+  "address": "0x005EC700",
+  "name": "MoLive_Reader_Process",
+  "signature": "u32 MoLive_Reader_Process(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader/decoder instance"
+  },
+  "summary": "Main per-call state machine of the MoLive streaming reader: scans the incoming buffer for the next packet, validates/changes the packet size, resets the bit reader, then decodes all Eps in the packet and returns a status code (0 = need more data, 2 = packet done, 0x42/0x43/0x44/0x49/0x80/0x100 = the error/again codes).",
+  "confidence": 0.6,
+  "evidence": "Readable C (0x5E0 bytes): calls the reader-interface vtable at self+0x51E ([0x14] get position/size, [0x18] seek, [0x24] get timestamp, [0x28] is-end), calls func_00155380 repeatedly to parse a frame/packet header out of the buffer (rejects headers shorter than 0x10), then func_005ED154 (DecodePacket) in a loop until it returns 0x100, func_005ECF88 (ParseEpHeader), func_005EE58C (ReadEp) in a loop until it returns g_005ECCDC, and 0x005ECD8C/0x005ECCE0/0x005EE398 for the stream-table housekeeping. Contains the string 'error: reader could not change its packet size' (0x005ECCAC) and the two 'invalid packet size' codes at g_005ECCA4/CCA8. Only caller: 0x006B9BF8 (MoLive_Decoder_Update), which maps the returned code to a driver error code."
+ },
+ {
+  "address": "0x005ECCE0",
+  "name": "MoLive_StreamTable_BeginPackets",
+  "signature": "u32 MoLive_StreamTable_BeginPackets(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader owning the stream map"
+  },
+  "summary": "Walks every stream in the reader's stream map and opens a new packet on it (MoLive_Stream_BeginPacket), marking the stream dirty so its data is re-read. Returns 0 if any stream could not allocate its packet.",
+  "confidence": 0.5,
+  "evidence": "Readable C: in-order walk of the tree at self+0x1430 (root at +0x1430+8, same iteration idiom as the other stream-table functions), body = func_005EBA14(stream) and on success stream->f_48->f_11 = 1; returns 0 as soon as one call fails. Callers: 0x005EC700 (MoLive_Reader_Process) and 0x005EEDBC/0x005EEF10 indirectly via the ctor/dtor reset path. The module is provably MoLive, not the generic sound layer: the sibling allocator paths in this band assert with 'MoLive::Allocator: not enough memory to allocate %d bytes !!!' (0x005EC31C, 0x005ED7B4, 0x00735154). func_005EBA14 (named maybe_Sound_Stream_PopFreeNode by N_083, which had no access to the MoLive strings) allocates a 0x18-byte segment from the stream allocator, stores it at stream+0x48 and links it into the pending list at +0x44."
+ },
+ {
+  "address": "0x005ECD8C",
+  "name": "MoLive_StreamTable_FlushSegments",
+  "signature": "u32 MoLive_StreamTable_FlushSegments(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader owning the stream map"
+  },
+  "summary": "For every stream: appends the segment currently queued at stream+0x44 to the stream's segment vector (std_SlotVector_AppendRange), detaches it from its owner and marks the stream dirty. This hands the freshly parsed packet data to each stream's decoder.",
+  "confidence": 0.5,
+  "evidence": "Readable C: walks the tree at self+0x1430; per stream takes f48 = stream->f_48, and when f48 and f48->f_8 are set calls func_0070FC08(&stream->f_2c, &stream+0x44, &stream+0x54) = std_SlotVector_AppendRange over the 0x10-byte slot at +0x44; then unlinks that slot from the intrusive list and re-initialises the list head at +0x44; finally f48->f_11 = 1. Called from MoLive_Reader_Process (0x005EC700) and the ctor path."
+ },
+ {
+  "address": "0x005ECEC4",
+  "name": "MoLive_StreamTable_ReleaseUnused",
+  "signature": "void MoLive_StreamTable_ReleaseUnused(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader owning the stream map"
+  },
+  "summary": "Erases from the stream map every stream that has finished (no pending packet at +0x68 and no queued bytes at +0x38); streams that are still active just have their pending flag cleared.",
+  "confidence": 0.55,
+  "evidence": "Readable C: walks the tree at self+0x1430; per node takes stream = node->f_18->f_10; if stream->f_68 == 0 && stream->f_38 == 0 it calls func_0070C528(out, &self->f_141c, &iter) = std_RbTree_EraseNodeRebalance, otherwise only clears stream->f_68. Called from MoLive_Reader_Process (0x005EC700) right after decoding a packet."
+ },
+ {
+  "address": "0x005ECF88",
+  "name": "MoLive_Reader_ParseEpHeader",
+  "signature": "u32 MoLive_Reader_ParseEpHeader(MoLiveReader* self, u8* buffer, u32* offset, u32 size)",
+  "params": {
+   "self": "MoLive reader",
+   "buffer": "packet bytes",
+   "offset": "in/out read offset",
+   "size": "buffer size"
+  },
+  "summary": "Parses the leading EP header of a packet: the flags byte (bit0 = 'first', bit1 = 'last', bits2..7 = stream count), the 64-bit time base and the optional 16-bit packet counter, then advances the reader's time by (new_stream_count - old_stream_count) * stream_size. Returns 0 or a MoLive error code (0x43 truncated, 0x44 decode failed, 0x46 inconsistent stream count, 0x50 bad counter).",
+  "confidence": 0.6,
+  "evidence": "Readable C: reads one byte and stores (b&2)>>1 and b&1 into the two flags at self+0x1491 / g_005ED14C+self, takes the 6-bit field (b>>2) as the packet's frame/stream count (the running value at self+0x1484 starts at 0x40 = 'unset'), then multiplies the count delta by self[2] (stream size) and accumulates it into the 64-bit time at self[0..3], then calls func_005ECCE0 (BeginPackets) and validates the 16-bit counter at g_005ED150+self against self+0x1484 (0x10000 = unset) calling func_005EE398 on mismatch. Returns the same 0x43/0x44/0x46/0x50 code set as the other MoLive packet functions. Called only from MoLive_Reader_Process (0x005EC700)."
+ },
+ {
+  "address": "0x005ED154",
+  "name": "MoLive_Reader_DecodePacket",
+  "signature": "u32 MoLive_Reader_DecodePacket(MoLiveReader* self, u8* buffer, u32* offset, u32 size)",
+  "params": {
+   "self": "MoLive reader",
+   "buffer": "packet bytes",
+   "offset": "in/out read offset",
+   "size": "buffer size"
+  },
+  "summary": "Decodes one packet body: for each stream id found in the packet it looks the stream up in the reader's stream map, creates a 0x24-byte stream entry (with the MoLive allocator, 'MoLive::Allocator: not enough memory...') when the id is new, binds the per-stream decoder callback and feeds it the packet slice. Returns 0x100 when the packet is exhausted.",
+  "confidence": 0.55,
+  "evidence": "Readable C (0x1244 bytes): uses the bit reader 0x005EBDF4, does two ordered-tree searches over the map at self+0x141C (root) / self+0x1430 (header) for the stream id, allocates a 0x24-byte node through the allocator vtable with the 'MoLive::Allocator: not enough memory to allocate %d bytes !!!' string at 0x005ED7B4 (inside this function), inserts it with func_006172CC (Container_AvlTree_InsertFixup), calls func_00715E68 (std_RbTree_InsertUnique) on the secondary map at self+0x507, func_00669820/006698AC (stream-map find / bind), func_0070F840 and func_007106F0 for slot-list cleanup. Called only from MoLive_Reader_Process (0x005EC700) in the 'while (func_005ED154(...) != 0x100)' loop."
+ },
+ {
+  "address": "0x005EE398",
+  "name": "MoLive_StreamTable_CommitPackets",
+  "signature": "u32 MoLive_StreamTable_CommitPackets(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader owning the stream map"
+  },
+  "summary": "Walks every stream in the reader's stream map and commits the packet segments gathered so far into that stream's bit-stream buffer (MoLive_Stream_CommitPacket). Returns 0 if any stream failed.",
+  "confidence": 0.5,
+  "evidence": "Readable C: in-order walk of the tree at self+0x1430, body = func_005EBBA8(stream); result is ANDed (0 on first failure). func_005EBBA8 (maybe_Sound_Stream_BuildChunk in N_083) sums the 0xC sizes of the pending 0x10-byte slots and calls func_007103E8 (std_SlotVector_Append) to append them to the stream's decode buffer. Callers: MoLive_Reader_Process (0x005EC700) before parsing Eps, and the ctor path."
+ },
+ {
+  "address": "0x005EE43C",
+  "name": "MoLive_Reader_SetSource",
+  "signature": "u32 MoLive_Reader_SetSource(MoLiveReader* self, MoLiveSource* source)",
+  "params": {
+   "self": "MoLive reader",
+   "source": "reader-interface object with a vtable"
+  },
+  "summary": "Attaches a data source to the MoLive reader: detaches the previous one, stores the new interface at self+0x1478, opens it (vtable +0xC) and resets the reader state (time, bit reader, packet counters). Returns 0x41 if the source refuses to open.",
+  "confidence": 0.7,
+  "evidence": "Readable C: calls func_005EE4E0 (DetachSource), stores arg2 at self[0x51E] (=+0x1478), calls (*source->vtable[3])(source) as the open call, then (*source->vtable[1])(source) to read the source type into g_005EE4DC+self, and clears *self..self[3] (64-bit time), self[0x520]=0x40, self[0x521]=0x10000, self+0x148F and self+0x1491. The real entry point is 0x005EE430 (a 12-byte 'if (arg2==0) return 0x40;' guard verified in asm), which is what 0x006B9694 calls. Only caller: 0x006B9694 (MoLive_Decoder_Create)."
+ },
+ {
+  "address": "0x005EE4E0",
+  "name": "MoLive_Reader_DetachSource",
+  "signature": "void MoLive_Reader_DetachSource(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader"
+  },
+  "summary": "Closes and forgets the attached data source, erases every stream from the reader's stream map, releases the segment vector and resets the time/bit-reader state. Used both by the destructor and when a new source is attached.",
+  "confidence": 0.65,
+  "evidence": "Readable C: if self[0x51E] (source) != 0 it calls (*source->vtable[4])(source) (close), clears the slot, calls func_0070CB90(out, self+0x507, first, last) = std_RbTree_EraseRange over the secondary map at self+0x507, then func_007106F0(self+0x50F, 0, self[0x512]) = std_SlotVector_DestroyRangeDelete and clears self[0x512], time and flags (+0x148D). Called by MoLive_Reader_SetSource (0x005EE43C) and MoLive_Reader_Dtor (0x005EEF10)."
+ },
+ {
+  "address": "0x005EE58C",
+  "name": "MoLive_Reader_ReadEp",
+  "signature": "u32 MoLive_Reader_ReadEp(MoLiveReader* self, u8* buffer, u32* offset, u32 size)",
+  "params": {
+   "self": "MoLive reader",
+   "buffer": "packet bytes",
+   "offset": "in/out read offset",
+   "size": "buffer size"
+  },
+  "summary": "Reads one EP (element) record out of the packet: a unary-coded stream id selects the stream in the reader's stream map, then that stream's data is appended. Emits the diagnostic messages 'ReadEp: cannot find stream %d', 'Ep goes beyond end of packet' and 'ReadEp: stream %d already disabled' through the reader's error callback.",
+  "confidence": 0.85,
+  "evidence": "Readable C: contains the three ReadEp strings at 0x005EEA30 / 0x005EEA54 / 0x005EEA74 (all inside this function's range 0x005EE58C-0x005EEDBC); reads the unary run with func_005EBDF4 (MoLive_BitReader_ReadBits), does a lower_bound/upper_bound pair over the stream map at self+0x286 (=+0x1430), reports 'ReadEp: cannot find stream %d' through the callback at self+0x291 when the id is unknown, and returns g_005EEDB8 (0x100) when the packet is finished. Called only from MoLive_Reader_Process (0x005EC700) in the 'while (func_005EE58C(...) != g_005ECCDC)' loop."
+ },
+ {
+  "address": "0x005EEDBC",
+  "name": "MoLive_Reader_Ctor",
+  "signature": "MoLiveReader* MoLive_Reader_Ctor(MoLiveReader* self, MoLiveAllocator* allocator, u32 flags)",
+  "params": {
+   "self": "storage for the reader (0x14A0 bytes)",
+   "allocator": "allocator interface used for every internal allocation",
+   "flags": "reader options"
+  },
+  "summary": "Constructs a MoLive streaming reader: clears the time/packet state, installs the allocator, creates the two ordered maps (stream map at +0x141C and the secondary map at +0x507), the 0x10-byte slot vector at +0x143C and the two AVL trees, then registers the default stream decoders.",
+  "confidence": 0.7,
+  "evidence": "Readable C: zeroes self[0..3], self[6]; stores arg2 at self[0x507] and self[0x50F]; sets self[0x50E]=1; calls func_0070C414(&self->f_507) (std_RbTree_AcquireNode) and makes the returned node the map header (parent=0, left=right=itself); calls func_00617638(&self->f_513, ...) and func_00617638(&self->f_4c, ...) (AVL-tree constructors, each storing the allocator at +0x24) and func_005EC19C (RegisterDefaultDecoders); sets self+0x1439 from the allocator type and self[0x51E]=arg2, self+0x147C, self+0x1484=0x40, self+0x1488=0x10000. Caller: 0x006B9694 (MoLive_Decoder_Create), which allocates the 0x14A0-byte block through the global allocator at g_006B988C and pairs it with 0x005EEF10 as destructor; the chain is entered from 0x001B7514 (maybe_Gfx_MoviePlayer_Init, N_082), i.e. this decoder supplies the audio of a movie."
+ },
+ {
+  "address": "0x005EEF10",
+  "name": "MoLive_Reader_Dtor",
+  "signature": "MoLiveReader* MoLive_Reader_Dtor(MoLiveReader* self)",
+  "params": {
+   "self": "MoLive reader"
+  },
+  "summary": "Destroys a MoLive reader: detaches the source, clears both AVL trees, releases the slot vector and the tree node pool, and frees the map's backing store. Returns self.",
+  "confidence": 0.7,
+  "evidence": "Readable C: func_005EE4E0 (DetachSource); func_0061745C(&self->f_1498) and func_0061745C(&self->f_144C) = Container_AvlTree_Clear on the two trees; func_007106F0(&self->f_143C, 0, self->f_1448) = std_SlotVector_DestroyRangeDelete; (*alloc->vtable[1])(alloc, self->f_1440) frees the map block; func_0070CB90(out, &self->f_141C, ...) = std_RbTree_EraseRange and then walks the free list at self+0x1420 freeing each node with the allocator's vtable[1]. Called from 0x006B9694 (MoLive_Decoder_Create) on its error path and from 0x006B9CDC (the sound driver's decoder-destroy entry point)."
+ },
+ {
+  "address": "0x005F1AF8",
+  "name": "maybe_Svc_HandlePool_Release",
+  "signature": "void maybe_Svc_HandlePool_Release(HandlePool* self, u32 handle)",
+  "params": {
+   "self": "typed handle pool (instances at +0x14, live bitmap at +0x18, capacity at +0x1C, live count at +0x20, work slots at +0x28, slot count at +0x30)",
+   "handle": "packed handle whose low bits index the pool"
+  },
+  "summary": "Releases one entry of a typed handle pool: copies the entry's two 0x14-byte transform blocks back into its work slot, marks the slot free, clears the entry's bit in the pool's live bitmap and decrements the pool's counters.",
+  "confidence": 0.4,
+  "evidence": "Readable C: iVar7 = self->f_28 + (u32)arg2->f_66 * 0x88 (per-entry 0x88-byte work slot), copies 2 x 0x14 bytes with func_0010EBE4 into slot+0x28 / slot+0x34, sets slot->f_10-- and slot->f_14 = 3 (state 'free'), then computes idx = (entry - self->f_14)/0x70, calls func_005F26AC(self->f_14 + idx*0x70, ...), clears bit idx in the bitmap at self->f_18 and decrements self->f_20 and self->f_30. The pool layout is confirmed by the neighbouring validator 0x005F1BFC (Ghidra merged it into this function's range; it starts at 0x005F1BFC after a literal pool word): it requires (handle >> 24) == 0x2D (a type tag), then (pool+0x14 != 0 && pool+0x1C > (handle & 0xFFFF) && pool+0x18 != 0) and tests the bitmap bit. Only caller 0x002E6828 (tail-call after that validator; called from Gfx_SpriteObject_UpdateFrame 0x004C625C)."
+ },
+ {
+  "address": "0x005F26AC",
+  "name": "maybe_Svc_HandlePool_ResetSlot",
+  "signature": "void maybe_Svc_HandlePool_ResetSlot(HandlePoolSlot* self)",
+  "params": {
+   "self": "pool slot (0x70 bytes) being recycled"
+  },
+  "summary": "Recycles a handle-pool slot: copies its transform data back to the owning entry, then re-initialises all four intrusive list heads and clears the two pending counters so the slot can be reused.",
+  "confidence": 0.4,
+  "evidence": "Readable C: if self->f_50 != 0 and its f_10 > 0 it copies 2 x 0x14 bytes via func_0010EBE4 into the owner and sets state 3, then relinks the four list heads at self+4/+8, self+0x18/+0x1c, self+0x2c/+0x30 and self+0x40/+0x44 back to themselves and zeroes f_68/f_6c. Only caller: maybe_Svc_HandlePool_Release (0x005F1AF8), which passes the 0x70-byte slot from the pool's instance array."
+ },
+ {
+  "address": "0x005F52DC",
+  "name": "Field_SceneObject_DtorSimple",
+  "signature": "void maybe_Field_SceneObject_DtorSimple(SceneObject* self, void* vtable)",
+  "params": {
+   "self": "scene object",
+   "vtable": "derived-class vtable to install first"
+  },
+  "summary": "Destructor for a scene object variant without a name map: installs the given vtable, frees the three owned resource blocks at +0x1B4/+0x1B8/+0x1BC and runs the shared scene-object base destructor.",
+  "confidence": 0.5,
+  "evidence": "Readable C: *self = arg2; if (self[0x6D]) func_0010F69C(); ... three times for self[0x6D..0x6F] (= +0x1B4/+0x1B8/+0x1BC) and clears them; then func_005E7D84(self). 0x005E7D84 is the shared scene-object base destructor (sets its vtable, releases a list of sub-objects through vtable[1], erases its std::map at +0x14 and clears the entry in the global handle table indexed by the u16 id at +4). Called from UI/scene teardown code, not from the map-owning variants (0x005F842C/0x005F852C)."
+ },
+ {
+  "address": "0x005F842C",
+  "name": "Field_SceneObject_Delete",
+  "signature": "void Field_SceneObject_Delete(SceneObject* self, void* vtable)",
+  "params": {
+   "self": "scene object",
+   "vtable": "derived-class vtable"
+  },
+  "summary": "Deleting destructor of the std::map-owning scene object: installs the vtable, erases every node of the map at +0x1F0, unlinks the three intrusive lists, runs the base destructor and finally releases the object itself.",
+  "confidence": 0.55,
+  "evidence": "Readable C: *self = arg2; walks the map from self[0x7E] erasing each node with func_0010EC14 (std_RbTree_EraseNode) and advancing with func_00115358/func_00115390 (tree successor); if self->f_80 it erases the root with func_0010EC00/func_0010EC14; relinks lists at self[0x79]/[0x7A] and self[0x1E]/[0x1F]; func_005E7D84(self) (base dtor); func_0010F6CC() frees the map. Twin function 0x005F852C is identical except it does not free the map, i.e. this one is the deleting destructor and the other a reset."
+ },
+ {
+  "address": "0x005F852C",
+  "name": "Field_SceneObject_Destroy",
+  "signature": "void Field_SceneObject_Destroy(SceneObject* self, void* vtable)",
+  "params": {
+   "self": "scene object",
+   "vtable": "vtable to install"
+  },
+  "summary": "Destructor body of the std::map-owning scene object: erases the map nodes, unlinks the intrusive lists and runs the base destructor, but does not release the object itself (the deleting twin 0x005F842C does).",
+  "confidence": 0.5,
+  "evidence": "Readable C is byte-for-byte the same as 0x005F842C except that the trailing func_0010F6CC() (map pool free) is missing; both are 0xF8/0x100-byte twins with the same callers list (none) and the same callees (0x0010EC00, 0x0010EC14 std_RbTree_EraseNode, 0x00115358, 0x00115390, 0x005E7D84)."
+ },
+ {
+  "address": "0x005F9828",
+  "name": "maybe_Ui_Scene_ApplyLayerFlags",
+  "signature": "void maybe_Ui_Scene_ApplyLayerFlags(UiScene* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "UI scene object",
+   "arg2": "unused/forwarded",
+   "arg3": "unused/forwarded",
+   "arg4": "unused/forwarded"
+  },
+  "summary": "Re-applies the UI scene's packed display-flag word: unpacks the 16-bit field of the shared scene-config singleton bit by bit and calls the per-bit setter with the matching render mask (0x10/0x20/0x40/0x80/0x100/0x200/0x400...), so layer visibility follows the configuration.",
+  "confidence": 0.45,
+  "evidence": "Readable C: lazily creates two singletons (vtable g_005F9C74 / g_005F9C88, the second 0x1D4 bytes via 0x001051F0) then repeatedly calls func_005F9768(self, (packed >> n) & 1, n, mask) for the 16 bits of the u16 at puVar3+3 with masks 0x40,0x80,0x100,0x200,0x10,0x20,0x400,... Callers are all Ui_SceneFlow_Update / Ui_SceneFlow_SyncState / Ui_SceneFlow_TeardownObjects / Ui_SmithMenu_GetGlobal (N_040/N_020), i.e. the per-frame UI scene refresh."
+ },
+ {
+  "address": "0x00600CD0",
+  "name": "Ui_Widget_DeleteDtor",
+  "signature": "void Ui_Widget_DeleteDtor(UiWidget* self)",
+  "params": {
+   "self": "UI widget with a name map at +0x1C"
+  },
+  "summary": "Deleting destructor for a map-owning UI widget: installs the vtable at g_00600D30, erases the widget's std::map, unlinks its two intrusive lists and releases the object.",
+  "confidence": 0.5,
+  "evidence": "Readable C: *arg1 = g_00600D30; if (arg1->f_b) erase the tree at arg1+7 words (+0x1C) with func_0010EC00/func_0010EC14 (std_RbTree_EraseNode); relink lists at arg1[5]/[6] and arg1[2]/[3]; func_0010F6CC(arg1) frees the map. Same shape as the scene-object destructors 0x005F842C/0x005F852C, and the vtable is a distinct UI one, so this is a UI widget rather than a field object."
+ },
+ {
+  "address": "0x00612110",
+  "name": "maybe_Ui_MessageStyle_SetLevelA",
+  "signature": "void maybe_Ui_MessageStyle_SetLevelA(UiMessageWindow* self, u32 level)",
+  "params": {
+   "self": "message window",
+   "level": "0..4 style level"
+  },
+  "summary": "Stores a 0..4 style level in the message window (+0x31C1) and pushes it to the shared message-style object, which converts it to a target float value (level*0.25) and starts the corresponding fade/animation.",
+  "confidence": 0.45,
+  "evidence": "Readable C: self->f_31c1 = (char)arg2; lazily creates the shared 0x1EB0-byte object (flag g_006121A0, instance g_006121A4, vtable g_006121B0) and calls func_00116C84(obj, arg2). Disassembly of 0x00116C84 shows 'if (level > 4) return; target = level * 0.25f; store at obj+0x1A90; if (changed && !(flags&4)) start animation with 1.0f'. Callers: 0x0041D888 (Ui_MessageWindow_UpdatePager, N_017) and 0x0041D8F8 (Ui_RankWindow_UpdateRows, N_028), i.e. text windows."
+ },
+ {
+  "address": "0x00612374",
+  "name": "maybe_Ui_MessageStyle_SetLevelB",
+  "signature": "void maybe_Ui_MessageStyle_SetLevelB(UiMessageWindow* self, u32 level)",
+  "params": {
+   "self": "message window",
+   "level": "0..4 style level"
+  },
+  "summary": "Second style channel of the same message window: stores the 0..4 level at +0x31C0 and applies it through the shared message-style object's other float channel (+0x1A94).",
+  "confidence": 0.45,
+  "evidence": "Readable C: self->f_31c0 = (char)arg2; same lazy-singleton + func_00116CE4(obj, arg2) pattern as 0x00612110, but the singleton/method literals differ (g_00612404/0x00612408/0x00612414 and func_00116CE4). Disassembly of 0x00116CE4 is the twin of 0x00116C84 writing to obj+0x1A94 instead of obj+0x1A90, both with the 0.25f multiplier. Same two callers (0x0041D888, 0x0041D8F8)."
+ },
+ {
+  "address": "0x00612624",
+  "name": "maybe_Ui_MessageStyle_ApplyLevelA",
+  "signature": "void maybe_Ui_MessageStyle_ApplyLevelA(UiMessageWindow* self)",
+  "params": {
+   "self": "message window whose stored level is re-applied"
+  },
+  "summary": "Re-applies the style level that is stored in the window's byte field to the shared message-style object (channel A), used when a window is restored or reopened.",
+  "confidence": 0.45,
+  "evidence": "Readable C: identical lazy-singleton boilerplate as 0x00612110 but instead of storing arg2 it reads the level from the window (g_006126C4 == 0x31C1, i.e. *(u8*)(self + 0x31C1)) and calls func_00116C84. Callers: 0x002CD2A0 (maybe_Ui_DataPanel_OpenWithStrings, N_025) and 0x002CE694 (maybe_Ui_DataPanel_Restore, N_025) - i.e. called on window restore."
+ },
+ {
+  "address": "0x00612950",
+  "name": "maybe_Ui_MessageStyle_ApplyLevelB",
+  "signature": "void maybe_Ui_MessageStyle_ApplyLevelB(UiMessageWindow* self)",
+  "params": {
+   "self": "message window whose stored level is re-applied"
+  },
+  "summary": "Re-applies the window's second stored style level (+0x31C0) to the shared message-style object (channel B).",
+  "confidence": 0.45,
+  "evidence": "Readable C: same as 0x00612624 but passes self->f_31c0 and calls func_00116CE4; same two callers (Ui_DataPanel_OpenWithStrings 0x002CD2A0, Ui_DataPanel_Restore 0x002CE694)."
+ },
+ {
+  "address": "0x00615818",
+  "name": "maybe_Ui_RenderObject_Draw",
+  "signature": "void maybe_Ui_RenderObject_Draw(UiRenderObject* self, u32 pane, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "UI render object (per-slot render nodes of 0x414 bytes at +0x2C)",
+   "pane": "pane/resource to draw",
+   "arg3": "draw parameter",
+   "arg4": "draw parameter"
+  },
+  "summary": "Draws one UI render element through the engine render-object API: binds the pane, acquires its resources, submits the draw and releases them again; only when the object is visible (flags at +0xC7C) and the current slot is valid.",
+  "confidence": 0.45,
+  "evidence": "Readable C: calls func_001F0340 / func_001F0598 / func_001F0554 / func_001EFF04 on self + self->f_28*0x414 + 0x2C (the per-slot 0x414-byte render node) - 0x001F0598 resolves the referenced resources (it sets arg3->f_60C and calls func_0053CD1C to refcount them); then guards on self->f_c80 < 1, the visible flag self->f_c7c, the object at self+0xC84 and func_00630584() != 1 before func_001F0510 (submit)."
+ },
+ {
+  "address": "0x00616DB4",
+  "name": "maybe_Ui_RenderObject_DrawWithTexture",
+  "signature": "void maybe_Ui_RenderObject_DrawWithTexture(UiRenderObject* self, u32 pane, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "UI render object",
+   "pane": "pane/resource to draw",
+   "arg3": "draw parameter",
+   "arg4": "draw parameter"
+  },
+  "summary": "Like Ui_RenderObject_Draw but also binds a texture and draws it as a full 400x480 (0x1E0 x 0x190) quad: it fetches the render context, sets the texture via func_005633B4 for both the element's own size and the full-screen rect, and saves/restores the render target around the draw.",
+  "confidence": 0.45,
+  "evidence": "Readable C: func_001052C8 (render context, named maybe_Gfx_GetRenderContext by N_080) then func_005633B4(ctx, tex, x, y+0x70) twice - the second time with the literal 400/0x1E0 x 480/0x190 rect; func_0062AF70(self->f_20) and func_001A6288(self->f_20, 1) bracket the draw (save/restore render target), then the same 0x001F0598/0x001F0554/0x001EFF04/0x001F0510 sequence as 0x00615818."
+ },
+ {
+  "address": "0x006172CC",
+  "name": "Container_AvlTree_InsertFixup",
+  "signature": "void Container_AvlTree_InsertFixup(AvlTree* tree, AvlNode* node)",
+  "params": {
+   "tree": "tree header",
+   "node": "newly linked node"
+  },
+  "summary": "Finishes an AVL insertion: makes the node a leaf (left/right point at the header), sets its height to 1, updates the tree's first/last and size counters and then walks up towards the root rebalancing with the rotate/update helpers.",
+  "confidence": 0.7,
+  "evidence": "Readable C: *node = node[1] = tree+1 (both children = header sentinel), *(u8*)(node+0xC) = 1, updates tree[5]/tree[6] (first/last) when the node becomes the extreme, tree[7]++ (size), then 'for (p = node->parent; p != header; node = p, p = p->parent) { child = (*p==node) ? p+1 : p; func_00617410(child); func_00617488(child); }' and finishes with func_00617410(tree)/func_00617488(tree). func_00617410/0x00617488 are the height-update and rebalance subroutines (Ghidra merged them into the 0x61737C/0x61745C ranges, they have no index entry). Called only by Container_AvlTree_Insert (0x005EC204) and MoLive_Reader_DecodePacket (0x005ED154)."
+ },
+ {
+  "address": "0x0061737C",
+  "name": "Container_AvlTree_EraseFixup",
+  "signature": "void Container_AvlTree_EraseFixup(AvlNode** slot)",
+  "params": {
+   "slot": "address of the node pointer being repaired"
+  },
+  "summary": "Repairs the height/minimum augmentation after a node was removed: decrements the node's stored height value, propagates the change to the parent while it improves the parent's value, then re-runs the balance/rotate helpers on the node and its parent. No-op when the node's value is already no larger than both children's.",
+  "confidence": 0.5,
+  "evidence": "Readable C: uVar2 = *(u8*)(*slot + 0xC) - 1; if (uVar2 <= *(u8*)(left+0xC) && uVar2 <= *(u8*)(right+0xC)) return; stores the new byte, propagates to parent+0xC, then calls func_00617410 on *slot, parent and parent+4 and func_00617488 on *slot and parent. Only caller: MoLive_Reader_DecodePacket (0x005ED154, asm lines 0x005EEA.. around the 'Ep goes beyond end of packet' path), i.e. the erase half of the same AVL tree that 0x006172CC builds."
+ },
+ {
+  "address": "0x0061745C",
+  "name": "Container_AvlTree_Clear",
+  "signature": "void Container_AvlTree_Clear(AvlTree* tree)",
+  "params": {
+   "tree": "tree header"
+  },
+  "summary": "Destroys every node of an AVL tree (post-order, calling the tree's node-release callback) and re-initialises the header so the tree is empty.",
+  "confidence": 0.75,
+  "evidence": "Readable C: calls func_006174E8(tree, *tree) (DestroySubtree) then sets tree[3]=tree+1, *tree=tree+1, tree[6]=tree+1, tree[7]=0, tree[5]=tree+1 - exactly the empty-header state that Container_AvlTree_InsertFixup expects. Called by MoLive_Reader_Dtor (0x005EEF10) for the two trees at +0x144C and +0x1498."
+ },
+ {
+  "address": "0x006174E8",
+  "name": "Container_AvlTree_DestroySubtree",
+  "signature": "void Container_AvlTree_DestroySubtree(AvlTree* tree, AvlNode* node)",
+  "params": {
+   "tree": "tree header (callback at +0x20)",
+   "node": "subtree root"
+  },
+  "summary": "Recursively frees a subtree in post-order, invoking the tree's node-release callback (header+0x20) with (tree, node) for each node.",
+  "confidence": 0.75,
+  "evidence": "Readable C: if (node != tree+4) { DestroySubtree(tree, node->left); DestroySubtree(tree, node->right); (*tree->f_20)(tree, node); } - post-order traversal ending in the indirect call through the header field at +0x20. Only caller: Container_AvlTree_Clear (0x0061745C)."
+ },
+ {
+  "address": "0x006268D8",
+  "name": "Ui_Layout_InitShader",
+  "signature": "void Ui_Layout_InitShader(UiLayoutObject* self)",
+  "params": {
+   "self": "UI layout object (shader bound into the object at +0xC)"
+  },
+  "summary": "Loads the UI layout shader 'lyt_shader.shbin' (once, cached in a global) and binds its two shader handles to the object's render object, then rebinds the layout's slot object.",
+  "confidence": 0.7,
+  "evidence": "Readable C: if the object is not yet initialised (self+9 == 0) it lazily creates a 0x21C-byte resource loader (vtable g_006269D8, alloc via func_00122120), calls func_00124B24(loader, 0, \"lyt_shader.shbin\") - the string is at 0x006269DC - walks the loaded shader list for the one matching g_006269F0, and binds it with func_0021F7C4(self->f_c, shader[0x1D], shader[0x17]); finally func_006270F0(self, 0) = Ui_SceneFlow_BindSlotObject (N_074)."
+ },
+ {
+  "address": "0x00626BC8",
+  "name": "Ui_SceneObject_Release",
+  "signature": "void Ui_SceneObject_Release(UiSceneObject* self)",
+  "params": {
+   "self": "UI scene object"
+  },
+  "summary": "Releases a UI scene object: makes sure its layout shader is initialised, releases the animation/motion/model resources and the extra render object, and plays the object's close sound effect. Used as the object's teardown/destructor body.",
+  "confidence": 0.6,
+  "evidence": "Readable C: if (!initialised) { if (func_0066D1C0(self) == 0) return; func_006268D8(self); if (self->f_14) func_002D25D8(); } then func_0021F820(self->f_c), func_0021677C(self->f_10), func_002D2210(self->f_14) (= Gfx_Resources_Release, N_003), func_00454C40(self->f_90), and finally if (self->f_94 != g_00626CD8) func_001EBC68(shared, self->f_94, 0, 0) (= Sound_PlaySeById, N_042). Only caller: 0x00600B74 (maybe_Script_UiSystem_Suspend, N_020)."
+ },
+ {
+  "address": "0x00628AF0",
+  "name": "maybe_Ui_Element_IsIdle",
+  "signature": "u32 maybe_Ui_Element_IsIdle(UiElement* self)",
+  "params": {
+   "self": "UI element"
+  },
+  "summary": "Returns 1 when the element and its sub-parts have finished their animation: the element's part list must report ready (func_006692A0) and either it has no span group or the span group at +0x388 is idle.",
+  "confidence": 0.45,
+  "evidence": "Readable C: iVar1 = func_006692A0(self) (disassembly confirms the call target; Ghidra prints it as x6_()) - 0x006692A0 walks the part list at self+0x54/+0x58 calling vtable+0xC on each and returns 1 only if all report done; then (self->f_388 == 0 || func_00641960(self->f_388) != 0). 0x00641960 is the span idle query used by the other Ui_..._IsIdle helpers (N_076's maybe_Ui_AreAllSpanGroupsIdle)."
+ },
+ {
+  "address": "0x00641960",
+  "name": "Ui_Span_IsIdle",
+  "signature": "u32 Ui_Span_IsIdle(UiSpan* self)",
+  "params": {
+   "self": "span/part object"
+  },
+  "summary": "Reports whether a UI span (sprite/animation part) has finished playing: false while its referenced animation handle is still alive, otherwise true only when every element of the span's key list has reached state >= 4.",
+  "confidence": 0.55,
+  "evidence": "Readable C: if self->f_ac != -1 it looks the handle up in the global object table (g_00641AF0 + (id & 0xFFF)*8 with generation check id>>12) via func_00630620 and returns 0 while the object exists; then walks (self->f_24 - self->f_20)/0xC key entries, resolving each through the same table and returning 0 if any object has f_78 < 4; the last check is on the key at self+4. Called by every other idle helper: 0x00628AF0, 0x0064A0D0, 0x00650DC0, 0x006540E8 and N_076's maybe_Ui_AreAllSpanGroupsIdle/AreAllSlotSpansIdle/AreAllIconSpansIdle, plus field-actor update paths."
+ },
+ {
+  "address": "0x0064A0D0",
+  "name": "maybe_Ui_Element_IsIdleA",
+  "signature": "u32 maybe_Ui_Element_IsIdleA(UiElement* self)",
+  "params": {
+   "self": "UI element with one span at +0x2AC"
+  },
+  "summary": "Idle query for a UI element that owns a single span at +0x2AC: returns 1 when the part list is ready and that span is idle.",
+  "confidence": 0.45,
+  "evidence": "Readable C: func_006692A0(self) (part list ready) and (self->f_2ac == 0 || func_00641960(self->f_2ac) != 0). Same idiom as 0x00628AF0 with a different span offset; the call at 0x0064A0D8 disassembles to 'bl 0x6692a0', which Ghidra prints as x6_()."
+ },
+ {
+  "address": "0x00650DC0",
+  "name": "maybe_Ui_Element_IsIdle8x3",
+  "signature": "u32 maybe_Ui_Element_IsIdle8x3(UiElement* self)",
+  "params": {
+   "self": "UI element owning 8 slots with 3 spans each"
+  },
+  "summary": "Idle query for a UI element with 8 slots x 3 spans (offsets 0x220/0x820/0xE20 with a 0xC0 stride): ANDs the idle result of all 24 spans and returns 1 only when every one is finished.",
+  "confidence": 0.45,
+  "evidence": "Readable C: func_006692A0(self) guard, then for i in 0..7 calls func_00641960(self + i*0xC0 + 0x220), +0x820 and +0xE20, ANDing the results (uVar5 &= ...). Same helpers as 0x00628AF0/0x0064A0D0."
+ },
+ {
+  "address": "0x006540E8",
+  "name": "maybe_Ui_Element_IsIdleB",
+  "signature": "u32 maybe_Ui_Element_IsIdleB(UiElement* self)",
+  "params": {
+   "self": "UI element with two spans at +0x2C8 and +0x388"
+  },
+  "summary": "Idle query for a UI element that owns two spans (+0x2C8 and +0x388): returns 1 only when both are idle.",
+  "confidence": 0.45,
+  "evidence": "Readable C: func_006692A0(self) guard then 'func_00641960(self + 0x2c8) && func_00641960(self + 0x388)'; disassembly confirms 'bl 0x6692a0' then the two span checks."
+ },
+ {
+  "address": "0x00655F58",
+  "name": "Gfx_GpuCmd_WriteTextureUnits",
+  "signature": "u32* Gfx_GpuCmd_WriteTextureUnits(GfxTextureUnitDesc* desc, u32* out, u32 unit_mask, int with_bind)",
+  "params": {
+   "desc": "texture unit description",
+   "out": "GPU command buffer write pointer",
+   "unit_mask": "which texture units to emit (bit0 = first, bits1-2 = second)",
+   "with_bind": "also emit the unit bind/size command"
+  },
+  "summary": "Appends PICA200 GPU command words that configure one or two texture units (size, param, LOD, address and the unit's register bind) from a texture description, returning the advanced write pointer.",
+  "confidence": 0.6,
+  "evidence": "Readable C writes (data, command) word pairs with the command words g_00656040=0x0F0111, g_00656044=0x0F0117, g_00656048=0x0F011D, g_0065604C=0x0F0116, g_00656050=0x0F011C, g_00656058=0x0F011E - i.e. the 0x0F00xx PICA200 command header format (0x0F<<20 | reg<<16 | param count); it shifts texture addresses right by 3 (func_0012345C(...) >> 3, PICA physical addresses are 8-byte units) and ORs 0x1000000 (the 'texture enabled' bit). Called from the 0x0056xxxx GPU command emitters (0x00567718, 0x0056797C, 0x00569350, 0x00569518, 0x00569ABC, 0x0056A3F0)."
+ },
+ {
+  "address": "0x006579C8",
+  "name": "Gfx_GpuCmd_WriteTextureDescriptor",
+  "signature": "u32* Gfx_GpuCmd_WriteTextureDescriptor(GfxTexture* tex, u32* out, int with_header)",
+  "params": {
+   "tex": "texture object (format at +0x8/+0xC, size, addresses at +0x20..+0x34)",
+   "out": "command buffer write pointer",
+   "with_header": "emit the preceding command block first"
+  },
+  "summary": "Appends the full PICA200 texture descriptor block for one texture: size, param (format/mip/type bits), border colour, LOD, the up-to-four address registers and the final type/bind command, converting the float LOD bias to fixed point.",
+  "confidence": 0.6,
+  "evidence": "Readable C emits (value, command) pairs with g_00657C20=0x0F0081, g_00657C24=0x0F0083, g_00657C28=0x0F0084, g_00657C44=0x0F0085, g_00657C48=0x0F0086, g_00657C5C=0x0F008E - the texture-unit-0 register block of the PICA200 command list (N_083 independently identified this 0x00655xxx-0x00659xxx band as the PICA200 state-block builders and named the neighbours 0x00654C/0x0065ACC/0x00658050/0x00657E28/0x00656B24/0x00656918/0x006564C0); texture addresses are shifted right by 3 and masked with 0xE03FFFFF (PICA address registers hold address>>3); the float at tex+0x10 is converted with VectorFloatToUnsigned(...,3) after clamping. Callers are the 0x0056xxxx GPU command emitters (0x005346DC, 0x0056797C, 0x00568070, 0x00568360, 0x0056964C, 0x00569D0C, 0x0056A3F0, 0x0056AC80, 0x0056E8F8, 0x00578868, 0x00657E28, 0x006F1634, 0x006F18FC, 0x006F19A8)."
+ },
+ {
+  "address": "0x006594D0",
+  "name": "Gfx_GpuCmd_WriteTextureBind",
+  "signature": "u32* Gfx_GpuCmd_WriteTextureBind(GfxTextureBind* bind, u32* out)",
+  "params": {
+   "bind": "texture bind record (bit31 of word 0 = 'has explicit address')",
+   "out": "command buffer write pointer"
+  },
+  "summary": "Appends the two GPU commands that bind a texture unit to a texture object: the enable/bind word and either the physical texture address (func_00508114 converts the buffer to a GPU address) or an explicit address taken from the record.",
+  "confidence": 0.55,
+  "evidence": "Readable C writes two (value, command) pairs with g_0065953C=0x0F006D and g_0065953C-0x20=0x0F004D; when bit31 of *arg1 is clear it calls func_00508114() to obtain the address, otherwise it takes (*arg1 & 0xFFFFFF). Callers are the 0x0057xxxx texture-upload paths (0x0057DE7C, 0x0057DFEC, 0x0057E220, 0x0057E404)."
+ },
+ {
+  "address": "0x006693B0",
+  "name": "maybe_MoLive_Stream_ReadPcm",
+  "signature": "int maybe_MoLive_Stream_ReadPcm(MoLiveStream* self, u32* out_ptr, u32 out_words)",
+  "params": {
+   "self": "MoLive stream with a ring buffer at +0x58",
+   "out_ptr": "destination buffer",
+   "out_words": "words to produce"
+  },
+  "summary": "Copies decoded PCM out of a MoLive stream's circular sample buffer into the caller's buffer, handling the wrap and growing the ring buffer when the requested range does not fit. Returns the number of words written.",
+  "confidence": 0.4,
+  "evidence": "Readable C is badly damaged by Ghidra ('Control flow encountered bad instruction data', halt_baddata in the middle), but the intact parts show the ring-buffer idiom used elsewhere in this reader: self->f_58 = buffer, self->f_5c = capacity, self->f_60 = head, self->f_30/f_34/f_3c = the 0x10-byte packet-slot ring, and copies via func_001112EC (memmove) with the wrap arithmetic (uVar3 = uVar3 - f_34). It calls func_00617298 to grow the capacity and asserts through the MoLive allocator string at 0x00669704. Only caller 0x006B99C4 (MoLive_Decoder_GetPacket) which passes its output buffer and then reads the format/size through func_00669708."
+ },
+ {
+  "address": "0x00669820",
+  "name": "MoLive_StreamMap_Find",
+  "signature": "u32 MoLive_StreamMap_Find(MoLiveStreamMap* map, u32 stream_id, u32* out_value, u32 arg4)",
+  "params": {
+   "map": "ordered stream map (context at +0, root at +4, header at +8)",
+   "stream_id": "key to look up",
+   "out_value": "receives the callback result",
+   "arg4": "argument forwarded to the stream callback"
+  },
+  "summary": "Looks a stream up by id in the MoLive stream map and, when found, invokes that stream's per-node decode callback (node+0x18) with the map context and arg4. Returns 0x51 when the id is unknown ('cannot find stream') and 0x44 when the callback fails.",
+  "confidence": 0.55,
+  "evidence": "Readable C: lower_bound walk from map[1] comparing node+0x10 with arg2, then the 'found' test that also rejects a key mismatch, then iVar3 = (*(code*)node[6])(map[0], arg4) with the result stored in *arg3; returns 0x51 (unknown stream) / 0x44 (decode failed) - the same code set as the ReadEp parser. Only caller: MoLive_Reader_DecodePacket (0x005ED154), which uses it to dispatch a packet slice to the stream registered under that id."
+ },
+ {
+  "address": "0x006698AC",
+  "name": "maybe_MoLive_Stream_BindPacket",
+  "signature": "void maybe_MoLive_Stream_BindPacket(u32 map_context, MoLiveStream* stream, MoLivePacket* packet)",
+  "params": {
+   "map_context": "stream map context pointer",
+   "stream": "stream object (vtable)",
+   "packet": "packet/segment descriptor"
+  },
+  "summary": "Hands a packet to a MoLive stream: calls the stream's vtable+0x18 (set/attach packet), asks vtable+0x10 whether the stream accepted it, and if so records the packet's time (+0x14) in the stream's field +0x14.",
+  "confidence": 0.4,
+  "evidence": "Readable C: (**(code**)(*arg2 + 0x18))(arg2, arg3); iVar1 = (**(code**)(*arg2 + 0x10))(arg2); if (iVar1 != 0) arg2[5] = arg3->f_14. Only caller: MoLive_Reader_DecodePacket (0x005ED154), immediately after func_00669820 in the 'new stream' path."
+ },
+ {
+  "address": "0x00670DF0",
+  "name": "maybe_Gfx_RenderState_Setup",
+  "signature": "void maybe_Gfx_RenderState_Setup(GfxRenderState* self, u32 arg2, u32 arg3, int mode, int variant)",
+  "params": {
+   "self": "render-state object (owns a resource handle at +0x338 and a block at +0x310)",
+   "arg2": "resource/handle argument",
+   "arg3": "unused",
+   "mode": "0 = release, 1 = build",
+   "variant": "selects the build flavour"
+  },
+  "summary": "Builds or releases one render-state object: mode 0 drops the owned handle and rebinds the block at +0x310, mode 1 allocates/initialises the object's buffer (with the usual lazy-singleton + Anim_Sequence_CtorBase allocation) and then binds it.",
+  "confidence": 0.4,
+  "evidence": "Readable C: if (arg4 == 0) it calls (*self->f_338->vtable[0])(self->f_338) (release), clears self->f_338 and calls func_005BCC88(self+0x310, arg2); if (arg4 == 1) it lazily creates a singleton (vtable g_00671058 family, Anim_Sequence_CtorBase 0x0010B2C4) and later calls func_0011C5F4 / func_006740E8 (the GPU state builder) and func_0011C5F4. Called by nobody in the call graph I indexed, so it is probably reached through a vtable slot."
+ },
+ {
+  "address": "0x0067254C",
+  "name": "maybe_Gfx_GpuState_SyncTextureStage",
+  "signature": "void maybe_Gfx_GpuState_SyncTextureStage(GfxState* self)",
+  "params": {
+   "self": "GPU state shadow block (cached resource pointers at +0x80C/+0x810)"
+  },
+  "summary": "Re-synchronises the cached texture-stage state: compares the render node's two resource pointers with the cached ones, clears the dirty markers and returns when nothing changed, otherwise rebuilds the stage's register values.",
+  "confidence": 0.45,
+  "evidence": "Readable C: reads the current render node (iVar20 = *(*(g_006729D4)+8)), its resource slots f_c and f_1c, compares them with puVar15[0x204] / puVar15[0x203], sets uVar12 to one of the enum values g_006729DC/DE/E4/E8 and returns early through 'puVar15[0x1a1] = 0; puVar15->f_1a4 = 0; *(u8*)(puVar15+0x691) = 0; *(u8*)(puVar15+0x692) = 0'. Called from Gfx_GpuState_Invalidate (0x006BA4AC) for flag 0x100."
+ },
+ {
+  "address": "0x006740E8",
+  "name": "maybe_Gfx_GpuState_BuildLightingBlock",
+  "signature": "void maybe_Gfx_GpuState_BuildLightingBlock(GfxState* self, u32 node, u32 arg3, u32* out)",
+  "params": {
+   "self": "GPU state shadow block",
+   "node": "render node",
+   "arg3": "mode",
+   "out": "output pointer"
+  },
+  "summary": "Rebuilds the lighting/material half of the GPU state shadow block: walks the light list, transforms the normals/positions and writes the packed fixed-point register values. Invoked from the GPU-state invalidator when the material-dirty flag is set.",
+  "confidence": 0.4,
+  "evidence": "Readable C is a 0xD7E-byte routine with the float->fixed packing idiom seen in the neighbouring GPU state writers (VectorFloatToUnsigned, 21-bit float conversion) plus matrix/normal helpers func_00672408 and func_00672468 and func_001200D8; it is called only by func_006BA4AC (Gfx_GpuState_Invalidate) when (g_006BA688 & flags) != 0, i.e. the material/lighting dirty bit."
+ },
+ {
+  "address": "0x00674E66",
+  "name": "maybe_Gfx_GpuState_PackTransformConstants",
+  "signature": "void maybe_Gfx_GpuState_PackTransformConstants(GfxState* self, u32 node, u32 arg3, u32* out)",
+  "params": {
+   "self": "GPU state shadow block",
+   "node": "render node",
+   "arg3": "mode",
+   "out": "output pointer"
+  },
+  "summary": "Packs a render node's transform/normal data into the fixed-point form the GPU state block expects. Ghidra could not decompile it reliably, so the exact register set is not verified.",
+  "confidence": 0.3,
+  "evidence": "0x228C bytes; Ghidra reports 'Control flow encountered bad instruction data' and instruction overlap at 0x006749AE, and the function is listed as Thumb while the surrounding functions are ARM, so the decompilation is unreliable. What is verifiable: it calls func_001200D8 (float->fixed pack) and func_00672468 (normal/vector transform) and has no callers in the indexed call graph, i.e. it is reached through a table. Name reflects only the data class (transform constants), not the exact layout."
+ },
+ {
+  "address": "0x006B8260",
+  "name": "Gfx_GpuCmd_FlushTextureUnits",
+  "signature": "void Gfx_GpuCmd_FlushTextureUnits(GfxCmdQueue* self)",
+  "params": {
+   "self": "GPU command queue / state"
+  },
+  "summary": "Emits the pending texture-unit commands: for texture units 0..2 whose 'dirty' bit is set it enqueues the texture setup command (via Gfx_GpuState_SetupTextureUnit or the multi-unit variant) and then appends the two trailing state words to the command buffer.",
+  "confidence": 0.55,
+  "evidence": "Readable C: for i in 0..2, tests bit (i+10) in the dirty mask at arg1, and depending on the per-unit type byte calls func_006BE858(*tex, i) (single unit) or func_006BF800(base, i) (multi unit); afterwards, when something was emitted and (state->f_770 & 7) != 0, writes two (value, command) word pairs into the buffer at g_006B83BC (write pointer, limit g_006B83C0) with command words g_006B83C4 / g_006B83C8. Called only from Gfx_GpuState_Invalidate (0x006BA4AC) for the texture dirty bit."
+ },
+ {
+  "address": "0x006B887C",
+  "name": "Gfx_Texture_DecodeEtc1",
+  "signature": "u32 Gfx_Texture_DecodeEtc1(GfxTextureDecode* self, u8* src, u32 size)",
+  "params": {
+   "self": "decode work area {dst, dst_size, produced, tmp, tmp_cap, blocks, count}",
+   "src": "compressed texture data",
+   "size": "compressed size"
+  },
+  "summary": "Decodes an ETC1-compressed texture into 16-bit RGB565 pixels: allocates/reuses the temporary and destination buffers, decodes each 8-byte block with the ETC1 block decoder and de-swizzles the 4x4 blocks into the destination with the requested stride.",
+  "confidence": 0.55,
+  "evidence": "Readable C: block count = func_0011CFAC(size, self[6]) (ceil), capacity from func_00518278(blocks-0x26, 2, 1), buffers grown through the allocator at g_006B8A50; per block it calls func_0011FFD8 (fill a 8-byte ETC1 block descriptor from the stream) and func_00518154 - which is a verified ETC1 block decoder (reads the 64-bit block, the differential bit, the per-subblock colour tables, and writes 16 RGB565 pixels). The inner loop then copies the decoded pixels into the destination with stride self[6], i.e. the swizzle walk."
+ },
+ {
+  "address": "0x006B9694",
+  "name": "MoLive_Decoder_Create",
+  "signature": "u32 MoLive_Decoder_Create(MoLiveDecoder** out, u32 arg2, u32 arg3)",
+  "params": {
+   "out": "receives the new decoder wrapper",
+   "arg2": "value stored at decoder+0x14C8",
+   "arg3": "value stored at decoder+0x14C4"
+  },
+  "summary": "Creates a MoLive streaming decoder: allocates the small wrapper and the 0x14A0-byte reader through the global sound allocator (g_006B988C), constructs the reader, installs the callback table at +0x14C0 and attaches the source interface; maps MoLive status codes to the sound driver's error codes.",
+  "confidence": 0.65,
+  "evidence": "Readable C: uses the allocator callbacks (*g_006B988C)(size) / (*g_006B988C)[1](ptr), stores the string-adjacent constant g_006B9890 in the wrapper's first word, allocates g_006B9894 bytes for the reader, calls func_005EEDBC (MoLive_Reader_Ctor), sets decoder+0x14C0 = g_006B9898, +0x14C4 = arg3, +0x14C8 = arg2, then func_005EE430 (MoLive_Reader_SetSource) with (decoder, decoder+0x14C0); on failure calls func_005EEF10 (Dtor) and frees. The big switch maps 0/1/2/3/0x40/0x41..0x49 to driver codes 0/3/0x10/0x11/1/4/5/0xc/0xe/0xf/6/9 - the same mapping as 0x006B9BF8."
+ },
+ {
+  "address": "0x006B98C0",
+  "name": "MoLive_Decoder_SkipPackets",
+  "signature": "u32 MoLive_Decoder_SkipPackets(MoLiveDecoder* self)",
+  "params": {
+   "self": "MoLive decoder wrapper"
+  },
+  "summary": "Discards all packets currently queued on the decoder's stream: resolves the stream through func_00669A40 and calls MoLive_Stream_PopPacket once per queued packet.",
+  "confidence": 0.55,
+  "evidence": "Readable C: i = func_00669A40(*(self+4)); stream = i->f_10; f38 = stream->f_38 (pending count); 'for (n = 0; n < f38; n++) if (func_005EBD2C(stream) == 0) return 0x14;' and returns 0xe when the stream cannot be resolved. 0x00669A40 is the handle-to-object resolver shared with 0x006B99C4/0x006B9BC0."
+ },
+ {
+  "address": "0x006B99C4",
+  "name": "MoLive_Decoder_GetPacket",
+  "signature": "u32 MoLive_Decoder_GetPacket(MoLiveDecoder* self, u32 arg2, u32* out_buf, u32* out_size, u32* out_rate, u64* out_time)",
+  "params": {
+   "self": "MoLive decoder wrapper",
+   "arg2": "unused",
+   "out_buf": "receives the PCM buffer pointer",
+   "out_size": "receives the byte count",
+   "out_rate": "receives the sample rate/format byte",
+   "out_time": "receives the 64-bit packet timestamp"
+  },
+  "summary": "Fetches the next decoded packet from a MoLive stream: pops a queued packet, copies its PCM into the caller's buffer (MoLive_Stream_ReadPcm), and returns the buffer pointer, size, format byte and timestamp. Returns 0x14 when no packet is ready and 0xe when the stream is gone.",
+  "confidence": 0.6,
+  "evidence": "Readable C: resolves the stream via func_00669A40(*(self+4)), gets the packet descriptor with func_00669708(stream), and if its byte at +0x11 is 0 calls func_006693B0(stream, out_buf, out_size) to fill the buffer; then *arg5 = *(u8*)(desc+0x10) (format) and *arg6/*arg6[1] = desc[0],desc[1] (64-bit timestamp). Otherwise pops the packet with func_005EBD2C and returns 0x14 with all outputs cleared / -1. This is the 'give me PCM' entry point of the sound driver."
+ },
+ {
+  "address": "0x006B9BC0",
+  "name": "MoLive_Decoder_NextPacket",
+  "signature": "u32 MoLive_Decoder_NextPacket(MoLiveDecoder* self)",
+  "params": {
+   "self": "MoLive decoder wrapper"
+  },
+  "summary": "Advances the decoder's stream by one packet (MoLive_Stream_PopPacket); returns 0x14 when no packet is pending and 0xe when the stream cannot be resolved.",
+  "confidence": 0.55,
+  "evidence": "Readable C: resolves the stream via func_00669A40(*(self+4)), returns 0xe if absent, otherwise calls func_005EBD2C(stream) and returns 0x14 on 0. Same idiom as MoLive_Decoder_SkipPackets (0x006B98C0) but without the loop."
+ },
+ {
+  "address": "0x006B9BF8",
+  "name": "MoLive_Decoder_Update",
+  "signature": "u32 MoLive_Decoder_Update(MoLiveDecoder* self)",
+  "params": {
+   "self": "MoLive decoder wrapper"
+  },
+  "summary": "Pumps the decoder once (MoLive_Reader_Process) and translates the MoLive status code into the sound driver's error code (0/1/3/4/5/6/9/0xc/0xe/0xf/0x10/0x11).",
+  "confidence": 0.6,
+  "evidence": "Readable C: iVar1 = func_005EC700(*(self+4)) then a switch mapping 0x41..0x49 to driver codes; identical mapping table to MoLive_Decoder_Create (0x006B9694). No callers in the indexed graph - it is a driver callback reached through the sound system's function table."
+ },
+ {
+  "address": "0x006B9D5C",
+  "name": "Gfx_GpuCmd_EnqueueTextureCopyRect",
+  "signature": "void Gfx_GpuCmd_EnqueueTextureCopyRect(GfxCmdQueue* self, u32 src, int x, int y, u32 dst, int w, int h, u32 flags)",
+  "params": {
+   "self": "GPU command queue (entries of 0x1C bytes at +0x18, count at +0x20)",
+   "src": "source address",
+   "x": "destination X",
+   "y": "destination Y",
+   "dst": "destination address",
+   "w": "width",
+   "h": "height",
+   "flags": "copy flags"
+  },
+  "summary": "Queues a rectangle texture copy / blit command: writes a type-4 command entry holding the source and destination addresses, the flags and the four rectangle coordinates scaled down by 16, then notifies the queue owner if this queue is the active one.",
+  "confidence": 0.55,
+  "evidence": "Readable C: entry = self->f_18 + self->f_20*0x1C; *entry = 4 (command type 4); entry+0xC = arg8; entry+4 = arg2 (source); entry+8 = arg5 (destination); the four shorts at +0x10..+0x16 are (arg4>>4, arg3>>4, arg7>>4, arg6>>4) - 3DS GPU coordinates are in 1/16 pixel units; then func_001197FC / func_0011980C bracket the queue update and g_006B9E04's active-queue check sets f_11 and calls func_00116104. Callers: Gfx_CopyBufferData (0x005642C8), 0x00567194, 0x0056AFFC."
+ },
+ {
+  "address": "0x006BA080",
+  "name": "Gfx_GpuCmd_EnqueueMemoryWrite",
+  "signature": "void Gfx_GpuCmd_EnqueueMemoryWrite(GfxCmdQueue* self, u32 tag)",
+  "params": {
+   "self": "GPU command queue",
+   "tag": "user tag stored with the command"
+  },
+  "summary": "Queues a type-1 command that makes the GPU write a small fixed block of state words (the three-word header emitted inline plus the caller's tag), aligning the inline data area and updating the queue's write offsets.",
+  "confidence": 0.5,
+  "evidence": "Readable C: entry = self->f_18 + self->f_20*0x1C; *entry = 1 (type 1); the inline words at self+4 (write cursor) get the (value, command) pairs g_006BA1CC/g_006BA1D0/g_006BA1D4; entry+4 = address of the inline block; entry+8 = size (with the pending-tail fix-up using self->f_34/self->f_30); entry+0xC = tag|4 (or |5 when self->f_3D); then the same func_001197FC / active-queue notification as the other enqueue functions. Callers: 0x0021F970, Gfx_FlushCommandBuffer (0x0055E71C), 0x00567194, 0x0056AFFC."
+ },
+ {
+  "address": "0x006BA4AC",
+  "name": "Gfx_GpuState_Invalidate",
+  "signature": "void Gfx_GpuState_Invalidate(u32 flags, int wait)",
+  "params": {
+   "flags": "dirty bits to flush",
+   "wait": "0 = also wait for the GPU"
+  },
+  "summary": "Central GPU state invalidator: for each dirty bit it calls the matching state rebuilder (material, texture units, texture stage, matrix/palette), clears the cached register bits and masks the dirty bits out of the shadow state.",
+  "confidence": 0.6,
+  "evidence": "Readable C: locks with func_001106D8, masks the argument with the current dirty set (puVar1[2]), and dispatches per bit: 0x2000 -> func_006BFE40 (material colour block), 0x80 -> func_006B8260 (texture units), 0x100 -> func_0067254C (texture stage), 0x200 -> func_0011C5F4, g_006BA688 -> func_006740E8 (lighting), then clears the corresponding bits in *puVar1 (the shadow GPU register word) and puVar1[1] (dirty mask), and unlocks. Callers: 0x001D0218, 0x002EB658, 0x00408D38 - i.e. generic render code."
+ },
+ {
+  "address": "0x006BE47C",
+  "name": "Gfx_GpuCmd_EnqueueBlit",
+  "signature": "void Gfx_GpuCmd_EnqueueBlit(GfxCmdQueue* self, u32 src, int src_w, int src_h, u32 src_fmt, u32 dst, int dst_w, int dst_h, u32 dst_fmt, int mode, int scale, int opt)",
+  "params": {
+   "self": "GPU command queue",
+   "src": "source address",
+   "src_w": "source width",
+   "src_h": "source height",
+   "src_fmt": "source pixel format code",
+   "dst": "destination address",
+   "dst_w": "destination width",
+   "dst_h": "destination height",
+   "dst_fmt": "destination pixel format code",
+   "mode": "0x500/0x501/0x502 conversion mode",
+   "scale": "scaling flag",
+   "opt": "extra option (0x20 sets a flag)"
+  },
+  "summary": "Queues a type-3 blit/format-conversion command: validates the source and destination pixel formats (codes for RGBA8/RGB8/RGB565/RGBA4/RGBA5551), computes the source row stride and the size adjustment when scaling, and writes the rectangle and flags into a command entry.",
+  "confidence": 0.55,
+  "evidence": "Readable C: maps arg10 (0x500/0x501/0x502) to a conversion mode, maps arg5 and arg9 through the pixel-format table (0x8051, 0x8056, 0x8058, 0x8D62, g_006BE71C) to (src,dst) format codes, then fills entry = self->f_18 + self->f_20*0x1C with *entry = 3 (type 3), +4 = src address, +8 = size (adjusted by the scaling formula), +0xC/+0xE = src w/h, +0x10 = src stride, +0x12 = dst height, +0x14 = packed format/mode bits (0x200 when arg12 == 0x20). Caller: 0x006B9D3C (Gfx_GpuCmd_CaptureScreen, N_021)."
+ },
+ {
+  "address": "0x006BE724",
+  "name": "Gfx_GpuCmd_EnqueueTextureCopy",
+  "signature": "void Gfx_GpuCmd_EnqueueTextureCopy(GfxCmdQueue* self, u32 src, u32 src_fmt, u32 dst, int dst_fmt, u32 src_stride, u32 dst_addr, u32 size, int copy_mode)",
+  "params": {
+   "self": "GPU command queue",
+   "src": "source address",
+   "src_fmt": "source format (masked to 23 bits)",
+   "dst": "destination address",
+   "dst_fmt": "destination format selector (0x10/0x18/0x20)",
+   "src_stride": "source stride",
+   "dst_addr": "destination address register value",
+   "size": "size",
+   "copy_mode": "copy mode selector (0x10/0x18/0x20)"
+  },
+  "summary": "Queues a type-2 texture copy command: writes the source and destination addresses plus the two 23-bit format fields, encoding the 0x10/0x18/0x20 selector as the corresponding flag bits in each word.",
+  "confidence": 0.55,
+  "evidence": "Readable C: entry = self->f_18 + self->f_20*0x1C; *entry = 2 (type 2); entry+4 = arg2; entry+8 = arg4; the low 23 bits of arg3 and arg7 are stored with the high bits preserved and 0x800000 / 0x1000000 set for the 0x18 / 0x20 selectors (arg5 and arg9); entry+0x10 = arg6; entry+0x14 = arg8. Caller: 0x006B9E08 (Gfx_GpuCmd_CopyTexture, N_021)."
+ },
+ {
+  "address": "0x006BE858",
+  "name": "Gfx_GpuState_SetupTextureUnit",
+  "signature": "int Gfx_GpuState_SetupTextureUnit(GfxTextureUnit* tex, int unit)",
+  "params": {
+   "tex": "texture unit description (floats at +0x18..+0x24, handles at +0x34)",
+   "unit": "texture unit index 0..2"
+  },
+  "summary": "Rebuilds one texture unit's cached GPU state: clears the unit's dirty bit, converts the unit's float coordinates/scale to fixed point and packs them into the shadow register words; returns 0 when the unit is up to date or not dirty.",
+  "confidence": 0.5,
+  "evidence": "Readable C: if the unit is already clean (or a forced flag is set) it just clears bit unit in the dirty mask at state+0x770 and returns; otherwise it converts tex[6..9] * g_006BEbCC with VectorFloatToUnsigned(...,3) and packs them (f_774 = x | y<<8 | w<<16 | h<<24, f_778, f_79C...). The 3-bit fractional fixed-point conversion and the shadow copies of the register words are the same idiom as the other Gfx_GpuState_* functions. Caller: Gfx_GpuCmd_FlushTextureUnits (0x006B8260)."
+ },
+ {
+  "address": "0x006BF800",
+  "name": "Gfx_GpuState_SetupTextureUnits",
+  "signature": "int Gfx_GpuState_SetupTextureUnits(GfxTextureUnit* units, int force)",
+  "params": {
+   "units": "array of texture unit descriptions with a 0x11-word stride",
+   "force": "force rebuild"
+  },
+  "summary": "Multi-unit variant of the texture-unit state rebuild: checks whether units 1..5 still match unit 0 (same handle, size and format), and if a full rebuild is needed packs the unit's float coordinates and the shared address/format words into the shadow registers.",
+  "confidence": 0.5,
+  "evidence": "Readable C: loops i = 1..5 comparing arg1[i*0x11+0xD] (handle) and the size/format words against unit 0's, breaking on the first mismatch; returns the cached error/status constant when up to date or when the state is clean; otherwise converts arg1[6..9] with VectorFloatToUnsigned(...,3) and writes state->f_774/f_778/f_79C/f_107. Caller: Gfx_GpuCmd_FlushTextureUnits (0x006B8260)."
+ },
+ {
+  "address": "0x006BFE40",
+  "name": "maybe_Gfx_GpuState_WriteMaterialColor",
+  "signature": "void maybe_Gfx_GpuState_WriteMaterialColor(void)",
+  "params": {},
+  "summary": "Emits the material/colour GPU registers: converts the current material's float colour and lighting values to the PICA 21-bit float format and appends them as (value, command) pairs to the command buffer.",
+  "confidence": 0.45,
+  "evidence": "Readable C: takes the current material (*(g_006C0154)) and converts puVar4[10], [0xB], ... from float to the 1.9.11 PICA float format by hand (exponent = (abs>>23)-0x40, mantissa = (bits & 0x7FFFFF) >> 7) and writes (value, g_006C0164) pairs into the command buffer at *g_006C015C while it has room. Called from Gfx_GpuState_Invalidate (0x006BA4AC) for dirty bit 0x2000."
+ },
+ {
+  "address": "0x006D7630",
+  "name": "maybe_Ui_DispatchCallback",
+  "signature": "u32 maybe_Ui_DispatchCallback(UiCallbackTable* self)",
+  "params": {
+   "self": "callback table (count at +0x84, entries of 3 words at +4)"
+  },
+  "summary": "Invokes the registered UI callback: when the table has an active entry it either calls the stored function pointer directly or resolves a virtual thunk through the object's vtable (bit0 of the flags word) and calls it. Returns 1 when a callback existed, 0 otherwise.",
+  "confidence": 0.45,
+  "evidence": "Readable C: iVar2 = arg1[0x21] (count); if 0 return 0; if *arg1 != 0 and (pcVar3 = arg1[iVar2*3+1]) != 0 or (flags = arg1[iVar2*3+2]) has bit0, then when bit0 is set pcVar3 = *(code**)(pcVar3 + *(int*)(*arg1 + (flags>>1))) (a virtual thunk through the vtable at *arg1) and finally (*pcVar3)(); returns 1. Callers are UI window code: 0x00198FF0 (maybe_Ui_Window_ClosePaneIfOpen, N_040), 0x0019903C (maybe_Ui_MenuUpdate, N_022), 0x0019AD74 (Ui_EquipmentWindow_OpenDetail, N_010), 0x0019BC88 (Ui_EquipmentWindow_PlayAnim, N_010), 0x0019BD2C (Ui_Panel_ResetAndPush, N_040)."
+ },
+ {
+  "address": "0x006D909C",
+  "name": "maybe_Ui_Message_FormatTextA",
+  "signature": "int maybe_Ui_Message_FormatTextA(void* obj, u32 fmt_arg, void* formatter, u32 method, u32 arg5)",
+  "params": {
+   "obj": "object the formatter method is called on",
+   "fmt_arg": "argument forwarded to the formatter",
+   "formatter": "formatter vtable/function pointer",
+   "method": "virtual method index (bit0 = thunk)",
+   "arg5": "extra argument for the string builder"
+  },
+  "summary": "Formats a message string with a caller-supplied formatter, converts the produced multibyte text to UTF-16 with mbrlen/mbrtowc and stores it into the message system's string object; releases the temporary string object on every path.",
+  "confidence": 0.45,
+  "evidence": "Readable C: clears a 0x108-byte stack buffer with func_00116AE0, resolves the virtual formatter (arg3 + *piVar2 when arg4 bit0 is set), calls it with (obj, buffer, 0x105, arg2), then converts with func_00100646 (mbrlen state init), func_00100658 (std_mbrlen, N_080) and func_0010067C (std_mbrtowc, N_080) into a u16 buffer, builds a string object with func_00504DB4 and commits it with func_002CDB84, freeing the temporary via func_0050500C/func_00505040/func_005040A8. Only caller 0x002CD02C (message system). Twin of 0x006D92C4."
+ },
+ {
+  "address": "0x006D92C4",
+  "name": "maybe_Ui_Message_FormatTextB",
+  "signature": "int maybe_Ui_Message_FormatTextB(void* obj, u32 fmt_arg, void* formatter, u32 method, u32 arg5)",
+  "params": {
+   "obj": "object the formatter method is called on",
+   "fmt_arg": "argument forwarded to the formatter",
+   "formatter": "formatter vtable/function pointer",
+   "method": "virtual method index (bit0 = thunk)",
+   "arg5": "extra argument for the string builder"
+  },
+  "summary": "Second instantiation of the message-text formatter (identical code, different literal pool): formats, converts multibyte to UTF-16 and commits the string to the message system.",
+  "confidence": 0.45,
+  "evidence": "The readable C of 0x006D92C4 is instruction-for-instruction the same as 0x006D909C (same call sequence func_00116AE0 / formatter / func_00100646 / func_00100658 / func_0010067C / func_00504DB4 / func_002CDB84 / func_0050500C / func_00505040 / func_005040A8), only the literal-pool constants differ (g_006D94E4/0x006D94E8 vs g_006D92BC/0x006D92C0). Same single caller 0x002CD02C. Two copies of the same template for different string/format types."
+ },
+ {
+  "address": "0x006F12A0",
+  "name": "maybe_Gfx_GpuCmd_WriteRect",
+  "signature": "int maybe_Gfx_GpuCmd_WriteRect(GfxCmdWriter* self, u32* rect)",
+  "params": {
+   "self": "command writer (buffer handle at +4)",
+   "rect": "4 unsigned coordinates + 2 extra words"
+  },
+  "summary": "Builds a 4-coordinate rectangle (converted to 3-bit fixed point) into a small command descriptor and appends it to the writer's command list.",
+  "confidence": 0.4,
+  "evidence": "Readable C: converts rect[0..3] with VectorUnsignedToFloat/VectorFloatToUnsigned(...,3), stores them as ints in a local descriptor together with rect[4]/rect[5], sets the descriptor's flag byte to 1 and calls func_00658240(&desc, *(self+4)) then func_00657824(&flag, result) to append the block. Callers are the 0x0056xxxx GPU command emitters (0x00567718, 0x0056797C, 0x00568F84, 0x005692CC, 0x00569350, 0x00569518, 0x00569ABC, 0x0056A3F0)."
+ },
+ {
+  "address": "0x006F170C",
+  "name": "Gfx_GpuCmd_BuildDrawPacket",
+  "signature": "GfxCmdWriter* Gfx_GpuCmd_BuildDrawPacket(GfxCmdWriter* self)",
+  "params": {
+   "self": "command writer whose +4 word receives the packet"
+  },
+  "summary": "Assembles one complete draw packet: clears the scratch descriptor and chains the per-stage command builders (texture, sampler, shader, state) so the resulting command list is stored at self+4.",
+  "confidence": 0.5,
+  "evidence": "Readable C: func_00507E00(&desc) (init), func_00116AE0(scratch,0x210), then the chain func_0065660C -> func_00656688 -> func_00656BCC -> func_006564C0 -> func_00656B24 -> func_00656918, each appending a command group to the growing packet, and finally '*(u32**)(self+4) = puVar1 + 2' (end pointer). Called from 19 GPU command emitters in the 0x0056xxxx region (0x005668A0 .. 0x0056AC80)."
+ },
+ {
+  "address": "0x006F1CA8",
+  "name": "Mem_SmallBlockAlloc",
+  "signature": "void* Mem_SmallBlockAlloc(MemSizeClassPool* self, u32 size)",
+  "params": {
+   "self": "size-class pool (5 classes of 0x10 bytes at +0, heap handle at +0x54)",
+   "size": "requested size"
+  },
+  "summary": "Allocates a small block from the first size class large enough (5 classes, minimum 4 bytes): pops a free node from the class free list, or carves a new block out of the pool's heap when the class is empty.",
+  "confidence": 0.6,
+  "evidence": "Readable C: loops i = 0..4, class max = max(4, *(u32*)(self + i*0x10 + 0xC)); if size <= class max it takes the node at self+i*0x10+4 (the class free list head), unlinks it (*head = *node) and returns it; otherwise falls through to HeapAlloc(self + 0x54) and returns the heap block (or self+0x54 on failure). The 0x10-byte class descriptor {list, ?, ?, max_size} plus the free-list pop is the classic size-class allocator."
+ },
+ {
+  "address": "0x006F1D1C",
+  "name": "Mem_SmallBlockAllocChunk",
+  "signature": "void* Mem_SmallBlockAllocChunk(MemSizeClassPool* self)",
+  "params": {
+   "self": "size-class pool"
+  },
+  "summary": "Carves one new block out of the pool's backing heap; the block size is the pool's configured chunk size at +4.",
+  "confidence": 0.5,
+  "evidence": "Readable C is a single call: heapAlloc = HeapAlloc(*(u32*)(arg1 + 4)) - i.e. it forwards to the heap allocator with the size stored at self+4, which is exactly the fallback path of Mem_SmallBlockAlloc (0x006F1CA8, 'HeapAlloc(self + 0x54)')."
+ },
+ {
+  "address": "0x006F1F88",
+  "name": "maybe_Ui_UiManager_GetInstance",
+  "signature": "UiManager** maybe_Ui_UiManager_GetInstance(UiManager** out)",
+  "params": {
+   "out": "receives the singleton pointer"
+  },
+  "summary": "Returns the process-wide UI manager singleton, creating the 0xE3C8-byte object on first use. Menu, event and data-panel code uses it to reach the open-screen list at +0xE1C0 and the mode flags at +0xE3C4.",
+  "confidence": 0.45,
+  "evidence": "Readable C: standard lazy-singleton pattern (BSS flag g_006F2018, instance g_006F201C, size g_006F2024 = 0xE3C8, vtable g_006F2028 = 0x782964 in .rodata), constructed through func_00103594 and writing a secondary base pointer at +4 (vtable+0x18). Callers (25) are UI/event code: 0x0024870C..0x0024932C (event/script callbacks), 0x003F3030 Ui_Menu_StartModeTransition, 0x003F333C Ui_Menu_UpdateModeTransition, 0x0045DAA0 Ui_DualDisplayWindow_SelectMode, 0x004FC124; the callers read *(u8*)(obj+0xE3C4) as a mode selector and walk the 0xA8-stride array at +0xE1C0 looking for entries with state 2."
+ },
+ {
+  "address": "0x0070C414",
+  "name": "std_RbTree_AcquireNode",
+  "signature": "void* std_RbTree_AcquireNode(RbTreePool* pool)",
+  "params": {
+   "pool": "node pool (free-block list at +8, current block at +0x10/+0x14/+0x18)"
+  },
+  "summary": "Hands out a zeroed 0x24-byte red-black-tree node, growing the pool in 0x24-byte blocks (block size grows 1.5x plus 32 nodes) when the current block is exhausted.",
+  "confidence": 0.7,
+  "evidence": "Readable C: if the free list at +8 is non-empty it pops a node (+8 = node->next); otherwise when the block cursor +0x10 reached the block end +0x14 it computes the next block count as max(size + size/2 + size/8, size + 0x20), allocates a 0xC-byte block header and count*0x24 bytes through the allocator vtable at *pool ([0] alloc, [2] assert with g_0070C524 = 'TQs'), links the block and advances the cursors; finally clears node->f_c, *node, +4 and +8. The 0x24 stride, the colour byte at +0 and the parent/left/right words at +4/+8/+0xC match the tree used by std_RbTree_InsertNode (0x0070CDD4)."
+ },
+ {
+  "address": "0x0070C528",
+  "name": "std_RbTree_EraseNodeRebalance",
+  "signature": "void std_RbTree_EraseNodeRebalance(void* out, RbTree* tree, RbNode** iter)",
+  "params": {
+   "out": "receives the successor node",
+   "tree": "tree header",
+   "iter": "in/out: node to erase; advanced to its successor"
+  },
+  "summary": "Erases the node the iterator points at from the red-black tree, restores the red-black invariants with the standard rotations, destroys the node's equal-key sub-list and returns the node to the tree's free list.",
+  "confidence": 0.65,
+  "evidence": "Readable C: computes the in-order successor of *arg3 (the classic 'if (node->right) leftmost(right) else climb while node == parent->right' block), performs the full RB delete fix-up (colour flips, left/right rotations with the 'set child to grandparent' idiom) on the header at tree+0x14, then 'pbVar11->f_c = *(u32*)(tree+8); func_0070F840(&pbVar11->f_14); *(tree+8) = pbVar11; tree->f_18--' - i.e. push onto the free list, release the sub-list, decrement size. Same node layout and free-list as std_RbTree_AcquireNode (0x0070C414). Called by MoLive_StreamTable_ReleaseUnused (0x005ECEC4)."
+ },
+ {
+  "address": "0x0070CB90",
+  "name": "std_RbTree_EraseRange",
+  "signature": "void std_RbTree_EraseRange(void* out, RbTree* tree, RbNode** first, RbNode** last)",
+  "params": {
+   "out": "receives the last erased node",
+   "tree": "tree header",
+   "first": "in/out iterator at the range start",
+   "last": "range end iterator"
+  },
+  "summary": "Erases the half-open range [first,last) from the red-black tree: in the common 'whole tree' case it walks the node list directly freeing each node, otherwise it advances the iterator and erases node by node.",
+  "confidence": 0.65,
+  "evidence": "Readable C: if the range covers the whole tree (first == header->left && last == header && size != 0) it walks the chain from header->parent freeing each node (destroying the equal-key sub-list at +0x14 and pushing onto the free list at tree+8) and then resets the header to the empty state; else 'while (*arg3 != *arg4) { advance *arg3 to its successor; func_0070C528(&local, tree, &local_node); }'. Callers: MoLive_Reader_DetachSource (0x005EE4E0), MoLive_Reader_Dtor (0x005EEF10)."
+ },
+ {
+  "address": "0x0070CDD4",
+  "name": "std_RbTree_InsertNode",
+  "signature": "void std_RbTree_InsertNode(void* out, RbTree* tree, int insert_left, RbNode* pos, RbNode* node)",
+  "params": {
+   "out": "receives the inserted node",
+   "tree": "tree header",
+   "insert_left": "force the node to be pos's left child",
+   "pos": "parent/neighbour node",
+   "node": "node to link (key already filled in)"
+  },
+  "summary": "Links an already allocated node into the red-black tree at the position found by the caller, initialises its equal-key sub-list head and restores the red-black invariants with the standard insert fix-up.",
+  "confidence": 0.65,
+  "evidence": "Readable C: initialises the node's intrusive sub-list (node+0x14 is the list head, node+0x20 the tail, linked from arg5's list), chooses left/right by 'tree->header == pos || insert_left || *key < pos->key', sets node->parent = pos, then the canonical RB insert fix-up loop ('while (node != header->left && node->parent->colour == 0) { uncle = grandparent->right/left; ... rotate ... }') ending with 'header->left->colour = 1'. Called by std_RbTree_InsertUnique (0x00715E68)."
+ },
+ {
+  "address": "0x0070D126",
+  "name": "maybe_std_RbTree_EraseRebalanceEntry1",
+  "signature": "void maybe_std_RbTree_EraseRebalanceEntry1(RbNode** iter)",
+  "params": {
+   "iter": "node pointer slot"
+  },
+  "summary": "First of three Thumb entry points (0x0070D126, 0x0070D12A, 0x0070D12E) that Ghidra records for the same red-black erase-and-rebalance routine; this 4-byte entry only sets up the register frame before falling into the shared body.",
+  "confidence": 0.3,
+  "evidence": "functions_index.json records 0x0070D126 with size 4, mode thumb, immediately after the ARM function 0x0070D0F8 (size 46 = 0x2E, ends exactly at 0x0070D126). Ghidra's decompilation of all three entries is the same erase-with-rebalance body with the node colour supplied in a register (it prints unaff_r6/unaff_r7 for the missing frame), which is what a shared body entered at different offsets looks like. Nothing references 0x0070D126 directly in asm/text/*.s. The real work is at 0x0070D12E."
+ },
+ {
+  "address": "0x0070D12A",
+  "name": "maybe_std_RbTree_EraseRebalanceEntry2",
+  "signature": "void maybe_std_RbTree_EraseRebalanceEntry2(RbNode** iter)",
+  "params": {
+   "iter": "node pointer slot"
+  },
+  "summary": "Second 4-byte Thumb entry point into the same red-black erase-and-rebalance routine as 0x0070D12E (register-frame variant); no distinct behaviour of its own.",
+  "confidence": 0.3,
+  "evidence": "Same as 0x0070D126: functions_index.json lists it as a 4-byte thumb function at 0x0070D12A, four bytes before the real 0x0070D12E; the three decompilations are identical modulo the missing prologue registers, and no code in asm/text/*.s branches to it."
+ },
+ {
+  "address": "0x0070D12E",
+  "name": "maybe_std_RbTree_EraseRebalance",
+  "signature": "void maybe_std_RbTree_EraseRebalance(RbTree* tree, RbNode* header, RbNode** iter, u8 colour)",
+  "params": {
+   "tree": "tree header",
+   "header": "header node",
+   "iter": "node being removed",
+   "colour": "colour of the removed node"
+  },
+  "summary": "Thumb red-black delete fix-up for the same tree as std_RbTree_EraseNodeRebalance: given the removed node and its colour it performs the rotations/colour flips, then returns the node to the free list and decrements the tree size.",
+  "confidence": 0.45,
+  "evidence": "Readable C (0x216 bytes, thumb): the canonical RB delete fix-up ('while (node != header->left && node->colour == colour) { sibling = parent->right; if (sibling->colour == 1) {...rotate...} ... }' with the four symmetric cases), then the same free-list push and size decrement as 0x0070C528 ('*(tree+8) = node; tree->f_18--'), plus the 0x18/0x10/0x08 byte-swapped store Ghidra prints at the end. Same node layout as the other std_RbTree_* functions in this batch; no direct callers in asm/text/*.s (reached through the 0x0070D126/0x0070D12A entries)."
+ },
+ {
+  "address": "0x0070F840",
+  "name": "std_RbTree_ListNodeUnlink",
+  "signature": "void* std_RbTree_ListNodeUnlink(RbListNode* node)",
+  "params": {
+   "node": "0x10-byte list node {owner, instance, next, prev}"
+  },
+  "summary": "Unlinks one node from the intrusive equal-key list embedded in a tree node and destroys the instance it holds (calls the instance's destructor and then hands it back to its owner's release function); clears the node.",
+  "confidence": 0.6,
+  "evidence": "Readable C: if node->next is null or points at the node itself it treats the node as the list head and, when node->instance != 0, calls (*(code*)**(u32**)node->instance)() (instance vtable slot 0 = destructor) and then (**(code**)(*(int*)*node + 4))(*node, node->instance) (owner vtable slot 1 = release); otherwise it unlinks from the doubly linked list (next->prev = prev; prev->next = next) and zeroes the links; finally node->instance = 0. Called by std_RbTree_EraseNodeRebalance (0x0070C528) and 0x0070D12E for every erased node, and by 0x0070CD34."
+ },
+ {
+  "address": "0x0070FC08",
+  "name": "std_SlotVector_AppendRange",
+  "signature": "u32 std_SlotVector_AppendRange(SlotVector* self, Slot** first, Slot** last)",
+  "params": {
+   "self": "vector {allocator, buffer, capacity, size, start, align}",
+   "first": "first slot to copy",
+   "last": "one past the last slot"
+  },
+  "summary": "Appends the slot range [first,last) to a vector of 0x10-byte slots, growing/reallocating the buffer when needed and keeping the slots' intrusive prev/next links consistent; returns 1 on success.",
+  "confidence": 0.6,
+  "evidence": "Readable C: capacity = self[2], needed = self[3] + ((last-first)>>4); when it must grow it computes the new capacity with func_00617298, allocates through the allocator at *self ([0] alloc, [2] assert with g_0071016C = 'TQs', [1] free) and copies the existing slots from self[4]..capacity then 0..i (the 'start offset' wrap), destroying the moved-from slots with func_00710778; otherwise it copies into the free tail. Each element is 0x10 bytes and the copy fixes up the element's own prev/next links (puVar9[3] = src[3]; src[3]->next = dst; dst[2] = src; src[3] = dst). Callers: MoLive_StreamTable_FlushSegments (0x005ECD8C), MoLive_Reader_DecodePacket (0x005ED154)."
+ },
+ {
+  "address": "0x00710170",
+  "name": "std_SlotVector_Reallocate",
+  "signature": "u32 std_SlotVector_Reallocate(SlotVector* self, u32 min_capacity, u32 capacity, u32 shift)",
+  "params": {
+   "self": "slot vector",
+   "min_capacity": "fallback capacity if the request fails",
+   "capacity": "requested capacity",
+   "shift": "how far to move the logical start"
+  },
+  "summary": "Reallocates the slot vector's buffer to 'capacity' slots (falling back to 'min_capacity' if that allocation fails) and rotates the contents so the logical start moves by 'shift' slots; frees the old buffer.",
+  "confidence": 0.55,
+  "evidence": "Readable C: tries (*alloc)(capacity), and only when that fails reports through (*alloc->vtable[2])(alloc, g_007102F8, capacity) and retries with (*alloc)(min_capacity); then copies the live slots [self[4]..self[2]) to new+shift and the wrapped head to new+shift+(capacity-start) with func_00116A14 (memmove), swaps self[1]/self[2] and frees the old buffer with (*alloc->vtable[1]). Only caller: MoLive_Reader_ReadEp (0x005EE58C)."
+ },
+ {
+  "address": "0x007102FC",
+  "name": "std_RingBuffer_CopyWrapped",
+  "signature": "void std_RingBuffer_CopyWrapped(RingBuffer* self, u32 dst_index, u32 src_index, u32 count, int second_half)",
+  "params": {
+   "self": "ring buffer (buffer at +4, capacity at +8)",
+   "dst_index": "destination index",
+   "src_index": "source index",
+   "count": "byte count",
+   "second_half": "internal recursion flag"
+  },
+  "summary": "Copies 'count' bytes inside a circular buffer from one index to another, splitting the copy at the wrap point and recursing on the two halves in an order that keeps overlapping copies correct.",
+  "confidence": 0.55,
+  "evidence": "Readable C: capacity = *(u32*)(self+8); if both ranges fit it does one func_001112EC (memmove) of count bytes at buffer+dst/src; otherwise it computes the bytes up to the wrap, wraps the indices modulo capacity and recurses twice with the flag (0: tail first then head; 1: head first then tail), which is the standard safe wrap-around copy. Only caller: 0x005EBBA8 (MoLive_Stream_CommitPacket)."
+ },
+ {
+  "address": "0x007103E8",
+  "name": "std_SlotVector_Append",
+  "signature": "u32 std_SlotVector_Append(SlotVector* self, Slot* slot)",
+  "params": {
+   "self": "slot vector",
+   "slot": "0x10-byte slot to append"
+  },
+  "summary": "Appends a single 0x10-byte slot to the vector (growing and shifting as needed), fixes up the slot's intrusive links and returns 1 on success.",
+  "confidence": 0.6,
+  "evidence": "Readable C: index = (base + self[3]*0x10 - base) >> 4 = self[3] (the size, i.e. push_back); when capacity < size+1 it grows via func_00617298, allocates through the allocator at *self (assert string g_007106EC = 'TQs'), copies the two halves and destroys the moved-from slots with func_00710778; otherwise it shifts the tail with func_007107F4 (memmove) and destroys the vacated slots. The final block copies the caller's slot (4 words) and relinks prev/next. Callers: MoLive_Stream_PopPacket (0x005EBD2C), MoLive_Stream_CommitPacket (0x005EBBA8), 0x005EB3D4."
+ },
+ {
+  "address": "0x007106F0",
+  "name": "std_SlotVector_DestroyRangeDelete",
+  "signature": "void std_SlotVector_DestroyRangeDelete(SlotVector* self, u32 first, u32 last)",
+  "params": {
+   "self": "slot vector",
+   "first": "first index",
+   "last": "one past the last index"
+  },
+  "summary": "Destroys slots [first,last): calls the instance's destructor (vtable slot 0) and then returns it to its owner (owner vtable slot 1), and clears the slot.",
+  "confidence": 0.55,
+  "evidence": "Disassembly 0x007106F0: per 0x10-byte slot, if slot[2] (next) is null/self then if slot[1] (instance) != 0 it does 'ldr r1,[r0]; ldr r1,[r1]; blx r1' (instance->vtable[0]()) followed by 'ldrd r0,r1,[r4]; ldr r2,[r0]; ldr r2,[r2,#4]; blx r2' (owner->vtable[1](owner, instance)); the else branch unlinks the slot from the list; finally slot[1] = 0. Twin 0x00710778 does only the owner release. Callers: MoLive_Reader_Process (0x005EC700), MoLive_Reader_DecodePacket (0x005ED154), MoLive_Reader_DetachSource (0x005EE4E0), MoLive_Reader_Dtor (0x005EEF10)."
+ },
+ {
+  "address": "0x00710778",
+  "name": "std_SlotVector_DestroyRangeRelease",
+  "signature": "void std_SlotVector_DestroyRangeRelease(SlotVector* self, u32 first, u32 last)",
+  "params": {
+   "self": "slot vector",
+   "first": "first index",
+   "last": "one past the last index"
+  },
+  "summary": "Releases slots [first,last) back to their owners without destroying the instances: calls owner->release(instance) (vtable slot 1) and unlinks the slot from its list.",
+  "confidence": 0.55,
+  "evidence": "Disassembly 0x00710778 is identical to 0x007106F0 except that the extra 'instance->vtable[0]()' destructor call is missing; it only does 'ldr r0,[r4]; ldr r1,[r4,#4]; ldr r2,[r0]; ldr r2,[r2,#4]; blx r2' then slot[1] = 0. Callers: 0x005EB3D4, 0x005EBA14, MoLive_Stream_PopPacket (0x005EBD2C), std_SlotVector_Append (0x007103E8)."
+ },
+ {
+  "address": "0x00715E68",
+  "name": "std_RbTree_InsertUnique",
+  "signature": "void std_RbTree_InsertUnique(RbNode** out, RbTree* tree, u32* key)",
+  "params": {
+   "out": "receives the node for the key (existing or new)",
+   "tree": "tree header",
+   "key": "pointer to the u32 key"
+  },
+  "summary": "Inserts a key into the red-black tree only if it is not already present: computes the lower bound, reuses the existing node when the key matches and otherwise allocates and links a new node through std_RbTree_InsertNode.",
+  "confidence": 0.6,
+  "evidence": "Readable C: lower_bound walk ('bVar4 = *key < node->key; node = bVar4 ? node->left : node->right'), then the 'hint' adjustment to the predecessor, then 'if (!tree->f_1c) { if (bVar4) { if (node == header->left) goto insert; ...predecessor... } if (*key <= local->key) goto done; } func_0070CDD4(&local, ...)' - the canonical _Rb_tree::_M_insert_unique. Called by MoLive_Reader_DecodePacket (0x005ED154) on the secondary map at self+0x507."
+ }
+]

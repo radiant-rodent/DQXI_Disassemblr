@@ -1,0 +1,1785 @@
+[
+ {
+  "address": "0x00218EA8",
+  "name": "Actor2D_CreateWithAnimInstanceA",
+  "signature": "void Actor2D_CreateWithAnimInstanceA(Actor2D* actor, const Actor2DSpriteRecord* record)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "sprite record (16-bit fields: position, size, colours, anim ids)"
+  },
+  "summary": "Initialises a 2D sprite actor from a 16-bit record: maps record[0xD] (0xE9/0xEA/0xEB) to the anim-state id f_2EC, copies the position/size/colour fields, creates an anim instance (0x178 bytes) from the 'sprite' template and applies it, then builds the actor's two sprite spans (f_24C and f_29C) with their colour (FCol) animators and finishes with the state anim flags. The A variant clears the layer byte f_2E9 to 0xFF and uses span flags 0x400/0x800.",
+  "confidence": 0.5,
+  "evidence": "Sets f_2E9=0xFF, f_2EC, f_296, f_240, f_298, f_2F0, f_2EE/f_2EF; Mem_AllocAligned(0x178,...,4) then func_002D1F28/func_002D1304 (anim instance create/apply, cf. N_003 maybe_Anim_Instance_ApplyTemplate) with the literal 'sprite' (0x007BE7B5) passed through func_006F44B0; func_0028E2A0 = Gfx_CreateFColAnimator; two func_00335A6C span creations at self+0x24C and self+0x29C (cf. N_004 maybe_Gfx_SpriteActor_AddChild); ends with Actor2D_ApplyStateAnimFlags (0x0021896C) and maybe_Actor2D_ResetSpansIfIdle (0x002188F8). No absolute pointer to this address exists in the image, so it is installed through a runtime-built type table."
+ },
+ {
+  "address": "0x00219268",
+  "name": "Actor2D_CreateWithAnimInstanceB",
+  "signature": "void Actor2D_CreateWithAnimInstanceB(Actor2D* actor, const Actor2DSpriteRecord* record)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "sprite record (same layout as the A variant)"
+  },
+  "summary": "Same 2D sprite-actor initialisation as 0x00218EA8 for the same record layout, but stores layer/priority byte 2 in f_2E9 and gives the two sprite spans the 0x100/0x200 flag pair instead of 0x400/0x800.",
+  "confidence": 0.5,
+  "evidence": "Byte-for-byte the same field set and callee list as 0x00218EA8 (anim instance via func_002D1F28/func_002D1304, spans via 2x func_00335A6C, 'sprite' literal) except f_2E9=2 and local_9C/local_50 = 0x100/0x200 (the A variant has 0x400/0x800 and a record-byte test)."
+ },
+ {
+  "address": "0x00219610",
+  "name": "Actor2D_SelectFacingCommand",
+  "signature": "int Actor2D_SelectFacingCommand(Actor2D* actor, int stateValue, const u32* patternPair, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "value stored in f_2E4 (current action id)",
+   "param_3": "struct whose +4 word holds the 22-bit pattern pair to compare",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Compares an incoming pattern pair against the actor's two span pattern words (f_250 / f_2A0) to decide which side of the sprite faces the camera (f_2EA = 0/1), maps that plus the actor state f_2EE (2/3) onto the gadget command id 5 or 6 (stored in f_2E8) and sends it to the field gadget manager. If no command was ever selected (f_2E8 == -1) it instead resets the actor through 0x00219764.",
+  "confidence": 0.55,
+  "evidence": "11-bit split/compare of `*(u32*)(arg3+4)` with f_250 and f_2A0 exactly like the facing tests in 0x0021B090/0x0021B22C; state switch on f_2EE==2/3 gives f_2E8=5/6; tail func_00256678(mgr, f_2E8, self+4) = Field_Gadget_AddAndTriggerCommand (N_024); f_2E8==-1 path calls 0x00219764(self,0)."
+ },
+ {
+  "address": "0x00219764",
+  "name": "Actor2D_StopAnimAndResetSpans",
+  "signature": "void Actor2D_StopAnimAndResetSpans(Actor2D* actor, int immediate)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "0 = release the anim instance and notify the gadget, non-zero = only disable update"
+  },
+  "summary": "Stops the sprite actor's current action: releases the anim instance at f_B8 (Anim_Instance release), tells the scene that the previous gadget state f_2EC ended, disables update through vtable+0x40/+0x58 (argument 4), clears the span flags f_288/f_2D8 and unregisters the actor id f_298 from the scene manager before releasing the vtable+8 handle.",
+  "confidence": 0.5,
+  "evidence": "func_002D1258(self[0x2E]=f_B8, g_00219888, 0) releases the anim instance; func_0062AB3C query then func_001EBC68(scene, f_2EC, 0) sends the end event; (**(code**)(*self+0x40))(self,4) and vtable+0x58(self,4); zeroes self[0xA2]=f_288 and self[0xB6]=f_2D8; func_00192BE8(work+0x24A98, count, f_298) then vtable+8(work, f_2F0, 1). Called by 0x00218A94, 0x005F3678, 0x0066DBF8 and GimmickDoorOpen 0x0014FD4C."
+ },
+ {
+  "address": "0x00219898",
+  "name": "maybe_Actor2D_InitSpanGroupB",
+  "signature": "Actor2D* maybe_Actor2D_InitSpanGroupB(void* owner, int meshSpec, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "owner/allocator context",
+   "param_2": "struct whose +4 word is the mesh/size spec",
+   "param_3": "unused",
+   "param_4": "stack scratch for the resource-key builder"
+  },
+  "summary": "Creates the second sprite-span group of a 2D actor: builds the span object with func_0028E630(owner, &scratch, 0x4000000C), installs the class vtable g_0021992C plus the secondary vtable at +0x22C, seeds f_298 with 0x0FFFFFFF, initialises the colour (FCol) block through func_004AF3F4 and sets the default colour/scale bytes, then returns the enclosing actor pointer (object-0x29C).",
+  "confidence": 0.4,
+  "evidence": "func_0028E630(...,0x4000000C) factory; `*piVar1 = g_0021992c` (vtable 0x0075BBDC) and `piVar1[0x8B] = g_0021992c+0x9C` (second vtable); func_004AF3F4 initialises the colour block and the returned pointer is `iVar2-0x29C`, i.e. the actor that owns the span group at f_29C created by 0x00218EA8."
+ },
+ {
+  "address": "0x002199E4",
+  "name": "Actor2D_HasPatternResource",
+  "signature": "u32 Actor2D_HasPatternResource(Actor2D* actor, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Returns 1 when the actor's secondary pattern byte f_320 is set (not 0xFF) and the scene's resource table (func_00636AFC on the scene work object) can resolve an entry for it - i.e. the pattern the actor wants to show actually exists.",
+  "confidence": 0.5,
+  "evidence": "Early-out on `*(char*)(arg1+0x320) != -1`; then func_006F1EEC singleton -> work+8 -> +0x6C manager -> func_00636AFC(manager); appears as a vtable slot next to 0x0021B090 and Actor2D_OnStateNotify at g_0021992C's table (0x0075BD58)."
+ },
+ {
+  "address": "0x00219ACC",
+  "name": "Actor2D_ReapplySpanPatterns",
+  "signature": "void Actor2D_ReapplySpanPatterns(Actor2D* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Re-applies the actor's current sprite pattern to every span: re-runs the state->pattern selection (0x00219C48) and then writes the pattern index f_274 and the two pattern words f_27C/f_2D0 into both colour/anim objects of each of the f_250 spans.",
+  "confidence": 0.55,
+  "evidence": "Calls func_00219C48 (Actor2D_SetPatternForState, N_024) first, then loops `for i < self->f_250` calling func_003DF7F8(&span->f_3C, self->f_27C, self->f_274) and func_003DF7F8(&span->f_3C, self->f_2D0, self->f_274); f_250 is the span count used by 0x0021B52C/0x0021AF9C."
+ },
+ {
+  "address": "0x0021B090",
+  "name": "Actor2D_SelectFacingCommandEx",
+  "signature": "int Actor2D_SelectFacingCommandEx(Actor2D* actor, int actionId, const u32* patternPair)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "action id stored in f_318",
+   "param_3": "struct whose +4 word holds the 22-bit pattern pair"
+  },
+  "summary": "Derived-class twin of 0x00219610: clears the facing byte f_322 to 0xFF, compares the incoming pattern pair with f_27C/f_2D0 to set it to 0 or 1, maps state f_326 (2/3) + facing onto command id 5/6 in f_320, fires scene event 9 when the actor has no pattern yet (f_2C7) and finally sends the command through the field gadget manager.",
+  "confidence": 0.55,
+  "evidence": "Identical structure to 0x00219610 with every field shifted by +0x38 (f_2EE->f_326, f_2EA->f_322, f_2E8->f_320, f_250->f_27C, f_2A0->f_2D0); extra block `if (!f_274 && f_2C7) func_001EBC68(scene,9,0,0)`; tail func_00256678(...,f_320,self+4) = Field_Gadget_AddAndTriggerCommand; vtable slot at 0x0075BD54."
+ },
+ {
+  "address": "0x0021B22C",
+  "name": "Actor2D_SetOpenFacingState",
+  "signature": "void Actor2D_SetOpenFacingState(Actor2D* actor, int backFacing, int immediate)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "0 = face the camera ('Open_Front'), non-zero = turn away ('Open_Back')",
+   "param_3": "0 = release the anim instance, non-zero = stop the animation instead"
+  },
+  "summary": "Plays the actor's 'open' state: stores the facing flag in f_322, sends the animation name 'Open_Front' or 'Open_Back' to the animator (vtable+0x84), disables update, clears f_2B4 and f_308, stops the current action (vtable+0x98, optionally releasing it / sending the scene event), unregisters the actor id f_2C8 from the scene list and releases the vtable+8 handle.",
+  "confidence": 0.6,
+  "evidence": "String literals 'Open_Front' (0x0021B360) and 'Open_Back' (0x0021B36C) chosen by arg2 and passed to vtable+0x84; zeroes self[0xAD]=f_2B4 and self[0xC2]=f_308; arg3==0 -> func_001EBC68(scene, f_324, 0), else func_005F7784(self,0x3C,0); func_00192BE8(sceneList, count, f_2C8) then vtable+8(sceneList, f_328, 1). Called from Actor2D_UpdateFacingToTarget (0x0021AF9C, N_024)."
+ },
+ {
+  "address": "0x0021B440",
+  "name": "maybe_Actor2D_DeleteChildObject",
+  "signature": "void maybe_Actor2D_DeleteChildObject(Actor2D* actor, void* vtable)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "class vtable to restore before destruction"
+  },
+  "summary": "Destruction helper for one of the 2D actor's child objects: restores the class vtable (and the +0xD4 secondary vtable), unlinks the child node at +0x2CC from the global object table, releases the render object at that node and frees the allocation.",
+  "confidence": 0.4,
+  "evidence": "`*arg1 = arg2; arg1[0x96] = arg2 + 0xD4` (main + secondary vtable); func_0017C334(arg1+0xB3) unlinks a node from the global hash table (writes 0 into the bucket) exactly as in the destructor 0x0021B7AC; func_0028EFB4(x-0x2CC) releases the render/mesh object; func_0010F6CC is the generic object destructor."
+ },
+ {
+  "address": "0x0021B468",
+  "name": "Actor2D_CreateSpriteMesh",
+  "signature": "void Actor2D_CreateSpriteMesh(Actor2D* actor, const void* spriteParams)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "sprite parameter record (word at +0x48 = allocator/owner)"
+  },
+  "summary": "Creates the actor's single 200x120 'sprite' render object: sets up the sprite anim instance for the scene node (func_005F2B54), builds a 200x120 mesh request through func_0031A48C and creates it with Gfx_CreateSpriteMesh (func_0031A394) using the literal 'sprite', then stores it in f_B8, marks f_129 = 10 and registers it with the scene node.",
+  "confidence": 0.55,
+  "evidence": "local_38 = 200, local_34 = 0x78 (the same 200x120 pair used by 0x0021C8EC/0x0021D550 descriptors); func_0031A48C(&params,0,0x24,arg2->f_48,&size); func_0031A394(&desc,self,&params,'sprite') = Gfx_CreateSpriteMesh (N_003 - it allocates the 0x178-byte object and calls func_002D1F28 with the 'sprite' string); self->f_B8 = result, result->f_129 = 10, func_005E7650(self, f_B8) registers the child."
+ },
+ {
+  "address": "0x0021B510",
+  "name": "maybe_Actor2D_TestStateAfterScroll",
+  "signature": "u32 maybe_Actor2D_TestStateAfterScroll(Actor2D* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Applies the actor's pending scroll/offset message (func_0040D9FC) and then returns 1 unless the actor's state byte f_00 equals 5 - i.e. 'still running' when the actor has not reached state 5.",
+  "confidence": 0.45,
+  "evidence": "Asm 0x0021B510: `mov r4,r0; bl 0x40d9fc; mov r0,r4; bl 0x64c740; eor r0,r0,#1`, and 0x0064C740 is exactly `return *(u8*)self == 5`. func_0040D9FC is the message handler that applies a (x,y) delta to the object at scene-work+0x54+0x20."
+ },
+ {
+  "address": "0x0021B6F0",
+  "name": "maybe_Actor2D_QueryGroundInfo",
+  "signature": "u32 maybe_Actor2D_QueryGroundInfo(Actor2D* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Asks the map/ground system for the 11 bytes of information at the actor's position (f_78/f_7C) - the query id comes from the actor's mesh object f_B8 (0xFF when there is none) - and stores the result in f_4D8/f_4D9/f_4DA plus the two words at f_4DC/f_4E0. Returns 1 when the query ran.",
+  "confidence": 0.45,
+  "evidence": "Reads f_78/f_7C (actor position, same fields used by 0x0021B8BC), `f_B8 ? func_0063C7B0() : 0xFF`, func_0040DBB4(out,7,id,&pos) which writes a tagged 12-byte record ([1,7,id, x, y]); result copied to f_4D8..f_4E0. Appears as a vtable slot at 0x0075BE10 next to 0x0021B508."
+ },
+ {
+  "address": "0x0021B7AC",
+  "name": "Actor2D_DestroySpanArray",
+  "signature": "void Actor2D_DestroySpanArray(Actor2D* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Destructor of the eight-span 2D actor: restores the two class vtables, destroys the eight 0x48-byte spans at +0x298 with std_destroy_range, then restores the base vtable, unlinks the object from the global scene-node list at +0x24C and releases that list.",
+  "confidence": 0.5,
+  "evidence": "`arg1[0x8B] = g_0021B810+0x9C; *arg1 = g_0021B810` then func_00100BE0(arg1+0xA6, g_0021B814, 0x48, 8) = std_destroy_range (N_037) over 8 elements of 0x48 (the eight spans created by 0x0021B52C Actor2D_CreateEightSpans); second vtable g_0021B818+0x98; func_0017C330(arg1+0x93) then list unlink and func_00335DAC(base+0x24C)."
+ },
+ {
+  "address": "0x0021B8BC",
+  "name": "maybe_Actor2D_TrackLeaderPosition",
+  "signature": "u32 maybe_Actor2D_TrackLeaderPosition(Actor2D* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Follow/track update: when f_297 is 0 it takes the leader object's position (scene work +0x54 +0x20, fields f_78/f_7C), computes the delta to the actor's own f_29C/f_2A0, converts the delta to a direction with func_00319678 and adds the resulting offset to the actor's render offsets f_C4/f_C8. When f_297 is 1 it only tests whether the target object can be resolved (func_00636AFC).",
+  "confidence": 0.45,
+  "evidence": "Path 0: work+8+0x54+0x20 leader, delta = f_29C/f_2A0 - leader.f_78/f_7C, func_00319678(&delta) normalises, func_002D1810, func_0031A7BC(&local,result), then `leader->f_C4 += local` and `leader+0xC8 += ...`; constant g_0021BA08 = 0.3f used as the follow factor; path 1: func_00636AFC(work+8+0x6C). Called from Actor2D_UpdateFacingToTarget and GimmickDoorOpen."
+ },
+ {
+  "address": "0x0021BB38",
+  "name": "maybe_Actor2D_UpdateFollowMode",
+  "signature": "u32 maybe_Actor2D_UpdateFollowMode(Actor2D* actor, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Decides whether the 2D actor is in 'attached to leader' mode: if the scene's local player object is in state 0x0B and the actor's target (f_2A4/f_2A6) still resolves (func_0031A868) it sets f_297 = 0 and returns 1; otherwise it sets f_297 = 1 and sends gadget command 0x0C for the actor.",
+  "confidence": 0.45,
+  "evidence": "Byte test `*(char*)(*(work+8)+0x48)+0x281 == 0x0B` (same object whose +0x281 byte is read in 0x0021B8BC); func_0031A868(f_2A4,f_2A6); sets f_297 to 0/1 (the flag read by 0x0021B8BC); else branch func_00256678(mgr,0xC,self+4) = Field_Gadget_AddAndTriggerCommand."
+ },
+ {
+  "address": "0x0021BC50",
+  "name": "maybe_Actor2D_ReleaseSpanList",
+  "signature": "void maybe_Actor2D_ReleaseSpanList(Actor2D* actor, void* vtable)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "base-class vtable to restore"
+  },
+  "summary": "Base-destructor half of the eight-span actor: restores the vtable (and the +0x98 secondary vtable), unlinks the scene-node list node at +0x24C and destroys that list, but does not free the object itself.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = arg2; arg1[0x8B] = arg2+0x98`; func_0017C330(arg1+0x93) -> list unlink (writes the two neighbours' pointers) -> func_00335DAC(node-0x24C); identical tail to 0x0021B7AC minus the span-array destruction and the vtable store."
+ },
+ {
+  "address": "0x0021BC88",
+  "name": "std_String_AppendChar",
+  "signature": "void std_String_AppendChar(std_String* str, u8 chr)",
+  "params": {
+   "param_1": "string object",
+   "param_2": "character to append"
+  },
+  "summary": "Small-string-optimised std::string::push_back: appends one character, growing the buffer through the standard reallocation path when the current capacity is exhausted (the 16-byte inline buffer is detected by comparing the begin pointer with self+0x11).",
+  "confidence": 0.75,
+  "evidence": "Reads the end pointer at self+8, tests `end - begin < 8` and `begin == self+0x11` (the classic 16-byte SSO buffer), calls func_00111378 (length_error/bad_alloc abort) and stores the char at the end pointer. Callers are UI window code (0x0044FF18, 0x0044FFC0, 0x0045031C, 0x004505B8, 0x004506B0) that build message text."
+ },
+ {
+  "address": "0x0021C334",
+  "name": "maybe_Ui_Part_ResetSlots",
+  "signature": "void maybe_Ui_Part_ResetSlots(Ui_Part* part, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "ui part object",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Resets the ui part's slot bookkeeping: clears the four slot handles f_C0/f_C4/f_C8/f_CC and the layout-object member at f_D0, then unregisters the four child object ids f_B0/f_B4/f_B8/f_BC from the scene object manager.",
+  "confidence": 0.45,
+  "evidence": "func_0045120C(&self->f_D0) releases the layout binding; f_C0/f_C4/f_C8(=self+200)/f_CC cleared; four func_001C7570(work+8+0x54, id) calls, where 0x001C7570 asm unlinks an object from the manager's id hash table (mask/ shift-by-11 lookup)."
+ },
+ {
+  "address": "0x0021C404",
+  "name": "maybe_Field_ResolveActorOverlap",
+  "signature": "void maybe_Field_ResolveActorOverlap(void)",
+  "params": {},
+  "summary": "Pair pass over two intrusive object lists (manager slot 8): for every two objects of the same type (type tag returned by vtable slot 0 is compared with 0x007C4CFC) it computes the closest approach along each object's forward axis within a radius taken from the global at g_0021C890, and if the two volumes overlap it pushes both objects apart (position fields f_9C/f_A0/f_A4 interpolated by 0.33/0.5) and records on which side each object was hit (bits in f_28C).",
+  "confidence": 0.4,
+  "evidence": "Two list heads from func_001C7AD0 / func_001C7560 (asm: list slot = manager + id*12 + 0x24/0x28) for slot 8 of the manager at scene-work+8+0x54; type filter compares the vtable's first slot result against g_0021C874 (0x007C4CFC); position at +0x9C/+0xA0/+0xA4, quaternion at +0x8C..+0x98, flag byte +0x118, per-side bits +0x28C; float constants 2.0/-1.0/0.0/1.0/0.33/0.5 plus the deg->rad constant 0.0174533 in the literal pool; func_00672E44 is the shared trig helper."
+ },
+ {
+  "address": "0x0021C8B0",
+  "name": "Ui_Part_ReleaseChildSlots",
+  "signature": "void Ui_Part_ReleaseChildSlots(Ui_Part* part)",
+  "params": {
+   "param_1": "ui part with four child slots"
+  },
+  "summary": "Releases the part's four child slot objects (the pointers at +0xC0..+0xCC) by calling their vtable+0xC0 destroy slot; null slots are skipped.",
+  "confidence": 0.5,
+  "evidence": "Loop `for i in 0..4`: `piVar1 = *(int**)(arg1 + i*4 + 0xC0); if (piVar1) (**(code**)(*piVar1+0xC0))()`. Same four slots are released by callback in maybe_Ui_ForEachSlotDispose (0x0021C3CC, N_012) and prepared in 0x0021D520 (N_012)."
+ },
+ {
+  "address": "0x0021C8EC",
+  "name": "maybe_Ui_Part_CreateChildPart",
+  "signature": "void maybe_Ui_Part_CreateChildPart(Ui_Part* part, const u8* kindRecord)",
+  "params": {
+   "param_1": "ui part that receives the new child",
+   "param_2": "kind record: byte 0 selects the animation/order kind (5 = special), +1 used as an index"
+  },
+  "summary": "Creates one ui2d child part of the actor/part: maps the kind record (and, for the default kind, the current map/scene ids 0x671/0x59D/0x64D/0x669) to a display kind (6/5/9/10), fills the 0xE/0x10/0x78/200-byte ui2d descriptor with white colours and 200x120 size, allocates a 0x378-byte part through func_003E6A8C, registers it in the scene object list (func_001235A4) and stores its handle in f_B0.",
+  "confidence": 0.4,
+  "evidence": "Descriptor block with local_90=0xE, local_91=0x10, local_92=5, local_5A=200, local_58=0x78 and many 0xFF colours (same shape as 0x0021D550); Mem_AllocAligned(0x378,...,4) + func_003E6A8C(size,&desc) = object factory; vtable+0xC(obj,desc) initialises it; global id counter g_0021CC38 -> obj[0xB]; func_001235A4(&scene->f_188,...,obj+2) registers it; result id stored as f_B0."
+ },
+ {
+  "address": "0x0021CC50",
+  "name": "maybe_Ui_Part_SelectChildParts",
+  "signature": "int maybe_Ui_Part_SelectChildParts(Ui_Part* part, const Ui_PartOwner* owner, const u8* kindRecord)",
+  "params": {
+   "param_1": "ui part",
+   "param_2": "owner whose entry array f_3B10/f_3B14 is searched",
+   "param_3": "kind record (byte +1 is the entry type to match)"
+  },
+  "summary": "Copies a 0x19-word status snapshot from the global at g_0021D098 (taken from func_0063EF80), creates the primary child part via 0x0021C8EC, then collects every entry of the owner's array f_3B10 whose type byte f_30 equals kindRecord[1] into a temporary vector - the list of parts that must be attached for this kind.",
+  "confidence": 0.4,
+  "evidence": "g_0021D098 receives a 27-word copy of func_0063EF80(*func_0011CB38()); then func_0021C8EC(arg1,arg3); then loop `for i < arg2->f_3B14` testing `entry->f_30 == *(char*)(arg3+1)` and push_back into a std::vector (inlined growth code); later calls 0x0021D550 per collected index."
+ },
+ {
+  "address": "0x0021D09C",
+  "name": "maybe_Ui_Part_UpdateSlotTransforms",
+  "signature": "void maybe_Ui_Part_UpdateSlotTransforms(Ui_Part* part, u32 frame, u32* timer)",
+  "params": {
+   "param_1": "ui part",
+   "param_2": "animation frame/time",
+   "param_3": "timer word updated in place"
+  },
+  "summary": "Per-frame transform update of the part's four slots: normalises the rotation angle (2*pi/pi/1-over-2pi constants), advances the timer and rewrites each slot's rotation/position through the shared trig helpers, marking the layout objects dirty.",
+  "confidence": 0.4,
+  "evidence": "Constants in the literal pool: 0.159155 (1/2pi), 6.28319 (2pi), 3.14159 (pi), 0.5, 2.0; calls func_006731EC/func_00672E44 (shared trig/math helpers), func_00574548/func_003674D4/func_006337CC/func_00573B6C layout transform helpers and func_006C29B4; called once per frame from 0x002F5CE0 (which passes &self->f_10, self->f_124, &self->f_129)."
+ },
+ {
+  "address": "0x0021D550",
+  "name": "maybe_Ui_Part_CreateChildPartEx",
+  "signature": "void maybe_Ui_Part_CreateChildPartEx(Ui_Part* part, int index, const u8* kindRecord)",
+  "params": {
+   "param_1": "ui part",
+   "param_2": "row/index offset added to the Y coordinate (+0xF)",
+   "param_3": "kind record (byte +8 used for the resource lookup)"
+  },
+  "summary": "Second child-part factory of the same family as 0x0021C8EC: resolves the resource with func_00640E4C(part->f_C, kindRecord[8]), fills the same 0xE/0x10/0x78/200 ui2d descriptor (Y offset arg2+0xF, 200x120), allocates a 0x394-byte part through func_002FB974, registers it in the scene list and stores its handle in f_B0.",
+  "confidence": 0.4,
+  "evidence": "Descriptor identical in shape to 0x0021C8EC (0xE/0x10 kind bytes, 200x120, 0xFF colours) with `local_66 = (short)arg2 + 0xF`; factory func_00109DC8(0x394,...,4)+func_002FB974; g_0021D854 id counter -> obj[0xB]; func_001235A4 registration. Called from 0x0021CC50."
+ },
+ {
+  "address": "0x0021D86C",
+  "name": "maybe_Ui_Part_CollectSlots",
+  "signature": "void maybe_Ui_Part_CollectSlots(Ui_Part* part)",
+  "params": {
+   "param_1": "ui part"
+  },
+  "summary": "Gathers the part's non-null child slots (+0xC0..+0xCC) into a local std::vector and hands the collection to the layout update helpers; the vector growth/insert code is the inlined std::vector implementation.",
+  "confidence": 0.4,
+  "evidence": "Loop over the four slot pointers with the standard vector push_back/grow sequence (duplicated in 0x0021CC50), followed by calls to func_0071FF10/func_00717E70/func_00628364 (ui2d layout APIs); called from 0x0021DB80 right after binding the slots."
+ },
+ {
+  "address": "0x0021DB48",
+  "name": "Ui_Part_NotifySlots",
+  "signature": "void Ui_Part_NotifySlots(Ui_Part* part, u32 value)",
+  "params": {
+   "param_1": "ui part",
+   "param_2": "value forwarded to each slot"
+  },
+  "summary": "Forwards one value to each of the part's four child slots (func_00366930), used to enable/disable or re-parameterise all four at once; callers use 1 to enable and 0 to disable.",
+  "confidence": 0.5,
+  "evidence": "Loop over arg1+0xC0..+0xCC calling func_00366930(slot,arg2); callers 0x002F5D64 (`func_0021DB48(&self->f_10,1)` together with clearing five state bytes) and 0x002F6128 (`...,0` on shutdown)."
+ },
+ {
+  "address": "0x0021DB80",
+  "name": "Ui_Part_BindSlotsToLayout",
+  "signature": "void Ui_Part_BindSlotsToLayout(Ui_Part* part)",
+  "params": {
+   "param_1": "ui part"
+  },
+  "summary": "Binds the part into the ui2d layout: for every non-null slot it registers the slot with the four layout transform helpers at f_D0 (func_00451420/004515B4/00451880/004519D0), optionally applies the layout record f_4C (func_003672AC), collects the slots (0x0021D86C) and finally applies the animation record f_10 to each slot (func_0036797C).",
+  "confidence": 0.5,
+  "evidence": "Four calls per slot with &arg1->f_D0 as first argument (a ui2d layout/animator object); `if (arg1->f_4C) func_003672AC(slot,&arg1->f_4C)`; func_0021D86C(arg1); func_0036797C(slot,&arg1->f_10). No callers in the readable tree - installed as a virtual/type-table entry."
+ },
+ {
+  "address": "0x0021DD7C",
+  "name": "Ui_NameEntry_BuildKanaGrid",
+  "signature": "void Ui_NameEntry_BuildKanaGrid(Ui_NameEntry* win)",
+  "params": {
+   "param_1": "name-entry window"
+  },
+  "summary": "Builds the kana keyboard grid of the name-entry window: it walks a 6-column grid (68 cells), advancing a two-digit cell label ('00'..'99') for each cell, calls the window's vtable+0x38 once per character with (row-major x, y) and finally installs the 'keyboard_hiragana' and 'keyboard_katakana' pages through func_003E00CC and resets the active page (f_52).",
+  "confidence": 0.5,
+  "evidence": "Literals 'null_txt_0' (0x0021DEE0), 'keyboard_hiragana' (0x0021DEEF+1) and 'keyboard_katakana' (0x0021DF04); loop limit 0x44 (68) with `(char)iVar2 + cVar1*-6` = column i%6; vtable+0x38 call per cell, vtable+0x48 for the page change; func_003E00CC/text-object loading for the two keyboard pages at +0x14C and +0x19C; same object layout as the destructor 0x0021E19C."
+ },
+ {
+  "address": "0x0021E19C",
+  "name": "Ui_NameEntry_Dtor",
+  "signature": "void Ui_NameEntry_Dtor(Ui_NameEntry* win)",
+  "params": {
+   "param_1": "name-entry window"
+  },
+  "summary": "Destructor of the name-entry window: restores the class vtable, destroys the two keyboard-page text objects at +0x14C/+0x19C (0x50 stride) and the three label objects at +0x4C/+0x9C/+0xEC, releases the base window and frees the object.",
+  "confidence": 0.55,
+  "evidence": "`*arg1 = g_0021E1EC` then func_00100BE0(arg1+0x53, g_0021E1F0, 0x50, 2) = std_destroy_range over the two pages at byte offset 0x14C; then vtable g_0021E1F4 and func_00100BE0(arg1+0x13,...,0x50,3) over the three objects at 0x4C; func_001A6768(base dtor); func_0010F6CC free. The 0x14C/0x19C pair matches the two text objects loaded by 0x0021DD7C."
+ },
+ {
+  "address": "0x0021E1F8",
+  "name": "Ui_RowList_ReleaseCells",
+  "signature": "void Ui_RowList_ReleaseCells(Ui_RowList* list)",
+  "params": {
+   "param_1": "five-row list window"
+  },
+  "summary": "Releases every cell layout object of the five-row list (5 rows of 0x3B8 bytes, 6 cells of 0x9C bytes each, starting at +0x138), plus the three auxiliary parts at +0x1380/+0x13D0/+0x1420 and the header object at +0x98.",
+  "confidence": 0.5,
+  "evidence": "Nested loops j<5, i<6 calling func_003DFEC4(self + j*0x3B8 + i*0x9C + 0x138); the row stride 0x3B8 and the three auxiliary parts at 0x1380/0x13D0/0x1420 match Ui_RowList_InitRows (0x0021E29C, N_012) and maybe_Ui_RowListOwner_Dtor (0x0021E648, N_012)."
+ },
+ {
+  "address": "0x0021F450",
+  "name": "Ui_Object_InsertPartInDrawOrder",
+  "signature": "void Ui_Object_InsertPartInDrawOrder(Ui_Object* self, Ui_Object* newPart)",
+  "params": {
+   "param_1": "ui object owning an ordered part list",
+   "param_2": "new part (its vtable provides the sort keys)"
+  },
+  "summary": "Inserts a newly created part into the object's ordered child list at the position dictated by its draw-order key: it reads the part's mode/order through vtable+0x34/+0x38/+0x3C, picks one of the four ordered lists (f_1278/f_1284/f_1290/f_129C family) and walks it until the existing element's order key is smaller, honouring the object's two visibility/ordering flags f_12A9/f_12AA.",
+  "confidence": 0.5,
+  "evidence": "vtable+0x34/+0x38/+0x3C inside the walk return the part's mode/order; ordered tiers 2/5/7/8 compared in the second branch; list heads at self+0x1278/0x1284/0x1290/0x129C with the sentinel check `*piVar8 != *piVar6`; called from 0x0021F738 for every part of the static table."
+ },
+ {
+  "address": "0x0021F698",
+  "name": "Ui_Object_SetSlotResource",
+  "signature": "void Ui_Object_SetSlotResource(Ui_Object* self, void* resource, int slotIndex)",
+  "params": {
+   "param_1": "ui object",
+   "param_2": "resource handle (0 clears the slot)",
+   "param_3": "slot index (0..n)"
+  },
+  "summary": "Assigns a resource to one of the object's animation slots: stores the handle at f_11E0+index*4, and when the handle is non-null re-initialises the 0x48-byte slot record at +0x1018+index*0x48 and resolves the actual resource through func_002F7864 using the static per-slot table g_0021F6E4.",
+  "confidence": 0.5,
+  "evidence": "`iVar2->f_11E0 = arg2` with `iVar2 = arg1 + arg3*4`; slot record `arg1 + arg3*0x48 + 0x1018` passed to func_00559D94 (reset) then func_002F7864(g_0021F6E4[arg3], slot) whose result goes to f_11C8; caller 0x006260B4."
+ },
+ {
+  "address": "0x0021F738",
+  "name": "Ui_Object_CreatePartsFromTable",
+  "signature": "bool Ui_Object_CreatePartsFromTable(Ui_Object* desc, Ui_Object* self)",
+  "params": {
+   "param_1": "static description table (per-object records of 0x110 bytes at +0x798)",
+   "param_2": "ui object receiving the parts"
+  },
+  "summary": "Core UI part factory used by nearly every window constructor: it asks the object for its part count (vtable+0x40) and per-index id (vtable+0x44 with the byte table g_0021F7C0), creates each part with vtable+8(self, id, desc + index*0x110 + 0x798, desc[1]) and, when the object reports a pending part (self[0x2A] != 0), inserts it into the draw order via 0x0021F450. Returns whether a part was inserted.",
+  "confidence": 0.55,
+  "evidence": "Called by ~110 window constructors (Ui_ShopWindow_Ctor, Ui_MessageWindow_*, Ui_PokerWindow_Ctor, Ui_TitleScreen_Ctor, ...) - the standard 'build the window's parts' helper; 0x110-byte record stride at +0x798; vtable slots +0x40/+0x44/+8; g_0021F7C0 is a per-object byte table; tail call func_0021F450(self) when self[0x2A] != 0."
+ },
+ {
+  "address": "0x0021FD68",
+  "name": "Ui_List_MoveCursorWithFallback",
+  "signature": "void Ui_List_MoveCursorWithFallback(Ui_List* list, u32 entryId, u32 direction, int keepCursor)",
+  "params": {
+   "param_1": "list widget",
+   "param_2": "target entry id",
+   "param_3": "direction (forward/backward)",
+   "param_4": "1 = restore the previous cursor when the move fails"
+  },
+  "summary": "Moves the list cursor to an entry: if the list object is missing it does nothing; otherwise it tries Ui_Cursor_Move, and when that fails and the widget's wrap flag f_EC is clear it re-selects the entry by id and finally either restores the previous cursor value or repeats the move.",
+  "confidence": 0.55,
+  "evidence": "vtable+0x58 returns the list object (null -> return), func_001D7D50 = Ui_Cursor_Move (N_042), func_001D809C = Ui_List_SelectEntryById (N_042) called with `(*(u16*)(arg1+0x28) << 16) | 8`, and func_001D806C reads back the current cursor; flag byte f_EC (arg1[0x3B])."
+ },
+ {
+  "address": "0x00220984",
+  "name": "Model_AttachSlot_Setup",
+  "signature": "void Model_AttachSlot_Setup(ModelAttachSlot* slot, ModelOwner* owner, const char* nodeName, const void* transform)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "owning model/actor",
+   "param_3": "model or node name (max 0x1F chars)",
+   "param_4": "transform/matrix to copy"
+  },
+  "summary": "Configures one attachment slot of a character model: links the slot into the owner's attachment list at f_6B0, copies the requested name into the inline string f_65C..f_67C, resolves the model resource id (func_0065963C) for character owners, stores the owner at f_654, copies the transform into f_680 and re-evaluates the visible/active flags f_588/f_589 (calling 0x00225BF4 and 0x00222148 as needed).",
+  "confidence": 0.55,
+  "evidence": "func_001235A4(&owner->f_6B0,&owner->f_6B0,&slot->f_3C) links the intrusive list; string copy into f_65C..f_678 with length 0x1F; `slot->f_67C = func_0065963C(...)` only when owner->f_5C is 1/2 and owner->f_11C->f_1C exists (character model); f_654 = owner; func_00574428(&slot->f_680,arg4) copies a 4x4 matrix; tail logic on f_588/f_589 mirrors 0x002219C8/0x0022225C. Callers: Model_AttachWeaponAndAccessory, Model_AttachEquipmentMeshes, Gfx_Model_AttachGadgetMesh, maybe_Model_CreateAttachedEffect."
+ },
+ {
+  "address": "0x002219C8",
+  "name": "Model_AttachSlot_ShowAll",
+  "signature": "void Model_AttachSlot_ShowAll(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment slot (root of the attachment chain)"
+  },
+  "summary": "Marks the attachment chain visible: if the slot is not already enabled it sets f_589, and for every child in the f_6B0 list that is currently hidden it shows the child (func_00225A9C), unless the owner reports that the character has no visible model.",
+  "confidence": 0.5,
+  "evidence": "Sets f_589 = 1 (the enabled flag also set by 0x0022225C/0x002219C8 pair); walks `self->f_6B4 .. self->f_6B0` list; `if (!child->f_588) func_00225A9C(child)`; the f_58A/f_58B guard is the same owner-visibility test used by 0x00222084/0x0022225C."
+ },
+ {
+  "address": "0x002221F0",
+  "name": "maybe_Model_AttachSlot_ReleaseNode",
+  "signature": "void maybe_Model_AttachSlot_ReleaseNode(ModelAttachSlot* slot, void* node, const void* state)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "model node to release (0 = use state->f_55)",
+   "param_3": "animation state record"
+  },
+  "summary": "Releases the render node used by an attachment slot: resolves the node from arg2 or state->f_55, plays the node's stop/default transition (vtable+0xC when the owner wants the animation finished, vtable+0x14 otherwise) and clears the slot's visibility timer at f_52C.",
+  "confidence": 0.45,
+  "evidence": "`iVar1 = arg2 ? arg2 : arg3->f_55`; node taken from slot->f_11C->f_1C; the +0xC/+0x14 vtable pair is the same one used by 0x002242AC for stopping animations; func_001D5C94(&slot->f_52C) clears the fade/countdown."
+ },
+ {
+  "address": "0x0022225C",
+  "name": "Model_AttachSlot_HideAll",
+  "signature": "void Model_AttachSlot_HideAll(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment slot"
+  },
+  "summary": "Hides the attachment chain: releases the slot itself (func_00222148) and clears f_589, then walks the f_6B0 child list and for every enabled child releases it and clears both f_588 and f_589.",
+  "confidence": 0.5,
+  "evidence": "`if (f_589) { func_00222148(self); f_589 = 0; }` then list walk `for (p = f_6B4; *p != f_6B0; p = p[1]) if (child->f_588) { if (child->f_589) func_00222148(child); child->f_588 = 0; }` - exact inverse of 0x002219C8."
+ },
+ {
+  "address": "0x002222C4",
+  "name": "maybe_Model_Attach_UpdateSpin",
+  "signature": "void maybe_Model_Attach_UpdateSpin(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment slot with a timed rotation"
+  },
+  "summary": "Advances the attachment's timed spin/rotation: increments the elapsed frame counter f_6C0, and while it is below the duration f_6BC it recomputes the three Euler angles f_6CC/f_6D0/f_6D4 from the per-axis speeds (bit flags f_6D8 & 1/2/4 select X/Y/Z), applying the angle normalisation constants (360, 0.0333, 0.01745) and a 0.8 smoothing factor; when the timer expires the angles snap to the stored end values.",
+  "confidence": 0.45,
+  "evidence": "Counter pair f_6BC (total) / f_6C0 (elapsed); float constants in the pool 360, 0.033333, 0.002778, 0.0174533, 2.2, 0.8; three independent `if (f_6D8 & 1/2/4)` blocks each doing sin/cos (func_006731EC) and a different rotation-matrix axis helper (func_00673BC8); result lerped into f_6CC/f_6D0/f_6D4. Called per frame from 0x0022412C and 0x002242AC."
+ },
+ {
+  "address": "0x00222DFC",
+  "name": "maybe_Model_Attach_SetSpinRange",
+  "signature": "void maybe_Model_Attach_SetSpinRange(ModelAttachSlot* slot, s32 start, s32 end)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "start angle (arg in r0/r1 pair)",
+   "param_3": "end angle"
+  },
+  "summary": "Sets the rotation range used by the spin update: stores the start/end angles in f_5CC/f_5D0/f_5D4/f_5D8 and remembers the previous value in f_5C8, choosing between two setups depending on a global threshold (g_00222E88/g_00222E8C); recurses into every child of the f_6B0 list.",
+  "confidence": 0.4,
+  "evidence": "Fields f_5C8/f_5CC/f_5D0/f_5D4/f_5D8 written from the two incoming register values (Ghidra lost the arguments - the recursion `func_00222DFC()` passes none); comparison against g_00222E88 with fallback constant g_00222E8C; recursive walk over f_6B4..f_6B0. Caller 0x0024390C."
+ },
+ {
+  "address": "0x002230C4",
+  "name": "Model_Attach_ComputeWorldMatrix",
+  "signature": "void Model_Attach_ComputeWorldMatrix(ModelAttachSlot* slot, Matrix44* out)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "output matrix"
+  },
+  "summary": "Builds the world matrix of an attached model: when the slot has no owner it takes the standalone node transform (f_5F0 or owner+0x84); otherwise it refreshes the cached node id f_67C and composes the owner matrix with the attachment's own transform before writing the result into *out.",
+  "confidence": 0.5,
+  "evidence": "func_0066CF28(&tmp, node) builds a matrix from a node transform; func_00574428(dst,src) copies/composes 4x4 matrices (used identically in 0x00220984 for f_680); the owner-is-character branch re-resolves f_67C with func_0065963C (maybe_Model_LookupIdByKey, N_008); last func_005754C0 applies the local offset. Callers: 0x00222468, Model_UpdateAttachMatrix, maybe_Gfx_ResetTrailTransform(+Alt), 0x0062CC78."
+ },
+ {
+  "address": "0x00223270",
+  "name": "Model_Attach_ApplyNodeOffset",
+  "signature": "void Model_Attach_ApplyNodeOffset(ModelAttachSlot* slot, u32 nodeIndex)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "node index (mapped to f_6DC-0xFF00 when a node exists)"
+  },
+  "summary": "Applies a named attachment node's local offset to the part: when the owner has a render node and the index is valid it looks the node up (func_006658F0 with the slot's node table), composes the node matrix (func_005733AC) and pushes it to the model (vtable+0x78) before recomputing the attach matrices.",
+  "confidence": 0.5,
+  "evidence": "`arg2 = self->f_6DC + -0xFF00` and the 0xFF sentinel test; func_00574428(tmp,g_002232F0) seed matrix; func_006658F0(node,f_6DC,tmp) node lookup; func_005733AC composes; `(**(code**)(*self->f_38+0x78))(self->f_38,tmp)`; tail func_00223E08 (Model_UpdateAttachMatrix, N_002). Called from 0x004A49A0, 0x004CE314, 0x004DB7FC, 0x004E708C, 0x004F2304, 0x005987E0."
+ },
+ {
+  "address": "0x00223BA4",
+  "name": "Model_Attach_SpawnEffect",
+  "signature": "void Model_Attach_SpawnEffect(ModelAttachSlot* slot, const u32* effectParams, u8 variant)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "effect parameter block (5 words)",
+   "param_3": "effect variant byte"
+  },
+  "summary": "Spawns the effect attached to a model part: copies the 0x12-byte local parameter block from the slot (f_120..f_154), overlays the five caller words and the variant byte and hands the combined record to func_002239F4 (maybe_Effect_CreateAttached2).",
+  "confidence": 0.5,
+  "evidence": "func_00116C10(&local,&slot->f_120,0x12) copies the 0x12-byte block; then local_50..local_40 = arg2[0..4], local_27 = arg3; tail func_002239F4(slot,&local) = maybe_Effect_CreateAttached2 (N_002). Callers: 0x002315C0 and maybe_Model_AttachAccessoryMesh."
+ },
+ {
+  "address": "0x00223CF4",
+  "name": "Model_Attach_PlayAnimation",
+  "signature": "u32 Model_Attach_PlayAnimation(ModelAttachSlot* slot, u32 animId)",
+  "params": {
+   "param_1": "attachment slot on a character model",
+   "param_2": "animation request/id"
+  },
+  "summary": "Plays an animation on an attached model part: only for character-owned parts (f_5C == 1) with a live render node it builds the animation request, resolves it with func_00633E24, stores whether the animation loops in f_525, applies it to the model (func_003BF14C) and starts it on the node (vtable+0x14). Returns 1 when the animation was started.",
+  "confidence": 0.5,
+  "evidence": "`if (f_5C == 1 && f_11C)`; func_001C9B8C(&req) builds the animation request struct; func_00633E24(self,&req,arg2) resolves it; `f_525 = (local_10 == 0)`; func_003BF14C(f_4F0, anim); node vtable+0x14; temporary destructor func_0010EC00/0010EC14. Callers: 0x00382368, 0x00399EA8, 0x004006FC, 0x0040136C, 0x00401424, 0x0040165C, Model_Equip_SetGripNode, 0x004B01F0, 0x004E43B8."
+ },
+ {
+  "address": "0x0022405C",
+  "name": "maybe_Model_Attach_ReleaseChainResources",
+  "signature": "u32 maybe_Model_Attach_ReleaseChainResources(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment slot (root)"
+  },
+  "summary": "Root-only cleanup pass of an attachment chain: when the slot is the root it releases the slot's and every child's model resource (func_00223F10) and, if the owner requests it and the character model is not currently drawing, releases the effect/anim resource at f_55C of each child (func_002A9330). Returns 1.",
+  "confidence": 0.45,
+  "evidence": "`if (f_654 == 0)` root test (same as 0x0022412C); func_00223F10 = maybe_Model_ReleaseResource (N_002) called for self and every child; func_00669264/func_006692EC query the render node state; func_002A9330(&f_55C) per child. No direct callers - virtual type-table entry."
+ },
+ {
+  "address": "0x0022412C",
+  "name": "Model_Attach_UpdateRoot",
+  "signature": "u32 Model_Attach_UpdateRoot(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment chain root"
+  },
+  "summary": "Per-frame update entry for a root attachment: updates its timed rotation (0x002222C4), recomputes the attach matrix (0x00223E08), resets the child state when the render node is live, applies the effect resource and finally updates all children (0x002242AC). Returns 1.",
+  "confidence": 0.5,
+  "evidence": "Calls func_002222C4(self), func_00223E08(self) (Model_UpdateAttachMatrix, N_002), func_00669264/func_006692EC node checks, func_002221EC(self,0), func_002A8CB0(&f_55C), func_002242AC(self); root test `f_654 == 0` shared with 0x0022405C/0x0022437C."
+ },
+ {
+  "address": "0x002242AC",
+  "name": "Model_Attach_UpdateChildren",
+  "signature": "void Model_Attach_UpdateChildren(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment chain root"
+  },
+  "summary": "Per-frame update of every attached part of a character model: for each child it advances the timed rotation, recomputes its attach matrix and, when the child has an active animation (f_555), stops/starts the node animation (vtable+0xC/+0x14) and clears its fade timer.",
+  "confidence": 0.5,
+  "evidence": "`for (p = f_6B4; *p != f_6B0; p = p[1]) { func_002222C4(); func_00223E08(child); if (child->f_555) { ... vtable+0xC/+0x14 ... func_001D5C94(&child->f_52C); } }`; only runs for character owners (f_5C 1/2). Callers: Model_SetupCharacterModel (0x002232FC), 0x0022412C, 0x0022437C."
+ },
+ {
+  "address": "0x0022437C",
+  "name": "maybe_Model_Attach_UpdateChildrenRoot",
+  "signature": "u32 maybe_Model_Attach_UpdateChildrenRoot(ModelAttachSlot* slot)",
+  "params": {
+   "param_1": "attachment chain root"
+  },
+  "summary": "Thin root guard for the child update: when the slot is the chain root (f_654 == 0) it forwards to 0x002242AC and always returns 1.",
+  "confidence": 0.45,
+  "evidence": "Body is `if (f_654 == 0) func_002242AC(arg1); return 1;` - a type-table wrapper around 0x002242AC, matching the vtable-style 'update' entry convention of this class."
+ },
+ {
+  "address": "0x002248FC",
+  "name": "Model_Attach_PlayNamedAnimation",
+  "signature": "u32 Model_Attach_PlayNamedAnimation(ModelAttachSlot* slot, void* animRequest, int force)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "animation request (0 = use the default clip)",
+   "param_3": "non-zero = play even when the owner is in state 0"
+  },
+  "summary": "Plays an animation clip on the attached model resource: when the model is loaded and (force or the owner is idle) it either restarts the default clip through func_003BEFA4(model,1) or resolves the requested animation with func_00633E24 and plays it on the model; returns the play result.",
+  "confidence": 0.5,
+  "evidence": "`f_4F0->f_D > 1 && f_11C->f_A4` guard; `arg3 != 0 || f_4F0->f_94->f_5C == 0` (owner idle); arg2==0 -> func_003BEFA4(f_4F0,1) else func_001C9B8C request + func_00633E24 + func_003BEFA4(f_4F0,1,anim); same helper pair as 0x00223CF4. Callers 0x003969B4, 0x003D17FC."
+ },
+ {
+  "address": "0x002258A8",
+  "name": "Model_Attach_UpdateAnimationFrame",
+  "signature": "void Model_Attach_UpdateAnimationFrame(ModelAttachSlot* slot, u32 frame, u32 arg3)",
+  "params": {
+   "param_1": "attachment chain root",
+   "param_2": "animation frame to apply",
+   "param_3": "forwarded to the effect resource update"
+  },
+  "summary": "Sets the animation time of every attached part: adds the incoming frame to the part's clip offset (from the animation table entry at f_4F0->f_C*0x2C, or a global default), applies it with func_003BF390/func_003BF35C/func_003BF3C0 when the two loop flags f_524/f_525 are clear, and updates the part's effect resource (func_002A90B0).",
+  "confidence": 0.5,
+  "evidence": "Per-child: `iVar1 = f_4F0 + f_4F0->f_C*0x2C`, `fVar4 = (iVar1->f_30 ? iVar1->f_18 : g_002259A0)` then `func_003BF390(child->f_4F0, frame+offset)`; guarded by `f_4F0+8 != 0` and the two loop flags f_524/f_525; tail func_002221EC(child,1) and func_002A90B0(&f_55C,arg2,arg3). Caller 0x00436808."
+ },
+ {
+  "address": "0x00225BF4",
+  "name": "maybe_Model_Attach_SetFadeRange",
+  "signature": "void maybe_Model_Attach_SetFadeRange(ModelAttachSlot* slot, s32 start, s32 end)",
+  "params": {
+   "param_1": "attachment slot",
+   "param_2": "start value",
+   "param_3": "end value"
+  },
+  "summary": "Sets the attachment's fade/alpha range: stores the two incoming values in f_5BC/f_5C0/f_5C4 (and the previous value in f_5B4/f_5B8), choosing the fallback constant g_00225C84 when the end is below the global threshold g_00225C80, then recurses into every child of the f_6B0 list.",
+  "confidence": 0.45,
+  "evidence": "Exact twin of 0x00222DFC but one field group earlier (f_5B4/f_5B8/f_5BC/f_5C0/f_5C4 instead of f_5C8..f_5D8); same lost-argument recursion `func_00225BF4()` and same child walk. Called from 0x00220984 (Model_AttachSlot_Setup) and from the model-equip/visibility code (Field_SceneObject_UpdateVisibility, Model_Equip_CommitNodeChanges, ...)."
+ },
+ {
+  "address": "0x002267EC",
+  "name": "maybe_Actor_InitBoundsCheck",
+  "signature": "void maybe_Actor_InitBoundsCheck(ShadowFootprint* self, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "footprint object (owner actor at f_28)",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Initialises the actor's walkable-bounds helper: reads the 'enabled' flag from scene work +0x44, resets the size fields f_40/f_44/f_48 to the global default, derives f_2C from the owner actor's f_2A8 and asks the actor for its bounds radius (vtable+0x88) before building the quad (0x00226880).",
+  "confidence": 0.4,
+  "evidence": "f_28 = owner actor; `f_49 = *(char*)(work+8+0x44) != 0`; f_40/f_44 = g_0022687C; `f_2C = f_28->f_2A8` when invalid or func_0062898C says so; `f_3C = (**(code**)(*f_28+0x88))()`; tail func_00226880. The follow-up function builds the four corners of a quad from a level cell record."
+ },
+ {
+  "address": "0x00226880",
+  "name": "maybe_Actor_UpdateBoundsCheck",
+  "signature": "void maybe_Actor_UpdateBoundsCheck(ShadowFootprint* self)",
+  "params": {
+   "param_1": "footprint object"
+  },
+  "summary": "Recomputes the four corners of the actor's walkable-bounds rectangle: takes the level record's cell size (f_24C[8]), the owner's position f_78/f_7C and the bounds extents f_4C/f_50, then for each of the four diagonal offsets (the (+1,0)/(0,-1) sign table at local_88) clamps the corner to the walkable rectangle and moves the actor toward the centre when it would leave it.",
+  "confidence": 0.4,
+  "evidence": "Sign table local_88 = {1,0, 0,-1, 0,0, 1,0, 0,-1, 0,0} used as `iVar2 = (a + i) % 4`; `local_4c[8]` = cell size of the level record at f_28->f_24C; corner clamp with f_4C/2 and f_50; movement written back through f_30/f_34 and the actor's f_B0/f_B4; only runs when the owner has no floor info (f_28->f_248 == 0)."
+ },
+ {
+  "address": "0x0022742C",
+  "name": "maybe_Actor_ReleaseBoundsCheck",
+  "signature": "void maybe_Actor_ReleaseBoundsCheck(ShadowFootprint* self)",
+  "params": {
+   "param_1": "footprint object"
+  },
+  "summary": "Releases both parts of the bounds helper: unregisters the owner actor from the field rail/shadow registry (func_001835AC) and releases the associated layout group (func_001B7A54) that was attached to the object.",
+  "confidence": 0.35,
+  "evidence": "Two-call body: func_001835AC(self->f_28) (maybe_Field_RegisterRailActors, N_039) and func_001B7A54(self) (maybe_Ui_LayoutGroup_Build, N_040). The names of both callees are inherited from other batches and were themselves low-confidence, so the direction (register vs release) is inferred from the matching init function 0x002267EC."
+ },
+ {
+  "address": "0x002274B0",
+  "name": "maybe_Actor_InitStateController",
+  "signature": "void maybe_Actor_InitStateController(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller (owner actor at f_28)"
+  },
+  "summary": "Starts a scripted actor action: caches the actor's target position f_328/f_32C/f_330 into f_3C/f_40/f_44, picks the entry/exit animation by the actor's state byte f_C7 (0 -> vtable+0x6C with name g_002275D4, 1 -> vtable+0x68 with g_002275DC), and when the actor has a motion object f_260 it starts the speaker/effect channel (func_0062EF8C + func_002D0E84) and sets the actor's handler f_158 to g_002275E0.",
+  "confidence": 0.45,
+  "evidence": "Copies actor->f_328/f_32C/f_330; `(char)piVar1[199]` = actor byte f_C7 switches between vtable+0x6C and vtable+0x68 and between the name pointers g_002275D4/g_002275DC passed to vtable+0x84; f_51 = work+8+0x44 flag; actor->f_158 = g_002275E0 (the per-frame handler slot, see 0x00227BFC)."
+ },
+ {
+  "address": "0x0022768C",
+  "name": "maybe_Actor_OnStateEvent",
+  "signature": "u64 maybe_Actor_OnStateEvent(ActorStateController* ctl, int eventId, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "controller",
+   "param_2": "event id (4 = arrived/finished, 1/2 = state change)",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Small event hook of the actor state controller: event 4 sets the 'done' flag f_30, events 1 and 2 refresh the global enable flag f_51 from scene work +0x44.",
+  "confidence": 0.45,
+  "evidence": "`if (arg2 == 4) self->f_30 = 1; else if (arg2 == 1 || arg2 == 2) self->f_51 = *(char*)(work+8+0x44) != 0;` - the same work+0x44 flag read by 0x002274B0; returns CONCAT44(arg2,self) (Ghidra artifact for a void/struct return)."
+ },
+ {
+  "address": "0x002276EC",
+  "name": "maybe_Actor_CheckInteractionRange",
+  "signature": "u32 maybe_Actor_CheckInteractionRange(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller (actor at f_28)"
+  },
+  "summary": "Checks whether the actor's interaction target (scene work +0x54 +0x1C) is within talking distance and inside the actor's facing cone: normalises the delta, compares the distance against the two capsule radii (f_164->f_58 + target->f_58), computes the angle with std_Acosf and, when it is small enough, plays the actor's idle/talk animation (func_00182A28) and starts counting time in f_38.",
+  "confidence": 0.45,
+  "evidence": "Distance/normalise block using g_00227914/g_00227918, forward dot-product with the actor quaternion f_8C..f_98 and the factor g_00227920, then func_00672A14 = std_Acosf (N_001); on success `func_00182A28(self->f_28)` = maybe_Field_Actor_PlayIdleAnimation (N_039) and f_52 = 1; animation names 'Walk'/'Run' live in this function's literal pool."
+ },
+ {
+  "address": "0x00227934",
+  "name": "maybe_Actor_UpdateApproachMove",
+  "signature": "void maybe_Actor_UpdateApproachMove(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller (actor at f_28)"
+  },
+  "summary": "Per-frame movement of a scripted actor: if the actor's f_351 flag is set it runs the arrival check and, once reached, notifies the field (func_001831F4) and the camera (maybe_Camera_UpdateFollowPosition) and spawns a trail/effect through func_005E7848; otherwise it steers the actor toward the cached target f_3C/f_44 with the configured speed f_4C and normalises the direction.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_28->f_351) { ... func_001831F4, func_00182B2C = maybe_Camera_UpdateFollowPosition (N_039), func_005E7848(actor,3,0) }`; else branch computes `local_18 = dx*dx + g_00227BF0^2 + dz*dz`, normalises with g_00227BF8, scales by self->f_4C and writes the step; calls 0x002275E4 and 0x002276EC before moving."
+ },
+ {
+  "address": "0x00227BFC",
+  "name": "maybe_Actor_EndStateController",
+  "signature": "void maybe_Actor_EndStateController(ActorStateController* ctl, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "controller",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Stops the scripted actor action: when the actor has a motion object f_260 it releases the speaker/effect channel (func_0062EF8C with 0, func_002D0E84 on the motion's f_B8) and replaces the actor's per-frame handler f_158 with the idle handler g_00227C50.",
+  "confidence": 0.45,
+  "evidence": "Mirror image of 0x002274B0: same f_260/f_B8/f_158 fields but func_0062EF8C(...,0) and g_00227C50 instead of g_002275E0; the constant 3.14159 in this function's literal pool is the idle turn-around angle."
+ },
+ {
+  "address": "0x00227CD8",
+  "name": "maybe_Actor_CheckInteractionDone",
+  "signature": "int maybe_Actor_CheckInteractionDone(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller"
+  },
+  "summary": "Returns 1 when the actor has no active interaction, or when its interaction object (f_10) reports 'not running' (vtable+0x14 != 1); when the interaction is still running it returns the caller-supplied timeout value f_20.",
+  "confidence": 0.45,
+  "evidence": "`if (!self->f_10) return 1; r = (**(code**)(*self->f_10+0x14))(); return (r == 1) ? self->f_20 : 1;`; called from IsTalkActive (0x0014A0AC) - a talk-progress predicate."
+ },
+ {
+  "address": "0x00227DF4",
+  "name": "maybe_Ui_Sprite_DrawByName",
+  "signature": "void maybe_Ui_Sprite_DrawByName(Ui_Sprite* sprite, const char* name)",
+  "params": {
+   "param_1": "sprite/widget",
+   "param_2": "resource name to look up"
+  },
+  "summary": "Looks a sprite resource up by name in the lazily created UI sprite manager (g_00227F0C/g_00227F18) with func_0063D384, and when found draws it through the generic sprite draw path (0x002283FC) with the manager's default flags g_00227F4C.",
+  "confidence": 0.45,
+  "evidence": "Same lazy-singleton construction pattern as the other UI managers (func_0011CFAC/00116AE0/0011CFDC + vtable g_00227F18); func_0063D384(singleton,name) resolves the sprite; the 6-word draw record local_34..local_2C (flags 1,1,g_00227F4C) is passed to func_002283FC. Callers: maybe_Ui_DrawSpriteById and 0x002281CC."
+ },
+ {
+  "address": "0x00227F84",
+  "name": "Ui_SpritePart_Create",
+  "signature": "void Ui_SpritePart_Create(Ui_SpriteOwner* owner, u32 drawMode)",
+  "params": {
+   "param_1": "object that receives the new sprite part in its slot at +4",
+   "param_2": "draw mode passed to func_003BEAFC"
+  },
+  "summary": "Creates a sprite part for a UI object: releases any previous part at +4, allocates a 0x1E4-byte part from the UI core heap (func_003BEDFC), inserts it into the window through the core part factory 0x0021F738, marks it as sprite f_94 = 1, applies the draw mode and, when the owner has a draw descriptor f_C, fills the 0x3F2 mask/rect fields for it.",
+  "confidence": 0.5,
+  "evidence": "Ui_GetCore (0x006F229C, N_021) heap at core->f_C->f_10; Mem_AllocAligned(0x1E4,...,4) + func_003BEDFC (part ctor); func_0021F738(core,part) = Ui_Object_CreatePartsFromTable, with cleanup via func_0021F8B8 when it fails; func_003BED3C/func_003BEAFC/func_003BED94 configure the sprite; mask 0xFFFFF800 and the 'H,W' literal are the layout rect fields. Called from maybe_Ui_DrawSpriteById."
+ },
+ {
+  "address": "0x002281A0",
+  "name": "maybe_Ui_SpritePart_Release",
+  "signature": "void maybe_Ui_SpritePart_Release(Ui_SpriteOwner* owner)",
+  "params": {
+   "param_1": "sprite owner"
+  },
+  "summary": "Releases the sprite part held in the owner's +0x10 slot: calls the sprite-part destructor with the UI core and clears the slot.",
+  "confidence": 0.45,
+  "evidence": "Two-call body: Ui core via func_006F1EEC then func_001A1774(core,owner->f_10) - the same 0x001A1774 destructor used by 0x002281CC/0x002285B8/0x00228838; 0x10 is the sprite part pointer. Called from maybe_Ui_List_RemoveEntryById."
+ },
+ {
+  "address": "0x002281CC",
+  "name": "maybe_Ui_SpritePart_Update",
+  "signature": "void maybe_Ui_SpritePart_Update(Ui_SpriteOwner* owner)",
+  "params": {
+   "param_1": "sprite owner"
+  },
+  "summary": "Updates the owner's sprite: re-resolves the sprite by name (0x00227DF4) when the name changed, then applies the blink/fade timing (0.0333 = one frame at 30 fps) to the sprite via func_003BED3C/func_003F2E44 and the UI core.",
+  "confidence": 0.45,
+  "evidence": "Calls func_00227DF4(self, name) then Ui_GetCore + func_0064A5B8 + func_003BED3C(self->+4,...) + func_003F2E44; float constant 0.0333333 (frame delta) and 0xFF alpha; f_58/f_94 fields match 0x00227F84's sprite part."
+ },
+ {
+  "address": "0x002283FC",
+  "name": "maybe_Ui_Sprite_Draw",
+  "signature": "void maybe_Ui_Sprite_Draw(Ui_Sprite* sprite, const UiDrawRecord* rec)",
+  "params": {
+   "param_1": "sprite/draw target",
+   "param_2": "6-word draw record (flags, rect, colour)"
+  },
+  "summary": "Draws one UI sprite with an explicit draw record: resolves the sprite object through the UI core, applies the record's position/size/colour and submits the 2D draw call; used both for direct sprite draws and by the text token renderer and the info-message window.",
+  "confidence": 0.45,
+  "evidence": "Called from maybe_Ui_DrawSpriteById, Text_DrawToken, Ui_ShowInfoMessage, 0x00227DF4 and 0x00227F84-family code; body uses Ui core (func_006F1EEC) and the record fields written by 0x00227DF4 (local_34..local_2C); constants 2.0/-1.0 in the pool are the flip flags."
+ },
+ {
+  "address": "0x0022858C",
+  "name": "maybe_Ui_SpritePart_ReleaseResources",
+  "signature": "void maybe_Ui_SpritePart_ReleaseResources(Ui_SpriteOwner* owner)",
+  "params": {
+   "param_1": "sprite owner"
+  },
+  "summary": "Releases the render resources of the owner's sprite part (func_003BED3C) without destroying the part itself; called from the talk-window resource teardown.",
+  "confidence": 0.45,
+  "evidence": "Body: `func_003BED3C(self->f_94_slot...)` - the same resource-release helper used by 0x00227F84; caller Ui_TalkWindow_ReleaseResources (0x00218428, N_012)."
+ },
+ {
+  "address": "0x002285B8",
+  "name": "maybe_Ui_SpritePart_CreateFromDesc",
+  "signature": "void maybe_Ui_SpritePart_CreateFromDesc(Ui_SpriteOwner* owner, u32 desc) ",
+  "params": {
+   "param_1": "owner",
+   "param_2": "description/parameter id"
+  },
+  "summary": "Second sprite-part factory: releases the old part, allocates a 0x1C8-byte part from the UI core heap, registers it through 0x0021F738, then applies the description via func_00240980/func_00240900 and the sprite setup helpers.",
+  "confidence": 0.45,
+  "evidence": "Ui_GetCore heap + Mem_AllocAligned(0x1C8) + func_0021F738 + func_0021F8B8 (the same create-or-rollback sequence as 0x00227F84); extra func_00240980/func_00240900 apply the descriptor; func_003BED3C used for the resource; f_94/f_58 field set matches the sprite part."
+ },
+ {
+  "address": "0x002286F4",
+  "name": "maybe_Ui_TextPart_Create",
+  "signature": "void maybe_Ui_TextPart_Create(Ui_SpriteOwner* owner, const char* text)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "text/description"
+  },
+  "summary": "Creates a text part for a UI object: checks the scene state (func_0062AB3C), allocates a 0x18C-byte part from the UI core heap, registers it with 0x0021F738, initialises the text object through func_003E105C and applies the text string.",
+  "confidence": 0.45,
+  "evidence": "Ui_GetCore heap + Mem_AllocAligned(0x18C) + func_0021F738/func_0021F8B8; func_003E105C is the text-object initialiser (same family as func_003E00CC used by 0x0021DD7C); mask 0xFFFFFC00 - the layout rect mask; func_0062AB3C scene check."
+ },
+ {
+  "address": "0x00228828",
+  "name": "maybe_Ui_Part_CreateScoped",
+  "signature": "void maybe_Ui_Part_CreateScoped(Ui_SpriteOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Scoped-create wrapper: builds the part with 0x00228838 and immediately frees the temporary allocation (func_0010F6CC) - the tail of a constructor path that only needs the side effects on the owner.",
+  "confidence": 0.4,
+  "evidence": "Body: `func_00228838(arg1); func_0010F6CC();` with the same argument register (a three-line function, 0x10 bytes)."
+ },
+ {
+  "address": "0x00228838",
+  "name": "maybe_Ui_Part_InitFromCore",
+  "signature": "void maybe_Ui_Part_InitFromCore(Ui_SpriteOwner* owner)",
+  "params": {
+   "param_1": "owner"
+  },
+  "summary": "Initialises a UI part from the UI core: gets the core through Ui_GetCore, releases the previous part at +4, allocates and configures a new part (func_0035FC84, func_001CF7F8) and stores it in the owner's slots (+0x10/+0x2C/+0x60/+0x88).",
+  "confidence": 0.4,
+  "evidence": "Ui_GetCore + func_0021F8B8 + func_0035FC84 (sprite part allocator, cf. 0x00227F84/0x002285B8) + func_001A1774 + func_001CF7F8; fields +0x10/+0x2C/+0x60/+0x88 with mask 0xFFFFFC00; called from 0x00228828."
+ },
+ {
+  "address": "0x00228948",
+  "name": "Ui_SkillPanel_Create",
+  "signature": "void Ui_SkillPanel_Create(Ui_SkillPanel* panel)",
+  "params": {
+   "param_1": "skill panel window"
+  },
+  "summary": "Builds the skill panel: plays the 'effect0' animation sequence on seven pane groups (func_0053D604), then binds the six panes 'txt_skill', 'txt_pane', 'txt_title', 'txt_panel_r', 'txt_panel2_r' (and one more) through func_003A7420 and installs the text widget with func_003E00CC.",
+  "confidence": 0.5,
+  "evidence": "String literals 'effect0', 'txt_skill', 'txt_pane', 'txt_title', 'txt_panel_r', 'txt_panel2_r' loaded with func_0011FFFC/0011FFD8 and used with func_0053D604 = Ui_PlayAnimByName (N_019) and func_003A7420 (pane binding); the 7-iteration loop plays the sequence on self+0x98; f_108 = 1 enables the panel."
+ },
+ {
+  "address": "0x00229154",
+  "name": "Ui_SkillPanel_UpdateTabVisibility",
+  "signature": "void Ui_SkillPanel_UpdateTabVisibility(Ui_SkillPanel* panel, const u8* state)",
+  "params": {
+   "param_1": "skill panel",
+   "param_2": "state record (byte 0 = UI state)"
+  },
+  "summary": "Shows or hides the two detail panes of the skill panel depending on the incoming UI state (states 0x13/0x14/0x15/0x16 are treated as 'list' states): it toggles the pane at +0x1124 or +0x1174 with func_003DFF34 and caches the last value per panel in g_002291CC so the switch only happens when it changes.",
+  "confidence": 0.5,
+  "evidence": "`cVar1 = *arg2;` states 0x13 vs {0,0x14,0x15,0x16}; `*(u8*)(g_002291CC + arg1)` caches the previous value; func_003DFF34(arg1+0x1124 or arg1+0x1174, 1) toggles the pane visibility. Offset 0x1124/0x1174 are the two panes created by Ui_SkillPanel_Create."
+ },
+ {
+  "address": "0x0022A948",
+  "name": "Ui_ListOwner_Dtor",
+  "signature": "void Ui_ListOwner_Dtor(Ui_ListOwner* obj)",
+  "params": {
+   "param_1": "list-owner object"
+  },
+  "summary": "Complete destructor of a UI list-owner object: restores the derived vtable, destroys the two embedded 0x24-byte elements at +0x4C, releases the base UI object and frees the memory.",
+  "confidence": 0.5,
+  "evidence": "`*arg1 = g_0022A97C` then func_00100BE0(arg1+0x13, g_0022A980, 0x24, 2) = std_destroy_range over two 0x24 elements at byte offset 0x4C; func_001A6768 = Ui_Object_DtorBase (N_040); func_0010F6CC frees."
+ },
+ {
+  "address": "0x0022A984",
+  "name": "Ui_ListOwner_DtorBase",
+  "signature": "void Ui_ListOwner_DtorBase(Ui_ListOwner* obj)",
+  "params": {
+   "param_1": "list-owner object"
+  },
+  "summary": "Non-freeing destructor of the same list-owner: restores the base vtable, destroys the two 0x24-byte elements at +0x4C and releases the base UI object, leaving the deallocation to the caller.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x0022A948 but using g_0022A9B4/g_0022A9B8 and without the final func_0010F6CC; callers Ui_ItemMenu_DestroyRoot (0x0019C164) and maybe_Ui_Screen_System_Release (0x001C33FC) destroy several objects in a row and free them together."
+ },
+ {
+  "address": "0x0022ABC0",
+  "name": "Ui_SkillPanel_SelectEntry",
+  "signature": "void Ui_SkillPanel_SelectEntry(Ui_SkillPanel* panel, int index)",
+  "params": {
+   "param_1": "skill panel",
+   "param_2": "entry index (the formatted name is 'txt_d_<index+1>')"
+  },
+  "summary": "Selects one skill row: sets the 'has selection' bit on the current pane f_F8, formats the pane name 'txt_d_%d' (index+1) with func_006F0C50, asks the layout for that pane (vtable+0x2C), copies its rect into f_F4 and then hides the two detail texts f_54 and f_A4.",
+  "confidence": 0.5,
+  "evidence": "Format string 'txt_d_' (s_txt_d_0022AC68) with arg2+1 through func_006F0C50 (sprintf-like); `(**(code**)(*self->f_30+0x2C))(self->f_30, name, 1)`; copies f_20/f_24 into f_F4 and sets bit 0x10 of f_44; func_003DFF34(&self->f_54,0) and func_003E043C(&self->f_A4,0) hide the detail texts. Sits between the skill panel create (0x00228948) and the list-owner dtors."
+ },
+ {
+  "address": "0x0022AE10",
+  "name": "Ui_ListOwner_Ctor",
+  "signature": "Ui_ListOwner* Ui_ListOwner_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of the UI list-owner object: builds the base UI object (Ui_Object_CtorBase), installs the class vtable and its +0x9C secondary vtable, then zeroes the two embedded sub-object blocks (0xD0 and 0x6A bytes) at +0x50 and +0x12C.",
+  "confidence": 0.5,
+  "evidence": "func_001A66A0 = Ui_Object_CtorBase (N_040); `*piVar1 = iRam0022AE6C; piVar1[0x13] = iRam+0x9C` (main/secondary vtable); func_003E0454 to reach the sub-object then func_00116AE0(&f_5C,0xD0) and func_00116AE0(+0x12C,0x6A) memsets; returns sub-0xA4 (the enclosing object)."
+ },
+ {
+  "address": "0x0022AEC8",
+  "name": "Actor_PlayShakeAnim",
+  "signature": "void Actor_PlayShakeAnim(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller (actor at f_28)"
+  },
+  "summary": "Plays the actor's 'Shake' reaction: notifies the battle/field manager (func_0023B61C on scene work +0x48), attaches the shake effect from the manager's +0x3B4 slot with func_005F5DF8 and pushes the animation name 'Shake' to the actor's animator (vtable+0x84).",
+  "confidence": 0.5,
+  "evidence": "String literal 'Shake' (0x0022AF2C) passed to `(**(code**)(*self->f_28+0x84))`; func_0023B61C(work+8+0x48) is the same manager call used by 0x00227BFC/0x0022CA0C; func_005F5DF8(actor, manager->f_3B4, 0) attaches the effect."
+ },
+ {
+  "address": "0x0022AF34",
+  "name": "maybe_Actor_ResetBattlePose",
+  "signature": "void maybe_Actor_ResetBattlePose(ActorStateController* ctl)",
+  "params": {
+   "param_1": "controller (actor at f_28)"
+  },
+  "summary": "When the actor is currently in a scripted/battle pose (func_00669DD4 reports so) it resets that pose through func_002340B0(actor, 0).",
+  "confidence": 0.45,
+  "evidence": "`if (func_00669DD4(self->f_28) != 0) func_002340B0(self->f_28, 0);` - func_002340B0 is in the same 0x23xxxx actor-state family (see 0x0023406C/0x002340B0 in this batch) and 0x00669DD4 is the pose/motion query used by Actor code."
+ },
+ {
+  "address": "0x0022AF60",
+  "name": "maybe_Ui_Object_InstallVtable",
+  "signature": "void maybe_Ui_Object_InstallVtable(void)",
+  "params": {},
+  "summary": "Installs the vtable g_0022AF88 on the object returned by func_00294C34 - part of a UI object's construction chain (the register argument is lost in the decompiler output).",
+  "confidence": 0.4,
+  "evidence": "`puVar1 = func_00294C34(); *puVar1 = g_0022AF88;` - a three-instruction vtable store; func_00294C34 is the UI object accessor used by this family."
+ },
+ {
+  "address": "0x0022AF9C",
+  "name": "maybe_Actor_CreateActionTable",
+  "signature": "void maybe_Actor_CreateActionTable(Actor* actor)",
+  "params": {
+   "param_1": "field actor"
+  },
+  "summary": "Builds the complete action/command table of a field actor: creates the mesh and equip objects (Gfx_CreateEquipObjectForNode, func_002908FC), the movement controllers (maybe_Field_ActorMove_Create / _InitDefaults), the battle action-anim entries, the cut/action records and the many per-action handlers, then sorts the list by priority (maybe_Actor_ActionList_SortByPriority) and registers the default action.",
+  "confidence": 0.45,
+  "evidence": "45 distinct callees including Gfx_CreateEquipObjectForNode, maybe_Field_ActorMove_Create (N_042), Battle_ActionAnimEntry_Create (N_025), Container_SlotReplace (N_025), maybe_Field_Action_CreateCut (N_040), maybe_Actor_ActionList_SortByPriority (N_029) and 0x0022D6A0/0x0022D8D4 (both in this batch); pool pointers 0x0022B470..0x0022C134 are the per-action tables. No direct callers - installed in a type table."
+ },
+ {
+  "address": "0x0022C1D0",
+  "name": "maybe_Actor_RebuildCharacterModel",
+  "signature": "void maybe_Actor_RebuildCharacterModel(Actor* actor)",
+  "params": {
+   "param_1": "field actor with a model at f_B8"
+  },
+  "summary": "Rebuilds the actor's character model after a character/outfit change: resolves the character table, picks the entry for the current player index (func_0023D078, 0xFF -> 0), reads its size/offset pair (f_C/f_E), applies it to the model object f_B8 (func_002D1C58), resets the transform controller f_BC and unregisters the previous model id f_210 from the scene list.",
+  "confidence": 0.45,
+  "evidence": "Lazy character-table singleton (same construction as the UI managers) + func_0063EB94(table,0); func_0023D078(0) player index; entry = table + idx*0x10 with f_C/f_E; func_0031A67C builds the rect then func_002D1C58(actor->f_B8,&rect); f_20C = g_0022C340; func_004C3968(actor->f_BC,0) resets the move controller (f_4C=2, f_50=1); func_001C7570(scene, f_210) unregisters the old id."
+ },
+ {
+  "address": "0x0022C344",
+  "name": "maybe_Actor_OnPlayEvent",
+  "signature": "void maybe_Actor_OnPlayEvent(Actor* actor, int eventId)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "event id (5 = start action)"
+  },
+  "summary": "Event hook of the field actor: it forwards the event to the listeners (func_005E754C) and, for event 5 while the actor is idle (f_43 == 0) and has no pending action (f_2EC == 0), arms the action timer f_2F0 with the constant g_0022C388 and sets f_2EC = 1 (the state whose countdown is decremented by 0x0022C884/0x0022C8AC).",
+  "confidence": 0.45,
+  "evidence": "func_005E754C = generic listener broadcast (used by Actor2D_DispatchEvent); `if (self->f_43 == 0 && arg2 == 5 && self->f_2EC == 0) { self->f_2F0 = *g_0022C388; self->f_2EC = 1; }` ties directly into the timer/SE logic of the two functions below."
+ },
+ {
+  "address": "0x0022C3F4",
+  "name": "maybe_Actor_UpdateModelOnStateChange",
+  "signature": "void maybe_Actor_UpdateModelOnStateChange(Actor* actor)",
+  "params": {
+   "param_1": "field actor"
+  },
+  "summary": "Per-frame model/pose refresh of the field actor: refreshes the transform (func_005F38C4), clears the 'moving' flag f_BB when the position changed, and then switches on the player state at scene work +0x281 - state 3 re-resolves the current animation/character (func_0047B844) and updates the model pattern, states 4/5 check the action animation (func_00634114).",
+  "confidence": 0.45,
+  "evidence": "`iVar9 = self[0x1E]; iVar10 = self[0x1F]; func_005F38C4(self); if (moved && (char)self[0xBB] == 2) self->f_BB = 0;` then `cVar1 = *(char*)(*(work+8+0x48)+0x281)` (the same player-state byte used by 0x0022CBB0/0x0022CC94); state 3 -> func_0047B844(animId,f_2B0,f_2AC,&pos) then `f_128 = func_0029E41C(entry)` and func_005F36E0(self,f_80,1); states 4/5 -> func_00634114."
+ },
+ {
+  "address": "0x0022C884",
+  "name": "maybe_Actor_UpdateStateSeTimerA",
+  "signature": "void maybe_Actor_UpdateStateSeTimerA(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Advances the actor's state timer and fires the associated sound: when the scene's attract/auto flags are set the state f_2EC is cleared; while f_2EC is 1 or 2 the timer f_2F0 is decremented and, once it falls below g_0022C9EC, a sound effect is played through the sound manager (Sound_PlaySeById).",
+  "confidence": 0.45,
+  "evidence": "Reads scene work +0x44/+0x45 ('attract mode') to clear f_2EC; `in_s0 = self->f_2F0 - in_s0; self->f_2F0 = in_s0; if (*f_2EC in {1,2} && in_s0 <= g_0022C9EC)` then the lazy sound-manager singleton (g_0022C9F0/g_0022C9F4/g_0022C9FC, vtable g_0022C340 family) with func_001EBC68 = Sound_PlaySeById (N_042). Twin of 0x0022C8AC."
+ },
+ {
+  "address": "0x0022C8AC",
+  "name": "maybe_Actor_UpdateStateSeTimerB",
+  "signature": "void maybe_Actor_UpdateStateSeTimerB(Actor* actorOrState)",
+  "params": {
+   "param_1": "actor (or its state block; the timer lives at +4 as a float)"
+  },
+  "summary": "Float-timer twin of 0x0022C884: same attract-mode check, then the float timer at +4 is decremented and, when it drops below g_0022C9EC while the state byte is 1 or 2, the same sound effect is played.",
+  "confidence": 0.45,
+  "evidence": "Identical globals and structure to 0x0022C884 but the timer is `*(float*)(arg1+4) - in_s0`, with the 0.27 constant in the literal pool; same lazy sound-manager singleton and Sound_PlaySeById path."
+ },
+ {
+  "address": "0x0022CA0C",
+  "name": "Actor_PlayActionAnimation",
+  "signature": "u32 Actor_PlayActionAnimation(Actor* actor, u32 actionId, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "action id",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Maps a field action id to its animation id and plays it: 5->0x15, 6->0x16, 0x0B->0x12, 0x0C->0x13, 0x0D->0x14, 0x0F->0x18, 0x11->0x17, 0x12->0x19, returning 0 for unknown ids; the whole mapping is skipped in the 'auto/attract' player state byte at scene work +0x27C.",
+  "confidence": 0.5,
+  "evidence": "Switch on arg2 with exactly those constants; `result = func_005E7848(actor, animId, 1)` (the action-sequence setter used by every function in this cluster); guard `*(char*)(*(work+8+0x48)+0x27C) == 0`."
+ },
+ {
+  "address": "0x0022CAE8",
+  "name": "maybe_Actor_ApplyMoveCommand",
+  "signature": "void maybe_Actor_ApplyMoveCommand(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Builds the actor's move-command record (func_00161E00), marks it enabled (local_23 = 1) and dispatches it to the player controller at scene work +0x48 (func_0023D518), then refreshes the actor's action state (0x0022D8D4).",
+  "confidence": 0.4,
+  "evidence": "func_00161E00(&record, actor) fills the record, `local_23 = 1` sets its enable byte, func_0023D518(work+8+0x48,&record) is the player-controller apply call, tail func_0022D8D4(actor) is the action-state refresh used by this cluster."
+ },
+ {
+  "address": "0x0022CB38",
+  "name": "maybe_Actor_TryPlayIdleAnimation",
+  "signature": "bool maybe_Actor_TryPlayIdleAnimation(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Tries to switch the actor to its idle animation (action id 6): saves the current orientation f_214/f_218/f_21C, plays the animation and, if the play request is rejected, restores the saved orientation and returns false.",
+  "confidence": 0.45,
+  "evidence": "`local_18 = f_214; uStack_14 = f_218; uStack_10 = f_21C; func_006722FC(&f_214); iVar1 = func_005E74A0(self,6,1); if (!iVar1) func_006722FC(&f_214,&local_18); return iVar1 != 0;` - func_005E74A0 is the 'try' variant of func_005E7848 used elsewhere in this cluster."
+ },
+ {
+  "address": "0x0022CBB0",
+  "name": "maybe_Actor_SelectIdleAnimation",
+  "signature": "void maybe_Actor_SelectIdleAnimation(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Chooses the actor's idle animation from the current player state: state 9 forces the 'surprised' action 9 and refreshes the action state; otherwise, depending on f_43 and the attract flag at scene work +0x27C, it plays action 5, 1 or 0x11.",
+  "confidence": 0.45,
+  "evidence": "`if (*(char*)(*(work+8+0x48)+0x281) == 9) { self->f_AC = 1; func_005E74A0(self,9,1); func_0022D8D4(self); return; }` then `f_43 != 0 -> func_005E7848(self,0x11,1)`; else `work+0x27C != 0 -> action 5` else `action 1`; func_005F4034 is the shared transform refresh."
+ },
+ {
+  "address": "0x0022CC94",
+  "name": "maybe_Actor_SelectIdleAnimationEx",
+  "signature": "void maybe_Actor_SelectIdleAnimationEx(Actor* actor, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Variant of 0x0022CBB0 without the state-9 special case: refreshes the transform (func_005E780C), then plays action 0x11 when f_43 is set, action 5 when the attract flag at +0x27C is set, and action 1 otherwise.",
+  "confidence": 0.45,
+  "evidence": "Body is 0x0022CBB0 minus the state-9 branch, using func_005E780C instead of func_005F4034 and the same action ids 0x11/5/1; the only caller pattern (via type tables) is the same as its twin."
+ },
+ {
+  "address": "0x0022CD10",
+  "name": "Actor_TryPlayActionSeq0D",
+  "signature": "bool Actor_TryPlayActionSeq0D(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0D (7 words)"
+  },
+  "summary": "Stores the parameters of action 0x0D (f_284..f_29C) and tries to start that action sequence; when the sequence refuses to start the previous parameter values are restored and the function returns false.",
+  "confidence": 0.5,
+  "evidence": "Saves f_284/f_288/f_28C/f_290/f_294/f_298/f_29C, writes arg2[0..6] into them, then `iVar2 = func_005E74A0(self,0xD,1)`; on failure restores all seven fields. Same save/restore pattern as all the other Actor_TryPlayActionSeq* functions in this cluster."
+ },
+ {
+  "address": "0x0022CDBC",
+  "name": "Actor_TryPlayActionSeq0B",
+  "signature": "bool Actor_TryPlayActionSeq0B(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0B (7 words)"
+  },
+  "summary": "Stores the parameters of action 0x0B (f_244..f_25C) and tries to start it, restoring the old values when the sequence is rejected.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x0022CD10 with the field block starting at f_244 and `func_005E74A0(self,0xB,1)`; caller 0x002B4750."
+ },
+ {
+  "address": "0x0022CE68",
+  "name": "maybe_Actor_ApplyModelVariant",
+  "signature": "void maybe_Actor_ApplyModelVariant(Actor* actor, u32 variant)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "model variant id"
+  },
+  "summary": "Switches the actor to another model variant when it has a character model: rebuilds the model (0x0022D278), rebuilds the move-command record (func_00161E00), applies it to the player controller (func_0023D518) and refreshes the action state (0x0022D8D4).",
+  "confidence": 0.45,
+  "evidence": "`if (arg1->f_B8) { func_0022D278(arg1,arg2,1); func_00161E00(&rec,arg1); local_23 = 1; func_0023D518(work+8+0x48,&rec); func_0022D8D4(arg1); }` - exactly the same command+state refresh as 0x0022CAE8."
+ },
+ {
+  "address": "0x0022CECC",
+  "name": "Actor_TrySelectIdleAnimation",
+  "signature": "void Actor_TrySelectIdleAnimation(Actor* actor, u32 blend, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "blend/priority argument forwarded to the animation call",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Tries to play the actor's idle animation by priority: action 0x11 when f_43 is set, action 5 in the 'attract' state at scene work +0x27C, action 1 otherwise.",
+  "confidence": 0.5,
+  "evidence": "`f_43 != 0 -> func_005E74A0(arg1,0x11,arg2)`; `work+0x27C != 0 -> func_005E74A0(arg1,5,arg2)`; else `func_005E74A0(arg1,1,arg2)` - the try-variant of 0x0022D180. Callers: maybe_Gfx_Sprite2D_SelectSlot, 0x00237868, 0x002BEFEC, 0x002BF298, 0x003E4274."
+ },
+ {
+  "address": "0x0022CF3C",
+  "name": "Actor_TryPlayActionSeq0F",
+  "signature": "bool Actor_TryPlayActionSeq0F(Actor* actor, const u8* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0F (13 bytes)"
+  },
+  "summary": "Stores the five parameters of action 0x0F (f_2C4..f_2D0) and tries to start it, restoring the previous values if the sequence is rejected.",
+  "confidence": 0.5,
+  "evidence": "Writes f_2C4, the 64-bit pair at f_2C8, f_2CC and f_2D0 from arg2, calls `func_005E74A0(self,0xF,1)` and restores on failure; caller 0x0062AE90."
+ },
+ {
+  "address": "0x0022CFC4",
+  "name": "maybe_ActorPart_CreateNamed",
+  "signature": "void maybe_ActorPart_CreateNamed(Actor* actor, const char* name, u32 arg3)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "part name",
+   "param_3": "unused/id"
+  },
+  "summary": "Creates a named attachment part of the actor: copies the name into an inline string buffer, allocates the part (Mem_AllocAligned + the part factory chain func_00423AA0/00423AE4/00423D84/00423E0C/00423E94), applies the rect (func_0031A6AC) to the actor model (func_002D1C58) and resets the transform controller (func_004C3968).",
+  "confidence": 0.4,
+  "evidence": "func_0011CCA0 + func_0011142C copy the name (same idiom as 0x00220984); the six 0x00423xxx calls are the part-create/registration chain used by 0x0022D110/0x0022D60C/0x0022D6A0; func_0031A6AC builds the rect, func_002D1C58 applies it, func_004C3968 resets the controller, func_001C7570 unregisters an old id. Called from 0x00235E0C."
+ },
+ {
+  "address": "0x0022D110",
+  "name": "maybe_Actor_ApplyModelPartsA",
+  "signature": "void maybe_Actor_ApplyModelPartsA(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Applies the actor's attachment/part set for the current player state: runs the part registration chain (func_00423AE4/00423E0C/00423D84/00423E94), applies the rect to the model (func_0031A6AC + func_002D1C58), resets the transform controller and unregisters the previous part id.",
+  "confidence": 0.4,
+  "evidence": "Same six-call chain as 0x0022CFC4/0x0022D60C/0x0022D6A0 with f_2C/f_2D/f_54/f_74 fields and the player-state byte 0x281; no callers (type-table entry)."
+ },
+ {
+  "address": "0x0022D180",
+  "name": "Actor_PlayIdleAnimationForState",
+  "signature": "void Actor_PlayIdleAnimationForState(Actor* actor, u32 blend, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "blend/priority forwarded to the animation call",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Force-plays the idle animation: action 0x11 when f_43 is set, action 5 in the attract state at +0x27C, action 1 otherwise - the func_005E7848 (play) twin of 0x0022CECC.",
+  "confidence": 0.5,
+  "evidence": "Identical branch structure to 0x0022CECC but calling func_005E7848 (the non-try action-sequence setter); many callers across the actor/party code (maybe_Field_Actor_ApplyStickInput, maybe_Ui_Menu_IsBusy, Party_Status_SetEnabled, maybe_Monster_ActionScaleGrow, ...)."
+ },
+ {
+  "address": "0x0022D1F8",
+  "name": "Actor_TryPlayActionSeq11",
+  "signature": "void Actor_TryPlayActionSeq11(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Refreshes the actor transform (func_005F4E48) and tries to start action 0x11 (the 'busy/talk' idle).",
+  "confidence": 0.5,
+  "evidence": "Body: `func_005F4E48(); func_005E74A0(arg1,0x11,1);` - action id 0x11 is the same one used by 0x0022CECC/0x0022D180 for f_43."
+ },
+ {
+  "address": "0x0022D218",
+  "name": "Actor_TryPlayActionSeq10",
+  "signature": "bool Actor_TryPlayActionSeq10(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x10 (3 words)"
+  },
+  "summary": "Stores the three parameters of action 0x10 (f_2DC/f_2E0/f_2E4) and tries to start it, restoring the old values on rejection.",
+  "confidence": 0.5,
+  "evidence": "Writes f_2DC/f_2E0/f_2E4 then `func_005E74A0(self,0x10,1)` with the standard save/restore; caller 0x00238D88."
+ },
+ {
+  "address": "0x0022D278",
+  "name": "maybe_Actor_CreateModelFromCharacterTable",
+  "signature": "void maybe_Actor_CreateModelFromCharacterTable(Actor* actor, u32 variant, u32 immediate)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "model/character variant id",
+   "param_3": "non-zero = apply the size immediately"
+  },
+  "summary": "Re-creates the actor's character model from the character table: looks the model up with func_0062C388/func_0062C3B0, refreshes the model node (func_005F37A4), marks the entry as seen (maybe_Menu_MarkEntrySeen), copies its size (func_005F3500 = Field_SceneObject_SetModelSize) and finally applies the model scale/position (func_005F36E0).",
+  "confidence": 0.45,
+  "evidence": "func_0062F0E0 + func_0062C388/func_0062C3B0 character-table lookup; func_005F37A4 node refresh; func_001DA294 = maybe_Menu_MarkEntrySeen (N_023); func_00633C38/00633DA0 apply the clip; func_005F3500 = Field_SceneObject_SetModelSize (N_029); func_005F36E0 final transform; constant -208.0f in the pool. Called from 0x0022CE68 and 0x00294894."
+ },
+ {
+  "address": "0x0022D4E0",
+  "name": "Actor_TryPlayActionSeq0C",
+  "signature": "bool Actor_TryPlayActionSeq0C(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0C (11 words)"
+  },
+  "summary": "Stores the eleven parameters of action 0x0C (f_260..f_280) and tries to start it, restoring the whole block if the sequence is rejected.",
+  "confidence": 0.5,
+  "evidence": "Writes f_260..f_280 from arg2 (including the u16 at arg2+0x12 -> f_272) then `func_005E74A0(self,0xC,1)` and restores on failure; same shape as 0x0022DA24."
+ },
+ {
+  "address": "0x0022D5C4",
+  "name": "Actor_TryPlayActionSeq16",
+  "signature": "bool Actor_TryPlayActionSeq16(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x16 (2 words)"
+  },
+  "summary": "Stores the two parameters of action 0x16 (f_2D4/f_2D8) and tries to start it, restoring the old values on rejection.",
+  "confidence": 0.5,
+  "evidence": "`self->f_2D4 = *arg2; self->f_2D8 = arg2[1]; func_005E74A0(self,0x16,1)` with rollback; caller maybe_Gfx_Sprite2D_UpdateDrawPos."
+ },
+ {
+  "address": "0x0022D60C",
+  "name": "maybe_Actor_ApplyModelPartsB",
+  "signature": "void maybe_Actor_ApplyModelPartsB(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Same per-state attachment refresh as 0x0022D110, used from the party-status page switch - registers the part set, applies the rect to the model, resets the controller and unregisters the previous part id.",
+  "confidence": 0.4,
+  "evidence": "Identical callee list and field set to 0x0022D110 (func_00423AE4/0031A6AC/002D1C58/00423E94/004C3968/00423E0C/00423D84/00423AA0/001C7570, player state 0x281); caller Party_Status_SelectPage (0x00239A94)."
+ },
+ {
+  "address": "0x0022D6A0",
+  "name": "maybe_Actor_CreateModelParts",
+  "signature": "void maybe_Actor_CreateModelParts(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Creates the actor's default attachment/part set (same 0x00423xxx registration chain, without the per-state branch) - called from the action-table builder 0x0022AF9C during actor construction.",
+  "confidence": 0.4,
+  "evidence": "Uses only the six 0x00423xxx part calls plus func_004C3968 and func_001C7570; fields f_2C/f_2D/f_54/f_74; the only caller is maybe_Actor_CreateActionTable (0x0022AF9C)."
+ },
+ {
+  "address": "0x0022D828",
+  "name": "Actor_TryPlayActionSeq0A",
+  "signature": "bool Actor_TryPlayActionSeq0A(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0A (7 words)"
+  },
+  "summary": "Stores the parameters of action 0x0A (f_228..f_240) and tries to start it, restoring them if the sequence is rejected.",
+  "confidence": 0.5,
+  "evidence": "Writes f_228..f_240 then `func_005E74A0(self,10,1)` (10 = 0x0A) with the standard rollback; caller 0x002B6E6C."
+ },
+ {
+  "address": "0x0022D8D4",
+  "name": "maybe_Actor_UpdateActionState",
+  "signature": "void maybe_Actor_UpdateActionState(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Refreshes the actor's action state from the player state byte at scene work +0x27C/+0x27F/+0x281 using func_0062F5C8/func_0062F110; called after every action/idle/command change in this cluster.",
+  "confidence": 0.45,
+  "evidence": "Reads the three state bytes 0x27C/0x27F/0x281, calls func_0062F5C8 and func_0062F110 (motion/action-state appliers), constants 0x88; called from 0x0022AF9C, 0x0022CAE8, 0x0022CBB0, 0x0022CE68, 0x00235E0C, 0x00237198, Party_Status_SelectPage, Party_Status_SetEnabled, 0x0061AF68."
+ },
+ {
+  "address": "0x0022DA24",
+  "name": "Actor_TryPlayActionSeq0E",
+  "signature": "bool Actor_TryPlayActionSeq0E(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 0x0E (11 words)"
+  },
+  "summary": "Stores the eleven parameters of action 0x0E (f_2A0..f_2C0) and tries to start it, restoring the block if the sequence refuses.",
+  "confidence": 0.5,
+  "evidence": "Same body shape as 0x0022D4E0 but with the block at f_2A0..f_2C0 and `func_005E74A0(self,0xE,1)`; caller 0x002F3E78."
+ },
+ {
+  "address": "0x0022DB14",
+  "name": "Actor_TryPlayActionSeq07",
+  "signature": "bool Actor_TryPlayActionSeq07(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 7 (2 words)"
+  },
+  "summary": "Stores the two parameters of action 7 (f_220/f_224) and tries to start it, restoring the old values on rejection.",
+  "confidence": 0.5,
+  "evidence": "`self->f_220 = *arg2; self->f_224 = arg2[1]; func_005E74A0(self,7,1)` with rollback; caller 0x004D7900 (same caller as the action-8 twin 0x0022DDE4)."
+ },
+ {
+  "address": "0x0022DB5C",
+  "name": "maybe_Container_RemoveValueFromVector",
+  "signature": "int* maybe_Container_RemoveValueFromVector(Actor* actor, int value)",
+  "params": {
+   "param_1": "object owning a std::vector<int> at f_BC",
+   "param_2": "value to erase"
+  },
+  "summary": "Erases every occurrence of a value from the integer vector at f_BC->f_5C..f_9C (std::remove compaction), updates the vector's size at f_9C and returns the new end pointer; returns 0 when there is no vector.",
+  "confidence": 0.45,
+  "evidence": "func_004C3944 gives begin/end of the vector; the body is the inlined std::remove (compacting loop over the array) followed by `iVar4->f_9C = (end-begin)/4` and a return of the new end pointer."
+ },
+ {
+  "address": "0x0022DC34",
+  "name": "maybe_ActorPart_CreateNamedB",
+  "signature": "void maybe_ActorPart_CreateNamedB(Actor* actor, const char* name, u32 arg3)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "part name",
+   "param_3": "unused/id"
+  },
+  "summary": "Second named-part constructor: copies the name into the inline string, allocates the part (Mem_AllocAligned + func_004C3B50) and wires it into the actor's part list; called from the action-table builder.",
+  "confidence": 0.4,
+  "evidence": "func_0011CCA0/func_0011142C name copy, Mem_AllocAligned(...,f_48,4), func_004C3B50 factory, f_27F/f_74/f_84/f_A4 fields; only caller maybe_Actor_CreateActionTable (0x0022AF9C)."
+ },
+ {
+  "address": "0x0022DD98",
+  "name": "maybe_ActorPart_InitSlots",
+  "signature": "void maybe_ActorPart_InitSlots(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Initialises the two slot records of an actor part through func_004C395C and func_004C397C (the part-list helpers of the 0x004C3xxx family).",
+  "confidence": 0.4,
+  "evidence": "Two-call body: func_004C395C(actor) and func_004C397C(actor); same 0x004C3xxx family as the part factory used by 0x0022DC34; caller 0x002388D0."
+ },
+ {
+  "address": "0x0022DDE4",
+  "name": "Actor_TryPlayActionSeq08",
+  "signature": "bool Actor_TryPlayActionSeq08(Actor* actor, const u32* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "parameter block for action 8 (2 words)"
+  },
+  "summary": "Stores the two parameters of action 8 (f_220/f_224) and tries to start it, restoring the old values on rejection.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x0022DB14 but `func_005E74A0(self,8,1)`; same caller 0x004D7900."
+ },
+ {
+  "address": "0x0022DE2C",
+  "name": "maybe_Actor_DetachModelChild",
+  "signature": "void maybe_Actor_DetachModelChild(Actor* actor, u32 unused, u32 arg3, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "forwarded",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "When the actor is in the detach state f_41 it unregisters the current model id f_210 from the scene object list, clears it and forwards to func_005F5078 (the scene-node detach helper).",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_41) { if (self->f_210) func_001C7570(work+8+0x54, self->f_210); self->f_210 = 0; func_005F5078(self,...); }` - f_210 is the registered model id also cleared by 0x0022C1D0."
+ },
+ {
+  "address": "0x0022E0B8",
+  "name": "maybe_Actor_Dtor",
+  "signature": "void maybe_Actor_Dtor(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Destructor of the field actor: restores the class vtable and its +0x84 secondary vtable, releases the scene-node children (func_005F4F34 with 0), tears down the scene node (func_005F52D8) and frees the object.",
+  "confidence": 0.45,
+  "evidence": "`*arg1 = g_0022E0F4; arg1[0x7D] = g_0022E0F4+0x84` (main + secondary vtable); func_005F4F34(arg1,0) releases children (same helper used in the Field_SceneNode family); func_005F52D8 is the scene-node destructor seen in 0x00335DAC; func_0010F6CC frees."
+ },
+ {
+  "address": "0x0022E0F8",
+  "name": "Model_SwitchAttachmentsByState_Show",
+  "signature": "void Model_SwitchAttachmentsByState_Show(Model* model, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Shows the attachment set that belongs to the current player state: it indexes the per-state attachment array at +0x244 with the player-state byte at scene work +0x281 and enables that slot (0x002219C8) when the model is not already busy (f_51 == 0).",
+  "confidence": 0.5,
+  "evidence": "`uVar2 = *(u8*)(*(work+8+0x48)+0x281); if (uVar2 != 0xFF && *(int*)(arg1 + uVar2*4 + 0x244) != 0) func_002219C8();` - the per-state array at +0x244 is shared with 0x0022F55C/0x0022F908/0x00230DF0/0x00230368; func_002219C8 is Model_AttachSlot_ShowAll from this batch."
+ },
+ {
+  "address": "0x0022E144",
+  "name": "Model_CreateCharacterModelWithEquipment",
+  "signature": "void Model_CreateCharacterModelWithEquipment(Model* model)",
+  "params": {
+   "param_1": "character model root"
+  },
+  "summary": "Builds a complete character model: creates the render model object f_224 from the model template, attaches it to the scene node, creates and wires the weapon/accessory meshes and all attachment slots, loads the layout config, applies the character equipment and creates the effect instances for the model's part table.",
+  "confidence": 0.5,
+  "evidence": "func_005F541C (base scene-node init) then Mem_AllocAligned(0x6C)+func_006F44B0('sprite'-style template)+func_0040BAEC(part ctor) -> f_224; func_0040A384 = Model_Equip_CreateWeaponMeshes (N_005); func_0040AD50 = Model_Equip_ApplyCharacterEquipment (N_027); func_0040B748 = Model_Equip_UpdateGripState; func_0040AE18 = Model_Equip_ApplyAccessorySlots; func_00220984 = Model_AttachSlot_Setup; func_00221AA8 = maybe_Ui_ApplyLayoutConfig; func_0035FF3C = maybe_Effect_FindOrCreateInstance (N_004); literal pool g_0022E5C4/size 0x2B8."
+ },
+ {
+  "address": "0x0022F55C",
+  "name": "Model_SwitchAttachmentsByState_Hide",
+  "signature": "void Model_SwitchAttachmentsByState_Hide(Model* model, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Hides the attachment set of the current player state: indexes the per-state array at +0x244 with scene work +0x281 and disables that slot (0x0022225C).",
+  "confidence": 0.5,
+  "evidence": "Mirror of 0x0022E0F8 with the same +0x244/0x281 indexing but calling func_0022225C (Model_AttachSlot_HideAll from this batch); func_005F57F8 is the scene-node pre-update."
+ },
+ {
+  "address": "0x0022F620",
+  "name": "maybe_Model_UpdatePatternTransformA",
+  "signature": "void maybe_Model_UpdatePatternTransformA(Model* model)",
+  "params": {
+   "param_1": "character model"
+  },
+  "summary": "Copies the model's world position and orientation into its pattern record (f_280..f_29C) and derives the rotated pattern axis f_284..f_290 with func_00573144; only when the current player state has an attachment slot.",
+  "confidence": 0.4,
+  "evidence": "`self->f_280 = self->f_88; f_294 = f_9C; f_298 = f_A0; f_29C = f_A4;` then the quaternion (f_8C..f_98) is used to build the rotated vector with the constant g_0022F898 and func_00573144; guarded by the +0x244/0x281 per-state check. Tail-twin of 0x0022F638 (which continues with a second rotation)."
+ },
+ {
+  "address": "0x0022F638",
+  "name": "maybe_Model_UpdatePatternTransform",
+  "signature": "void maybe_Model_UpdatePatternTransform(Model* model)",
+  "params": {
+   "param_1": "character model"
+  },
+  "summary": "Same pattern-record update as 0x0022F620 but it also rotates the resulting axis a second time and writes the full f_2A0..f_2D8 block, producing the transform used for the model's pattern/attachment placement.",
+  "confidence": 0.45,
+  "evidence": "Superset of 0x0022F620: identical position/quaternion copy and first func_00573144 call, then a second rotation block on f_284..f_290 writing f_2D0..f_2D8; constant 2.0 in the pool; called from 0x00231948 and 0x00234144."
+ },
+ {
+  "address": "0x0022F908",
+  "name": "Model_SyncAttachmentVisibilityByState",
+  "signature": "void Model_SyncAttachmentVisibilityByState(Model* model)",
+  "params": {
+   "param_1": "character model"
+  },
+  "summary": "Keeps the two attachment sets in sync with the current player state: when the state's slot exists and the state record's flag f_56 is set it shows f_160, otherwise it hides it; then it shows or hides the state slot itself depending on the f_589/f_58B visibility flags.",
+  "confidence": 0.5,
+  "evidence": "Uses the +0x244/0x281 per-state indexing, func_0063D6B8 to fetch the state record, tests `f_56`, `f_589`, `f_58B` and calls func_002219C8/func_0022225C (Model_AttachSlot_ShowAll/HideAll) on f_160 and the state slot; also guards on work+0x40 being null."
+ },
+ {
+  "address": "0x0022FA0C",
+  "name": "maybe_Model_CreateStateEffects",
+  "signature": "void maybe_Model_CreateStateEffects(Model* model, int stateIndex)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "player-state index"
+  },
+  "summary": "Creates the effects attached to one player state: releases the previous effect handle in the per-state array at +0x420, then, when the state table g_0022FB54 has an effect id for that index, builds an effect request (func_0032F98C, name from 'N_ALL') and instantiates it through func_0035FF3C.",
+  "confidence": 0.45,
+  "evidence": "`iVar6->f_420` per-state handle with the 0x3FF/0xFFFFF800 id validation; per-state id table g_0022FB54 (short per index, -1 = none); literal 'N_ALL' built into the request name with func_0011CCA0/func_0011142C; func_0035FF3C = maybe_Effect_FindOrCreateInstance (N_004). Callers: maybe_Field_Gadget_SetState, maybe_Ui_Menu_ActivatePage."
+ },
+ {
+  "address": "0x0022FBD8",
+  "name": "Actor_CreateBehaviourTasks",
+  "signature": "void Actor_CreateBehaviourTasks(Actor* actor, u32 initialAction)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "initial action/animation id"
+  },
+  "summary": "Builds the actor's behaviour-task chain (emote, behaviour and move tasks) from the model's task count f_40, installing each created task through Container_SlotReplace and destroying it again if the slot is already taken; finally starts the initial action with the action-sequence player.",
+  "confidence": 0.5,
+  "evidence": "`func_005E74A0(self,0,1)` then repeated blocks `if (N < model->f_40) { Mem_AllocAligned(...); factory(func_001BAB48/001E1AD4/001E158C); func_002A8BA4(model,N,task); }` where the factories are maybe_Gfx_Emote_InitVector, maybe_Field_Actor_CreateBehaviourTask and maybe_Field_ActorMove_CreateTask (N_040/N_042) and func_002A8BA4 = Container_SlotReplace (N_025); slot numbers 1..3 and the g_0022FEDC..g_0022FEEC vtables."
+ },
+ {
+  "address": "0x0023018C",
+  "name": "maybe_Model_UpdateNamedNodeAndId",
+  "signature": "void maybe_Model_UpdateNamedNodeAndId(Model* model)",
+  "params": {
+   "param_1": "character model"
+  },
+  "summary": "When the debug/global switch g_00230290 is on it pushes a default 12-word node transform to the model's node f_160 and re-registers the named node 'N_ALL' plus two ids (f_170 and the per-model id from g_002302A0); a second block updates the model id f_30C when the global switch g_002302A4 is on.",
+  "confidence": 0.4,
+  "evidence": "func_00633EFC(model->f_160,&transform) then func_00633C38(...,'N_ALL') and func_00633DCC(...,index,&transform); func_0063EF40(table, model->f_170) registers an id; the id-mask test `g_002302A8 != f_30C>>11` with the bucket table g_002302AC is the standard id-registry idiom."
+ },
+ {
+  "address": "0x002302B0",
+  "name": "Actor_PlayAnimationByState",
+  "signature": "void Actor_PlayAnimationByState(Actor* actor, u32 animId)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "animation name/id"
+  },
+  "summary": "Routes an animation request to the right model: when the current player state has an attachment slot and that state's flag f_5A is set it starts the action sequence on the state model (0x00223030), otherwise it sends the animation name to the shared model node (vtable+0x84); finally it forwards to the generic scene-node setter func_005F6000.",
+  "confidence": 0.5,
+  "evidence": "`uVar4 = work+8+0x48+0x281; if (slot != 0) { if (func_0063D6B8(table,uVar4)->f_5A) func_00223030(slot,arg2); }` else `func_003F422C(f_30C)` + vtable+0x84(node,arg2); tail func_005F6000(actor,arg2). func_00223030 = Anim_ActionSeq_StartForActor (N_024)."
+ },
+ {
+  "address": "0x00230368",
+  "name": "maybe_Actor_UpdateDirectionBlend",
+  "signature": "void maybe_Actor_UpdateDirectionBlend(Actor* actor)",
+  "params": {
+   "param_1": "actor (direction vector at +0x100..+0x10C)"
+  },
+  "summary": "Blends the actor's movement direction toward a target direction by the stored factor, re-normalising the result, and only for the special action ids 0x253..0x25B; the same block is repeated for the opposite-facing vector.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_5C - 0x253 < 9)` selects action ids 0x253..0x25B; vector at self[0x40..0x42] (0x100..0x108) lerped with the factor pair g_002306A8 (+0xC/+8), then SQRT-normalised; fallback constant vector g_002306AC; float constants 0.0333333, 0.5, 1.0; tail func_005F6018 (scene-node transform commit)."
+ },
+ {
+  "address": "0x002306B8",
+  "name": "maybe_Model_CreateBillboardPart",
+  "signature": "void maybe_Model_CreateBillboardPart(Model* model, const void* partDesc)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "part descriptor (flags byte f_1F, size f_20)"
+  },
+  "summary": "Creates a 200x120 billboard/sprite part for the model when the descriptor's f_1F flag is set and the current model id is not registered yet: builds the 0x10/0xFF-colour sprite descriptor through func_0036B528/func_003F42B0, allocates a 0x224-byte part and registers it in the scene object list.",
+  "confidence": 0.45,
+  "evidence": "Descriptor with f_3A=200, f_3C=0x78 (120), colour 0xFF, f_40=0x10 - the same 200x120 sprite descriptor as 0x0021C8EC/0x0021D550; Mem_AllocAligned(0x224,...,4) + factory; func_0036B528 builds the base record, func_003F42B0 applies the descriptor, func_001235A4 registers; id-registry idiom on f_30C. Caller 0x0033E39C."
+ },
+ {
+  "address": "0x00230B50",
+  "name": "maybe_Actor_InitStateModels",
+  "signature": "void maybe_Actor_InitStateModels(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Initialises the per-state models of an actor: sets the two visibility flags f_599/f_59A on the model, plays the initial action (action 1 or the state's action via 0x00233738) and creates the effect/mesh part for every state that the inventory/state tables mark as present.",
+  "confidence": 0.45,
+  "evidence": "func_005E7598 (scene-node init); `work+0x3C == 2 ? func_005E74A0(self,1) : func_00233738(self,1)`; sets f_160->f_599/f_59A = 1; loop over state indices calling func_00636000 (maybe_Game_TestInventoryFlag, N_030) and func_00635E18 then creating the per-state part at `self + i*4 + 0x420`; literals 'H,W' and 'N_ALL'."
+ },
+ {
+  "address": "0x00230DF0",
+  "name": "maybe_Model_SyncAllStateAttachments",
+  "signature": "u32 maybe_Model_SyncAllStateAttachments(Model* model, u32 unused, u32 unused2, u32 scratch)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "unused",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Makes the attachment visibility match the current player state across the whole per-state array: in the neutral state (0) it hides every visible slot 0..0xB (plus the special slot f_274), otherwise it shows only the slot of the current state.",
+  "confidence": 0.45,
+  "evidence": "`uVar5 = work+8+0x48+0x281; if (uVar5 == 0) for (i < 0xC) if (slot[i]->f_589) func_0022225C();` (plus the i==9/f_274 special case) `else { slot = *(int*)(self + uVar5*4 + 0x244); if (!slot->f_589) ... }` - the +0x244 per-state array again, using Model_AttachSlot_HideAll."
+ },
+ {
+  "address": "0x00230EC4",
+  "name": "maybe_Actor_StartBehaviourState",
+  "signature": "void maybe_Actor_StartBehaviourState(Actor* actor, const void* stateRecord)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "state record (7 words + flags)"
+  },
+  "summary": "Enters a new actor behaviour state: sets the state byte f_312 to 2, copies the seven state parameters f_324..f_33C plus the two flag bytes f_341/f_342 and creates the tasks/parts required by that state (task 0x19 and the following slots) through Container_SlotReplace.",
+  "confidence": 0.45,
+  "evidence": "`if (*(char*)(arg1+0x312) == 2) return; *(u8*)(arg1+0x312) = 2;` then `arg1[0xC9..0xCF] = arg2[0..6]`, bytes 0x341/0x342 from arg2+0x1D/+0x1E; task creation with `if (model->f_40 > 0x19) { Mem_AllocAligned(0x44,...); func_004CE35C(...); func_002A8BA4(model,0x19,task); }` (= Container_SlotReplace, N_025). Caller 0x004AF170."
+ },
+ {
+  "address": "0x00231404",
+  "name": "Actor_ApplyStateAnimEvent",
+  "signature": "void Actor_ApplyStateAnimEvent(Actor* actor, const u8* record)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "event record (byte at +0x0A selects the state/action)"
+  },
+  "summary": "Applies an animation event to the actor: for record kind 0 it stores the eleven parameters f_3C8..f_3F0 and plays action 0x18, but only when the player is in state 2; kinds 1..3 apply only in player state 5; other kinds fall through to the generic handling.",
+  "confidence": 0.5,
+  "evidence": "`switch (*(u8*)(arg2+10))` with case 0 guarded by `work+8+0x48+0x281 == 2`, copying arg2[0..9] into f_3C8..f_3F0 and calling `func_005E7848(self,0x18,1)`; cases 1/2/3 require player state 5; caller list (0x003639FC, 0x0044B1F8, 0x004E6410, 0x004E697C) is actor/monster animation code."
+ },
+ {
+  "address": "0x002315C0",
+  "name": "ModelPreview_CreateAttachments",
+  "signature": "void ModelPreview_CreateAttachments(ModelPreview* preview, u32 slot)",
+  "params": {
+   "param_1": "model-preview object",
+   "param_2": "preview slot index"
+  },
+  "summary": "Builds the attachments/effects of one model-preview slot: creates the scene-node part, wires the character model and its attachment slots, applies the layout config, spawns the preview effect and toggles the attachment visibility for the slot.",
+  "confidence": 0.5,
+  "evidence": "Called from ModelPreview_SelectSlot (0x002351B4, N_024) and 0x002351A8; callees include func_00220984 (Model_AttachSlot_Setup), func_00221AA8 (maybe_Ui_ApplyLayoutConfig), func_00223BA4 (Model_Attach_SpawnEffect), func_0022225C (Model_AttachSlot_HideAll), func_006F44B0/0x0036B528 (part template), Mem_AllocAligned with the 0x6E4-size pool, per-state byte 0x281 and the 0x276A9 mask constant."
+ },
+ {
+  "address": "0x002318B0",
+  "name": "Model_ReleaseStatePart",
+  "signature": "void Model_ReleaseStatePart(Model* model, int stateIndex, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "character model",
+   "param_2": "state index",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Releases the render part that belongs to one player state: validates the handle stored at model+0x420+state*4 against the id registry and destroys it through func_0035FC84 on the scene's object heap.",
+  "confidence": 0.5,
+  "evidence": "`self = self + arg2*4; f420 = self->f_420; if (g_00231904 != f420>>10 && bucket[..] == f420>>10) func_0035FC84(work+8+0x60, f420, 0);` - the same per-state handle array used by 0x0022FA0C/0x00230B50. Callers: maybe_Field_Gadget_SetState, maybe_Ui_Menu_ClearMode, maybe_Ui_Menu_DeactivatePage."
+ },
+ {
+  "address": "0x00231948",
+  "name": "maybe_Model_SetTrailTarget",
+  "signature": "void maybe_Model_SetTrailTarget(Model* model, const float* targetPos, const float* targetDir)",
+  "params": {
+   "param_1": "model/actor",
+   "param_2": "target position (3 floats)",
+   "param_3": "target direction (3 floats)"
+  },
+  "summary": "Places a trail/ribbon anchor: stores the target position at +0x9C, normalises the supplied direction and orients the object along it (func_005F5F54), then builds the 0.0333-second trail descriptor (colour/width constants) used by the trail renderer.",
+  "confidence": 0.45,
+  "evidence": "`arg1[0x27..0x29] = arg2[0..2]; arg1->f_46 = 1;` then normalise arg3 with SQRT and g_00231A84 before func_005F5F54(arg1,&dir,1); descriptor block g_00231A88/g_00231A90 with the 0.0333333 time step; caller 0x00235E0C."
+ },
+ {
+  "address": "0x00231A9C",
+  "name": "maybe_Actor_CreateTaskChain",
+  "signature": "void maybe_Actor_CreateTaskChain(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Creates a chain of behaviour tasks for the actor (task ids 0x19 and the following slots) with Mem_AllocAligned and func_004DB86C, installing each through Container_SlotReplace and refreshing the actor's action state.",
+  "confidence": 0.4,
+  "evidence": "Same task-chain shape as 0x0022FBD8/0x00230EC4: Mem_AllocAligned + factory func_004DB86C + func_002A8BA4 = Container_SlotReplace (N_025), plus func_00294C34/0x00372A20/0x002A8874/0x00238CC8/Party_Status_SetEnabled; caller maybe_Actor_UpdateFollowTargetMotion (N_001)."
+ },
+ {
+  "address": "0x00231D88",
+  "name": "maybe_ModelPreview_UpdateAttachments",
+  "signature": "void maybe_ModelPreview_UpdateAttachments(ModelPreview* preview)",
+  "params": {
+   "param_1": "model-preview object"
+  },
+  "summary": "Refreshes the preview's attachment/effect set: rebuilds the per-state parts and effects (0x0023240C, func_005913CC, func_0035FF3C), plays the slot's animation and then shows or hides the attachment slots according to the preview state.",
+  "confidence": 0.45,
+  "evidence": "Called from 0x0023406C (Actor_ResetStateModelIfCurrent) and ModelPreview_SelectSlot; callees func_0023240C, func_005913CC, func_0035FF3C (maybe_Effect_FindOrCreateInstance), func_005F5AB8, func_005E74A0, func_00233738, then func_002219C8/func_0022225C (Model_AttachSlot_ShowAll/HideAll); per-state array 0x244/0x281 and the 'H,W' 200x120 descriptor."
+ },
+ {
+  "address": "0x002322AC",
+  "name": "maybe_Actor_ResetIdleAnimAndTrail",
+  "signature": "void maybe_Actor_ResetIdleAnimAndTrail(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Returns the actor to its idle animation (4, or 5/1 in the attract state, 0x1B when f_43 is set) and re-initialises the 0.0333-second trail/effect descriptor at f_3F8.",
+  "confidence": 0.45,
+  "evidence": "`if (f_43) func_005E7848(arg1,0x1B,1); else if (work+0x27C == 0) func_005E7848(arg1,4,1); else func_00669250(arg1)==4 ? 5 : 1` - the same action-id selection as 0x00233738/0x002340B0 - followed by the descriptor block g_002323F8/g_00232400/g_00232404 with the 0.0333333 constant."
+ },
+ {
+  "address": "0x00233738",
+  "name": "Actor_TrySelectAttractAnimation",
+  "signature": "void Actor_TrySelectAttractAnimation(Actor* actor, u32 blend, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "blend/priority forwarded to the animation call",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Try-variant of the idle-animation selection: action 0x1B when f_43 is set, otherwise action 5 when the actor's motion id (func_00669250) is 4 and the attract state at +0x27C is on, action 1 in attract mode, or action 4 in the normal field state.",
+  "confidence": 0.5,
+  "evidence": "`f_43 -> func_005E74A0(arg1,0x1B,arg2)`; `work+0x27C != 0 -> (func_00669250(arg1) == 4 ? 5 : 1)`; else action 4. The non-try twin 0x002340B0 uses the identical branch tree with func_005E7848. Callers: 0x0022FBD8, 0x00230B50, 0x00231D88."
+ },
+ {
+  "address": "0x00233808",
+  "name": "maybe_Actor_UpdateStateTimer",
+  "signature": "u32 maybe_Actor_UpdateStateTimer(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Advances the actor's state timer f_3FC: in 'attract' mode it counts down while f_3F4 is set and otherwise resets, switching the target value between 1 and 6 depending on the player state (0/0xFF vs others).",
+  "confidence": 0.45,
+  "evidence": "`if (work+0x44 == 0) { iVar3 = f_3FC; if (f_3F4 == 0) f_3FC = (iVar3 < 0) ? iVar3+1 : 0; else { f_3FC = iVar3+1; cVar1 = work+0x48+0x281; iVar3 = (cVar1 == 0 || cVar1 == -1) ? 1 : 6; ... } }` - the timer fields and the 1/6 target values are the ones consumed by 0x0023xxxx actor code."
+ },
+ {
+  "address": "0x002338DC",
+  "name": "maybe_Actor_StartStateOne",
+  "signature": "void maybe_Actor_StartStateOne(Actor* actor, const void* record)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "state record (0x0D bytes copied to f_314)"
+  },
+  "summary": "Enters actor state 1: copies 0x0D bytes of state data to f_314, creates the behaviour tasks 0x19 and 0x1A (Container_SlotReplace) and plays action 0x19.",
+  "confidence": 0.45,
+  "evidence": "`if (f_312 != 1) { f_312 = 1; func_00116C10(arg1+0xC5, arg2, 0xD); ... if (model->f_40 > 0x19) { Mem_AllocAligned(0x44); func_004F2368(...); func_002A8BA4(model,0x19,task); } func_005E74A0(arg1,0x19,1); ... if (model->f_40 > 0x1A) ... }`; the same f_312 state byte and task ids are used by 0x00230EC4 (state 2)."
+ },
+ {
+  "address": "0x00233BC8",
+  "name": "maybe_Actor_EndStateChain",
+  "signature": "void maybe_Actor_EndStateChain(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Leaves the current actor state: resets f_312 to 0 and, when the model's task byte f_38 is 0x1A, resolves the party-status page for the current player state and updates the model/effect state accordingly.",
+  "confidence": 0.4,
+  "evidence": "Clears f_312 (the state byte set by 0x002338DC/0x00230EC4) and branches on `*(char*)(model->f_18 + 0x38) == 0x1A`; calls func_00239A94 = Party_Status_SelectPage (N_024) with the player-state byte 0x281. NOTE: this entry point is only 0x24 bytes but its readable file contains 153 lines and ends in `halt_baddata()`, i.e. Ghidra merged the following code into it - the decompiled body is partly unreliable."
+ },
+ {
+  "address": "0x00233BEC",
+  "name": "maybe_Actor_EndStateChainEx",
+  "signature": "void maybe_Actor_EndStateChainEx(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Second, longer variant of the state-exit path: clears f_312, checks the model task byte 0x1A and updates the party-status page and the model's attachment/effect state.",
+  "confidence": 0.4,
+  "evidence": "Identical prologue to 0x00233BC8 (f_312 = 0, model->f_18->f_38 == 0x1A) and the same callee set (Party_Status_SelectPage, Container_SlotReplace, Mem_AllocAligned, maybe_Gfx_Emote_InitVector, maybe_Field_Actor_CreateBehaviourTask, maybe_Field_Actor_UpdateEffectColor...); called from 0x004A49A0, 0x004E708C, 0x004F0FE0, 0x004F17A0. Contains a `halt_baddata()` artifact, so the tail is incomplete."
+ },
+ {
+  "address": "0x0023406C",
+  "name": "maybe_Actor_ResetStateModelIfCurrent",
+  "signature": "void maybe_Actor_ResetStateModelIfCurrent(Actor* actor, u32 unused, int modelHandle)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "unused",
+   "param_3": "model handle that is being replaced"
+  },
+  "summary": "When the handle passed in is the model currently used by the actor's active state slot (f_278), it refreshes the preview/model attachments (0x00231D88) and clears the active state index f_278.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_278 != 0 && *(int*)(self + self->f_278*4 + 0x244) == arg3) { func_00231D88(self); self->f_278 = 0; }` - f_278 is the index into the +0x244 per-state array, and 0x00231D88 is ModelPreview_UpdateAttachments from this batch."
+ },
+ {
+  "address": "0x002340B0",
+  "name": "Actor_SelectAttractAnimation",
+  "signature": "void Actor_SelectAttractAnimation(Actor* actor, u32 blend, u32 unused, u32 scratch)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "blend/priority forwarded to the animation call",
+   "param_3": "unused",
+   "param_4": "unused stack scratch"
+  },
+  "summary": "Force-playing twin of 0x00233738: action 0x1B when f_43 is set, action 5 when the actor's motion id is 4 in attract mode, action 1 in attract mode, action 4 otherwise.",
+  "confidence": 0.5,
+  "evidence": "Same branch tree as 0x00233738 with func_005E7848 instead of func_005E74A0; ~40 callers across the actor, field-action and party code (maybe_Field_Action_CanFinishCut, maybe_Field_ActorMove_Integrate, maybe_Field_Actor_UpdateBehaviour, Party_Status_SetEnabled, maybe_Model_UpdateLaunchMotion, ...) - the standard 'return to idle animation' call."
+ },
+ {
+  "address": "0x00234144",
+  "name": "maybe_Actor_UpdateFollowTarget",
+  "signature": "u32 maybe_Actor_UpdateFollowTarget(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Per-frame approach/follow update: while the game is not in the field state it compares the actor's position with the follow target f_3D4/f_3D8/f_3DC, plays the walk or run animation (vtable+0x68/+0x6C depending on f_311), and when the actor is inside the arrival radius it clears the follow offset f_C4.",
+  "confidence": 0.45,
+  "evidence": "Target from `work+8+0x48` fields f_3D4/f_3D8/f_3DC compared with self[0x27..0x29] (position 0x9C..0xA4); `if (f_311) vtable+0x6C else vtable+0x68`; distance test against `in_s0 * g_0023450C * g_00234520` then `self->f_C4 = 0`; uses func_0023BF3C = maybe_Gfx_Trail_BuildRibbon (N_045), func_0022F638 and Anim_ActionSeq_StartForActor; constants 0.3, 1000.0, 3.0, 2.0."
+ },
+ {
+  "address": "0x00234614",
+  "name": "maybe_Actor_ResetToIdleAction",
+  "signature": "void maybe_Actor_ResetToIdleAction(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Resets the actor to its idle action 0x1B and, when the player is in the neutral state, applies the shared model's motion id (0x0023523C) and clears the model's flag bit 0x20000000.",
+  "confidence": 0.45,
+  "evidence": "`func_005E78CC(); func_005E74A0(self,0x1B,1);` then `if (work+8+0x48+0x281 == 0) { node = func_003F422C(f_30C); if (node && node->f_51 == 0) func_0023523C(self,node->f_220); if (f_3C && (f_3C->f_10 & 0x20000000)) f_3C->f_DC = 0; }`."
+ },
+ {
+  "address": "0x002347D4",
+  "name": "maybe_Actor_UpdateTrailQuad",
+  "signature": "void maybe_Actor_UpdateTrailQuad(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Builds/updates the actor's trail quad: computes the two side vertices from the current and previous positions (with the 1.41421 diagonal factor), expands the quad by the width factor 1.25 and writes the four vertices into the trail object f_340/last slot.",
+  "confidence": 0.45,
+  "evidence": "Uses func_001D9A64 = maybe_Ui_Sprite_ComputeQuadVertices (N_042) plus SQRT/normalisation; constants 1.0, 1.25, 0.5, 1.4142135, 8.0 and the vertex offset 0x34000000; func_0062F5C8/func_0062F110/func_005F5F54 are the same transform helpers used by 0x00231948. Callers 0x00294AFC, 0x003E4B6C."
+ },
+ {
+  "address": "0x00234B48",
+  "name": "maybe_Actor_ApplyStateAnimName",
+  "signature": "void maybe_Actor_ApplyStateAnimName(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Sends the animation name that belongs to the current player state to the actor: it fetches the state entry from the character table and passes the entry's inline animation name (or null) to the animator (vtable+0x84).",
+  "confidence": 0.45,
+  "evidence": "`cVar1 = work+8+0x48+0x281; if (cVar1 != 0) { entry = func_0063D6B8(table,cVar1); puVar6 = entry->f_38 ? (u8*)(entry->f_38 + entry + 0x38) : 0; } (**(code**)(*arg1+0x84))(arg1, puVar6);` - the inline-name pointer idiom used by 0x00220984's name copy."
+ },
+ {
+  "address": "0x00234BBC",
+  "name": "maybe_Actor_CreateTaskChainB",
+  "signature": "void maybe_Actor_CreateTaskChainB(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Second task-chain builder for actors: allocates and installs the state tasks (task 0x19 and the next slots) through Container_SlotReplace with the factory func_0059299C, then refreshes the action state and the overlay animation.",
+  "confidence": 0.4,
+  "evidence": "Same shape as 0x00230EC4/0x00231A9C (Mem_AllocAligned + factory + func_002A8BA4 = Container_SlotReplace, maybe_Gfx_Emote_InitVector, 0x00238CC8 = maybe_Ui_Overlay_TriggerElementAnimation (N_045), Party_Status_SetEnabled); task ids 0x19/0x1A and the +0x34/+0x44/+0x48/+0x84 fields; caller 0x0040D8C0."
+ }
+]

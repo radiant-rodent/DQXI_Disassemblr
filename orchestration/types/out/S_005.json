@@ -1,0 +1,494 @@
+[
+  {
+    "class": "Anim_CurveSample",
+    "type": "AnimCurveSample",
+    "summary": "One animation keyframe curve: a time range, a quantised key array and the value scale/bias that turn raw key values into floats; the 4x8 evaluator table at 0x007AE7C8 dispatches on its key-format and interpolation-mode bytes.",
+    "size": 36,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Evaluator cells Anim_CurveSample_F2M0..F3M7 read +0x0E (key count), +0x20 (key array), +0x18 (duration), +0x10/+0x14 (value scale/bias) and +0x1C (1/duration). The 4x8 evaluator table at 0x007AE7C8 is indexed by the curve's key-format byte (+0x0C) and interpolation-mode byte (+0x0D) as base + row*0x20 + col*4, so 0x007AE828 is row 3 column 0 of that static table, NOT an object vtable: offset 0 is a float start time (dispatcher 0x0065B890 does `vldr s1,[r4]` then `vsub.f32 s0,s0,s1` after Math_ComputeNormalizedRatio 0x0065B760, which is handed the curve itself as its {start,end,mode} range).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "startTime",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Dispatcher 0x0065B890 loads it with `vldr s1,[r4]` and subtracts it from the wrapped time; Math_ComputeNormalizedRatio (0x0065B760) reads range[0] as the range start, and F3M0 computes (self[1]-*self) as the duration."
+      },
+      {
+        "offset": 4,
+        "name": "endTime",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Math_ComputeNormalizedRatio (0x0065B760) reads range[1] as the range end; F3M0 `(self[1] - *self)` is the curve duration and `if (self[1] < fVar16 + fVar10)` clamps a key time to it."
+      },
+      {
+        "offset": 14,
+        "name": "keyCount",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.85,
+        "evidence": "F2M1 asm `ldrh r2,[r4,#0xe]` then `add r2,r3,r2,lsl #3` gives the last 8-byte key; F3M0 `add r2,r2,ip,lsl #4` gives the last 16-byte key. Every F2M*/F3M* cell uses it as the key count."
+      },
+      {
+        "offset": 16,
+        "name": "valueScale",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "F2M1 asm `vldmia r4,{s1,s2}` at self+0x10 then `vmla.f32 s0,s3,s1` computes bias + rawValue*scale, i.e. the affine dequantisation of the stored key value."
+      },
+      {
+        "offset": 20,
+        "name": "valueBias",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "Same `vmla.f32 s0, rawValue, [r4+0x10]` with s0 preloaded from `vldr s0,[r4,#0x14]`, so +0x14 is the constant term added to scale*rawValue."
+      },
+      {
+        "offset": 24,
+        "name": "duration",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "F2M1 asm `vldr s1,[r4,#0x18]; vmul.f32 s2,keyTime,s1; vcmp.f32 s2,in_s0` - the quantised key time is multiplied by +0x18 to reach curve time, so +0x18 is the curve duration (equal to endTime-startTime)."
+      },
+      {
+        "offset": 28,
+        "name": "inverseDuration",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "F3M0 `self[7] * (keyCount-1) * t` is the key-index estimate (asm 0x006EB9C0..0x006EB9D4: `vldr s2,[r0,#0x1c]; vmul.f32 s1,s3,s1; vmul.f32 s1,s2,s1; vcvt.u32.f32`), so +0x1C = 1/duration."
+      },
+      {
+        "offset": 32,
+        "name": "keyArray",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.85,
+        "evidence": "`ldr r1,[r0,#0x20]` is the key array base; keys are 16, 12, 8 or 6 bytes depending on the key-format row, and the last key is keyArray + (keyCount-1)*stride."
+      }
+    ]
+  },
+  {
+    "class": "Anim_Tween",
+    "type": "AnimTween",
+    "summary": "A 2D layout tween: current and target X/Y, elapsed time, duration and the easing function pointer chosen by Anim_Tween_SetTarget.",
+    "size": 28,
+    "base": null,
+    "confidence": 0.55,
+    "evidence": "Anim_Tween_SetTarget (0x006E6F04) writes all seven words: the current vector from func_007115E4 (or the target when the duration argument is <= 0), the target vector, elapsed = 0.0f, duration = the float argument, and one of 16 easing code addresses 0x006F45B8..0x006F4EB8 selected by the third argument. Callers are Ui_LayoutAnim_AddOffset/SetTwoValues/Reset.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "currentX",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`*self = local_20` where local_20 comes from func_007115E4 (reads the current vector); in the snap branch `*self = *target`."
+      },
+      {
+        "offset": 4,
+        "name": "currentY",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`self[1] = local_1c`, the second word of the current vector (or target[1] in the snap branch)."
+      },
+      {
+        "offset": 8,
+        "name": "targetX",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "`self[2] = *target` stores the requested X target."
+      },
+      {
+        "offset": 12,
+        "name": "targetY",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "`self[3] = target[1]` stores the requested Y target."
+      },
+      {
+        "offset": 16,
+        "name": "elapsed",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "`self[4] = 0.0f` (fVar2 is initialised to 0) resets the progress counter whenever a new target is set."
+      },
+      {
+        "offset": 20,
+        "name": "duration",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`self[5] = in_s0`, the float argument of Anim_Tween_SetTarget; the same value decides whether the current value is kept as the new start."
+      },
+      {
+        "offset": 24,
+        "name": "easingFunc",
+        "type": "void (*)(void)",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "`self[6] = uVar1` where uVar1 is one of 16 code addresses 0x006F45B8..0x006F4EB8 chosen by the easing index argument (switch cases 0..0xF)."
+      }
+    ]
+  },
+  {
+    "class": "Anim_Timeline",
+    "type": "AnimTimeline",
+    "summary": "A small value generator: while its step counter is below a limit it returns the counter, otherwise it returns count * amplitude * waveform(phase) using the callback table at 0x007E8120.",
+    "size": 32,
+    "base": null,
+    "confidence": 0.35,
+    "evidence": "Only method is 0x006631E8 (124 bytes; it ends at the `pop {r4,pc}` at 0x00663260, so the 516-byte symbol size is wrong). It reads +0x08 (limit), +0x0C (u8 multiplier), +0x0D (callback index into 0x007E8120), +0x10 (counter), +0x14 (callback argument), +0x18 (cached result) and +0x1D (recompute flag). The three call-graph 'callers' (Sound_Cwav_Open etc.) are bogus - Sound_Cwav_Open's only bl targets are 0x00663308/0x006632A0 - so the owner of this object is unknown.",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "maybe_count",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.4,
+        "evidence": "`ldrb r0,[r4,#0xc]` then `vcvt.f32.u32 s1,s1` and `vmul.f32 s0,s1,s0` - multiplied into the returned float."
+      },
+      {
+        "offset": 13,
+        "name": "maybe_waveformIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.45,
+        "evidence": "`ldrb r1,[r4,#0xd]; ldr r0,[0x007E8120 + r1*4]` selects the callback; index 4 takes the cached-value path instead of calling it."
+      },
+      {
+        "offset": 16,
+        "name": "maybe_currentStep",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "`ldr r0,[r0,#0x10]` is compared with the limit at +0x08 (`ldr r1,[r4,#8]; cmp r1,r0; bhi`); while it is below the limit the function returns the counter unchanged."
+      },
+      {
+        "offset": 20,
+        "name": "maybe_phase",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`vldr s0,[r4,#0x14]` is the argument passed to the waveform callback in s0."
+      },
+      {
+        "offset": 24,
+        "name": "maybe_cachedValue",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "`vstr s0,[r4,#0x18]` stores the callback result when +0x1D is set, and `vldreq s0,[r4,#0x18]` reuses it when +0x1D is clear."
+      },
+      {
+        "offset": 29,
+        "name": "maybe_recomputeFlag",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.4,
+        "evidence": "`ldrb r1,[r4,#0x1d]; cmp r1,#0` chooses between calling the waveform callback and reusing the cached value at +0x18."
+      }
+    ]
+  },
+  {
+    "class": "Anim_Track",
+    "type": "AnimTrack",
+    "summary": "A transform track group: a flags word plus the translation, rotation (quaternion) and scale curves that Anim_Track_AccumulateTranslation blends into a bone pose.",
+    "size": 24,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Anim_Track_AccumulateTranslation (0x007131A0) reads the flags at +0x08 (`ldr r0,[r0,#8]`; bits 0x20/0x10/0x08 skip translation/rotation/scale, bits 4/2/1 mean 'constant, no curve evaluation') and the three curve pointers at +0x0C/+0x10/+0x14 (`ldr r0,[r5,#0xc]` -> Anim_Track_EvaluateVec3, `[r5,#0x10]` -> Anim_Track_EvaluateVec4, `[r5,#0x14]` -> Anim_Track_EvaluateVec3). +0x04 is a struct_db artefact: it is the end time of the separate 16-byte {start,end,keys} curve that EvaluateVec3/Vec4 take as their first argument.",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "unknown_04",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No access in the group methods. The recorded reads (`param_1[1] == in_s0`) come from Anim_Track_EvaluateVec3/Vec4, whose first argument is the separate 16-byte curve (start@0, end@4, keys@0xC), so this offset is a clustering artefact and its meaning in the group is unknown."
+      },
+      {
+        "offset": 12,
+        "name": "translationCurve",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "`ldr r0,[r5,#0xc]` is evaluated by Anim_Track_EvaluateVec3 and accumulated into outPose+4/+8/+0xC (the translation triple) unless flags bit 0x20 is set."
+      },
+      {
+        "offset": 16,
+        "name": "rotationCurve",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "`[r5,#0x10]` goes to Anim_Track_EvaluateVec4 (4-float quaternion) and then func_0051B2EC, filling the six rotation-matrix floats at outPose+0x10..+0x28; skipped when flags bit 0x10 is set."
+      },
+      {
+        "offset": 20,
+        "name": "scaleCurve",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "`[r5,#0x14]` goes to Anim_Track_EvaluateVec3 and is added to the diagonal outPose+0x1C/+0x2C/+0x3C; skipped when flags bit 0x08 is set."
+      }
+    ]
+  },
+  {
+    "class": "Anim_AnimClip",
+    "type": "AnimAnimClip",
+    "summary": "Base of a UI BFLAN animation clip: vtable, playback time and a cleared word, extended by the concrete 0x34-byte clip that stores its start frame at +0x30.",
+    "size": 48,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "Ctor 0x005402F0 runs the unnamed 0x24-byte base ctor 0x00537720, stores vtable 0x007815D8 at +0x00, `vstr s0,[r0,#0x24]` (a VFP store, so +0x24 is a float), `strb r2,[r0,#0x28]` and `str r2,[r0,#0x2c]`. Ui_AnimClip_Load (0x0053D36C) allocates 0x34 bytes, overrides the vtable with 0x00781250 and clears +0x30, and Ui_AnimClip_PlayFrom (0x005363E8) stores the start frame in clip[0xC] = +0x30.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "`str r1,[r0]` with r1 = 0x007815D8 in ctor 0x005402F0; Ui_AnimClip_Load overwrites it with 0x00781250 for the concrete clip."
+      },
+      {
+        "offset": 36,
+        "name": "maybe_playbackTime",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "`vstr s0,[r0,#0x24]` in ctor 0x005402F0 stores a float (0.0f from the literal pool at 0x00540318); the start frame lives at +0x30, so +0x24 is the running playback time."
+      },
+      {
+        "offset": 44,
+        "name": "maybe_playbackFlags",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.3,
+        "evidence": "`str r2,[r0,#0x2c]` clears it in ctor 0x005402F0; no recovered method of this class reads it, so the purpose is unknown."
+      }
+    ]
+  },
+  {
+    "class": "Anim_CurveEval",
+    "type": "AnimCurveEval",
+    "summary": "The same 36-byte animation keyframe curve as Anim_CurveSample, seen through the row 0/1 evaluator cells (Anim_CurveEval_F0M*/F1M*); the two classes are one object split by struct_db clustering.",
+    "size": 36,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "Anim_CurveEval_F0M1/F0M2/F0M4/F1M1/F1M2/F1M4 read the same offsets as the Anim_CurveSample cells (+0x0E key count, +0x18 duration, +0x20 key array). This is the same 36-byte curve object as Anim_CurveSample: the cells read +0x0E, +0x18 and +0x20 with exactly the same expressions, and the 'vtable' 0x007AE7C8 is the static 4x8 evaluator table (base + row*0x20 + col*4), not an object vtable - offset 0 is the float start time that dispatcher 0x0065B890 subtracts after Math_ComputeNormalizedRatio (0x0065B760).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "startTime",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "Dispatcher 0x0065B890 does `vldr s1,[r4]` then `vsub.f32 s0,s0,s1` on the value returned by Math_ComputeNormalizedRatio (0x0065B760), which is handed the curve itself as its {start,end,mode} range; so +0x00 is the range start, not a vtable."
+      },
+      {
+        "offset": 14,
+        "name": "keyCount",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.8,
+        "evidence": "`((uint)*(ushort *)(param_1 + 0xe) * 6 + -6 + *(int *)(param_1 + 0x20))` walks to the last key; the same expression appears in the Anim_CurveSample cells."
+      },
+      {
+        "offset": 24,
+        "name": "duration",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "`(uint)(fVar4 * DAT_006eb000 * *(float *)(param_1 + 0x18) == in_s0)` - the quantised key time is multiplied by +0x18 to reach curve time, so +0x18 is the duration."
+      },
+      {
+        "offset": 32,
+        "name": "keyArray",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "`*(int *)(param_1 + 0x20)` is the key array base that the key-count expression indexes into."
+      }
+    ]
+  },
+  {
+    "class": "Anim_CurveEvalCase",
+    "type": "AnimCurveEvalCase",
+    "summary": "The same 36-byte animation keyframe curve as Anim_CurveSample, seen through the 16 maybe_Anim_CurveEvalCase_* cells; one object, three struct_db clusters.",
+    "size": 36,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "The 16 maybe_Anim_CurveEvalCase_* functions (0x006E972E..0x006EA68A) read +0x0E, +0x18 and +0x20 with exactly the same expressions as the Anim_CurveSample cells. This is the same 36-byte curve object as Anim_CurveSample: the cells read +0x0E, +0x18 and +0x20 with exactly the same expressions, and the 'vtable' 0x007AE7C8 is the static 4x8 evaluator table (base + row*0x20 + col*4), not an object vtable - offset 0 is the float start time that dispatcher 0x0065B890 subtracts after Math_ComputeNormalizedRatio (0x0065B760).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "startTime",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "Same object as Anim_CurveSample: dispatcher 0x0065B890 loads +0x00 with `vldr s1,[r4]` and subtracts it from the wrapped time, and Math_ComputeNormalizedRatio (0x0065B760) reads range[0] as the range start."
+      },
+      {
+        "offset": 14,
+        "name": "keyCount",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.75,
+        "evidence": "`((uint)*(ushort *)(param_1 + 0xe) * 6 + -6 + *(int *)(param_1 + 0x20))` - the key count scales the key stride to reach the last key."
+      },
+      {
+        "offset": 24,
+        "name": "duration",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "`(uint)(fVar4 * DAT_006eb000 * *(float *)(param_1 + 0x18) == in_s0)` - key time times +0x18 is compared with curve time, so +0x18 is the duration."
+      },
+      {
+        "offset": 32,
+        "name": "keyArray",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "`*(int *)(param_1 + 0x20)` is the key array base indexed by the key-count expression."
+      }
+    ]
+  },
+  {
+    "class": "Anim_Owner",
+    "type": "AnimOwner",
+    "summary": "An object that owns one embedded animation instance at +0xFC and a player pointer at +0x108: its per-frame tick snaps the player to a requested frame and then advances the instance.",
+    "size": 268,
+    "base": null,
+    "confidence": 0.45,
+    "evidence": "Anim_Owner_Tick (0x002D19C8) is `ldr r0,[r0,#0x108]; cmp r0,#0; blne 0x0029E520 (Anim_Player_SetFrame); add r0,r4,#0xfc; vldr s0,[pc]; b 0x002D0F4C (Anim_Instance_Update)`. The deleting dtor 0x002D2044 stores the vtable at +0x00, destroys the embedded instance at +0xFC through Anim_Instance_Dtor (0x002D11B4) and frees the object. The 268-byte size is only a lower bound: the embedded instance needs at least 0x28 bytes because its own +0x0C/+0x24/+0x26 are read.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "`str r1,[r0]` in the deleting dtor 0x002D2044 installs the incoming vtable pointer."
+      },
+      {
+        "offset": 252,
+        "name": "animInstance",
+        "type": "Anim_Instance*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "`add r0,r4,#0xfc` is passed by address to Anim_Instance_Update (0x002D0F4C) and Anim_Instance_Dtor (0x002D11B4), so an Anim_Instance is embedded here; the word at +0xFC is that instance's vtable slot, not a pointer to it."
+      },
+      {
+        "offset": 264,
+        "name": "maybe_player",
+        "type": "Anim_Player*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`ldr r0,[r0,#0x108]` is null-tested and then passed to Anim_Player_SetFrame (0x0029E520) with the tick's own frame argument; the same word is the embedded instance's +0x0C pointer read by Anim_Instance_Update."
+      }
+    ]
+  },
+  {
+    "class": "Anim_BoneTrack",
+    "type": "AnimBoneTrack",
+    "summary": "The per-bone animation channel set: an array of channel pointers plus its count, evaluated by Anim_BoneTrack_EvaluateAll into the skeleton pose buffer.",
+    "size": 20,
+    "base": null,
+    "confidence": 0.7,
+    "evidence": "Anim_BoneTrack_EvaluateAll (0x00712858) tests `*(short *)(*animState->f_c + 6) == 4` (the first channel's u16 type), fetches channel i with `*(int *)(animState->f_c + i * 4)` and loops `while (i < animState->f_10)`; each channel carries a flags word at +8 and is evaluated by Anim_Channel_EvaluateRotation (0x00712EC8).",
+    "fields": [
+      {
+        "offset": 12,
+        "name": "channelArray",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "`animState->f_c` is indexed by 4 to get channel i (`*(int *)(animState->f_c + i * 4)`) and `*animState->f_c` is dereferenced for the u16 type at +6, so it is an array of channel pointers."
+      },
+      {
+        "offset": 16,
+        "name": "channelCount",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "`if (animState->f_10 != 0)` guards the loop and `while (i < animState->f_10)` bounds it."
+      }
+    ]
+  },
+  {
+    "class": "Anim_KeyframeTrack",
+    "type": "AnimKeyframeTrack",
+    "summary": "Head of the keyframe-track evaluator state: the pose buffer it allocates and the write cursor into it; the 8-byte size is only a lower bound (the same object also holds the buffer size at +0x08 and the track tables at +0x18/+0x1C).",
+    "size": 8,
+    "base": null,
+    "confidence": 0.45,
+    "evidence": "Anim_KeyframeTrack_EvaluateAll (0x005ABEB4) does `iVar11 = Mem_AllocAligned(iVar9,...); self[1] = iVar11; *self = iVar11; self[2] = iVar9;` and later `self[6]`/`self[7]` for the two track tables, so the object is at least 0x9C bytes. The recorded write in Anim_KeyframeTrack_ResetState (0x005ACB04) is to a locally computed pointer (`puVar6 = (u32 *)(iVar3 * 0x10)`), not to self, so it is not evidence for these offsets.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "poseBuffer",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "`*self = iVar11` where iVar11 is the Mem_AllocAligned pose buffer, so +0x00 is the buffer base."
+      },
+      {
+        "offset": 4,
+        "name": "maybe_poseBufferCursor",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.45,
+        "evidence": "`self[1] = iVar11` starts at the same base and is then advanced to the aligned per-bone area (`self[1] = uVar8`), i.e. the write cursor into the pose buffer."
+      }
+    ]
+  },
+  {
+    "class": "Anim_PingPongFloat",
+    "type": "AnimPingPongFloat",
+    "summary": "The owner object of a ping-pong swing: only its per-frame delta at +0xA4 is recovered; the swing value and velocity live in the second argument of Anim_PingPongFloat_Update.",
+    "size": 168,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Anim_PingPongFloat_Update (0x0049D404) computes `arg2->f_13c + arg2->f_140 * owner->f_a4`, stores it back to arg2->f_13c, then flips arg2->f_140 and clamps to 0x431B0000/0x43430000 before calling Ui_ArcListRow_UpdateSwingPose (0x0049DDB8). The only field of the first argument it touches is +0xA4, so the 168-byte class is the owner, not the swing state.",
+    "fields": [
+      {
+        "offset": 164,
+        "name": "frameDelta",
+        "type": "f32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "`arg2->f_140 * owner->f_a4` is the per-update increment of the swing value, i.e. velocity times the frame delta."
+      }
+    ]
+  },
+  {
+    "class": "Anim_Player",
+    "type": "AnimPlayer",
+    "summary": "An animation player: a clip pointer at +0x44 and the current frame stored as a float at +0x64, set by Anim_Player_SetFrame.",
+    "size": 72,
+    "base": null,
+    "confidence": 0.7,
+    "evidence": "Anim_Player_SetFrame (0x0029E520) is `ldr r0,[r0,#0x44]; cmp r0,#0; beq out; cmp r4,#0; blt out; bl 0x0063C78C (frame count of the clip); cmp r0,r4; blt out; vcvt.f32.s32 s0,r4; vstr s0,[r5,#0x64]`, so +0x44 is the clip and +0x64 the current frame. The 72-byte size is a lower bound because +0x64 lies beyond it.",
+    "fields": [
+      {
+        "offset": 68,
+        "name": "clip",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "`ldr r0,[r0,#0x44]` is null-checked and then passed to 0x0063C78C, which returns the clip's frame count; the frame is only stored when 0 <= frame <= that count."
+      }
+    ]
+  }
+]

@@ -1,0 +1,1778 @@
+[
+ {
+  "address": "0x00100050",
+  "name": "std_ConstructArray",
+  "signature": "void *std_ConstructArray(void *base, void (*ctor)(void *), u32 elemSize, u32 count)",
+  "params": {
+   "param_1": "base",
+   "param_2": "ctor",
+   "param_3": "elemSize",
+   "param_4": "count"
+  },
+  "summary": "Runs a constructor callback once per element of a raw array, advancing by elemSize and stopping after count elements; returns the array base, never the callback result. This is the helper every array-of-objects constructor in the binary was compiled down to.",
+  "confidence": 0.7,
+  "evidence": "Body: iVar1 = base; while (arg4) { (*arg2)(iVar1); iVar1 += arg3; } return base. Disassembly shows an actual `blx r6` per element, so the second argument is a code pointer, not a fill value. 593 callers including Engine_Initialize@0x101b74, 0x109990 (2 slots of 10 bytes at +0x31ce), 0x1064d8 (5 slots of 0x10 at +0x34), 0x1064d8/0x15cdc4. Every code-pointer argument used with it dereferences to a code address in code.decompressed.bin: g_0010672c -> 0x107f6c, g_00109d94 -> 0x10f3b4, g_0010e42c/30/34 -> 0x116798/0x1167b0/0x116780, g_00114270 -> 0x11982c, g_001144b0 -> 0x119838, g_0011deac -> 0x1235e0, g_00124478 -> 0x1150a0, g_001221bc -> 0x106a10; and the object each ctor fills starts with a vtable pointer (e.g. g_00106728 -> 0x7821c8). This is the array-of-objects construction helper, not memset/memcpy (N_081's merge note guesses memcpy for this address - that is wrong)."
+ },
+ {
+  "address": "0x001005EE",
+  "name": "maybe_std_StrtodThunk",
+  "signature": "double maybe_std_StrtodThunk(const char *text, char **end)",
+  "params": {
+   "param_1": "text",
+   "param_2": "end"
+  },
+  "summary": "Eight-byte pass-through trampoline that branches straight into std_strtod with the caller's registers untouched, so it is an alternate entry to the double parser rather than atof (atof would clear the endptr argument).",
+  "confidence": 0.45,
+  "evidence": "Bytes at 0x1005ee: 10 b5 00 f0 4a fc 10 bd = push {r4,lr}; bl 0x100e88 (std_strtod); pop {r4,pc}; no argument setup at all. Only callers are 0x502e20 and 0x503298, i.e. the 0x50xxxx math/format block, not the libc printf core."
+ },
+ {
+  "address": "0x001005F6",
+  "name": "std_mbstowcs",
+  "signature": "int std_mbstowcs(u16 *dst, const u8 *src, u32 maxChars, mbstate *state)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src",
+   "param_3": "maxChars",
+   "param_4": "state"
+  },
+  "summary": "Converts a multibyte byte string (current locale encoding) into a 16-bit wide-character buffer, one character per call to the locale decoder, stopping at the terminating NUL or after maxChars characters, and returns the number of wide characters stored.",
+  "confidence": 0.7,
+  "evidence": "Loop reads one byte, calls 0x2ff9d0 (locale mbrtowc dispatch: it tail-calls the encoding function at state->f_103) and stores the resulting wchar with `*(short*)(arg1 + i*2)`; loop exits on wchar==0 or i>=arg3; callers 0x502650/0x502928 are in the libc string/format block next to std_mbrlen@0x100658 and std_mbrtowc@0x10067c."
+ },
+ {
+  "address": "0x00100A74",
+  "name": "std_wcsncpy",
+  "signature": "u16 *std_wcsncpy(u16 *dst, const u16 *src, int count)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src",
+   "param_3": "count"
+  },
+  "summary": "Copies at most count wide characters and zero-fills the remainder: once the source NUL is copied the source pointer stops advancing, which is exactly the wcsncpy contract.",
+  "confidence": 0.8,
+  "evidence": "Body: while (count--) { *dst++ = *src; if (*src) src++; } return dst; the conditional advance is the c89 wcsncpy padding idiom. 16 callers include Actor_CompareNames@0x147dc4, Text_LayoutPage_BuildLines@0x2fd45c and 0x1918 0x19180c (seven-character short-name field of a text page)."
+ },
+ {
+  "address": "0x00105584",
+  "name": "Snd_StreamSlot_UpdateAll",
+  "signature": "void Snd_StreamSlot_UpdateAll(SndStreamPool *pool)",
+  "params": {
+   "param_1": "pool"
+  },
+  "summary": "Per-frame update of the six banks of streamed-audio slots (6 x 0x20 slots of 0x24 bytes at +0x110). For every slot whose state bits are set it validates the slot's pack handle, completes or cancels the pending async transfer, releases the pack record and adjusts the busy counters.",
+  "confidence": 0.5,
+  "evidence": "Slot records are 0x24 bytes at self+0x110 (index = bank*0x20 + slot, six banks, f_d4/f_d8/f_dc are the busy counts, f_f8/f_e0 the per-bank bitmasks); state word at +4 with bits 2/4; pack handle at +5 is validated against g_00105aec/g_00105af0 exactly like Pack_FreeHandleEntry@0x1241d0; transfers go through 0x10df00 and complete via 0x10ef64/0x10efb8; gain changes via Snd_FadeChannelToGain@0x114cfc. Callers 0x10293c (frame tasks), 0x1ecd08, 0x1ecd6c, 0x1edab4 (sound)."
+ },
+ {
+  "address": "0x00105ACE",
+  "name": "maybe_Snd_StreamVoice_UpdateAlt",
+  "signature": "void maybe_Snd_StreamVoice_UpdateAlt(SndStreamVoice *voice)",
+  "params": {
+   "param_1": "voice"
+  },
+  "summary": "Same streamed-voice state machine as 0x105afc. Ghidra decoded the tail bytes of the neighbouring ARM routine as a separate Thumb function, so this entry is a mis-split duplicate of the stop/fade/ring-advance code.",
+  "confidence": 0.3,
+  "evidence": "0x105ace is exactly the end of 0x105584 and sits in ARM code (the ARM twin 0x105afc is 0x2e bytes later), yet the batch marks it thumb; the pseudo-C is structurally identical to 0x105afc (same 0x40-entry rings f_a48/f_a4c, state byte f_a50, same callees 0x116e44 / 0x114cfc / 0x10df00)."
+ },
+ {
+  "address": "0x00105AFC",
+  "name": "Snd_StreamVoice_Update",
+  "signature": "void Snd_StreamVoice_Update(SndStreamVoice *voice)",
+  "params": {
+   "param_1": "voice"
+  },
+  "summary": "Drives one streamed-audio voice for a frame: consumes the 64-entry command ring at +0x1848 (start / set-buffer / stop / fade / delay), submits pack-streamed chunks into the voice's two buffers, advances the fade timer at +0x1a54 and runs the nine-state machine at +0x1a50.",
+  "confidence": 0.55,
+  "evidence": "Called by Snd_RequestBgmPlay@0x1ec1d0 and Snd_RequestBgmStop@0x1ee4f8 plus 0x10293c; ring of 0x40 records of 8 bytes at +0x1848 read via f_1a48/f_1a4c, states 0..8 in f_1a50, fade compares f_1a54 with f_1a58, calls 0x10df00 (async read into a buffer), Snd_FadeChannelToGain@0x114cfc, 0x116e44 (per-voice parameter), and the pack free path 0x1241d0."
+ },
+ {
+  "address": "0x001064D8",
+  "name": "maybe_Os_OwnerTable_Init",
+  "signature": "void maybe_Os_OwnerTable_Init(OsOwnerTable *table, u32 vtable)",
+  "params": {
+   "param_1": "table",
+   "param_2": "vtable"
+  },
+  "summary": "Initialises a small owner/handle table: stores the vtable word, walks a chain of 0x30-byte sub-blocks starting at +4 and default-constructs five 0x10-byte records at +0x34.",
+  "confidence": 0.3,
+  "evidence": "*arg1 = arg2, then a repeated 0x109558(arg+1) / 0x109558(&x->f_30) chain (Ghidra lost the individual calls), closing with func_00100050(&x->f_34, g_0010672c, 0x10, 5). No callers; the neighbours are Gfx_ReleaseFinishedUploads@0x106280, Os_SetRuntimeFlag@0x106440 and Os_GetThreadClass@0x106460."
+ },
+ {
+  "address": "0x00108F32",
+  "name": "maybe_Snd_ShutdownEngine",
+  "signature": "void maybe_Snd_ShutdownEngine(SndEngine *engine, u32 arg2, u32 *mask, int count)",
+  "params": {
+   "param_1": "engine",
+   "param_2": "arg2",
+   "param_3": "mask",
+   "param_4": "count"
+  },
+  "summary": "Closes the engine's session handles and tears down active voices: for every set bit of the caller's id mask it releases the 0x1c-byte voice records (honouring the 0x8000 flag table at g_00109894) and finally signals the waiting lock.",
+  "confidence": 0.4,
+  "evidence": "svc 0x24 (wait) plus svc 0x23 (CloseHandle) on ->f_344, sets state bytes f_358/f_348, calls 0x10ea00 (buffer release) on +0x340; then loops `mask = *(u32*)(arg3 + i*4)` bit by bit over 0x1c-byte records at self->f_24 + i*0x1c calling 0x10df40 / 0x10df90 / 0x10e174; asserts through 0x118100 when *g_0010988c < 0. Ghidra dropped several registers (unaff_r5/r6), so the object identity comes from the callees."
+ },
+ {
+  "address": "0x00109990",
+  "name": "maybe_Gfx_Context_ResetState",
+  "signature": "void maybe_Gfx_Context_ResetState(GfxContext *ctx, u32 vtable)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "vtable"
+  },
+  "summary": "Constructor/reset of the display context: stores the vtable, clears the counters at +0x294c..+0x2988 and the table at +0xc738, then default-constructs two 10-byte entries there.",
+  "confidence": 0.35,
+  "evidence": "*arg1 = arg2; explicit zero stores to arg1[0xa53..0xa62], arg1[0xa99..0xa9b], arg1[0xb48..0xb4a]; ends with func_00100050((int)arg1 + 0x31ce, g_00109d94, 10, 2). Neighbours Gfx_CopyFramebuffer@0x10ad60, Gfx_SwapFrameBuffers@0x109e28, Gfx_ReleaseBufferRecord@0x109e88."
+ },
+ {
+  "address": "0x0010AF94",
+  "name": "Pack_HandleTable_Get",
+  "signature": "PackHandleTable **Pack_HandleTable_Get(PackHandleTable **out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Lazily creates and returns the global pack-handle table: allocates a zeroed singleton, constructs its twenty 0x28-byte handle entries at +0x18 and caches the pointer.",
+  "confidence": 0.5,
+  "evidence": "One-shot flag g_0010b040, cache g_0010b044, size g_0010b04c aligned to 0x10 through 0x11cfac, std_bzero + 0x1242ac (the 0x14-entry pack handle ctor at g_00124478), then ->f_4 = g_0010b050 + 0x18. Callers Fs_CacheSet_Initialize@0x103724, Gfx_SubmitDrawList@0x10411c, Fs_NamedObject_LoadSimple@0x3882f0, Ui_Window_SetColorByState@0x38859c."
+ },
+ {
+  "address": "0x0010CDE0",
+  "name": "maybe_Svc_RequestWithSetup",
+  "signature": "int maybe_Svc_RequestWithSetup(u32 cmd, u32 arg2, u32 arg3)",
+  "params": {
+   "param_1": "cmd",
+   "param_2": "arg2",
+   "param_3": "arg3"
+  },
+  "summary": "Wraps a service request in the engine's global lock: queries the session state, waits (sleeping) while the peer reports busy, sends the caller's three-word request and restores the lock.",
+  "confidence": 0.4,
+  "evidence": "0x119ba8/0x119e1c bracket every step (global lock), 0x114514(0xffffffff,&a,&b,&c) plus 0x11a36c polling with 0x11cc94 sleeps, then 0x1144c0(cmd,arg2,arg3) issues the real svc 0x32 request; errors go to 0x118924(result, 0x10ce1c / 0x10ce58 / 0x10cef8). Callers are the two sound-state updaters 0x1078a8 and 0x1079c0."
+ },
+ {
+  "address": "0x0010D430",
+  "name": "maybe_Svc_RequestWithRetry",
+  "signature": "int maybe_Svc_RequestWithRetry(u32 req, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "req",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Same locked session wrapper, but it retries the request while the service returns one of three 'try again' codes, sleeping ten time units between attempts, and reports a negative result through the error handler.",
+  "confidence": 0.45,
+  "evidence": "Loop calls 0x1145c4(arg1..arg4) and repeats while the result equals g_0010d640 / g_0010d644 / g_0010d648, sleeping via 0x11cc94(g_0010d64c * 10); arms/clears the in-call flag with 0x11391c / 0x113980, error path 0x11ed40(result, 0x10d5d4); caller maybe_Snd_UpdateStateB@0x1079c0."
+ },
+ {
+  "address": "0x0010E08C",
+  "name": "Container_ForEachPair",
+  "signature": "int Container_ForEachPair(Container *map)",
+  "params": {
+   "param_1": "map"
+  },
+  "summary": "Iterates a key/value container and dispatches every entry to the owner object's vtable slot +0xc; returns 0 as soon as an entry cannot be read and 1 after the whole map was walked.",
+  "confidence": 0.5,
+  "evidence": "0x114dd0 builds the iterator (element count = *iterator), the loop calls 0x115d78(it,&key,&value) and then `(**(code **)(*arg1 + 0xc))(arg1,key,value)`; bail-out returns the partially read value when 0x115d78 fails."
+ },
+ {
+  "address": "0x0010E104",
+  "name": "Snd_QueueWaveCommand",
+  "signature": "void Snd_QueueWaveCommand(u32 unused, u32 waveAddress, u32 waveLength)",
+  "params": {
+   "param_1": "unused",
+   "param_2": "waveAddress",
+   "param_3": "waveLength"
+  },
+  "summary": "Queues a 'set wave data' command on the sound engine: allocates a six-word command node, tags it 0x31, stores the caller's buffer address and length, links it into the submit chain and flushes the queue.",
+  "confidence": 0.5,
+  "evidence": "Engine singleton 0x11b7e8; node alloc 0x11b57c(engine,6); node byte +4 = 0x31; f_10/f_14 = arg2/arg3; submit 0x11b89c; then 0x114e60(engine,1) and 0x115018 wait for the command id. Only caller is 0x105584 (streamed-voice update), which passes the voice buffer pointer and its size."
+ },
+ {
+  "address": "0x0010E174",
+  "name": "Snd_ReleaseAllChannels",
+  "signature": "void Snd_ReleaseAllChannels(SndEngine *engine)",
+  "params": {
+   "param_1": "engine"
+  },
+  "summary": "Destroys every channel object of the engine (0x18 records of 0x5c bytes), rebuilds the three 128-entry parameter tables and drains the pending command queue before the engine stops.",
+  "confidence": 0.55,
+  "evidence": "Loop i < self->f_18 calling 0x11ae88(self->f_1c + i*0x5c) = per-channel release; then three func_00100050(stack, g_0010e42c/0x10e430/0x10e434, 0xc, 0x80) = construct 3 x 128 twelve-byte records (128 = the mixer's voice count); finally 0x11b7e8 (engine), 0x114fac (queue drain) and 0x114e60(engine,0). Callers 0x108f32 (engine shutdown) and 0x10967c."
+ },
+ {
+  "address": "0x0010E438",
+  "name": "maybe_Snd_SetVoiceLoop",
+  "signature": "void maybe_Snd_SetVoiceLoop(SndVoice *voice, int restart, u32 rate, float startPos)",
+  "params": {
+   "param_1": "voice",
+   "param_2": "restart",
+   "param_3": "rate",
+   "param_4": "startPos"
+  },
+  "summary": "Programs a voice's sample-loop window: converts the caller's rate and start position into a loop length (clamped to at least one sample), stores start/length/end and switches the voice into the 'loop prepared' state; with restart == 0 the existing loop is first torn down.",
+  "confidence": 0.45,
+  "evidence": "Reads state byte f_a1 (0..3), locks the 4-word loop record with 0x11cbd4(&voice->f_78), computes (int)((g_0010e53c - s0) * (float)rate) with a minimum of 1, writes f_78/f_7c/f_80/f_84 and sets f_a1 = 3 (restart) or 1 plus flag f_a3. Used by 0x105584, 0x105ace, 0x105afc and 0x1eb8c8 - all streamed-voice code; the float argument arrives in s0, which is why Ghidra's signature only shows three parameters."
+ },
+ {
+  "address": "0x0010F448",
+  "name": "maybe_Ui_PartyStatus_InitMemberData",
+  "signature": "void maybe_Ui_PartyStatus_InitMemberData(UiPartyStatus *wnd)",
+  "params": {
+   "param_1": "wnd"
+  },
+  "summary": "Initialises the member/parameter region of the party-status window: fills the 31-byte flag array with 0xff, zeroes the 0x36 per-member records and resets the 90-entry name table plus the 0x168 / 0x64 / 0x54 sub-tables to their defaults.",
+  "confidence": 0.4,
+  "evidence": "Called with the window pointer from 0x19371c; uses std_bzero@0x116ae0, std_memcpy@0x116c10 and the fill helpers 0x111384 / 0x1113ec; every offset it touches (0x2780, 0x2964, 0x2a70, 0x31ce, 0x4b30, 0x5418, 0x5762, 0x59ac, 0x89a8) lies inside the >0x974c-byte object built by 0x19371c / 0x1939c0."
+ },
+ {
+  "address": "0x0010F790",
+  "name": "maybe_Gfx_InitRegisterTables",
+  "signature": "void maybe_Gfx_InitRegisterTables(GfxState *state, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "state",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Builds the GPU's static state tables: copies the register table, expands four 0xbd-terminated id lists into bitsets, and fills the per-format value/valid arrays with the constants 0x800, 0x3f000, 0x3c00, 1 and 0.",
+  "confidence": 0.42,
+  "evidence": "Only caller is Gfx_InitializeContext@0x109fb0. Writes state->f_13a4..f_176c (a value array plus the parallel valid-byte array at +0x16b1), has a switch over indices 0x61..0xb3 selecting 0x3c00 / 0x3f000 / 0x800 / 1 / 0, and ends with the `while (i != 0xbd) { bits[i>>5] |= 1 << (i & 31); }` idiom (0xbd is the list terminator)."
+ },
+ {
+  "address": "0x0011108C",
+  "name": "std_VectorInsertU32",
+  "signature": "void std_VectorInsertU32(u32 **vec, u32 *pos, const u32 *value)",
+  "params": {
+   "param_1": "vec",
+   "param_2": "pos",
+   "param_3": "value"
+  },
+  "summary": "std::vector<u32>::insert: with spare capacity it shifts the tail right with memmove and stores the new word; otherwise it doubles the capacity and copies both halves into a fresh block.",
+  "confidence": 0.6,
+  "evidence": "Disassembly 0x11108c: ldrd r0,r1,[r6,#4] (begin/end), compares end to capacity, `addhi r7,r2,#4` when pos == end, three calls to 0x111378 with (dst,src,bytes) move the two halves, and the new capacity is `size ? size*2 : 1` (lslne r8,r0,#1 / moveq r8,#1)."
+ },
+ {
+  "address": "0x0011117C",
+  "name": "std_VectorInsertU32Copy",
+  "signature": "void std_VectorInsertU32Copy(u32 **vec, u32 *pos, const u32 *value)",
+  "params": {
+   "param_1": "vec",
+   "param_2": "pos",
+   "param_3": "value"
+  },
+  "summary": "A second, instruction-identical instantiation of std::vector<u32>::insert; two translation units emitted their own copy, so the game contains both.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x11117c..0x111268 is instruction-for-instruction identical to 0x11108c..0x111174 apart from the branch offsets; both call 0x111378 (memmove) three times with the same register setup."
+ },
+ {
+  "address": "0x00111378",
+  "name": "std_memmove",
+  "signature": "void *std_memmove(void *dst, const void *src, u32 bytes)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src",
+   "param_3": "bytes"
+  },
+  "summary": "memmove: copies bytes in whichever direction is safe (backwards when the regions overlap and dst > src) using 4-byte words with a byte tail, and returns dst.",
+  "confidence": 0.85,
+  "evidence": "0x111378 jumps into 0x1112ec, which starts `subs r3,r0,r1; cmphs r2,r3; bls 0x116a14` (no overlap -> forward memcpy) and otherwise copies backwards with `ldr/str [r0,#-4]!`; 63 callers, all vector/array moves (e.g. 0x18c544, 0x194408, 0x194220)."
+ },
+ {
+  "address": "0x001114A4",
+  "name": "maybe_Buffer_ResetDoubleBuffer",
+  "signature": "void maybe_Buffer_ResetDoubleBuffer(BufferPair *pair)",
+  "params": {
+   "param_1": "pair"
+  },
+  "summary": "Zeroes both 0x84-byte halves of a double-buffered record and marks the two slots empty (-1), i.e. the reset half of a double-buffered object cache.",
+  "confidence": 0.35,
+  "evidence": "std_bzero(self,0x84); std_bzero(&self->f_84,0x84); f_108 = 0; f_10c = 0; f_110 = 0xffffffff. Two unrelated subsystems use the same template: callers 0x5f8e48 and 0x67bfd0."
+ },
+ {
+  "address": "0x00113814",
+  "name": "maybe_Os_SignalAndClose",
+  "signature": "void maybe_Os_SignalAndClose(void)",
+  "params": {},
+  "summary": "If the runtime object exists, wakes its waiting thread and then sends the close/notify request; part of the service-call bracketing used by the session wrappers 0x10cde0 / 0x10d430.",
+  "confidence": 0.35,
+  "evidence": "iVar1 = 0x11f20c(); if (iVar1 != 0) { 0x11f730(iVar1); 0x11973c(); }. 0x11973c is the svc-0x32 stub with header 0x190000. Callers 0x10cde0, 0x10d430, 0x51c38c."
+ },
+ {
+  "address": "0x00113A10",
+  "name": "maybe_Os_IsSessionRunnable",
+  "signature": "int maybe_Os_IsSessionRunnable(void)",
+  "params": {},
+  "summary": "Returns 1 only when the session is open and both the connected (0x20000000) and ready (0x10000000) bits of its status word are set.",
+  "confidence": 0.4,
+  "evidence": "uVar1 = 0x113954() status word, iVar2 = 0x1139b0() open flag, result = (open && (status & 0x20000000) && (status & 0x10000000)). Its only caller 0x10d430 uses the result to decide whether to arm the in-call flag."
+ },
+ {
+  "address": "0x00113F2C",
+  "name": "maybe_StaticInit_ThreeWordArray",
+  "signature": "void maybe_StaticInit_ThreeWordArray(void)",
+  "params": {},
+  "summary": "Constructs a three-element, 4-byte-stride temporary array through the shared array-ctor helper; Ghidra lost the rest of the body, so only the construction is visible.",
+  "confidence": 0.3,
+  "evidence": "Only statement: func_00100050(local_1c[12], g_00114270, 4, 3), and the caller-less function is marked noreturn. Same 'stack array of static objects' idiom as 0x1143f4."
+ },
+ {
+  "address": "0x001143F4",
+  "name": "maybe_StaticInit_TwoRecordArray",
+  "signature": "void maybe_StaticInit_TwoRecordArray(void)",
+  "params": {},
+  "summary": "Constructs a two-element array of 0x10-byte records on the stack through the shared array-ctor helper; everything after the construction was truncated by Ghidra.",
+  "confidence": 0.3,
+  "evidence": "func_00100050(local_30[36], g_001144b0, 0x10, 2). Called from 0x10cde0 and 0x10d430 immediately before they send their request, so this is the local request-structure setup Ghidra could not follow."
+ },
+ {
+  "address": "0x001144C0",
+  "name": "maybe_Svc_SendRequest3",
+  "signature": "int maybe_Svc_SendRequest3(u32 handle, int cmd, u32 arg3)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "cmd",
+   "param_3": "arg3"
+  },
+  "summary": "Builds a five-word IPC request in the calling thread's command block (header, command, argument, handle, command<<14|2) and issues svc 0x32 (SendSyncRequest), then returns the reply word.",
+  "confidence": 0.4,
+  "evidence": "coproc 10,6,7 yields the thread command block; f_80 = g_0011450c (header), f_84 = arg2, f_8c = arg3, f_94 = arg1, f_90 = arg2<<0xe|2; software_interrupt(0x32) = SendSyncRequest; returns iVar3->f_84 when the result is >= 0. Only caller 0x10cde0."
+ },
+ {
+  "address": "0x00114514",
+  "name": "maybe_Svc_QuerySessionInfo",
+  "signature": "int maybe_Svc_QuerySessionInfo(u8 cmd, u8 *out0, u32 *out1, u32 *out2, u32 *out3)",
+  "params": {
+   "param_1": "cmd",
+   "param_2": "out0",
+   "param_3": "out1",
+   "param_4": "out2",
+   "param_5": "out3"
+  },
+  "summary": "Sends a one-byte command to the session and copies the four reply words back to the caller; used to poll the session state before a request is made.",
+  "confidence": 0.4,
+  "evidence": "Header g_0011457c, command byte in f_84, svc 0x32, then on success copies f_88 / f_8c / f_90 / f_94 to the four out pointers. Callers 0x10cde0 and 0x10d388."
+ },
+ {
+  "address": "0x001145C4",
+  "name": "maybe_Svc_SendRequest4",
+  "signature": "u32 maybe_Svc_SendRequest4(u32 arg1, u32 arg2, int arg3, u32 arg4)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Six-word IPC request builder used by the retrying wrapper 0x10d430: packs arg3<<14|2 as the request descriptor, issues svc 0x32 and returns the reply.",
+  "confidence": 0.4,
+  "evidence": "f_80 = g_0011460c (header), f_90 = arg4, f_84 = arg1, f_88 = arg3, f_94 = arg3<<0xe|2, f_98 = arg2, software_interrupt(0x32). Only caller 0x10d430."
+ },
+ {
+  "address": "0x00114728",
+  "name": "maybe_Svc_PollStatusFlags",
+  "signature": "void maybe_Svc_PollStatusFlags(void)",
+  "params": {},
+  "summary": "Refreshes a pair of one-byte status flags from the service and, when the returned mode word changes to the expected value, switches the runtime to the new mode.",
+  "confidence": 0.35,
+  "evidence": "If g_00114790[1] != 0: 0x11fb54(&a) and 0x11fadc(&b) both succeed, the two bytes are OR-ed into *g_00114790, and if 0x11fb90(0) == g_00114794 then 0x11fb18(0) is called. Callers 0x10cde0, 0x10d430, 0x51c254."
+ },
+ {
+  "address": "0x00114DD0",
+  "name": "maybe_Fs_ArcHeader_Parse",
+  "signature": "int *maybe_Fs_ArcHeader_Parse(u32 *out3, int *header)",
+  "params": {
+   "param_1": "out3",
+   "param_2": "header"
+  },
+  "summary": "Parses a three-section archive header: checks the magic word and a size field (0x1000000..0x1000100), then resolves the three sub-blob offsets and returns pointers to each payload (each +8 past its header word).",
+  "confidence": 0.45,
+  "evidence": "if (*arg2 == g_00114e5c && arg2[2] - 0x1000000 < 0x10001) then 0x11bb70 / 0x11bb08 / 0x11bbdc locate the three sections and the results are stored as +8 offsets; out array is three pointers. Callers 0x10e08c and 0x54a3b8."
+ },
+ {
+  "address": "0x00114E60",
+  "name": "maybe_Os_WorkQueue_Push",
+  "signature": "u32 maybe_Os_WorkQueue_Push(WorkQueue *q, int wait, u32 arg3, int *node)",
+  "params": {
+   "param_1": "q",
+   "param_2": "wait",
+   "param_3": "arg3",
+   "param_4": "node"
+  },
+  "summary": "Publishes the next work item: waits until a free node is available, drains the completion queue (folding finished item ids into f_188/f_18c), links the new node at the tail and returns the item's sequence number.",
+  "confidence": 0.45,
+  "evidence": "Uses 0x11b8c0(q,4) to reserve a node, 0x11c8e0(&q->f_b4,&local) to pop completions while none is free (sleeping via 0x11cc94), maintains q->f_16c/f_170/f_174 (tail pointer, last id), and 0x11c96c / 0x1166b4 to hand the node over. Callers 0x10e104, 0x10e174, 0x543484, 0x546220, 0x547934, 0x5517d0, 0x5518f4."
+ },
+ {
+  "address": "0x00114FAC",
+  "name": "maybe_Os_WorkQueue_Drain",
+  "signature": "void maybe_Os_WorkQueue_Drain(WorkQueue *q, u32 arg2, u32 arg3, int *node)",
+  "params": {
+   "param_1": "q",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "node"
+  },
+  "summary": "Discards every pending completion of a work queue: pops each finished node, records its item id and clears the matching in-flight id when it was the last one submitted.",
+  "confidence": 0.4,
+  "evidence": "while (0x11c8e0(&q->f_b4,&local)) { q->f_178 = local[2]; walk to the tail; q->f_188 = tail[3]; q->f_18c = 0; if (q->f_184 == tail[3]) { q->f_188 = 0; q->f_184 = 0; } } - identical body to the cleanup block inside 0x114e60. Callers 0x10e174 and Sound_StreamThread_Main@0x5476b0."
+ },
+ {
+  "address": "0x00116C10",
+  "name": "std_memcpy",
+  "signature": "void *std_memcpy(void *dst, const void *src, u32 bytes)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src",
+   "param_3": "bytes"
+  },
+  "summary": "memcpy: copies bytes with an unrolled 32/16/8/4/2/1-byte ladder, loading eight words at a time while more than 0x20 bytes remain; returns the end of the destination in the second return register.",
+  "confidence": 0.9,
+  "evidence": "Body: while (bytes > 0x1f) copy 8 words (ldm/stm via HintPreloadData hints), then a bit-test ladder for 0x10 / 8 / 4 / 2 / 1; 385 callers, all record/struct copies (e.g. 0x10f448 copying 0x168-byte blocks, 0x1926d4 copying a 0x84-byte text-style record)."
+ },
+ {
+  "address": "0x00116DAC",
+  "name": "maybe_Pack_HandleApplyIfLoaded",
+  "signature": "void maybe_Pack_HandleApplyIfLoaded(u32 arg1, u8 index, int *handle, u32 value)",
+  "params": {
+   "param_1": "arg1",
+   "param_2": "index",
+   "param_3": "handle",
+   "param_4": "value"
+  },
+  "summary": "If the caller holds a live handle, looks the indexed pack record up and - unless the record is still in state 1 - applies a value to the handle's object.",
+  "confidence": 0.35,
+  "evidence": "if (*arg3 != 0) { puVar1 = 0x11cb38(&tmp); iVar2 = 0x11bac0(*puVar1, arg2); if (iVar2 == 0 || *(char*)(iVar2+4) != 1) { 0x11b530(*arg3, arg4); } } - the same record-type test used by 0x116e44 and 0x11ae88."
+ },
+ {
+  "address": "0x00116E44",
+  "name": "maybe_Pack_ApplyToLoadedHandles",
+  "signature": "void maybe_Pack_ApplyToLoadedHandles(StreamSlot *slot, u32 value)",
+  "params": {
+   "param_1": "slot",
+   "param_2": "value"
+  },
+  "summary": "Pushes a value into every live handle of a streamed slot (the two buffers at +0x34/+0x3c, the pack-backed one at +0x40 and the 5 x 32-record table at +0x7c) provided the corresponding pack record reports type 2.",
+  "confidence": 0.35,
+  "evidence": "Helper does the same 0x11cb38 + 0x11bac0 lookup and type==2 test for slot->f_34 (index f_58), f_3c (f_60) and f_40 (+0x64), then loops i < (f_84+0x1f)>>5 over the bitmap at f_80, indexing 0x14-byte records at f_7c and calling 0x11b530(record[0], arg2) unless bits 0x18 of +0x11 are set. Callers 0x105584, 0x105ace, 0x105afc, 0x1eb8c8."
+ },
+ {
+  "address": "0x00118814",
+  "name": "maybe_Os_InvokeCallbacks",
+  "signature": "void maybe_Os_InvokeCallbacks(void)",
+  "params": {},
+  "summary": "When a pending-event bit is set, invokes up to eight registered callback slots, then (if a callback asked for it) waits for the runtime object to drain and closes it.",
+  "confidence": 0.4,
+  "evidence": "*g_001188a8 is a state block: byte +1 = pending mask, +2 = handled mask, +8 = handle. Loop i < 8 calling table[*g_001188ac + i*4]; then while (0x1180b0(g_001188b0) == 0) sleep 0x11cc94; 0x1186b8(handle); 0x118064(). Callers 0x10cde0, 0x10d430, 0x119af4, 0x51c254."
+ },
+ {
+  "address": "0x0011973C",
+  "name": "maybe_Svc_SendRequest190000",
+  "signature": "u32 maybe_Svc_SendRequest190000(u32 *reply)",
+  "params": {
+   "param_1": "reply"
+  },
+  "summary": "One-word IPC request with the fixed header 0x190000 and a single reply word; part of the service bracketing used by the session wrappers.",
+  "confidence": 0.4,
+  "evidence": "Thread command block f_80 = 0x190000, svc 0x32, on success result = f_84 and *reply is left in f_84's neighbour; only caller 0x113814 (signal-and-close)."
+ },
+ {
+  "address": "0x0011AE88",
+  "name": "Snd_Channel_Release",
+  "signature": "void Snd_Channel_Release(SndChannel *chan)",
+  "params": {
+   "param_1": "chan"
+  },
+  "summary": "Releases one channel object: unlinks and frees its parameter list, recomputes the volume/pan of each remaining sub-voice, and returns all recycled list nodes to the pool.",
+  "confidence": 0.5,
+  "evidence": "Walks self->f_28 (removing entries of type 2 via 0x11fcf8) and the list at +4 (calling maybe_Snd_CalcVolumePan@0x11b048 on each 0x108-byte owner), then recycles from a 0xc-byte, 0x80-entry bucket table at g_0011b030 after applying UnsignedSaturate(prio,7); only caller 0x10e174 (release all channels)."
+ },
+ {
+  "address": "0x0011AF14",
+  "name": "Snd_ChannelList_ReinsertByPriority",
+  "signature": "void Snd_ChannelList_ReinsertByPriority(SndChannel *chan, u32 bucketOnly)",
+  "params": {
+   "param_1": "chan",
+   "param_2": "bucketOnly"
+  },
+  "summary": "Moves a channel between the mixer's priority buckets: unlinks it from the channel list and re-links it under the bucket index derived from its volume+pan priority byte, saturated to the eight priority levels.",
+  "confidence": 0.5,
+  "evidence": "Disassembly 0x11af14: removes the node from the list at +0xc with 0x11ad60, computes prio = usat((u8)node->0x9d + node->0x50, 7) and index = prio*3 into the 0xc-byte, 0x80-entry bucket table at g_0011b030, then inserts with 0x11fcf8(list, node). Companion of maybe_Snd_InsertChannelByPriority@0x11fd1c (N_032) and of the bucket walk inside 0x11ae88; no direct callers (reached through the channel vtable)."
+ },
+ {
+  "address": "0x0011B840",
+  "name": "maybe_Snd_QueueObjectCommand",
+  "signature": "u32 maybe_Snd_QueueObjectCommand(int *obj, u8 subtype)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "subtype"
+  },
+  "summary": "Queues a type-9 sound command carrying a value taken from the target object's vtable slot +0x20 plus a caller-supplied subtype byte, and returns the command's sequence number.",
+  "confidence": 0.45,
+  "evidence": "engine = 0x11b7e8(); node = 0x11b57c(engine,6); node[3] = engine->f_184; *(u8*)(node+1) = 9; value = (**(code**)(*obj + 0x20))(obj); node[4] = value; *(u8*)(node+5) = subtype; links at engine->f_16c/f_170 and returns engine->f_174. Callers 0x54455c, 0x545520, 0x546d3a (all in the 0x54xxxx stream player)."
+ },
+ {
+  "address": "0x0011CB38",
+  "name": "maybe_Game_GetDataManager",
+  "signature": "GameData **maybe_Game_GetDataManager(GameData **out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Lazily creates and returns the global game-data context (master tables: monsters, items, text, maps) that the 0x63xxxx lookup helpers take as their first argument.",
+  "confidence": 0.45,
+  "evidence": "One-shot flag g_0011cbc0, cache g_0011cbc4, size g_0011cbc8 via 0x11fe8c + 0x11cfac alignment, std_bzero then vtable store *puVar3 = g_0011cbd0. 992 callers, all of which immediately pass the result to data lookups such as 0x63fd24 (battle slot id -> monster record, test of record->f_191), 0x63cc1c and 0x63d85c."
+ },
+ {
+  "address": "0x0011CFE0",
+  "name": "Container_HashMap_Init",
+  "signature": "void Container_HashMap_Init(HashMap *map, u32 vtable)",
+  "params": {
+   "param_1": "map",
+   "param_2": "vtable"
+  },
+  "summary": "Constructor of an open-addressing hash map: stores the vtable, seeds the three bucket heads with the 0xfffff000 empty sentinel and default-constructs the 31 initial 8-byte slots.",
+  "confidence": 0.5,
+  "evidence": "*arg1 = arg2; arg1[2] = arg1[4] = arg1[6] = 0xfffff000 (empty key sentinel); arg1[1] = arg1[3] = arg1[5] = 0; then func_00100050(arg1 + 7, g_0011deac, 8, 0x1f). No callers; sits between the queue helpers and Os_GetCurrentThreadHandle@0x11df0c."
+ },
+ {
+  "address": "0x0011ED70",
+  "name": "maybe_Svc_SendRequestBuffer128",
+  "signature": "u32 maybe_Svc_SendRequestBuffer128(u32 *reply, u32 src)",
+  "params": {
+   "param_1": "reply",
+   "param_2": "src"
+  },
+  "summary": "IPC request with a 0x80-byte inline payload: copies the caller's buffer into the thread command block after the header 0x10800 and issues svc 0x32.",
+  "confidence": 0.4,
+  "evidence": "f_80 = 0x10800; std_memcpy(&f_84, arg2, 0x80); svc 0x32; returns f_84 on success. Only caller 0x11896c (transfer-done wait)."
+ },
+ {
+  "address": "0x0011FADC",
+  "name": "maybe_Svc_QueryStatus3C",
+  "signature": "int maybe_Svc_QueryStatus3C(u8 *out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "One-byte IPC query with the fixed header 0x3c0000; returns the status word and writes the first reply byte to the caller.",
+  "confidence": 0.4,
+  "evidence": "f_80 = 0x3c0000; svc 0x32; on success *arg1 = f_88 and result = f_84. Only caller 0x114728."
+ },
+ {
+  "address": "0x0011FB54",
+  "name": "maybe_Svc_QueryStatus3B",
+  "signature": "int maybe_Svc_QueryStatus3B(u8 *out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "One-byte IPC query with header 0x3b0000 (the literal at 0x3afff4 + 0xc); returns the status word and writes the first reply byte to the caller.",
+  "confidence": 0.4,
+  "evidence": "f_80 = s_cursor_select_003afff4 + 0xc = 0x3b0000; svc 0x32; on success *arg1 = f_88 and result = f_84. Only caller 0x114728, which ORs this byte with the one from 0x11fadc."
+ },
+ {
+  "address": "0x0011FD44",
+  "name": "maybe_Snd_ListInsertByPriority",
+  "signature": "void maybe_Snd_ListInsertByPriority(SndList *list, SndEntry *entry)",
+  "params": {
+   "param_1": "list",
+   "param_2": "entry"
+  },
+  "summary": "Inserts an entry into the priority-ordered channel list at the first position whose computed priority is lower (or equal, in strict mode) than the new entry's, clamping priorities to 0x7f.",
+  "confidence": 0.45,
+  "evidence": "Walks the intrusive list at self->f_10 comparing `prio = clamp(entry->f_9d + entry->f_50, 0..0x7f)` with `clamp(node[-0x2e] + (u8)node[-0x6b], 0..0x7f)`, using `break` on the ordering depending on self->f_58, then 0x11fcf8(&self->f_c, node, &entry->f_108) links it. Sibling of maybe_Snd_InsertChannelByPriority@0x11fd1c (N_032)."
+ },
+ {
+  "address": "0x00122124",
+  "name": "maybe_Container_MultiList_Init",
+  "signature": "void maybe_Container_MultiList_Init(Container *c, u32 arg2, u32 vtable, u32 arg4)",
+  "params": {
+   "param_1": "c",
+   "param_2": "arg2",
+   "param_3": "vtable",
+   "param_4": "arg4"
+  },
+  "summary": "Constructor of a container with two intrusive list heads at +0x54/+0x58 and seven 0x28-byte sub-records at +0x104; all scalar fields are cleared and the vtable stored.",
+  "confidence": 0.4,
+  "evidence": "*arg1 = arg3 (vtable); fields +4, +8, +0xc, +0xd, +0x10..+0x58 cleared; arg1[0x15] = arg1[0x16] = arg1 + 0x19 (self-referential list heads); arg1[0x17] = arg1 + 0x41; func_00100050(&arg1->f_41, g_001221bc, 0x28, 7). No callers; neighbours are Pack_LoadMasterTables@0x120464 and 0x122200."
+ },
+ {
+  "address": "0x0012345C",
+  "name": "Os_VirtualToPhysical",
+  "signature": "u32 Os_VirtualToPhysical(u32 address, int size)",
+  "params": {
+   "param_1": "address",
+   "param_2": "size"
+  },
+  "summary": "Translates a virtual address to its FCRAM physical address: VRAM (0x1f000000..0x1f5fffff, plus the 0x1f600000 alias) maps to 0x08000000-based memory, the linear heap shifts by 0x0c000000 or 0x0f000000 depending on the heap base, and unmapped addresses return 0.",
+  "confidence": 0.6,
+  "evidence": "Body: result = 0x123e18(address,1); if 0 and (address + 0xe1000000 < 0x600000 || address == 0x1f600000) -> address + 0xf9000000 (0x1f000000 -> 0x08000000, the classic VRAM mapping); otherwise tries 0x123db4 / 0x123dcc and the heap bounds from 0x122cd8 / 0x122cc0, adding 0xc000000 (or 0xf0000000 for heaps at 0x30000000+). 31 callers, all low-level audio/DSP buffer setup."
+ },
+ {
+  "address": "0x00123DCC",
+  "name": "Os_TranslateLinearAddress",
+  "signature": "int Os_TranslateLinearAddress(u32 address, int size)",
+  "params": {
+   "param_1": "address",
+   "param_2": "size"
+  },
+  "summary": "Translates an address that lies inside the linear heap: validates the range against 0x124cdc/0x124cec and returns the physical address by adding the heap's base delta.",
+  "confidence": 0.5,
+  "evidence": "uVar1 = 0x124cec(); if (address >= uVar1 && address + size > address && address + size <= 0x124cdc() + uVar1) return *g_00123e14 + address; else 0. Only caller 0x12345c."
+ },
+ {
+  "address": "0x00123E18",
+  "name": "maybe_Os_TranslateMainRamAddress",
+  "signature": "int maybe_Os_TranslateMainRamAddress(u32 address, int size)",
+  "params": {
+   "param_1": "address",
+   "param_2": "size"
+  },
+  "summary": "Returns the physical address for a range that overlaps the main RAM window reported by 0x1180f0/0x1180e0, or 0 when the range lies completely outside it.",
+  "confidence": 0.45,
+  "evidence": "uVar1 = 0x1180f0() (base), iVar2 = 0x1180e0() (size), tests whether [arg1, arg1+arg2) intersects [uVar1, uVar1+iVar2) and then returns *(int*)(g_00123e68 + 4) + arg1. Callers 0x12345c plus three sound-buffer setup functions."
+ },
+ {
+  "address": "0x00124154",
+  "name": "Pack_Handle_Dtor",
+  "signature": "PackHandleRef *Pack_Handle_Dtor(PackHandleRef *ref)",
+  "params": {
+   "param_1": "ref"
+  },
+  "summary": "Releases the pack handle owned by a game object (a destructor helper): frees the handle's table entry, then overwrites the handle word with the 'empty' sentinel.",
+  "confidence": 0.5,
+  "evidence": "0x30c3f0() first (subsystem-specific pre-release), then validates *arg1 against the pack handle table (g_001241c4 mask / g_001241c8 table, entry[1] == handle>>12) and calls Pack_FreeHandleEntry@0x1241d0; finally *arg1 = *arg1 & g_001241cc | g_001241cc (sentinel). 39 callers, all over UI/field object destructors."
+ },
+ {
+  "address": "0x001242AC",
+  "name": "Pack_HandleEntry_Init",
+  "signature": "void Pack_HandleEntry_Init(PackHandleEntry *entry, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "entry",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Constructor of a pack-handle entry: installs the vtable pair at +4/+8, clears the state words, and default-constructs the twenty 0x28-byte sub-handles at +0x18.",
+  "confidence": 0.5,
+  "evidence": "piVar1 = 0x10e8c0(arg1 + 4) (base-object ctor); piVar1[-1] = g_00124470; *piVar1 = g_00124470 + 0x18; then [1]=0, [2]=g_00124474, [3]=0, [4]=g_00124474, [5]=0 and func_00100050(piVar1 + 6, g_00124478, 0x28, 0x14). Callers 0x10af94 (lazy global table) and Pack_FreeHandleEntry@0x1241d0."
+ },
+ {
+  "address": "0x00124D48",
+  "name": "Pack_HandlePair_MoveAssign",
+  "signature": "u32 *Pack_HandlePair_MoveAssign(u32 *dst, u32 *src)",
+  "params": {
+   "param_1": "dst",
+   "param_2": "src"
+  },
+  "summary": "Move-assigns a pair of pack handles: releases both handles currently held by dst (validating them against the two handle tables) and then takes over src's handle, leaving src untouched.",
+  "confidence": 0.55,
+  "evidence": "For each of *arg1 and *arg2: if (mask != handle>>12) look up the table entry and, when entry[1] == handle>>12 and entry[0] != 0, call Pack_FreeHandleEntry@0x1241d0 / 0x124dd0; finally *arg1 = *arg2. 51 callers including Pack_LoadMasterTables@0x120464 and the UI resource loaders."
+ },
+ {
+  "address": "0x00126250",
+  "name": "std_MemCopyAlias",
+  "signature": "u32 std_MemCopyAlias(const void *src, void *dst, u32 bytes)",
+  "params": {
+   "param_1": "src",
+   "param_2": "dst",
+   "param_3": "bytes"
+  },
+  "summary": "Alternate entry to the forward memcpy (0x116a14) that forwards its three arguments and returns the destination; i.e. a second memcpy symbol from another translation unit.",
+  "confidence": 0.5,
+  "evidence": "Body: func_00116a14(); return arg1; 0x116a14 is the forward memcpy (byte-head, word body, jumps to 0x116c10 when both pointers are word-aligned). Only caller 0x564b60, in the 0x56xxxx maths/vector block."
+ },
+ {
+  "address": "0x00147750",
+  "name": "Script_ArraySort",
+  "signature": "int Script_ArraySort(uint *vm, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "The native behind array.sort(): heapsorts the elements of the array in stack slot vm->f_34, using the caller's comparator closure when one was passed and the built-in value comparison otherwise.",
+  "confidence": 0.6,
+  "evidence": "Gets the array with 0x5b5c6c(self, f_34) and its size from (+4)->f_1c, then heapifies with `for (i = n/2; i >= 0; i--)` calling 0x152ff0 (the comparator sift), then repeatedly swaps element 0 with the last one and re-sifts; 0x6bbd6c supplies the argument count. Part of the Squirrel standard library block (0x14cc14 has the 'compare func failed' string)."
+ },
+ {
+  "address": "0x00147834",
+  "name": "Script_ArrayClone",
+  "signature": "int Script_ArrayClone(uint *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Copies all elements of one script array into another (the native behind array copy/assign): grows the destination's capacity, copies each 8-byte value with reference-count handling, and releases the elements beyond the new length.",
+  "confidence": 0.55,
+  "evidence": "src = 0x5b5c6c(self, f_34 + 1), dst = 0x5f9d8c(self->f_8c, size) where size comes from the source (or 0 for non-int sources), capacity growth via 0x14ce14(dst[6], cap*8, n*8), element copy with refcount bump when the tag has bit 0x8000000, and release of dropped elements through the vtable slot +8."
+ },
+ {
+  "address": "0x00147A4C",
+  "name": "maybe_Script_CallFunction2",
+  "signature": "int maybe_Script_CallFunction2(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Calls a script closure with two arguments and, if the VM exposes a result hook, hands the returned value back to it.",
+  "confidence": 0.45,
+  "evidence": "0x6bda58(vm,2) sets the argument count, 0x6bbd28(vm,0xffffffff,&ret) performs the call, then if vm->f_8c->f_a8 (a callback pointer in the VM) is non-null it is invoked with (vm, &g_00147aa0, ret). No callers - reached through a binding table."
+ },
+ {
+  "address": "0x001498FC",
+  "name": "Event_EvaluateConditionBlock",
+  "signature": "int Event_EvaluateConditionBlock(int *block, u32 kind, u32 row)",
+  "params": {
+   "param_1": "block",
+   "param_2": "kind",
+   "param_3": "row"
+  },
+  "summary": "Evaluates a serialised condition/requirement block (the kind selector plus up to four id lists) against the current game flags: it returns 1 as soon as one listed requirement mismatches the flag bytes and 0 when the whole list matches. The caller ORs the result into a per-entry byte, i.e. it is a boolean predicate over a requirement list.",
+  "confidence": 0.5,
+  "evidence": "The block is an array of 0x28-byte rows selected by row+0x20 == kind; each row has counts and self-relative offsets to lists of (u16 id, u8 mode) pairs that are compared with the flag bytes at gameWork+0x24a98+id (the same +0x24a98 flag area used by 0x15a690); ids are resolved through 0x66b17c (item), 0x66af08 (spirit) and 0x66b380 (quest). Callers 0x1ab690 and 0x1b2448 (menu/quest UI)."
+ },
+ {
+  "address": "0x0014AE70",
+  "name": "Script_ArrayRemoveAt",
+  "signature": "int Script_ArrayRemoveAt(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "The native behind array.remove(index): checks the argument is an integer in range, releases the element's reference, shifts the tail down with memmove, shrinks the array and reports 'wrong type' / 'idx out of range' otherwise.",
+  "confidence": 0.6,
+  "evidence": "Body: 0x5b5c6c(self, f_34) -> array, 0x5b5c6c(self, f_34+1) -> index value, checks tag bit 0x4000000 (integer), errors via 0x6bd988(self, s_wrong_type_0014b0b8) and 0x6bd988(self, s_idx_out_of_range_0014b0c4), releases refs, memmoves with 0x11cd00, decrements f_1c and shrinks the capacity via 0x14ce14. Neighbours Script_ArrayResize@0x14b0d8 and Script_ArrayCopyRange@0x14b36c."
+ },
+ {
+  "address": "0x0014B31C",
+  "name": "maybe_Script_CallAllArgs",
+  "signature": "int maybe_Script_CallAllArgs(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Calls the closure currently under the pushed arguments, passing every argument that is on the VM stack, and returns 1 on success or -1 when the call fails.",
+  "confidence": 0.45,
+  "evidence": "iVar1 = 0x6bbd6c(vm) (current stack top), then 0x6bb0f4(vm, iVar1 - 1, 1) = Sq_VmCall(vm, top-1 args, want result); result < 0 -> -1 else 1. 0x6bb0f4 is Sq_VmCall (same call shape as in 0x14cc14, where three arguments are pushed first)."
+ },
+ {
+  "address": "0x0014B5D8",
+  "name": "maybe_Script_ApiResultCheckA",
+  "signature": "int maybe_Script_ApiResultCheckA(void)",
+  "params": {},
+  "summary": "Trivial adaptor over a Squirrel API call: turns a negative return code into -1 and anything else into 1, the standard 'return 1 to the script / -1 to raise' pattern used by the binding wrappers.",
+  "confidence": 0.35,
+  "evidence": "iVar1 = 0x6bc964(); return iVar1 < 0 ? 0xffffffff : 1. No callers (bound through the native table)."
+ },
+ {
+  "address": "0x0014CC14",
+  "name": "Script_CompareValues",
+  "signature": "bool Script_CompareValues(ScriptVm *vm, u32 a, u32 b, int closureIndex, u32 expected)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "a",
+   "param_3": "b",
+   "param_4": "closureIndex",
+   "param_5": "expected"
+  },
+  "summary": "Compares two script values - using the stack closure at closureIndex when given, or the VM's built-in object comparison otherwise - and returns whether the result satisfies the caller.",
+  "confidence": 0.55,
+  "evidence": "If arg4 < 0 the fast path 0x5b5e3c(vm) (Sq_VmObjCmp) is used; otherwise it pushes the closure (0x6bc5c0), pushes both values (0x5b5660), calls 0x6bb0f4(vm,3,1,0), reads the result with 0x6bba70 and restores the stack top via 0x6bd830. Errors: s_compare_func_failed_0014cd08 and s_numeric_value_expected_as_return_0014cd1c."
+ },
+ {
+  "address": "0x0014CD5C",
+  "name": "maybe_Script_ArrayCallWithElements",
+  "signature": "int maybe_Script_ArrayCallWithElements(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Calls the closure held in the array's next stack slot with every element of the array as arguments, then returns 1 or -1 according to the call result.",
+  "confidence": 0.4,
+  "evidence": "array = 0x5b5c6c(self, f_34 + 1) (size f_1c), pushes the value at f_34 with 0x5b5660, pushes each of the f_1c elements, then 0x6bb0f4(self, f1c, 1, 1). Same call shape as 0x14ef80 and 0x14b31c."
+ },
+ {
+  "address": "0x0014CDE4",
+  "name": "maybe_Script_CallAllArgsNoThrow",
+  "signature": "int maybe_Script_CallAllArgsNoThrow(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Same as 0x14b31c but calls with the 'do not raise on error' flag, so a failing closure returns -1 instead of throwing.",
+  "confidence": 0.4,
+  "evidence": "iVar1 = 0x6bbd6c(vm); 0x6bb0f4(vm, iVar1 - 1, 1, 0); returns -1 if the result is negative else 1."
+ },
+ {
+  "address": "0x0014CE48",
+  "name": "Script_ThreadWakeup",
+  "signature": "int Script_ThreadWakeup(ScriptVm *vm, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "unused",
+   "param_3": "unused2",
+   "param_4": "unused3"
+  },
+  "summary": "The native behind thread.wakeup(): validates the argument really is a coroutine, refuses to wake an idle or running thread, and otherwise wakes it.",
+  "confidence": 0.6,
+  "evidence": "Reads the value in stack slot f_34, refcounts it, requires tag 0x8001000 (Squirrel object) and 0x6bbe08(obj) == 2 (suspended) - otherwise calls 0x6bd988 with s_wrong_parameter_0014d04c, s_cannot_wakeup_a_idle_thread_0014d05c or s_cannot_wakeup_a_running_thread_0014d078 - then 0x6bdbe4(obj,1,1,1,0) performs the wake and 0x5b4c34 releases the reference."
+ },
+ {
+  "address": "0x0014EF14",
+  "name": "maybe_Script_ArrayPrepare",
+  "signature": "int maybe_Script_ArrayPrepare(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Prepares a result array sized from the array that was passed in (2*n+2, at least 12) and replaces the previous stack slot with it, so the following helper can fill it element by element.",
+  "confidence": 0.35,
+  "evidence": "Gets the advertised size from `*(int*)(*(int*)(*(int*)(0x5b5c6c(vm,f_34+1)+4)+0x24)+0x1c)`, clamps to at least 0xc, creates the array with 0x6bc2ac(vm,size) and stores it into slot -2 with 0x6bbf1c(new, vm, 0xfffffffe). Followed by 0x14ef80, which fills and calls it."
+ },
+ {
+  "address": "0x0014EF68",
+  "name": "maybe_Script_ApiResultCheckB",
+  "signature": "int maybe_Script_ApiResultCheckB(void)",
+  "params": {},
+  "summary": "Second adaptor of the same 'negative result -> -1, otherwise 1' pattern, this time around the Squirrel API entry 0x6bb5a4.",
+  "confidence": 0.3,
+  "evidence": "iVar1 = 0x6bb5a4(); return iVar1 < 0 ? 0xffffffff : 1. No callers (reached from the native bindings)."
+ },
+ {
+  "address": "0x0014EF80",
+  "name": "maybe_Script_ArrayCallWithElements2",
+  "signature": "int maybe_Script_ArrayCallWithElements2(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Variant of 0x14cd5c: pushes the array and each of its elements and calls the closure with them, but uses the non-throwing call and the plain 'want result' flag.",
+  "confidence": 0.35,
+  "evidence": "array = 0x5b5c6c(self, f_34+1); 0x5b5660(self, 0x5b5c6c(self, f_34)); loop over f_1c elements pushing each; 0x6bb0f4(self, f1c, 1, 0)."
+ },
+ {
+  "address": "0x00152FF0",
+  "name": "Script_ArraySortSift",
+  "signature": "int Script_ArraySortSift(ScriptVm *vm, ScriptArray *array, int start, int end, int closure)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "array",
+   "param_3": "start",
+   "param_4": "end",
+   "param_5": "closure"
+  },
+  "summary": "One sift-down step of the heapsort used by array.sort(): compares the node with its children (through the comparator closure when closure >= 0, or the VM's built-in comparison) and swaps until the heap property holds.",
+  "confidence": 0.55,
+  "evidence": "Loop over i = 2*start and i+1 within end, calling 0x5b5e3c (Sq_VmObjCmp) in the no-closure path or pushing the closure plus both values and calling 0x6bb0f4/0x6bba70 in the closure path, then swapping the two 8-byte slots; returns 0 on a failed comparison (callers treat that as failure). Caller 0x147750 (Script_ArraySort)."
+ },
+ {
+  "address": "0x00153280",
+  "name": "maybe_Script_ArraySortSiftAlt",
+  "signature": "int maybe_Script_ArraySortSiftAlt(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Damaged second copy of the array-sort sift routine: Ghidra lost most registers (unaff_*) and turned the loop bounds into constants, but the comparator/call/swap sequence is identical to 0x152ff0.",
+  "confidence": 0.45,
+  "evidence": "Same callee set as 0x152ff0 (0x5b5e3c, 0x5b5660, 0x6bb0f4, 0x6bba70, 0x6bc5c0, 0x6bd830) and the same error strings g_00153278 / g_0015327c; the swap block is duplicated verbatim, but the loop variables are unaff_r6/r8/r10/r11 so the exact entry contract cannot be reconstructed."
+ },
+ {
+  "address": "0x00153B84",
+  "name": "Script_RegisterSystemGlobals",
+  "signature": "void Script_RegisterSystemGlobals(SquirrelVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Registers the Squirrel system globals: walks a static table of name/value pairs into the root table, then sets _version_ = \"Squirrel 2.2.5 stable\", _charsize_, _intsize_ and _floatsize_.",
+  "confidence": 0.6,
+  "evidence": "Table at g_00153ccc (4 words per entry: name, value, extra, extra2) is walked with 0x6bc7a0 (new slot), 0x6bbf64, 0x6bd4c0 (bind) and 0x6bd5bc; the literal strings s__version__00153cd0, s_Squirrel_2_2_5_stable_00153cdc, s__charsize__00153cf4, s__intsize__00153d00 and s__floatsize__00153d0c are pushed right after; only caller is maybe_Sq_VmCaptureCallStack@0x5b5368 (the VM init)."
+ },
+ {
+  "address": "0x00155608",
+  "name": "maybe_Str_FreeStringList",
+  "signature": "void maybe_Str_FreeStringList(StrList *list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Frees a two-level string list: releases the first string, then every string in the pointer array, then the array itself.",
+  "confidence": 0.45,
+  "evidence": "0x165594(*arg1); if (arg1[1]) { for (i < arg1[2]) 0x165594(*(u32*)(arg1[1] + i*4)); 0x165594(arg1[1]); } - a textbook string-array destructor. Only caller 0x6b9584, in the Squirrel compiler's error/format path."
+ },
+ {
+  "address": "0x00155664",
+  "name": "maybe_Script_ReturnTop",
+  "signature": "int maybe_Script_ReturnTop(void)",
+  "params": {},
+  "summary": "Pushes one value (whatever the caller left in the VM register) and returns 1, the standard 'native returned one value' epilogue.",
+  "confidence": 0.3,
+  "evidence": "Only statement is 0x5b5660() followed by `return 1`; no callers (binding table entry)."
+ },
+ {
+  "address": "0x00155684",
+  "name": "maybe_Script_ReturnArg",
+  "signature": "int maybe_Script_ReturnArg(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Reads the argument in the first stack slot, pushes it as the single return value and returns 1, or -1 when reading the argument fails.",
+  "confidence": 0.35,
+  "evidence": "result = 0x5b5c6c(vm, f_34 + 1); if (0x6bd78c(vm) < 0) return -1; 0x5b5660(vm, result); return 1."
+ },
+ {
+  "address": "0x001556CC",
+  "name": "maybe_Script_ApiResultCheckC",
+  "signature": "int maybe_Script_ApiResultCheckC(void)",
+  "params": {},
+  "summary": "Third instance of the 'negative result -> -1, otherwise 1' wrapper, here around the Squirrel API entry 0x6bb8dc.",
+  "confidence": 0.3,
+  "evidence": "iVar1 = 0x6bb8dc(); return iVar1 < 0 ? 0xffffffff : 1. No callers."
+ },
+ {
+  "address": "0x00157014",
+  "name": "maybe_Script_FormatValues",
+  "signature": "int maybe_Script_FormatValues(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Formats up to two script values into a buffer using the VM's format routine, defaulting the buffer to \"unnamedbuffer\" when the third argument is absent.",
+  "confidence": 0.4,
+  "evidence": "count = 0x6bbd6c(vm); local_18 = s_unnamedbuffer_0015709c; 0x6bbd28(vm,2,&buf); size = 0x6bbbf0(vm,2); if (count > 2) 0x6bbd28(vm,3,&local_18); 0x6bb570(vm, buf, size, local_18, 0) performs the format; <0 -> -1 else 1."
+ },
+ {
+  "address": "0x001570AC",
+  "name": "maybe_Script_ReturnRootTable",
+  "signature": "int maybe_Script_ReturnRootTable(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Pushes the VM's root table (vm->f_8c->f_38) and returns 1, which is how the standard library exposes the root table as a native result.",
+  "confidence": 0.35,
+  "evidence": "Single statement 0x5b5660(vm, &vm->f_8c->f_38) then `return 1`."
+ },
+ {
+  "address": "0x001570C4",
+  "name": "Script_ClosureInfo",
+  "signature": "int Script_ClosureInfo(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Implements the getclosureinfo-style native: reads a closure value, extracts its name, source file and line, then builds and returns a result table containing name/source/line/locals.",
+  "confidence": 0.6,
+  "evidence": "0x6bba70(vm,-1,&val); 0x6bd888(vm,val,&name) fills name/source/line; the two name strings default to s_unknown_00157244; then 0x6bc210 (new table), 0x6bc7a0 with the keys g_0015724c / g_00157254 / &g_00157258 and s_locals_00157260, 0x6bc6c8 for the integer line, and 0x6bbac8 iterates the closure's outer values into the 'locals' table."
+ },
+ {
+  "address": "0x00157268",
+  "name": "maybe_Script_ReturnArg2",
+  "signature": "int maybe_Script_ReturnArg2(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Pushes the value from the first stack slot and returns 1, or -1 if 0x6bd2fc rejects the argument.",
+  "confidence": 0.35,
+  "evidence": "result = 0x5b5c6c(vm, f_34 + 1); if (0x6bd2fc(vm) < 0) return -1; 0x5b5660(vm, result); return 1."
+ },
+ {
+  "address": "0x001572AC",
+  "name": "Script_CheckArgType",
+  "signature": "int Script_CheckArgType(ScriptVm *vm, int index, u32 expected, u32 *out)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "index",
+   "param_3": "expected",
+   "param_4": "out"
+  },
+  "summary": "Type-checks one argument and stores the value: returns 1 when the value's tag equals the expected type, otherwise raises 'wrong argument type: expected %s' with the expected type's name.",
+  "confidence": 0.6,
+  "evidence": "Slot = 0x5b5c6c(vm, index-1+f_34) (or 0x5b5c78(vm) for index < 0); if (*slot != expected) 0x5b3c40(vm,slot) and 0x5b3da4(vm, s_wrong_argument_type__expected____0015736c, 0x14819c(expected), slot+7) raise the error and return 0. 10 callers, all in the 0x6ba6xx-0x6bd1xx native implementations."
+ },
+ {
+  "address": "0x0015739C",
+  "name": "Script_ThrowUnexpectedType",
+  "signature": "void Script_ThrowUnexpectedType(ScriptVm *vm, u32 value)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "value"
+  },
+  "summary": "Raises the formatted error 'unexpected type %s' for a value and aborts the call.",
+  "confidence": 0.55,
+  "evidence": "uVar1 = 0x14819c(arg2) (type name), 0x245cf0(vm,100) allocates the 100-byte message buffer, 0x100270 formats s_unexpected_type__s_001573e8, then 0x6bd988 raises it with the 0xffffffff message handle. No callers."
+ },
+ {
+  "address": "0x00158010",
+  "name": "maybe_Event_DispatchByType",
+  "signature": "void maybe_Event_DispatchByType(u32 *source, void *record)",
+  "params": {
+   "param_1": "source",
+   "param_2": "record"
+  },
+  "summary": "Dispatches a record to a handler looked up by its type byte: the table at g_00158094 holds 8-byte (handler, expected-substyle) pairs, and the handler is invoked only when its stored style matches the source record's +8 byte.",
+  "confidence": 0.45,
+  "evidence": "Guards on the one-shot init *g_00158090 (0x10009c), indexes puVar1 = g_00158094 + (u8)*(arg2+4)*8, requires puVar1[0] != 0 and puVar1[1] == *(char*)(arg1+2), then calls handler(*arg1, arg2). Only caller 0x46015c."
+ },
+ {
+  "address": "0x00159088",
+  "name": "maybe_Script_ApiResultCheckD",
+  "signature": "int maybe_Script_ApiResultCheckD(void)",
+  "params": {},
+  "summary": "Fourth 'negative result -> -1, otherwise 1' wrapper, around the Squirrel API entry 0x6bd140.",
+  "confidence": 0.3,
+  "evidence": "iVar1 = 0x6bd140(); return iVar1 < 0 ? 0xffffffff : 1. No callers."
+ },
+ {
+  "address": "0x001590A0",
+  "name": "Script_ToBool",
+  "signature": "int Script_ToBool(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Converts the value in the first stack slot to a boolean in place (1 when the VM reports it as 'true', 0 otherwise).",
+  "confidence": 0.55,
+  "evidence": "iVar1 = 0x6bc964(vm, 0xfffffffe) (a truth test on slot -2); if (iVar1 >= 0) 0x6bc600(vm,1) else 0x6bc600(vm,0); returns 1. No callers."
+ },
+ {
+  "address": "0x0015A690",
+  "name": "maybe_Save_ResetGameFlagBlock",
+  "signature": "void maybe_Save_ResetGameFlagBlock(GameFlags *flags)",
+  "params": {
+   "param_1": "flags"
+  },
+  "summary": "Lazily creates the global game-flag block, then resets it (state counters plus the 0x24a98-byte flag area) for a new game.",
+  "confidence": 0.4,
+  "evidence": "The same one-shot init pattern as 0x1498fc: *arg1 clears the init byte, 0x11fe8c/0x11cfac allocate g_0015a7d8/0x10 bytes, std_bzero, vtable g_0015a7dc and func_00100050(+1, g_0015a7e4, g_0015a7e0, 0x1f); then 0x192cc8(*g_0015a7d0 + 0x24a98). The +0x24a98 offset is the flag area read by Event_EvaluateConditionBlock@0x1498fc, and 0x192cc8 clears it."
+ },
+ {
+  "address": "0x0015AFB8",
+  "name": "maybe_Script_ReturnGlobal",
+  "signature": "int maybe_Script_ReturnGlobal(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Pushes a value taken from a global constant (g_0015b028) as the native's result, with the usual reference-counted slot assignment.",
+  "confidence": 0.3,
+  "evidence": "local_18 = g_0015b028; 0x5b5660(vm,&local_18); releases the dispatched slot via the vtable when the tag has bit 0x8000000; returns 1. No callers."
+ },
+ {
+  "address": "0x0015B030",
+  "name": "maybe_Script_ApiCallNoArgs",
+  "signature": "int maybe_Script_ApiCallNoArgs(void)",
+  "params": {},
+  "summary": "Calls one fixed Squirrel helper with no arguments and reports success unconditionally; a thin binding shim.",
+  "confidence": 0.3,
+  "evidence": "Only statement: 0x6bde24(); return 1. No callers."
+ },
+ {
+  "address": "0x0015C66C",
+  "name": "Script_ReportError",
+  "signature": "u32 Script_ReportError(ScriptVm *vm, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "vm",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Reports a script error through the currently installed error handler: with no argument it uses 'AN ERROR HAS OCCURED [unknown]', otherwise the passed argument is formatted into the message, and the VM is left in the error state.",
+  "confidence": 0.6,
+  "evidence": "handler = 0x6bbbe4(vm) (the VM's error handler); if set: local_10 = 0, count = 0x6bbd6c(vm), and when count > 0 it reads argument 2 (0x6bbd28(vm,2,&local_10)) to format s_AN_ERROR_HAS_OCCURED___s__0015c6e0, else s_AN_ERROR_HAS_OCCURED__unknown__0015c6fc; finally 0x6bdf98(vm) aborts the call. Returns 0."
+ },
+ {
+  "address": "0x0015CDC4",
+  "name": "maybe_Field_SceneObject_InitAnimState",
+  "signature": "void maybe_Field_SceneObject_InitAnimState(SceneObjectState *state, u32 animId)",
+  "params": {
+   "param_1": "state",
+   "param_2": "animId"
+  },
+  "summary": "Builds the initial animation/gadget state word for a field scene object: looks the animation id up in the scene table, resolves its record, and packs the state as (id & 0xffffff00) | 2.",
+  "confidence": 0.45,
+  "evidence": "Lazily creates the scene table (same init pattern as 0x10af94), then 0x63e6c4(work, arg2) -> u16* and 0x63e70c(work, *id) -> record; the result is written as `*arg1 = arg2 & 0xffffff00 | 2`. Callers are the field scene reset/anim entry points: 0x44b944, 0x44bb6c, 0x44bc90, 0x4af980, 0x4c9020, 0x4c9d08."
+ },
+ {
+  "address": "0x0015EFD0",
+  "name": "Message_SetArgFromTable",
+  "signature": "void Message_SetArgFromTable(Message *msg, u32 id, u32 arg3, u32 arg4)",
+  "params": {
+   "param_1": "msg",
+   "param_2": "id",
+   "param_3": "arg3",
+   "param_4": "arg4"
+  },
+  "summary": "Resolves a text id through the game's message table and installs the resulting string as the message argument.",
+  "confidence": 0.55,
+  "evidence": "0x11cb38(&tmp) yields the data context, 0x63dd44(context, id) returns the string entry; if found Message_SetArg(msg, entry, 0) is called (0x1f076c), otherwise the same call is made with the empty default &g_0015f018."
+ },
+ {
+  "address": "0x0016044C",
+  "name": "Script_ToNumber",
+  "signature": "int Script_ToNumber(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Converts the argument to a number: integers and floats pass through, numeric strings are parsed, everything else becomes 0; a non-numeric string raises 'cannot convert the string'.",
+  "confidence": 0.6,
+  "evidence": "Reads the slot from 0x5b5c6c(vm, f_34) and switches on the tag (comparisons against g_00160660 / g_00160664 / g_0016066c, i.e. integer, float and string tags): the string path calls 0x165004(slot+0x1c,&out) = Script_ParseNumberString and errors with s_cannot_convert_the_string_00160670 on failure; each branch pushes the converted value with 0x5b5660. Sibling of 0x161370 (integer-only variant)."
+ },
+ {
+  "address": "0x001606EC",
+  "name": "Gfx_EffectPart_SetRotationFromActor",
+  "signature": "void Gfx_EffectPart_SetRotationFromActor(GfxActor *actor, EffectParam *param)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "param"
+  },
+  "summary": "Binds a 3D effect part to an actor and orients it from the actor's quaternion: builds the part's transform from the actor's rotation fields and applies the resulting direction vector.",
+  "confidence": 0.5,
+  "evidence": "iVar1 = 0x5b1208(); if set, 0x5f56a0(iVar1, actor, name, &stack_block) binds the named part and 0x5f5f54(iVar1,&vec,0) applies the computed vector: the vector is derived from actor->f_8c/f_90/f_94/f_98 (a quaternion) with the constant at 0x1607d0. Recovered entry point; neighbouring functions are all Gfx effect-part operations."
+ },
+ {
+  "address": "0x00160EA4",
+  "name": "maybe_Script_SetStackTop",
+  "signature": "int maybe_Script_SetStackTop(void)",
+  "params": {},
+  "summary": "Resets the VM stack top and returns 1; a one-line binding shim.",
+  "confidence": 0.3,
+  "evidence": "Only statement 0x6bda58() then `return 1`, and 0x6bda58 is the Squirrel 'set top' helper (compare 0x14ce48, which calls it with an explicit count 2). No callers."
+ },
+ {
+  "address": "0x00161370",
+  "name": "Script_ToInteger",
+  "signature": "int Script_ToInteger(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Integer-only variant of 0x16044c: booleans and integers pass through, floats are truncated with a float->int convert, numeric strings are parsed, and anything else yields 0.",
+  "confidence": 0.55,
+  "evidence": "Same structure as 0x16044c but the float conversion is `(int)(float)value` and the tag constants are g_00161578/g_0016157c/g_00161584; error string s_cannot_convert_the_string_00161588; result pushed with 0x5b5660."
+ },
+ {
+  "address": "0x00161D74",
+  "name": "maybe_Actor_SetOnceFlag",
+  "signature": "int maybe_Actor_SetOnceFlag(int *obj)",
+  "params": {
+   "param_1": "obj"
+  },
+  "summary": "Reads a sub-object through the object's vtable slot +0x48, and if it is present and has a non-zero +0x10 field, sets the one-shot flag at +0xb0f7 and returns its previous value.",
+  "confidence": 0.4,
+  "evidence": "uVar4 = (**(code**)(*arg1 + 0x48))(arg1,0); iVar1 = (int)uVar4; if (iVar1 && iVar1->f_10) { result = iVar1->f_b0f7; iVar1->f_b0f7 = 1; } else result = 0. Neighbours ActorResetCullingStopUpdate@0x161b14 and ActorWarpToMapJumpLocatorID@0x161b94."
+ },
+ {
+  "address": "0x001661E8",
+  "name": "maybe_Script_ApiResultCheckE",
+  "signature": "int maybe_Script_ApiResultCheckE(void)",
+  "params": {},
+  "summary": "Fifth instance of the 'negative result -> -1, otherwise 1' wrapper, around the Squirrel API entry 0x6ba7f4.",
+  "confidence": 0.3,
+  "evidence": "iVar1 = 0x6ba7f4(); return iVar1 < 0 ? 0xffffffff : 1. No callers; sits between TalkStart@0x166164 and Script_ToString@0x166268."
+ },
+ {
+  "address": "0x00166200",
+  "name": "Script_ArrayTop",
+  "signature": "int Script_ArrayTop(ScriptVm *vm)",
+  "params": {
+   "param_1": "vm"
+  },
+  "summary": "Returns the last element of an array (array.top()): pushes element n-1, or raises 'top() on a empty array' when the array is empty.",
+  "confidence": 0.6,
+  "evidence": "array = 0x5b5c6c(vm, f_34), size = (*(int*)(array+4))->f_1c; if size > 0 push *(int*)((array+4)->f_18 + size*8 - 8) and return 1; otherwise 0x6bd988(vm, s_top___on_a_empty_array_00166250)."
+ },
+ {
+  "address": "0x00166308",
+  "name": "maybe_Ui_SceneObjArray_Ctor",
+  "signature": "void maybe_Ui_SceneObjArray_Ctor(SceneObjArray *arr)",
+  "params": {
+   "param_1": "arr"
+  },
+  "summary": "Default-constructs the five 0x0c-byte scene-object sub-records that make up this array; the rest of the body was lost, leaving only the array construction.",
+  "confidence": 0.3,
+  "evidence": "Sole statement func_00100050(arg1, g_001667e8, 0xc, 5); callers 0x3702fc, 0x3a26cc, 0x3a2abc, 0x3ad38c are scene-object init/animation entry points."
+ },
+ {
+  "address": "0x00167764",
+  "name": "Ui_Window_InitBase",
+  "signature": "void Ui_Window_InitBase(UiWindow *wnd)",
+  "params": {
+   "param_1": "wnd"
+  },
+  "summary": "Base constructor of a UI window: creates the window object through 0x1d8b6c, installs its vtable, then creates the 12-entry child list object at +0x11c and back-links it to the window.",
+  "confidence": 0.5,
+  "evidence": "puVar2 = 0x1d8b6c(); *puVar2 = g_00167ff0 (vtable); puVar3 = 0x21c2dc(puVar2 + 0x47); *puVar3 = g_00167ff4; puVar3[8] = puVar2; func_00100050(puVar3 + 9, g_00167ff8, 0x18, 0xc). Only caller Ui_CreateWindowById@0x193e58 - same construction shape as Ui_MessageWindowRoot_Ctor@0x1959d8."
+ },
+ {
+  "address": "0x0016D8A8",
+  "name": "Battle_BackupUnitActions",
+  "signature": "u32 Battle_BackupUnitActions(Battle *battle, ActionRecord *out, int slot, int actorId)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "out",
+   "param_3": "slot",
+   "param_4": "actorId"
+  },
+  "summary": "Snapshots the battle action table: copies all 80 action records (each holding five 0x8c-byte per-member sub-records) from the staging array to the backup array, clears the staging array, and copies the record belonging to actorId (optionally filtered by slot) into the caller's buffer.",
+  "confidence": 0.5,
+  "evidence": "The two 0x50-entry tables are self->f_e8 (staging) and self->f_ec (backup), each record 0x2c8 bytes with 5 sub-records of 0x8c; the record key is at +0 and the action id at +0x88 (0xffffffff = empty, otherwise validated through 0x63fd24(work, id) and the record's f_191 byte). Returns 1 when a matching record was copied. Callers 0x4009f0, 0x42c7f8, 0x47d47c, 0x47efe8, 0x4b8258 (battle UI/effect code)."
+ },
+ {
+  "address": "0x0016F76C",
+  "name": "Battle_CheckActionSlotFree",
+  "signature": "u32 Battle_CheckActionSlotFree(Battle *battle, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Checks whether the current unit's action slot is usable: validates each of the five per-member sub-records, and rejects the slot when the candidate actor id already appears in one of the record's ten target id fields.",
+  "confidence": 0.5,
+  "evidence": "Reads record arg1[0x3a] + arg1[0x49]*0x2c8 and the per-member entries at +0x88 (empty = -1) and +0x8c*index; the not-empty ids are validated with 0x63fd24 + f_191; then walks the caller's actor list (intrusive list at arg1[0x44], head arg1[0x43]) and compares each id with the target fields f_20/f_24 ... f_58/f_5c, returning 0 on a match and 1 after all five slots. Only caller maybe_Ui_CmdQueue_ProcessSlots@0x16932c."
+ },
+ {
+  "address": "0x00170CA4",
+  "name": "Battle_HasPendingAction",
+  "signature": "u32 Battle_HasPendingAction(Battle *battle, ActionRecord *record, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "record",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Scans the staging action array from the current index for a record belonging to the given actor whose action id is still valid, and reports whether one exists.",
+  "confidence": 0.5,
+  "evidence": "Loops i from self->f_124 to 0x4f over self->f_e8 + i*0x2c8: record[0] must equal arg2, then the id at +0x88 is either 0xffffffff (match) or validated through 0x63fd24(work, id) with record->f_10 and the f_191 byte; returns 1 on the first match. Callers Battle_BuildTargetSlots@0x1723e8, Battle_BuildTargetSlotsForCommand@0x172ed8 and 0x26acf8."
+ },
+ {
+  "address": "0x00171DA4",
+  "name": "Battle_RebuildUnitActions",
+  "signature": "void Battle_RebuildUnitActions(Battle *battle, ActionRecord *record, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "record",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Rebuilds the staging action array: copies it to the backup, clears the staging copy, then removes every record whose key equals the given actor (clearing its five sub-records and decreasing the live count) and compacts the remaining non-empty records upwards.",
+  "confidence": 0.5,
+  "evidence": "Full 0x50 x 0x2c8 copy loop plus the five 0x8c sub-record clears; removal matches `*(int*)(f_ec + i*0x2c8) == arg2` and clears the record, then `self->f_124--`; the tail loop copies each record whose first byte is non-zero from f_ec back into f_e8. Callers Battle_SelectAiActions@0x16c7f8 and Battle_Update@0x16e3e0."
+ },
+ {
+  "address": "0x00173624",
+  "name": "maybe_Battle_QueueTargetMode8",
+  "signature": "void maybe_Battle_QueueTargetMode8(Battle *battle, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Selects targets with mode 8 and then builds a four-element temporary array of 8-byte target descriptors; Ghidra truncated the rest of the body.",
+  "confidence": 0.35,
+  "evidence": "Calls Battle_SelectActionTargets@0x170d4c(arg1, arg4, arg3, 8) then func_00100050(auStack_330, g_0017397c, 8, 4). Recovered entry point; sibling 0x173664 does only the array construction."
+ },
+ {
+  "address": "0x00173664",
+  "name": "maybe_Battle_ClearTargetSlots",
+  "signature": "void maybe_Battle_ClearTargetSlots(void)",
+  "params": {},
+  "summary": "Builds (i.e. default-constructs) the four 8-byte target-slot descriptors on the stack; the remainder of the original function was lost.",
+  "confidence": 0.3,
+  "evidence": "Sole statement func_00100050(auStack_330, g_0017397c, 8, 4)."
+ },
+ {
+  "address": "0x00174674",
+  "name": "maybe_Battle_ClearTargets",
+  "signature": "void maybe_Battle_ClearTargets(Battle *battle, u32 a2, u32 *action)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "a2",
+   "param_3": "action"
+  },
+  "summary": "Invokes the action object's vtable slot +0x80 (its reset entry) and then rebuilds the four 8-byte target descriptors.",
+  "confidence": 0.35,
+  "evidence": "`(**(code **)(*(int *)*arg3 + 0x80))();` followed by func_00100050(auStack_318, g_0017487c, 8, 4). Caller Battle_Update@0x16e3e0."
+ },
+ {
+  "address": "0x001748A0",
+  "name": "maybe_Battle_RebuildUnitActionsFromSlot",
+  "signature": "void maybe_Battle_RebuildUnitActionsFromSlot(Battle *battle, ActionRecord *record, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "record",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Same staging/backup rebuild as 0x171da4, but the removal scan starts at the current live index (self->f_124) instead of 0, so only the still-pending tail is considered.",
+  "confidence": 0.4,
+  "evidence": "Identical copy/clear/compact blocks to 0x171da4; the only difference is `for (i = self->f_124; i < 0x50; i++)` in the removal loop and the id validation through 0x63fd24. Callers 0x278668 and maybe_Battle_ActorAction_ShowAttackPopup@0x42ab48."
+ },
+ {
+  "address": "0x00175840",
+  "name": "Battle_InitUnitActionArrays",
+  "signature": "void Battle_InitUnitActionArrays(Battle *battle)",
+  "params": {
+   "param_1": "battle"
+  },
+  "summary": "Allocates and initialises the two 80-record action tables (0x2c8 bytes each): every record gets five cleared 0x8c-byte per-member sub-records with the empty-action sentinel 0xffffffff and the default state (6/0/1).",
+  "confidence": 0.5,
+  "evidence": "i = 0x10f6ec(g_00175a64, self->f_b8, 4) followed by func_00100050(i, g_00175a68, 0x2c8, 0x50) for both self->f_e8 and self->f_ec, then the per-record init loop; the same 0x2c8/0x8c layout and sentinels used by 0x16d8a8/0x171da4/0x1748a0. Called from maybe_Gfx_Scene_Init@0x206bbc."
+ },
+ {
+  "address": "0x00175A78",
+  "name": "Battle_PurgeStaleActors",
+  "signature": "void Battle_PurgeStaleActors(Battle *battle, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Walks the actor list at +0x110 and drops every entry whose vtable slot +0x30 reports 'finished' or whose action id is no longer valid, unlinking it through vtable slot +0xc.",
+  "confidence": 0.5,
+  "evidence": "piVar3 = self->f_110 (intrusive list, head self->f_10c); loop: 0x30 check -> next; 0x48(entry,0) -> owner; action id at owner+0x1230 tested for 0xffffffff or validated with 0x63fd24/f_191; on stale calls vtable +0xc (unlink) with the refcount decrement."
+ },
+ {
+  "address": "0x00175C58",
+  "name": "Battle_Ctor",
+  "signature": "void Battle_Ctor(Battle *battle)",
+  "params": {
+   "param_1": "battle"
+  },
+  "summary": "Constructor of the battle object: installs the vtable pair at +0/+0xb4, empties the actor list at +0x10c/+0x110, sets the 'no actor' sentinel and default-constructs the four 0x58-byte slot records at +0x150.",
+  "confidence": 0.55,
+  "evidence": "*arg1 = g_00175f04; arg1[0x2d] = g_00175f08; arg1[0x2f] = g_00175f0c; arg1[0x43] = arg1[0x44] = arg1[0x45] = arg1+0x43 (self-referential list heads); arg1[0x4d] = 0xffffffff; func_00100050(arg1 + 0x54, g_00175f10, 0x58, 4). Callers 0x6059a0 and 0x60e36c. The same object layout (f_10c/f_110 list, +0x150 slots) is used by 0x175a78 and 0x175f88."
+ },
+ {
+  "address": "0x00175F88",
+  "name": "maybe_Battle_SetMode",
+  "signature": "void maybe_Battle_SetMode(Battle *battle, int *action, u32 mode, u32 a4)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "action",
+   "param_3": "mode",
+   "param_4": "a4"
+  },
+  "summary": "Selects a battle sub-mode: notifies the work object, switches on the mode value (0..5) and forwards the selection to the action object's vtable slot +0x54.",
+  "confidence": 0.4,
+  "evidence": "0x11cb38(&tmp) then 0x63cda0(*ctx) (scene/work notify); the switch on arg3 has six empty cases in the decompiled output (the per-mode work was inlined away), and it ends with (**(code**)(*arg2 + 0x54))(arg2). Siblings 0x17606c and 0x176394 use the same two callees."
+ },
+ {
+  "address": "0x0017606C",
+  "name": "maybe_Battle_SetDistanceRate",
+  "signature": "void maybe_Battle_SetDistanceRate(Battle *battle, int *action, u32 distance)",
+  "params": {
+   "param_1": "battle",
+   "param_2": "action",
+   "param_3": "distance"
+  },
+  "summary": "Converts a distance into a rate against the action's reference value and picks the matching one of eight 0xc-byte range records (min/max/param), then forwards it to the action object's vtable slot +0x54.",
+  "confidence": 0.4,
+  "evidence": "uVar1 = (**(code**)(*arg2 + 0x94))(arg2) (reference value); fVar6 = (distance / uVar1) * g_0017612c; scans eight 0xc-byte records returned by 0x63cda0 for `min <= rate < max`; ends with (**(code**)(*arg2 + 0x54))(arg2)."
+ },
+ {
+  "address": "0x00176394",
+  "name": "maybe_Battle_GetWorkRef",
+  "signature": "void maybe_Battle_GetWorkRef(void)",
+  "params": {},
+  "summary": "Resolves the battle work object through 0x11cb38/0x63cda0 and discards it; a thin accessor left over after inlining.",
+  "confidence": 0.3,
+  "evidence": "puVar1 = 0x11cb38(auStack_18); 0x63cda0(*puVar1); no other statement. Caller Field_CheckZonePoint@0x1763fc - the call is likely a mis-attributed tail of the neighbour."
+ },
+ {
+  "address": "0x00179298",
+  "name": "Map_ComputeObjectTransform",
+  "signature": "void Map_ComputeObjectTransform(MapObject *obj, int mode, MapVec3 *outPos, MapVec3 *outDir)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "mode",
+   "param_3": "outPos",
+   "param_4": "outDir"
+  },
+  "summary": "Composes an object's world position and facing: copies its local position, looks up the referenced locator/rotation record, multiplies the two quaternions and optionally scales the result by the record's factor for mode 3.",
+  "confidence": 0.55,
+  "evidence": "*arg3 = self->f_9c/f_a0/f_a4; *arg4 = g_00179394[0..2] (default direction) then a full quaternion product of the object's rotation (f_8c..f_98) with the locator record's rotation (record fields f_34/f_38/f_3c, looked up by the u16 id at self+600 through 0x63eeac); if mode == 3 the vector is scaled by record->f_84. Callers maybe_Map_UpdateGridInstance@0x179154 and maybe_Map_PlaceObject@0x1798d0."
+ },
+ {
+  "address": "0x0017CD5C",
+  "name": "maybe_Ui_MapCursor_Ctor",
+  "signature": "void maybe_Ui_MapCursor_Ctor(UiMapCursor *cursor, u32 vtable)",
+  "params": {
+   "param_1": "cursor",
+   "param_2": "vtable"
+  },
+  "summary": "Constructor of the map-cursor object: stores the vtable, clears the position/selection words and default-constructs the five 0x24-byte cursor slots.",
+  "confidence": 0.45,
+  "evidence": "*arg1 = arg2; arg1[1] = 0; arg1[2] = 0; func_00100050(arg1 + 3, g_0017cf48, 0x24, 5). Neighbours Map_AddInstance@0x17cbac, Ui_WorldMap_Destroy@0x17cf50 and Ui_DestroyMapCursor@0x17ccd8."
+ },
+ {
+  "address": "0x001836A0",
+  "name": "Field_SpawnObject_ApplyRecord",
+  "signature": "void Field_SpawnObject_ApplyRecord(FieldObject *obj, u32 recordId)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "recordId"
+  },
+  "summary": "Applies a spawn record to a field object: reads five transform blocks from the record (position, rotation, scale, colour) into the object's +0x68..+0xd8 fields and hands the record's model name to the object's vtable slot +0x84.",
+  "confidence": 0.5,
+  "evidence": "Requires obj->f_3c->f_10 & 0x20000000 (a live 'placed' flag), looks the record up with 0x63d6b8(work, recordId) and converts the five self-relative offsets at record +0x38/+0x3c/+0x40/+0x44/+0x48 into fixed strings with std_FixedString15_Ctor@0x6f44b0 (0x14 bytes each), then calls (**(code**)(*arg1 + 0x84))(arg1, name). Callers 0x182ac4, 0x1832d4, 0x183918, 0x1846ec."
+ },
+ {
+  "address": "0x001837DC",
+  "name": "maybe_Field_Object_GetTypeParam",
+  "signature": "int maybe_Field_Object_GetTypeParam(FieldObject *obj, u32 type)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "type"
+  },
+  "summary": "Returns the per-type parameter for a field object (0x550 for type 6, the defaults at g_001838f0..g_00183914 for the other types) with two special cases that consult the object's model record.",
+  "confidence": 0.45,
+  "evidence": "A chain of constant comparisons on arg2 (5, 6, 0xb, 0xe, 0xf, 0x14, 0x15, 0x17, 0x21, 0x22) yielding the literals g_001838f0/g_001838f4/g_001838f8/g_001838fc/g_00183900/g_00183904/g_00183908/g_0018390c/g_00183910/g_00183914 and 0x550; types 0x17 and 0x22 look the object's model id (obj->f_160->f_120) up through 0x63e2bc and adjust the result when the record's type byte is 0 or 10 / 13."
+ },
+ {
+  "address": "0x00184E38",
+  "name": "Ui_DialogRoot_Ctor",
+  "signature": "void Ui_DialogRoot_Ctor(UiDialogRoot *root)",
+  "params": {
+   "param_1": "root"
+  },
+  "summary": "Constructor of a dialog-root UI object: runs the UI object base constructor, installs the dialog vtable and default-constructs the twelve 0x50-byte child windows at +0x4c.",
+  "confidence": 0.55,
+  "evidence": "puVar1 = Ui_Object_CtorBase@0x1a66a0(); *puVar1 = g_00184e74 (vtable); func_00100050(puVar1 + 0x13, g_00184e78, 0x50, 0xc). Callers maybe_Ui_DialogRoot_Create@0x19cbf4 and maybe_Ui_ComplexWindow_Ctor@0x1c31b8 - both are dialog-composition entry points."
+ },
+ {
+  "address": "0x00186CB4",
+  "name": "Script_SqCompiler_FunctionExp",
+  "signature": "void Script_SqCompiler_FunctionExp(SqCompiler *c, u32 *value)",
+  "params": {
+   "param_1": "c",
+   "param_2": "value"
+  },
+  "summary": "Parses a Squirrel 'function name(a, b = 1) : (locals) { ... }' expression: creates the function object, binds each parameter (with optional default value), declares the optional local names and then compiles the body statement.",
+  "confidence": 0.6,
+  "evidence": "Creates the function with 0x1be0b4 (Script_Compiler_CreateFunction) and copies the name from the value pair (f_88/f_8c); loops while the token is not 0x29 (')') expecting identifiers via 0x1874ec (Script_SqCompiler_Expect), handling the 0x3d ('=') default-value form with 0x185720 and the 0x3a (':') local-declarations list with 0x1bd588; the body ends with 0x18927c (Script_SqCompiler_Statement), 0x1bd1a4, 0x1bdd50 (push stack op) and 0x1bdd10; tokens come from Sq_LexerReadToken@0x5fc86c. Callers: ParseStatementList, Factor and Statement of the same compiler."
+ },
+ {
+  "address": "0x0018BD88",
+  "name": "maybe_Script_SqFuncState_Ctor",
+  "signature": "void maybe_Script_SqFuncState_Ctor(SqFuncState *fs)",
+  "params": {
+   "param_1": "fs"
+  },
+  "summary": "Constructor of a Squirrel compiler/VM function-state object: installs the vtable, zeroes the two link words and default-constructs the single 8-byte sub-record at +0x2c.",
+  "confidence": 0.4,
+  "evidence": "arg1[1] = 0; *arg1 = g_0018be60; arg1[2] = 0; func_00100050(arg1 + 0xb, g_0018be64, 8, 1). Only caller 0x5fa298, which is the Squirrel lexer/compiler entry (it checks self->f_54 and calls 0x5fa328). Byte-identical twin of 0x18be68 with a different vtable."
+ },
+ {
+  "address": "0x0018BE68",
+  "name": "maybe_Script_SqFuncState_CtorB",
+  "signature": "void maybe_Script_SqFuncState_CtorB(SqFuncState *fs)",
+  "params": {
+   "param_1": "fs"
+  },
+  "summary": "Second instantiation of the function-state constructor (same layout, vtable g_0018bf40); used by the VM side rather than the compiler side.",
+  "confidence": 0.4,
+  "evidence": "Same body as 0x18bd88 with *arg1 = g_0018bf40 and the sub-record ctor g_0018bf44; only caller 0x5b57e4 (Sq_VmExecute's closure setup path)."
+ },
+ {
+  "address": "0x0018C18C",
+  "name": "maybe_Text_BuildCharDesc",
+  "signature": "void maybe_Text_BuildCharDesc(TextCharDesc *desc, u32 charId, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "desc",
+   "param_2": "charId",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Builds a two-field character descriptor: stores the character id byte and resolves the id's glyph/metric record through the text data context.",
+  "confidence": 0.45,
+  "evidence": "*arg1 = (u8)arg2; 0x11cb38(&tmp); *(u32*)(arg1 + 4) = 0x63cfc8(*tmp, arg2). Neighbour 0x18c1c0 is the same with 0x63d018, and both sit in the text (0x18cxxx) block next to Container_SortIdsByName@0x18c1ec."
+ },
+ {
+  "address": "0x0018C1C0",
+  "name": "maybe_Text_BuildCharDescB",
+  "signature": "void maybe_Text_BuildCharDescB(TextCharDesc *desc, u32 charId, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "desc",
+   "param_2": "charId",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Variant of 0x18c18c that resolves the character's record through the second text lookup (0x63d018) instead of 0x63cfc8.",
+  "confidence": 0.4,
+  "evidence": "*arg1 = (u8)arg2; 0x11cb38(&tmp); *(u32*)(arg1 + 4) = 0x63d018(*tmp, arg2)."
+ },
+ {
+  "address": "0x0018C544",
+  "name": "maybe_Text_BuildFallbackGlyphList",
+  "signature": "maybe_Text_BuildFallbackGlyphList *maybe_Text_BuildFallbackGlyphList(TextFallbackList *list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Builds and sorts the fallback glyph table: fills a 118-entry u16 array with the consecutive character codes 0x0aa3..0x0b19 and then sorts it by the shared id/name comparator.",
+  "confidence": 0.4,
+  "evidence": "Three embedded pointers (begin/current/end at +0, +4, +8) over an inline 0xec-byte array; the loop writes `(short)i + 0xaa3` for i < 0x76 (118) and finishes with Container_SortIdsByName@0x18c1ec. The 0xaa3 base is in the font's private-use range and the block is surrounded by Text_* functions."
+ },
+ {
+  "address": "0x0018C85C",
+  "name": "maybe_Text_GlyphCache_Compact",
+  "signature": "void maybe_Text_GlyphCache_Compact(TextGlyphCache *cache, int lo, int hi)",
+  "params": {
+   "param_1": "cache",
+   "param_2": "lo",
+   "param_3": "hi"
+  },
+  "summary": "Compacts the 255-entry text glyph cache: removes every entry equal to the 'current' entry sentinel, shifts the survivors down with memcpy and zero-fills the tail.",
+  "confidence": 0.45,
+  "evidence": "Entries are 0x18 bytes with the key in the first three ints; the function computes a start index from (lo,hi) with a 64-bit multiply, skips entries whose three key words all equal piRam0018c944, memcpys 0x11 bytes per survivor with std_memcpy@0x116c10 (0x11 = 17 bytes, i.e. the key plus flags), then clears the 0x18-byte slots to the end of the 0xff-entry array. Only caller 0x18c948."
+ },
+ {
+  "address": "0x0018C948",
+  "name": "Text_GlyphCache_FindOrInsert",
+  "signature": "u8 Text_GlyphCache_FindOrInsert(TextGlyphCache *cache, int *key)",
+  "params": {
+   "param_1": "cache",
+   "param_2": "key"
+  },
+  "summary": "Looks a three-word key up in the text glyph/metric cache; on a hit it refreshes the entry's use counter and returns it, on a miss it compacts the cache, inserts the new entry and returns the default weight 1.",
+  "confidence": 0.5,
+  "evidence": "Scans the 0xff entries (0x18 bytes, stride 6 ints, end = arg1 + 0x5fa*4) comparing the three key words; on a hit clamps the use counter at *(u8*)(entry+0x10)+1 and calls 0x18c85c (compact) before storing back; the miss path also compacts, finds the sentinel entry (piRam0018cbac) and memcpys the 0x11-byte record in with 0x116c10. Only caller Text_LayoutLine_AutoSize@0x2fcfd4."
+ },
+ {
+  "address": "0x0018F6D4",
+  "name": "maybe_Field_AsyncOp_Init",
+  "signature": "void maybe_Field_AsyncOp_Init(FieldAsyncOp *op, u32 a2, u32 state)",
+  "params": {
+   "param_1": "op",
+   "param_2": "a2",
+   "param_3": "state"
+  },
+  "summary": "Initialises a field async-operation record: stores the state word, marks it ready and default-constructs the two 8-byte sub-records.",
+  "confidence": 0.35,
+  "evidence": "*arg1 = arg3; *(u8*)(arg1 + 1) = 1; func_00100050(arg1 + 2, g_0018f714, 8, 2). Neighbours maybe_Os_CreateAsyncWaitOp@0x18f73c and maybe_Os_PollAsyncWaitOp@0x18f89c."
+ },
+ {
+  "address": "0x00191768",
+  "name": "Text_Page_Reset",
+  "signature": "void Text_Page_Reset(TextPage *page, u8 style)",
+  "params": {
+   "param_1": "page",
+   "param_2": "style"
+  },
+  "summary": "Resets a text page: clears the glyph arrays (30 and 20 entries) to 0xff, stores the new style byte and reinitialises the page's line/offset state.",
+  "confidence": 0.55,
+  "evidence": "Calls 0x193bac, 0x10f11c(self+200), stores *(u8*)(self+200) = style, then two loops writing 0xff over the 2-byte entries starting at f_129b (0x1e iterations) and f_1273 (0x14 iterations), and finally sets f_e5 = 0xff, f_12e4 = 1 and clears f_12d8..f_12e8. Callers 0x19180c, Text_Page_Ctor@0x192450, Ui_Window_ResetState@0x35f814."
+ },
+ {
+  "address": "0x0019180C",
+  "name": "Text_Page_BuildFromRecord",
+  "signature": "void Text_Page_BuildFromRecord(TextPage *page, int recordId, int *nameBlock, int *record)",
+  "params": {
+   "param_1": "page",
+   "param_2": "recordId",
+   "param_3": "nameBlock",
+   "param_4": "record"
+  },
+  "summary": "Fills a text page from a serialised message record: copies the short name, applies the style/line-count fields, writes each character's glyph id and extra words, then substitutes the argument slots and appends the trailing characters.",
+  "confidence": 0.55,
+  "evidence": "Calls Text_Page_Reset@0x191768 (as 0x191768), std_wcsncpy@0x1000a74(self+0xca, name, 7), 0x45bf38/0x45a5b4/0x45bd14 (the layout state used to measure the name), then loops over the record's character array writing *(u16*)(self + i*2 + 0xec) = glyphId and updating cells with maybe_Text_ClearCell@0x191470, 0x191e3c, Text_ApplyFontRecord@0x19201c and Text_TryInsertChar@0x192280; the argument indirection table is applied at +0xec afterwards. Callers maybe_Party_InitEquipment@0x1522a8 and the text measuring entry points 0x35f38c/0x35f4b4."
+ },
+ {
+  "address": "0x001926D4",
+  "name": "Text_Style_Decode",
+  "signature": "void Text_Style_Decode(TextStyle *style, u32 src)",
+  "params": {
+   "param_1": "style",
+   "param_2": "src"
+  },
+  "summary": "Decodes a packed 0x84-byte text-style record into the style object's fields, validating it through the shared text error routine first.",
+  "confidence": 0.5,
+  "evidence": "Clears a 0x84-byte stack copy, memcpys the caller's record with std_memcpy@0x116c10, calls 0x18cea4 (maybe_Text_Throw, the style validator) and then copies the 17 decoded words out to self+2..+0x40. Recovered entry point; neighbours are the Text_/Party_ helpers and the same 0x84-byte record size is used by 0x1114a4."
+ },
+ {
+  "address": "0x001927E0",
+  "name": "Text_Style_Create",
+  "signature": "TextStyle *Text_Style_Create(void)",
+  "params": {},
+  "summary": "Allocates and initialises a default text style object: zeroes the counters, constructs the embedded font-name field and sets the seven-character default name.",
+  "confidence": 0.5,
+  "evidence": "result = 0x192780() (the 0x60-byte style allocator); f_5c = 0; 0x6722c4(&result->f_44) (name-field ctor); f_4e/f_52/f_56/f_5a = 0; std_wcsncpy(&f_4e, g_00192824, 7). Three callers copy the object around (0x193018, 0x19317c, 0x192f84)."
+ },
+ {
+  "address": "0x00192DEC",
+  "name": "Text_StyleList_Insert",
+  "signature": "void Text_StyleList_Insert(TextStyleList *list, u32 index)",
+  "params": {
+   "param_1": "list",
+   "param_2": "index"
+  },
+  "summary": "Inserts a fresh default style at the given index of the five-entry style list: shifts the following 0x44-byte records down and writes the new default record into the freed slot.",
+  "confidence": 0.5,
+  "evidence": "If arg2 < 5 it memmoves (4-arg2) records of 0x44 bytes from self + (index+1)*0x44 down one slot with std_memcpy@0x116c10, then builds a default style in a stack buffer via 0x192780 and copies 0x44 bytes into self + arg2*0x44 + 0x92f4. Only caller maybe_Party_ShiftSkillSlots@0x193098, which uses the same 5 x 0x44 style array as 0x193018/0x19317c."
+ },
+ {
+  "address": "0x00192F84",
+  "name": "maybe_Text_StyleList_Ctor",
+  "signature": "void maybe_Text_StyleList_Ctor(void)",
+  "params": {},
+  "summary": "Default-constructs the four 3-byte records of the style-list header; the remainder of the body was lost.",
+  "confidence": 0.3,
+  "evidence": "Sole statement func_00100050(auStack_20, g_00193014, 3, 4) and the function is marked noreturn."
+ },
+ {
+  "address": "0x00193018",
+  "name": "maybe_Ui_PartyList_Insert",
+  "signature": "void maybe_Ui_PartyList_Insert(UiPartyList *list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "Shifts the party-member record block up by one slot (0x2a0 bytes) and writes a freshly created default member record into the freed position.",
+  "confidence": 0.45,
+  "evidence": "0x11cd00(arg1 + 0x944c, arg1 + 0x94ac, 0x2a0) (memmove of one 0x60 slot), then a default record from 0x192780 (Text_Style_Create) is filled (f_5c = 0, 0x6722c4(&f_44), std_wcsncpy(&f_4e, g_00193094, 7)) and copied 0x5d bytes to arg1 + 0x96ec. Only caller maybe_FieldMapState_AdvanceN@0x3bde2c; the same 0x944c/0x96ec layout is used by 0x19317c and 0x19371c."
+ },
+ {
+  "address": "0x0019317C",
+  "name": "maybe_Ui_PartyList_InsertMember",
+  "signature": "void maybe_Ui_PartyList_InsertMember(UiPartyList *list, u32 record)",
+  "params": {
+   "param_1": "list",
+   "param_2": "record"
+  },
+  "summary": "Stores a member record in the party list: with fewer than eight members it writes the record into the next free 0x60 slot, otherwise it shifts the list and overwrites the last slot.",
+  "confidence": 0.4,
+  "evidence": "iVar2 = maybe_Party_GetMemberCount@0x62a110(); if (iVar2 > 7) { 0x11cd00(arg1+0x944c, arg1+0x94ac, 0x2a0); build default at 0x192780; copy 0x5d bytes to arg1+0x96ec twice } else std_memcpy(arg1 + count*0x60 + 0x944c, arg2, 0x5d). Only caller maybe_Ui_PartyStatusPanel_Build@0x4ac46c."
+ },
+ {
+  "address": "0x0019371C",
+  "name": "maybe_Ui_PartyStatusWindow_Reset",
+  "signature": "void maybe_Ui_PartyStatusWindow_Reset(UiPartyStatus *wnd)",
+  "params": {
+   "param_1": "wnd"
+  },
+  "summary": "Resets the party-status window: reinitialises the member data region, clears the 32 status slots to 0xffff/-1, resets the five 0x44 style records and the eight 0x60 member records to their defaults, and rebuilds the header table.",
+  "confidence": 0.45,
+  "evidence": "Calls maybe_Ui_PartyStatus_InitMemberData@0x10f448 first, sets the vtable words at +0x8aa8 and +0x9448, loops 32 times writing 0xffff/-1 at g_001939ac + i*8, fills the five 0x44 style slots (0x92f4) and eight 0x60 member slots (0x944c) with the 0xff/0 defaults plus std_wcsncpy(&f_4e, g_001939b4, 7), and ends with func_00100050(&local, g_001939bc, 3, 4). Only caller Ui_Window_ResetState@0x35f814."
+ },
+ {
+  "address": "0x001939C0",
+  "name": "maybe_Ui_PartyStatusWindow_Ctor",
+  "signature": "void maybe_Ui_PartyStatusWindow_Ctor(void)",
+  "params": {},
+  "summary": "Constructor twin of 0x19371c: installs the party-status vtable, sets the same default bytes and constructs ten 0xb8-byte slot records.",
+  "confidence": 0.35,
+  "evidence": "Recovered entry point (Ghidra lost the argument register): puVar1 = func_0x0010998c(); *puVar1 = uRam00193b3c; puVar1[0x22aa] = uRam00193b40; the same 0x8aad/0x8aae/0x8aaf/0x8bc1 defaults as 0x19371c and func_00100050(&puVar1->f_22f1, uRam00193b44, 0xb8, 10)."
+ },
+ {
+  "address": "0x00194220",
+  "name": "maybe_Container_RemoveFromGlobalList",
+  "signature": "void maybe_Container_RemoveFromGlobalList(Container *obj, int *node)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "node"
+  },
+  "summary": "Removes an object from the global registry vector and notifies its owner: scans the global begin/end range for the entry equal to the object, erases it and calls the owner's detach routine.",
+  "confidence": 0.4,
+  "evidence": "piVar1 = *g_00194284 (begin), piVar2 = g_00194284[1] (end); on a hit it memmoves the tail with 0x111378 (std_memmove) and shrinks the end by 4, then 0x5647f8(&arg1->f_60, arg2, end) and arg1->f_e4 = 0."
+ },
+ {
+  "address": "0x00194408",
+  "name": "Container_AddUniqueId",
+  "signature": "void Container_AddUniqueId(u32 id, u32 a2, u32 *vec)",
+  "params": {
+   "param_1": "id",
+   "param_2": "a2",
+   "param_3": "vec"
+  },
+  "summary": "Appends an id to a global vector unless it is already present: scans the caller's range and the global registry, and grows the vector (doubling through std_memmove) when it is full.",
+  "confidence": 0.5,
+  "evidence": "Scans *arg3..arg3[1] for arg1, then scans g_00194584[0..1]; if absent, pushes at g_00194584[1] (incrementing it) or, when full, calls 0x111378 (memmove) to grow. Companion of 0x194220, which removes ids from the same vector."
+ },
+ {
+  "address": "0x001959D8",
+  "name": "maybe_Ui_MessageWindowRoot_Ctor",
+  "signature": "void maybe_Ui_MessageWindowRoot_Ctor(void)",
+  "params": {},
+  "summary": "Constructor of the message-window root: installs its vtable, creates the child object at +0x3574 and default-constructs eight 0x18-byte window slots.",
+  "confidence": 0.45,
+  "evidence": "puVar2 = func_0x003be214(); *puVar2 = uRam00195eb8 (vtable); puVar3 = 0x21c2dc(puVar2 + 0xd5d); *puVar3 = uRam00195ebc; puVar3[8] = puVar2; func_00100050(puVar3 + 9, uRam00195ec0, 0x18, 8). Same shape as Ui_Window_InitBase@0x167764; neighbours are Ui_ReleaseMessageWindowRoot@0x195ef0 and Ui_CreateMessageWindow@0x19608c."
+ },
+ {
+  "address": "0x00197400",
+  "name": "Ui_Pager_Ctor",
+  "signature": "void Ui_Pager_Ctor(UiPager *pager, u32 owner)",
+  "params": {
+   "param_1": "pager",
+   "param_2": "owner"
+  },
+  "summary": "Constructor of the message pager: runs the UI object base constructor, installs the pager vtable, stores the owner and default-constructs the four 0x3c-byte page records at +0x50.",
+  "confidence": 0.55,
+  "evidence": "puVar2 = Ui_Object_CtorBase@0x1a66a0(); *puVar2 = uRam00197450 (vtable); puVar2[0x13] = arg2; func_00100050(puVar2 + 0x14, uRam00197454, 0x3c, 4). The immediate neighbour Ui_Pager_Dtor@0x19745c confirms the class."
+ },
+ {
+  "address": "0x00197FB8",
+  "name": "maybe_Field_TextObject_Ctor",
+  "signature": "void maybe_Field_TextObject_Ctor(FieldTextObject *obj)",
+  "params": {
+   "param_1": "obj"
+  },
+  "summary": "Constructor of a field text/effect object: lazily creates its 0x37c-byte backing block, installs the vtable, sets the default state bytes and constructs the eight 8-byte sub-records.",
+  "confidence": 0.4,
+  "evidence": "One-shot init (g_001980c8 flag) allocating 0x37c bytes through 0x11fe8c/0x11cfac, std_bzero and 0x1064d4; then arg1[1] = block + 0xd1, *arg1 = g_001980d8, the 0xff/0 defaults and func_00100050(arg1 + 0xb, g_001980dc, 8). Only caller Field_InitSceneObjects@0x19cd50."
+ },
+ {
+  "address": "0x00198134",
+  "name": "Container_FixedVector_Push16",
+  "signature": "void Container_FixedVector_Push16(FixedVector16 *vec, const void *value)",
+  "params": {
+   "param_1": "vec",
+   "param_2": "value"
+  },
+  "summary": "Push-back for a 16-byte-element vector with an 8-element inline buffer: inserts at the end when there is room (shifting the tail with memcpy), otherwise grows by doubling and copies the inline and heap halves into the new block.",
+  "confidence": 0.5,
+  "evidence": "begin = *(u32**)(self+4), end = *(u32**)(self+8), inline start = &self->f_14, inline capacity 0x80 bytes (8 elements of 0x10); the shift loop uses std_memcpy@0x116c10 with 0xe bytes per element, and the growth branch relocates both halves and sets *(u32*)self = 0 (heap pointer) with the new capacity at self->f_c."
+ },
+ {
+  "address": "0x0019C8F4",
+  "name": "Gfx_ObjectDesc_Ctor4",
+  "signature": "void Gfx_ObjectDesc_Ctor4(GfxObjectDesc *desc, u32 arg2, u32 arg3, u32 arg4, u32 arg5)",
+  "params": {
+   "param_1": "desc",
+   "param_2": "arg2",
+   "param_3": "arg3",
+   "param_4": "arg4",
+   "param_5": "arg5"
+  },
+  "summary": "Constructor for the type-4 object descriptor: runs the shared descriptor initialiser, installs the type-4 vtable and stores the caller's second word in the descriptor's +0x28 field.",
+  "confidence": 0.5,
+  "evidence": "puVar1 = maybe_Gfx_ObjectDesc_Init@0x193d84(arg1..arg5, 4); *puVar1 = g_0019c928 (vtable); puVar1[10] = arg2. 16 callers, all NPC/monster/field-object constructors (Field_NpcGesture_Create@0x332e38, Monster_AiBehavior_Ctor@0x619cf4, Field_NpcEcstacyAction_Ctor@0x3d8fa4, ...)."
+ },
+ {
+  "address": "0x0019E6D0",
+  "name": "Ui_MessageWindow_ShowTalkData",
+  "signature": "void Ui_MessageWindow_ShowTalkData(UiMessageWindow *wnd, TalkRecord *rec)",
+  "params": {
+   "param_1": "wnd",
+   "param_2": "rec"
+  },
+  "summary": "Opens the message window for a talk/monster record: resolves the speaker's name and style from the record id, sets the window mode and background music, and switches the scene flow into the message state.",
+  "confidence": 0.5,
+  "evidence": "Uses Game_GetWork@0x6f20c0 (the +0x24a98 flag block), copies the record's three words into the window state (f_b0->f_114/f_118/f_11c), resolves the speaker through 0x6459ec/0x64585c/0x645998/0x6458d0 and 0x63d85c (monster data), sets the window style f_14a, calls maybe_Sound_ResolveFieldBgmId@0x1f38dc / maybe_Sound_RefreshPendingBgmVolume@0x1f353c and finally invokes vtable slot +0x10 for the record's mode. Callers maybe_Menu_Item_UseConfirm@0x305534 and maybe_Ui_MapWindow_RefreshEntry@0x624028."
+ },
+ {
+  "address": "0x0019EB58",
+  "name": "maybe_Ui_MessageWindow_ShowSimple",
+  "signature": "void maybe_Ui_MessageWindow_ShowSimple(UiMessageWindow *wnd, u32 *rec)",
+  "params": {
+   "param_1": "wnd",
+   "param_2": "rec"
+  },
+  "summary": "Sets the window up for a simple one-line message: stores the record word, selects state 7 and style 2; Ghidra stopped decoding at the following branch (bad instruction data).",
+  "confidence": 0.35,
+  "evidence": "Stores self->f_b0->f_136 = *arg2, f_149 = 7, f_14a = 2, f_146 = 6 and then hits halt_baddata(); callers maybe_Ui_StatusWindow_UpdateState@0x295790 and maybe_Ui_SceneFlow_SetState@0x66f77c."
+ },
+ {
+  "address": "0x001A342C",
+  "name": "Ui_MessageWindow_ShowFieldData",
+  "signature": "void Ui_MessageWindow_ShowFieldData(UiMessageWindow *wnd, FieldMessage *msg)",
+  "params": {
+   "param_1": "wnd",
+   "param_2": "msg"
+  },
+  "summary": "Opens the message window for a field message record: appears the speaker, picks the text id from the field/monster tables (with per-scenario overrides), sets the window style and background music and moves the scene into the message state.",
+  "confidence": 0.5,
+  "evidence": "Uses Game_GetWork@0x6f20c0 and the +0x24a98 block, 0x63cc1c (field text record), 0x63cd1c/0x63d85c, 0x640c64 (&self->f_50->f_5c), 0x614024, 0x6f... and Snd_ResolveSceneBgmId@0x1f3ac4 / maybe_Sound_RefreshPendingBgmVolume@0x1f353c; writes f_b0->f_149 = 0, f_14a (style), f_146 and sets self->f_1c = 10. Callers maybe_Ui_Window_Hide@0x19e9a0 and maybe_Ui_MapWindow_RefreshEntry@0x624028 - the field-message twin of 0x19e6d0."
+ },
+ {
+  "address": "0x001A3EE0",
+  "name": "maybe_Ui_SpriteWidget_Ctor",
+  "signature": "void maybe_Ui_SpriteWidget_Ctor(UiSpriteWidget *w)",
+  "params": {
+   "param_1": "w"
+  },
+  "summary": "Constructor of a 2D sprite widget: runs the sprite base constructor, installs the widget vtable and default-constructs the eight 0x48-byte animation slots at +0x298.",
+  "confidence": 0.45,
+  "evidence": "piVar2 = 0x1a5a60() (sprite base ctor); *piVar2 = g_001a3f1c (vtable); piVar2[0x8b] = g_001a3f1c + 0x9c (second vtable); func_00100050(piVar2 + 0xa6, g_001a3f20, 0x48, 8). Only caller maybe_Ui_Overlay_CreateSlotWidget@0x237adc."
+ }
+]

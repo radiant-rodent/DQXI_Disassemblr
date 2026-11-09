@@ -22,8 +22,8 @@ from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-if "../reference project" not in sys.path:
-    sys.path.insert(0, "../reference project")
+if "../3DS_Translate" not in sys.path:
+    sys.path.insert(0, "../3DS_Translate")
 
 from tools import pack
 from tools.texture_tool import PICA_FORMATS, decode_tiled, tiled_size
@@ -151,6 +151,8 @@ class MeshGeometry:
     ibo_abs: int = 0
     index_size: int = 2
     num_indices: int = 0
+    # vertex record layout of the draw: name (PICA semantic: 0 pos, 1 normal, 3 colour, 4 uv0, ...), format, elements, scale, byte offset
+    layout: list = field(default_factory=list)
 
 
 @dataclass
@@ -1185,6 +1187,12 @@ class BchParser:
             geom.num_indices = num_indices
 
             attributes = self._vertex_attributes(vbo)
+            lay_off = 0
+            for attr in attributes:
+                if attr["format"] not in (0, 1):
+                    lay_off += lay_off & 1
+                geom.layout.append(dict(attr, offset=lay_off))
+                lay_off += attr["elements"] * {3: 4, 2: 2, 1: 1, 0: 1}[attr["format"]]
             for v_idx in range(max_vtx + 1):
                 pos = vbo_abs + v_idx * stride
                 if pos + stride > len(self.data):
@@ -1725,9 +1733,9 @@ def resolve_model_info(stem: str, path: str) -> tuple[str, str]:
 
 
 def read_romfs():
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     return f, ncch.romfs()
 
 

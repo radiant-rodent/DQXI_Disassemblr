@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 ORIGINAL_ROM = PROJECT_ROOT / "original" / "DQXI.3ds"
 if not ORIGINAL_ROM.is_file():
-    ORIGINAL_ROM = Path(r"..\reference project\DQXI.3ds")
+    ORIGINAL_ROM = Path(r"..\3DS_Translate\DQXI.3ds")
 
 BUILD_DIR = PROJECT_ROOT / "build"
 BUILD_CODE_BIN = BUILD_DIR / "code.bin"

@@ -1,0 +1,1773 @@
+[
+ {
+  "address": "0x00426794",
+  "name": "maybe_Battle_FinishUnitSelection",
+  "signature": "void maybe_Battle_FinishUnitSelection(BattleScene* self, int actionId, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle scene/manager",
+   "actionId": "selected action id",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Walks the four formation unit lists, clears the pending flag at +0x58A on units that have no matching action, then closes the unit selection: writes the extra-window id at +0x1200/+0x1204 and hides the battle command extra window. It is the tail of the 'action chosen, run unit sequence' path.",
+  "confidence": 0.35,
+  "evidence": "Body is a Ghidra container (entry merged at LAB_004262d8, thumb); iterates self->f_429c lists 4 times, tests unit ids against vtable+0x48/+0x4c, clears *(u8*)(unit+0x58A), finally writes f_1200/f_1204 and calls func_0027D268(...,0) which another batch named Ui_BattleCommandWindow_SetExtraWindow."
+ },
+ {
+  "address": "0x00426D9C",
+  "name": "maybe_Battle_ShowCommandListEntry",
+  "signature": "u32 maybe_Battle_ShowCommandListEntry(BattleScene* self, int entryIndex, int visible, u32 unused)",
+  "params": {
+   "self": "battle scene/manager",
+   "entryIndex": "index into the per-command table",
+   "visible": "non-zero to show, 0 to hide",
+   "unused": "unused"
+  },
+  "summary": "Shows or hides one entry of the battle command list: when hiding it makes list entry self->f_4254 visible for command entryIndex, otherwise it either forwards to the object's own vtable slot +0x60 or to the shared actor action handler. Uses the per-command table at self+0x1230 (two ints per command).",
+  "confidence": 0.4,
+  "evidence": "ARM at 0x00426D9C: cmp r1,#4 / cmp r1,#0xFF; ldr r0,[r3] then ldr r2,[r0,#0x60]; bx r2 (self vtable call); func_002AB83C(*(self+0x5c)+0x4254, byte) - the same +0x4254 list that other batches named Container_List_SetParamOnVisible is used on; self->f_168D read as a state byte (literal 0x168D misread as global by Ghidra)."
+ },
+ {
+  "address": "0x00426E44",
+  "name": "Battle_PushActionEntry",
+  "signature": "void Battle_PushActionEntry(BattleScene* self, u16 actionKind, int actionId)",
+  "params": {
+   "self": "battle scene/manager",
+   "actionKind": "action/command kind passed to the entry builder",
+   "actionId": "action id"
+  },
+  "summary": "Appends one unit-action entry to the 12-slot action queue at self+0x70C (stride 0x64=25 words): clears the slot, stores the action id, builds the entry for the unit picked by vtable+0x60, optionally queues the actor action sequence and sound, then advances self->f_877 (wrapping at 12).",
+  "confidence": 0.5,
+  "evidence": "Writes self[self[0x877]*0x19+0x723]=actionId and increments self[0x877]; calls Ui_ActionSeq_ClearEntry (0x424330), maybe_Field_ActorActionSeq_BuildEntryFromUnits (0x424CA8), func_003989FC, func_002BB798, and loops the unit list via vtable+0x48. Same slot layout as 0x427D64."
+ },
+ {
+  "address": "0x004271D4",
+  "name": "Battle_UpdateUnitTransform",
+  "signature": "void Battle_UpdateUnitTransform(BattleScene* self)",
+  "params": {
+   "self": "battle scene/manager"
+  },
+  "summary": "Per-frame battle unit transform pass: for four formation slots it copies the pose/orientation block (8 words at +0x88..+0xA4) into the render transform block (+0x240..+0x268), recomputes the quaternion terms, then updates every unit's model equipment/state via vtable+0x40/+0x48 and finishes by retiring the command window.",
+  "confidence": 0.5,
+  "evidence": "Copies puVar6[0x22..0x29] to [0x90..0x97] and computes quaternion components from them; loops func_00630DC8 units and calls func_0040AC10 (Model equipment update, other batch) and func_00376F34; ends with Ui_GetCore vtable+0x28 and func_00610418 (window close)."
+ },
+ {
+  "address": "0x004275C0",
+  "name": "Battle_UpdateActionSoundCues",
+  "signature": "void Battle_UpdateActionSoundCues(BattleUnit* self, float elapsed)",
+  "params": {
+   "self": "battle unit with an action cue table",
+   "elapsed": "seconds since the action step started"
+  },
+  "summary": "Plays the per-action sound cues of one battle unit: picks the cue table for the unit's category (0/1/2 at +0x360/+0x3A0/+0x3E0), and when the elapsed time passes the next cue's timestamp starts that SE and advances the 8-entry cursor at +0x21FC.",
+  "confidence": 0.7,
+  "evidence": "Table entries are (float time, s16 seId) pairs indexed by self->f_21FC (limit 8); calls Sound_PlaySeById with the s16 at +4 and stores the handle at +0x21D8; category comes from func_0020C7BC(self->f_125c) returning 0/1/2."
+ },
+ {
+  "address": "0x004276C0",
+  "name": "maybe_Battle_PrepareUnitListUi",
+  "signature": "void maybe_Battle_PrepareUnitListUi(BattleScene* self)",
+  "params": {
+   "self": "battle scene/manager"
+  },
+  "summary": "Prepares the battle UI lists for the current action: hides the shared command/member lists and the four per-formation lists, sets the unit list from the live actors, and then shows only the formation lists that match the current action mode (+0x13DF) or collects up to 16 unit ids for the command window.",
+  "confidence": 0.4,
+  "evidence": "Repeated func_002AB8C0(*(...+0x5c)+0x4270/0x4254/i*0x1c+0x428C, 0) calls (list visibility), func_0060C164 / func_0060B3FC feed arg1[0x48b] (battle command window), ends with f_1204=1 and f_1200 and Ui_GetCore vtable+0x1C."
+ },
+ {
+  "address": "0x00427D64",
+  "name": "maybe_Battle_PushDamageActionEntry",
+  "signature": "void maybe_Battle_PushDamageActionEntry(BattleScene* self, int actionId)",
+  "params": {
+   "self": "battle scene/manager",
+   "actionId": "selected action/command id"
+  },
+  "summary": "Variant of Battle_PushActionEntry used for actions that show damage/heal numbers: it measures the text run, clears and fills the current action slot, builds the actor action sequence, and when the action carries a value also spawns the number popup and actor popup before advancing the 12-slot queue.",
+  "confidence": 0.45,
+  "evidence": "Same self->f_877*0x19 slot arithmetic as 0x426E44; Text_MeasureTextRun (0x486208) result kept at +0x2203; calls maybe_Battle_Ui_BuildEntryFromUnitsB (0x4256D8), Ui_PopupEntry_SpawnNumberList (0x3FC9F0), Ui_PopupEntry_SpawnForActorList (0x3FC220), Sound_PlaySeById."
+ },
+ {
+  "address": "0x004283AC",
+  "name": "Battle_IsUnitSelectable",
+  "signature": "u32 Battle_IsUnitSelectable(BattleUnit* self)",
+  "params": {
+   "self": "battle unit"
+  },
+  "summary": "Returns 1 when the player may pick this battle unit as a target/actor: it is not flagged dead at +0x2201, its id at +0x125C is not already present in the battle work bitset at +0x29F14, and the global message/menu lock +0x4251 is clear; otherwise 0.",
+  "confidence": 0.6,
+  "evidence": "Reads self->f_2201, tests Game_GetWork()->f_29F14 bit (self->f_125c & 0x1f) and *(*(...+0x5c)+0x4251); returns 1/0 only."
+ },
+ {
+  "address": "0x00428450",
+  "name": "maybe_Battle_UpdateConditionIcons",
+  "signature": "void maybe_Battle_UpdateConditionIcons(BattleUnit* self)",
+  "params": {
+   "self": "battle unit"
+  },
+  "summary": "Counts how many of the 32 condition slots at +0x1BAC are non-empty and, when the two condition bitmasks at +0x169E/+0x16A0 changed, asks the popup entry system to rebuild the model-attached condition icons (slot 0 and 1).",
+  "confidence": 0.4,
+  "evidence": "Loops 0x20 ints at self+0x1BAC counting non-zero; compares self->f_169E and self->f_16A0 with g_004284E8; calls maybe_Ui_PopupEntry_SpawnModelDebugText (0x3FF200) with the mask array and index 0/1."
+ },
+ {
+  "address": "0x00428738",
+  "name": "Battle_ShowMonsterPairPopup",
+  "signature": "void Battle_ShowMonsterPairPopup(BattleScene* self, u32 unitIndex)",
+  "params": {
+   "self": "battle scene/manager",
+   "unitIndex": "index of the acting unit"
+  },
+  "summary": "Handles the 'monster joined/recruited' popup: resolves the acting unit and its monster pair ids (+0xCA/+0xCC), marks the pair as seen in the game work, spawns the monster popup and a balloon, or plays the 'already seen' popup.",
+  "confidence": 0.55,
+  "evidence": "Uses func_0063E5C8(monsterId) -> record with f_ca/f_cc pair ids, func_0035EBB0(gameWork, id, 1), maybe_Ui_PopupEntry_SpawnForMonsterPair (0x3FF500), Ui_Balloon_SpawnAtAnchor (0x1F4478), and sets unit flags f_f1c/f_f1d."
+ },
+ {
+  "address": "0x00428D80",
+  "name": "maybe_Battle_CleanupUnitActors",
+  "signature": "void maybe_Battle_CleanupUnitActors(BattleScene* self)",
+  "params": {
+   "self": "battle scene/manager"
+  },
+  "summary": "On battle teardown, walks all units and, when the UI flag at +0x4244 is set, resolves each unit's actor object through the handle table at +0x11E4 and stops/detaches its effect, model and script objects; finally clears the party slot type flags.",
+  "confidence": 0.45,
+  "evidence": "Loops func_00630DC8 units, vtable+0x48, func_006443CC(self+0x11E4,i) handle lookup, then func_00633C7C/func_003BF388/func_0030AC50(actor+0x11C); ends with maybe_FieldParty_ClearSlotTypeFlags (0x1FEF18)."
+ },
+ {
+  "address": "0x00428ED8",
+  "name": "maybe_Battle_StopUnitMotion",
+  "signature": "void maybe_Battle_StopUnitMotion(u32 unitIndex, u32 unused2, u32 unused3, u32 unused4)",
+  "params": {
+   "unitIndex": "battle unit slot index",
+   "unused2": "unused",
+   "unused3": "unused",
+   "unused4": "unused"
+  },
+  "summary": "Stops the motion/voice of the actor bound to a battle unit: if the unit's system id is 0x572 it cancels the current face/voice, otherwise it stops the action directly, then clears the busy byte at +0x35 and flushes the actor animation.",
+  "confidence": 0.3,
+  "evidence": "Looks up *(*(...engine+0x88)+8) actor; branches on actor->f_14 == 0x572; calls func_0061F3F8 / func_005F9110 / func_0060FFC0 and clears f_35. Not enough context to name the exact motion."
+ },
+ {
+  "address": "0x00428F68",
+  "name": "maybe_Battle_RefreshUnitTextSlots",
+  "signature": "void maybe_Battle_RefreshUnitTextSlots(BattleScene* self, u32 arg2, u32 arg3, int arg4)",
+  "params": {
+   "self": "battle scene/manager",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Enables or disables the combat text glyph slots of every living unit and refreshes each unit's paired game-work record (HP/MP display flags at +0x1C2/+0x1C4); finishes by showing or hiding the units' UI objects depending on the battle UI mode.",
+  "confidence": 0.4,
+  "evidence": "Calls Ui_GlyphSlot_Reset (0x4EE2F0) and writes actor->f_71c, func_0035EB98(gameWork, unit+0x1da) then writes f_1c4/f_1c2, and drives per-unit vtable+0x50 on the 4-element groups."
+ },
+ {
+  "address": "0x00429260",
+  "name": "maybe_Battle_ResetUnitUi",
+  "signature": "u32 maybe_Battle_ResetUnitUi(BattleScene* self)",
+  "params": {
+   "self": "battle scene/manager"
+  },
+  "summary": "Resets the battle unit UI after an action: clears the glyph slot flag on the lead unit's actor, resets its text/face state and finishes the action; the decompiler lost the tail of the function (bad instruction data) so the exact return value is uncertain.",
+  "confidence": 0.3,
+  "evidence": "Starts with func_004284EC, then loops units with vtable+0x60/+0x50; calls func_005F5818(unit->f_110), Ui_GlyphSlot_Reset (0x4EE2F0), writes f_71c=0 and func_0063FDAC. Ghidra reports unreachable blocks and halt_baddata()."
+ },
+ {
+  "address": "0x004297E4",
+  "name": "maybe_Battle_PlayPartyMemberSe",
+  "signature": "void maybe_Battle_PlayPartyMemberSe(BattleScene* self, u32 flags)",
+  "params": {
+   "self": "battle scene/manager",
+   "flags": "bit mask of party member slots to react"
+  },
+  "summary": "Plays the per-party-member sound effect tied to a battle action: depending on the low bit of flags it either plays the SE stored at +0x18 for all 8 member widgets, or resolves the formation lists, marks the members and plays the SE at +0x16.",
+  "confidence": 0.35,
+  "evidence": "8 iterations of func_00467B10(self+i*0x1c+0x34,...) then Sound_PlaySeById(...,*(+0x18)); else branch collects list ids via Container_List_CollectVisibleIds (0x2AB7C0) and plays +0x16."
+ },
+ {
+  "address": "0x0042AB48",
+  "name": "maybe_Battle_ActorAction_ShowAttackPopup",
+  "signature": "int maybe_Battle_ActorAction_ShowAttackPopup(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object (state at +0x498, done flag at +0xD2)"
+  },
+  "summary": "One battle actor action step: when the action record has the two attack icons 0x5E/0x5F it shows the attack-name popup, measures the icon scale from the actor and spawns the associated effect (id 0x6D), then finishes the step. Returns the actor's done flag at +0xD2.",
+  "confidence": 0.4,
+  "evidence": "Standard actor-action state machine: if *(self+0xD2) return 1; state at self[0x498] initialized from g_0042B0F0, next state -0xD3A; calls func_0063E05C(0x5E/0x5F), func_003FBE4C popup, func_0035FF3C(effect 0x6D); uses vtable +0x94/+0xAC and func_001F43D4 to finish."
+ },
+ {
+  "address": "0x0042B158",
+  "name": "maybe_Battle_ActorAction_WaitStep",
+  "signature": "int maybe_Battle_ActorAction_WaitStep(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Battle actor action step that clears a display flag and waits for the action to finish: it removes the icon at g_0042B2F0 from the actor's UI, shows the resulting popup and then calls the actor's finish hook (vtable +0x108). Returns the done flag at +0xD2.",
+  "confidence": 0.35,
+  "evidence": "Same +0xD2 / self[0x498] state-machine prologue; states -0xC14 and 2/0x10; calls vtable +0xE4/+0x120 with the id in g_0042B2F0, func_003FBE4C popup and func_001F43D4 / vtable +0x108."
+ },
+ {
+  "address": "0x0042B318",
+  "name": "Battle_ActorAction_ApplyAddedState",
+  "signature": "void Battle_ActorAction_ApplyAddedState(BattleActor* self, BattleActor* target)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "target": "unit that receives the state"
+  },
+  "summary": "Applies the state/condition added by a battle actor action: resolves the two state ids from the action and adds them to the target unit through the battle state API.",
+  "confidence": 0.5,
+  "evidence": "Guards on target->f_10 and vtable+0x10, reads arg2[0x39D], func_00631B24/func_00631BE0(engine+0x5c,arg2), func_0020A630(engine,v4,v3,1,0,0), then maybe_Battle_AddStateFlags (0x1CAE90)(arg2,state)."
+ },
+ {
+  "address": "0x0042B3D0",
+  "name": "Battle_ActorAction_SelectAnimation",
+  "signature": "u32 Battle_ActorAction_SelectAnimation(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Chooses and plays the actor animation for a battle actor action: reads the action record, picks animation 5 or 6 depending on the command result and starts it; returns 1 when nothing needs to play.",
+  "confidence": 0.5,
+  "evidence": "func_0063FC70(actor->f_274,self[0x2F],self[0x2E]) returns the record; switch on result/command id 0x2D/0x2E/0x31C/0x32; calls func_005E7848(actor,5/6,0) and Battle_Ui_ForwardCommand (0x4BBC9C); func_00631D30 result selects 6 vs 5."
+ },
+ {
+  "address": "0x0042B5CC",
+  "name": "Battle_ActorAction_ShowNamePopup",
+  "signature": "int Battle_ActorAction_ShowNamePopup(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Looks up the actor's action record, spawns the model-actor popup (name/HP), plays the SE stored in the record at +0xA and finishes the action step. Returns the done flag.",
+  "confidence": 0.5,
+  "evidence": "func_0063FD24(handle, self[0x497]) returns the actor record; maybe_Ui_PopupEntry_SpawnForModelActors with record->f_160 and self[0x497]; Sound_PlaySeById(*(u16*)(self[0x498]+0xA)); func_001F43D4 at the end; self[0x498] is the record pointer."
+ },
+ {
+  "address": "0x0042BA90",
+  "name": "Battle_ActorAction_SpawnEffects",
+  "signature": "int Battle_ActorAction_SpawnEffects(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Spawns the one or two attached effects of the current battle actor action and stores their handles in the actor (+0x4E3/+0x4E4); returns 1 once the effects exist. Used for actions that have an effect on the caster and one on the target.",
+  "confidence": 0.5,
+  "evidence": "Two calls to maybe_Effect_FindOrCreateInstance (0x35FF3C) with `*(u32*)(*(...+0x60))` effect manager; handles stored in arg1[0x4E3]/[0x4E4]; record fields f_134/f_136 and f_17A select the branches."
+ },
+ {
+  "address": "0x0042BE58",
+  "name": "maybe_Battle_ActorAction_Complete",
+  "signature": "int maybe_Battle_ActorAction_Complete(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Completion step of a battle actor action: sets the actor's done flag at +0xD2, shows the model popup and plays the action SE, then exits. This is the shared tail used by several battle actor action elements.",
+  "confidence": 0.45,
+  "evidence": "Writes *(u8*)(self+0xD2)=1 and actor->f_108; reads record via func_0063FD24 / func_0063E60C; popup maybe_Ui_PopupEntry_SpawnForModelActors; Sound_PlaySeById(*(u16*)(self[0x498]+0xA)); func_001F43D4."
+ },
+ {
+  "address": "0x0042C7F8",
+  "name": "Battle_ActorAction_MoveAndSpawnEffect",
+  "signature": "int Battle_ActorAction_MoveAndSpawnEffect(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Battle actor action that moves actors along the action path (FieldParty_MoveActorTowardTarget), spawns up to two effects and shows two popups, e.g. a monster charge or a breath attack.",
+  "confidence": 0.5,
+  "evidence": "Calls FieldParty_MoveActorTowardTarget (0x1FD97C) with slot 2/0, two maybe_Ui_PopupEntry_SpawnForModelActors and maybe_Effect_FindOrCreateInstance, plus func_005E7848 to play actor animations."
+ },
+ {
+  "address": "0x0042D4D4",
+  "name": "Battle_ActorAction_ShowDamage",
+  "signature": "int Battle_ActorAction_ShowDamage(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Shows the damage/heal result of a battle actor action: builds the actor row message (Battle_Message_BuildActorRowBig), spawns the number list and actor list popups, plays the hit SE and updates the row state.",
+  "confidence": 0.55,
+  "evidence": "Calls Battle_Message_BuildActorRowBig (0x493980), maybe_Battle_Monster_CheckRowState (0x494D74), Ui_PopupEntry_SpawnNumberList (0x3FC9F0), Ui_PopupEntry_SpawnForActorList (0x3FC220), func_004BC310; reads the row state and self[0x497]/[0x498]; vtable +0x7C/+0xC4 text methods."
+ },
+ {
+  "address": "0x0042EC54",
+  "name": "maybe_Battle_ActorAction_SpawnThreeEffects",
+  "signature": "int maybe_Battle_ActorAction_SpawnThreeEffects(BattleActor* self, int arg2)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "arg2": "action sub-index"
+  },
+  "summary": "Spawns the three effect instances of a battle actor action (e.g. charge aura, hit and fade) after playing the action's SE; the sub-index selects which effect set is used.",
+  "confidence": 0.45,
+  "evidence": "Three maybe_Effect_FindOrCreateInstance calls; func_0063FD24 + func_0063E60C(actorId)->f_c is the SE id; state at self[0x62D] initialized from g_0042EFD8."
+ },
+ {
+  "address": "0x0042F104",
+  "name": "maybe_Battle_ActorAction_Sequence",
+  "signature": "int * maybe_Battle_ActorAction_Sequence(BattleActor* self, int* a, int* b, int** c)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "a": "in/out vector/param block",
+   "b": "in/out vector/param block",
+   "c": "in/out pointer slot"
+  },
+  "summary": "Long multi-stage battle actor action: plays several SE cues, moves the actor, spawns popups and effects depending on the record ids, and returns a pointer into the action data. Used by the bigger monster attack animations.",
+  "confidence": 0.45,
+  "evidence": "Multiple Sound_PlaySeById calls with record offsets 0x6/0x10/0x12 and g_00430258; FieldParty_MoveActorTowardTarget; maybe_Ui_PopupEntry_SpawnForModelActors; four-pointer signature from Ghidra; the body is a large switch/state machine."
+ },
+ {
+  "address": "0x0042FE10",
+  "name": "maybe_Battle_ActorAction_PopupStep",
+  "signature": "void maybe_Battle_ActorAction_PopupStep(BattleActor* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "arg2": "popup id/param",
+   "arg3": "popup param",
+   "arg4": "popup param"
+  },
+  "summary": "Small actor-action step that only spawns the model-actor popup and returns; used as a sub-step of the longer action sequences.",
+  "confidence": 0.4,
+  "evidence": "Body contains a single maybe_Ui_PopupEntry_SpawnForModelActors (0x3FF9AC) call on the stack packet and nothing else; thumb mode."
+ },
+ {
+  "address": "0x004303F4",
+  "name": "Battle_ActorAction_ShowNamePopupById",
+  "signature": "int Battle_ActorAction_ShowNamePopupById(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Looks up the actor's action record and shows its popup (id, model id, monster id), then waits for the UI; a second call from the menu window can cancel the actor's UI flag. Returns 0 (not a blocking step).",
+  "confidence": 0.5,
+  "evidence": "func_0063FD24(handle,self[0x497]); popup packet uses self[0x497], *(u16*)(g_0043057C+record) and record->f_160; state at g_00430574/-0x111D; Menu_ClearActorUiFlag (0x20CB6C) on cancel."
+ },
+ {
+  "address": "0x004307C4",
+  "name": "Battle_ActorAction_SpawnAttachedEffects",
+  "signature": "u32 Battle_ActorAction_SpawnAttachedEffects(BattleActor* self, Actor* actor)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "actor": "actor to attach the effects to"
+  },
+  "summary": "Spawns the two effects attached to an actor's action record (ids at record+0x134/+0x136) at the actor's position and stores the handles at +0x4E3/+0x4E4; returns 1 when the effects were created.",
+  "confidence": 0.55,
+  "evidence": "Two maybe_Effect_FindOrCreateInstance calls with record->f_134 / *(u16*)(g_004309A4+record); uses vtable +0xB8 to build the effect transform from actor->f_110; stores arg1[0x4E3]/[0x4E4]; state at +0x62F."
+ },
+ {
+  "address": "0x004309A8",
+  "name": "maybe_Battle_ActorAction_HandleDamageResult",
+  "signature": "int maybe_Battle_ActorAction_HandleDamageResult(BattleActor* self, int arg2)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "arg2": "action sub-index"
+  },
+  "summary": "Handles the damage/condition result of a battle actor attack: looks up the action record, spawns the result popups, updates the actor's condition and drop-item flags, and switches the model state. Contains a large switch on the record id.",
+  "confidence": 0.45,
+  "evidence": "Uses func_0063FD24, func_0063E5C8, Battle_Ui_ShowDropItemMessage (0x4BEE8C), maybe_Ui_PopupEntry_SpawnForModelActors, maybe_Effect_FindOrCreateInstance, func_001CA474; record ids 0x298/0x33F/0x382 and states g_00430990/+0xC03."
+ },
+ {
+  "address": "0x00430C86",
+  "name": "maybe_Battle_ActorAction_HandleDamageResultB",
+  "signature": "u32 maybe_Battle_ActorAction_HandleDamageResultB(BattleActor* self, ActionStep* step, u32 arg3)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "step": "action step descriptor",
+   "arg3": "action argument"
+  },
+  "summary": "Thumb-mode duplicate of part of Battle_ActorAction_HandleDamageResult: it invokes the action step callback, spawns the same popups and updates the actor flags; Ghidra could not recover the register-based arguments, so the naming is by analogy with 0x4309A8.",
+  "confidence": 0.3,
+  "evidence": "Starts (*arg2->f_18)() and then matches the g_004314E4/EC state constants, popup maybe_Ui_PopupEntry_SpawnForModelActors, func_001FD96C, func_004346B4 and writes +0x385; the ARM version at 0x4309A8 has the same constants and structure."
+ },
+ {
+  "address": "0x00431504",
+  "name": "Battle_ActorAction_SetModelVisibility",
+  "signature": "u32 Battle_ActorAction_SetModelVisibility(BattleActor* self, int mode)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "mode": "visibility mode passed to the action model"
+  },
+  "summary": "Applies the visibility mode to the actor's action model(s) and returns 0; used when a battle actor action hides/shows parts of the model during the animation.",
+  "confidence": 0.5,
+  "evidence": "Ends with maybe_Battle_ActionModel_SetVisibilityMode (0x485824)(local_3c,result); loops actor/model slots and uses func_005F5818; writes the chosen model id."
+ },
+ {
+  "address": "0x00431808",
+  "name": "Battle_ActorAction_UpdateSubCommands",
+  "signature": "u32 Battle_ActorAction_UpdateSubCommands(BattleActor* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "battle enemy/actor object (3 sub-command slots at +0x18CC)",
+   "arg2": "command argument",
+   "arg3": "command argument",
+   "arg4": "command argument"
+  },
+  "summary": "Runs the three queued sub-commands of a battle actor action: for each non-empty slot it invokes the stored function object with the three arguments and, when it reports completion, resets the slot to the idle constant pair.",
+  "confidence": 0.55,
+  "evidence": "Loops i=0..2 over self+i*8, reads function object at +0x18CC/+0x18D0, calls (*fn)(obj,arg2,arg3,arg4); on non-zero result stores g_004318B0[0]/[1] back into the slot; returns 0 while any slot is still running, 1 when all are idle."
+ },
+ {
+  "address": "0x00431D60",
+  "name": "maybe_Battle_ActorAction_UpdatePose",
+  "signature": "void maybe_Battle_ActorAction_UpdatePose(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Per-frame pose update of a battle actor action: reads the action's target position, computes the facing/lean toward it, applies the pose transform and finally refreshes the actor's visibility flags.",
+  "confidence": 0.45,
+  "evidence": "Large float body with vtable +0x3C actor and func_005F5F54(actor,&self->f_3D,0) at the end, followed by maybe_Actor_CheckVisibleFlags (0x64DB70); uses the same spherical-offset math as the camera but for an actor."
+ },
+ {
+  "address": "0x0043247C",
+  "name": "maybe_Battle_ActorAction_UpdateReaction",
+  "signature": "int maybe_Battle_ActorAction_UpdateReaction(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "State machine for a battle actor's reaction animation (hit/stagger): looks up the action record, walks the state at +0x62B, spawns popups and plays the reaction animation until the done flag at +0x1386 is set.",
+  "confidence": 0.45,
+  "evidence": "Reads func_0063FD24(handle,self[0x497]); state at self[0x62B]; uses maybe_Ui_PopupEntry_SpawnForModelActors and func_004346B4; returns *(u8*)(self+0x1386)."
+ },
+ {
+  "address": "0x00432E24",
+  "name": "maybe_Battle_ActorAction_UpdateReactionB",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateReactionB(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Variant reaction state machine for a different action id set: same popup/animation stepping, driven by the state word at +0x623 and the action record looked up from self[0x497].",
+  "confidence": 0.4,
+  "evidence": "Same func_0063FD24 + popup packet + state at self[0x623] shape as 0x43247C; returns a stack value and writes self[0x623]."
+ },
+ {
+  "address": "0x0043342C",
+  "name": "maybe_Battle_ActorAction_UpdateReactionC",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateReactionC(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Third variant of the battle actor reaction state machine, used for actions that show a status/effect popup and then wait for the actor's animation to finish.",
+  "confidence": 0.4,
+  "evidence": "Same state-machine skeleton as the neighbouring battle actor action updates: popup packet (u16 fields + self[0x497]) fed to func_003FBE4C, state constants at g_004336xx, return 1/-2."
+ },
+ {
+  "address": "0x00433720",
+  "name": "maybe_Battle_ActorAction_UpdateMotion",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateMotion(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Moves a battle actor through the action's motion curve: computes the interpolated offset/rotation, updates the actor transform and checks whether the motion has finished.",
+  "confidence": 0.45,
+  "evidence": "Float-heavy body with spherical/lerp math, vtable +0x3C/+0x48 actor access, func_005E7848 animation play and state constants; returns 1 when the step completes."
+ },
+ {
+  "address": "0x00433FF4",
+  "name": "maybe_Battle_ActorAction_UpdateSequence",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateSequence(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Long sequential actor-action step: iterates the action's sub-commands (up to many entries in a 0x5B8-byte stack buffer), executes each popup/effect/SE and advances the state at +0x623.",
+  "confidence": 0.4,
+  "evidence": "Large stack frame with arrays of u16 popup params; state at self[0x623]; calls func_0063FD24, func_0063E05C, popup/message helpers; matches the other Battle_ActorAction_* state machines."
+ },
+ {
+  "address": "0x004346B4",
+  "name": "Battle_ActorAction_FinishWeaponAnim",
+  "signature": "int Battle_ActorAction_FinishWeaponAnim(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Finishes the weapon part of a battle actor attack: clears the 'weapon locator dirty' bit, calls Monster_Model_UpdateWeaponLocators, plays the weapon SE and removes the two attack icons 0x9A/0x9B from the actor's UI.",
+  "confidence": 0.7,
+  "evidence": "Calls maybe_Monster_Model_UpdateWeaponLocators (0x437FF4), maybe_Battle_Effect_UpdateLinkTarget (0x2DB520), Sound_PlaySeById(*(u16*)(self[0x498]+0x10)), vtable +0x124 with 0x9A/0x9B; state at self[0x62B] with -0xB16 and 5/0xE; done flag at +0x1386."
+ },
+ {
+  "address": "0x00434820",
+  "name": "maybe_Battle_ActorAction_UpdateSequenceB",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateSequenceB(BattleActor* self, int arg2)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "arg2": "action argument/index"
+  },
+  "summary": "Second sequential actor-action updater; executes the popup/SE commands of an action and advances the state at +0x623. Returns the step result.",
+  "confidence": 0.4,
+  "evidence": "Same shape as 0x433FF4: popup packets, func_0063FD24, self[0x623] state, return via LAB_00434AF0."
+ },
+ {
+  "address": "0x00435794",
+  "name": "maybe_Battle_ActorAction_SpawnImpactEffects",
+  "signature": "u32 maybe_Battle_ActorAction_SpawnImpactEffects(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Impact-heavy battle actor action: positions effect quads at the hit point, spawns the impact particle effects, plays the hit SE and pushes the damage number popup. The decompiler lost several jump-table targets, so the exact action id set is unknown.",
+  "confidence": 0.45,
+  "evidence": "Many calls to func_00574044 / func_00665564 (vector math), Gfx effect helpers, maybe_Effect_FindOrCreateInstance, popup for model actors; self[0x623] switch with g_00435C38.. constants; Sound_PlaySeById(g_00436498); ends at Ui_GetCore vtable+0x10."
+ },
+ {
+  "address": "0x00435FC8",
+  "name": "Battle_ActorAction_UpdateComposite",
+  "signature": "u32 Battle_ActorAction_UpdateComposite(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Composite actor-action updater that delegates to the damage (0x42D4D4) and sequence (0x42F104) steps and adds extra effect/anchor handling; the local return value is passed through unchanged.",
+  "confidence": 0.5,
+  "evidence": "Callers: 0x42D4D4 and 0x42F104 are called from it (mutually recursive action composition); reads self[0x497]/[0x4DA]; spawns effects and popups; returns local_7c."
+ },
+ {
+  "address": "0x00436808",
+  "name": "maybe_Battle_ActorAction_UpdateCompositeB",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateCompositeB(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Composite actor-action updater (second variant) that advances the actor animation and, when the action carries a special flag, positions the camera/actor and shows the extra popup.",
+  "confidence": 0.4,
+  "evidence": "Same state/popup machinery; returns 0/1 based on two bytes at +0x1385/+0x1386; uses func_005E7848 and func_004346B4."
+ },
+ {
+  "address": "0x00436E98",
+  "name": "maybe_Battle_ActorAction_UpdateCompositeC",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateCompositeC(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Composite actor-action updater (third variant), used for actions whose effect is attached to a model node; it prepares the effect transform, spawns the effect and waits for both the effect and the actor animation.",
+  "confidence": 0.4,
+  "evidence": "Builds a large effect descriptor (0x190-byte stack frame, arrays of u16 ids), calls effect spawn helpers and animation checks, returns 1 when two bytes at local_54+0x21/+0x85 are set."
+ },
+ {
+  "address": "0x004378DC",
+  "name": "maybe_Battle_ActorAction_UpdateCompositeD",
+  "signature": "u8 maybe_Battle_ActorAction_UpdateCompositeD(BattleActor* self, int arg2)",
+  "params": {
+   "self": "battle enemy/actor object",
+   "arg2": "action sub-index (register parameter lost by Ghidra)"
+  },
+  "summary": "Composite actor-action updater (fourth variant) that runs the action's sub-steps and returns the second done flag at +0xD3; stores the sub-index at +0x1308.",
+  "confidence": 0.4,
+  "evidence": "State at self[0x61F] with g_00437C38, arg1[0x4C2]=in_s0 (register arg), many popup/effect calls, returns *(u8*)(self+0xD3)."
+ },
+ {
+  "address": "0x004388B4",
+  "name": "Battle_ActorAction_Dtor",
+  "signature": "void Battle_ActorAction_Dtor(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Destructor of the actor action object: clears the actor's flag at +0x270, destroys the embedded effect/actor sub-objects and frees the object.",
+  "confidence": 0.55,
+  "evidence": "Sets vtable g_00438914, clears actor->f_270, calls maybe_Battle_Effect_Dtor (0x2DB8BC), func_001CF7F4 and func_00200220 on container_of pointers, then func_0010F6CC (free). Found in the vtable at 0x76F264."
+ },
+ {
+  "address": "0x00438918",
+  "name": "Battle_ActorAction_UpdateAnchor",
+  "signature": "void Battle_ActorAction_UpdateAnchor(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Re-anchors a battle actor's action UI: fetches the actor, computes its ground position (with a height offset in the 3D/2D display modes), creates the balloon anchor and plays the actor animation.",
+  "confidence": 0.5,
+  "evidence": "Uses func_0063FC70(actor->f_274), func_001F4CF8 / func_001F6EA8 (actor position setters), maybe_Battle_Ui_GetBalloonAnchor (0x1F6EC4), func_005E7848(actor,anim); reads actor->f_8C..f_A4 and display mode from func_006326D8()."
+ },
+ {
+  "address": "0x00438B10",
+  "name": "Battle_ActorAction_ShowRevivePopup",
+  "signature": "int * Battle_ActorAction_ShowRevivePopup(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Battle actor action used for revival/wake-up: shows the flagged popup, plays SE 0x128, calls the actor anchor update and then waits for the animation to reach its end state.",
+  "confidence": 0.5,
+  "evidence": "maybe_Ui_PopupEntry_SpawnFlagged (0x3FDB08), Sound_PlaySeById(0x128), func_00438918; state at self[0x497] initialized from g_00438CC0 and stepped through 0xC/0x10; returns *(u8*)(self+0xD2)."
+ },
+ {
+  "address": "0x00438D48",
+  "name": "Battle_ActorAction_ClearStatusIcons",
+  "signature": "int Battle_ActorAction_ClearStatusIcons(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Removes the two status icons 0x75/0x76 from an actor (cure/revive action): verifies the icons exist, clears them, plays the animation and finishes; returns the done flag.",
+  "confidence": 0.6,
+  "evidence": "Calls vtable +0xE8 with 0x76/0x75 to test and +0x124 to clear them; state at self[0x499] from g_00438FC0, states 0xE/0x12 and -0xAE6; func_005E7848(actor,anim); stores the old icon mask at g_00438FCC."
+ },
+ {
+  "address": "0x00438FE4",
+  "name": "maybe_Battle_ActorAction_UpdateMotionB",
+  "signature": "u32 maybe_Battle_ActorAction_UpdateMotionB(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Second motion updater for battle actor actions: applies the action's positional/rotational offset over time, spawns the attached effect and checks the game-work flag at +0x27C57 before finishing.",
+  "confidence": 0.45,
+  "evidence": "Float/vector math, effect instance creation, Game_GetWork()->f_27C57 check, state at arg1[0x64F]=g_004394D0, returns 1."
+ },
+ {
+  "address": "0x004394D4",
+  "name": "Battle_Actor_Update",
+  "signature": "int Battle_Actor_Update(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object (large object, sub-objects at +0x125C)"
+  },
+  "summary": "Main per-frame update of a battle actor (10 KB): drives its action state machine, animation, model parts, effects and UI popups, and returns the actor's done flag at +0xD2. This is the body behind the class vtable slot +0x2C (0x76F64C).",
+  "confidence": 0.6,
+  "evidence": "Largest function in the batch (0x281C bytes); found in the battle-actor vtable at 0x76F64C; uses self[0x497]/[0x498] action ids, self+0x125C embedded object, Game_GetWork, effect and popup helpers; ends with `return *(char*)((int)self+0xD2)`. Its destructor pair is 0x43BE48/0x43BEBC and its dispatch wrapper is 0x43BF48."
+ },
+ {
+  "address": "0x0043BE48",
+  "name": "Battle_Actor_Dtor",
+  "signature": "void Battle_Actor_Dtor(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Deleting destructor of the battle actor class: releases the target-marker list, destroys the embedded 0x14-stride array, resets the second vtable, destroys the embedded +0x125C sub-object and frees the allocation.",
+  "confidence": 0.6,
+  "evidence": "Sets *self=g_0043BEB0, calls Ui_BattleTargetMarker_ReleaseAll (0x26829C), func_005AD1CC, std_destroy_range(self+0x630,g_0043BEB4,0x14,2), then func_00124154(self+0x497), func_00200220(base-0x125C) and func_0010F6CC; vtable pair at 0x76F634/0x76F630."
+ },
+ {
+  "address": "0x0043BEBC",
+  "name": "Battle_Actor_DtorNoFree",
+  "signature": "void Battle_Actor_DtorNoFree(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Non-deleting destructor variant of the battle actor class: same member teardown as Battle_Actor_Dtor but without the final free. Used for objects embedded in another allocation.",
+  "confidence": 0.6,
+  "evidence": "Identical body to 0x43BE48 minus the final func_0010F6CC; installs vtable g_0043BF28; found at vtable slot 0x76F630."
+ },
+ {
+  "address": "0x0043BF48",
+  "name": "Battle_Actor_UpdateDispatch",
+  "signature": "void Battle_Actor_UpdateDispatch(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Thin virtual dispatch/guard in front of Battle_Actor_Update: if the battle actor is still in a live state it calls the main update and, when that reports completion, notifies the battle UI and the actor's model; otherwise it forwards the state byte to the actor. Ghidra lost part of the jump targets here.",
+  "confidence": 0.5,
+  "evidence": "Calls func_004394D4(self+0x497) (the main actor update via container_of) and maybe_Battle_Ui_UpdateFinishedBalloons (0x1F70FC); reads self[0x100C]+0xEB and self[0x14]+0xB0FA; vtable at 0x76F7A8; has halt_baddata() truncation."
+ },
+ {
+  "address": "0x0043C3A8",
+  "name": "maybe_Battle_ActorEffect_Dtor",
+  "signature": "void maybe_Battle_ActorEffect_Dtor(BattleActor* self, u32 vtable)",
+  "params": {
+   "self": "battle actor/effect object",
+   "vtable": "vtable pointer to install"
+  },
+  "summary": "Destructor of a battle actor/effect object: installs the base vtable, destroys the embedded effect at +0x3FD0, installs the second vtable and frees the +0x4E0 sub-object. The decompiler truncated the tail.",
+  "confidence": 0.4,
+  "evidence": "Sets *arg1=arg2 and arg1[0xB0F]=PTR_PTR_0043C45C, calls maybe_Battle_Effect_Dtor (0x2DB8BC) on arg1+0xFF4, sets PTR_DAT_0043C460, func_00124154(iVar-0x138); ends with halt_baddata()."
+ },
+ {
+  "address": "0x0043C46C",
+  "name": "maybe_Battle_ActorAction_Wait",
+  "signature": "int maybe_Battle_ActorAction_Wait(BattleActor* self)",
+  "params": {
+   "self": "battle enemy/actor object"
+  },
+  "summary": "Waits for the current battle actor action to finish: state at self[0x498] starts from g_0043C5B8, and while the actor reports busy it keeps the state, otherwise it shows the 'action cancelled' popup and finishes. Returns the done flag at +0xD2.",
+  "confidence": 0.4,
+  "evidence": "Same +0xD2 / self[0x498] state machine as 0x42AB48; constant -0x86C; checks func_00640348 for the menu lock; popup func_003FBE4C; func_001F43D4 to finish; vtable 0x76F8BC."
+ },
+ {
+  "address": "0x0043C61C",
+  "name": "Anim_TimeTrack_PurgeExpired",
+  "signature": "void Anim_TimeTrack_PurgeExpired(AnimTimeTrackList* self, u32 unused2, u32 unused3, int unused4)",
+  "params": {
+   "self": "time-track list",
+   "unused2": "unused",
+   "unused3": "unused",
+   "unused4": "unused"
+  },
+  "summary": "Removes every timeline entry whose owner is gone or whose owner reports 'finished', inserting the survivors into the sorted live list by their time field, then renumbers the entries. Ghidra merged the real entry point into a container (unaff_ registers).",
+  "confidence": 0.5,
+  "evidence": "Same body as Anim_TimeTrack_PurgeAndRenumber (0x43CE70): walks the intrusive list, tests owner->vtable+0x18, compares *(float*)(entry+0x1C), func_001235A4 to reinsert, writes entry+0x18=index."
+ },
+ {
+  "address": "0x0043C7BC",
+  "name": "maybe_Anim_TimeTrack_PurgeExpiredB",
+  "signature": "void maybe_Anim_TimeTrack_PurgeExpiredB(AnimTimeTrackList* self)",
+  "params": {
+   "self": "time-track list"
+  },
+  "summary": "Second copy of the timeline purge (used by the battle action element that owns two tracks); removes finished entries, keeps the list ordered by time and renumbers. Entry point recovered from a container.",
+  "confidence": 0.45,
+  "evidence": "Container/thumb body: iterates unaff_r8+arg1 list, tests owner vtable+0x18, compares entry time with g_0043CFC0, reinserts with func_001235A4 and writes +0x18 indices; same as 0x43CE70/0x43C61C."
+ },
+ {
+  "address": "0x0043CE70",
+  "name": "Anim_TimeTrack_PurgeAndRenumber",
+  "signature": "void Anim_TimeTrack_PurgeAndRenumber(AnimTimeTrackList* self)",
+  "params": {
+   "self": "intrusive list of animation time tracks"
+  },
+  "summary": "Housekeeping for the animation timeline list: drops every track whose owner object is gone or whose owner's vtable+0x18 reports 'finished', re-inserts the survivors into the live list ordered by their time field (+0x1C), and (unless the debug flag at +0x4201 is set) rewrites the sequential index at +0x18.",
+  "confidence": 0.65,
+  "evidence": "Walks the intrusive list, tests owner=(*(entry+0xC)) and owner->vtable+0x18, compares entry time with g_0043CFC0, reinserts via func_001235A4, then renumbers +0x18; called by Anim_TimeTrack_MergeDuplicates."
+ },
+ {
+  "address": "0x0043D1F4",
+  "name": "Anim_TimeTrack_IsAlive",
+  "signature": "u32 Anim_TimeTrack_IsAlive(AnimTimeTrackList* self, int index)",
+  "params": {
+   "self": "animation time-track list",
+   "index": "sequential track index stored at entry+0x18"
+  },
+  "summary": "Returns 1 when the track with the given index still exists and its owner is alive (owner->vtable+0x18 != 0), else 0. Used by the timeline code to skip dead tracks.",
+  "confidence": 0.6,
+  "evidence": "Loops entries, compares *(int*)(entry+0x18)==arg2 and tests owner->vtable+0x18; returns 1/0."
+ },
+ {
+  "address": "0x0043D270",
+  "name": "Anim_TimeTrack_MergeDuplicates",
+  "signature": "void Anim_TimeTrack_MergeDuplicates(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "First purges expired tracks, then merges tracks that start at (almost) the same time: it copies the newest track's value/weight into the older one, advances the older track's start time and removes the duplicate. This keeps the timeline free of overlapping identical keys.",
+  "confidence": 0.55,
+  "evidence": "Calls Anim_TimeTrack_PurgeAndRenumber; compares fabs((entry+0x10)+(entry+0x1C)-other->f_1C) < 1/65536 (0x37800001); copies f_1C/f_20/f_24 and adds +0x10 to the base time, unlinks with func_0010EBE4, then renumbers +0x18."
+ },
+ {
+  "address": "0x0043D288",
+  "name": "Anim_TimeTrack_MergeDuplicatesNoPurge",
+  "signature": "void Anim_TimeTrack_MergeDuplicatesNoPurge(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Same duplicate-time merge as Anim_TimeTrack_MergeDuplicates but without the initial purge pass; used when the caller has already purged the list.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x43D270 except that the opening call to 0x43CE70 is absent; same 1/65536 time comparison, field copies and +0x18 renumbering."
+ },
+ {
+  "address": "0x0043D8F4",
+  "name": "Anim_TimeTrack_HasExpired",
+  "signature": "u32 Anim_TimeTrack_HasExpired(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Returns 1 as soon as any track in the list is expired (owner missing or owner->vtable+0x18 == 0), else 0.",
+  "confidence": 0.6,
+  "evidence": "Loops the list and tests owner/owner->vtable+0x18; returns 1 on the first dead track."
+ },
+ {
+  "address": "0x0043D958",
+  "name": "Anim_TimeTrack_RemoveFirstExpired",
+  "signature": "int Anim_TimeTrack_RemoveFirstExpired(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Finds and unlinks the first expired track, returning it (or 0 when every track is alive). Used by the timeline update to recycle one dead key per frame.",
+  "confidence": 0.6,
+  "evidence": "Loops the list, tests owner->vtable+0x18, then func_0010EBE4(&self->f_C, entry) to unlink and returns the entry pointer."
+ },
+ {
+  "address": "0x0043D9D0",
+  "name": "Anim_TimeTrack_Reset",
+  "signature": "void Anim_TimeTrack_Reset(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Resets a timeline list: clears the time/scale fields at +0x18..+0x34, unlinks both intrusive lists and frees every entry.",
+  "confidence": 0.6,
+  "evidence": "Writes arg1[6..0xC] from g_0043DABC/g_0043DAC0, clears f_E, then walks both lists (arg1[1] and arg1[4]) unlinking and freeing entries via func_0010F6CC; called from Anim_TimeTrack_Ctor/Dtor."
+ },
+ {
+  "address": "0x0043DD80",
+  "name": "Anim_TimeTrack_Ctor",
+  "signature": "AnimTimeTrackList* Anim_TimeTrack_Ctor(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Initialises an animation timeline list: sets both intrusive-list sentinels to point at themselves and resets the timing fields. Returns self.",
+  "confidence": 0.65,
+  "evidence": "Initialises *(self)=self, *(self+4)=self, *(self+8)=self and the second sentinel at +0xC, then calls Anim_TimeTrack_Reset (0x43D9D0)."
+ },
+ {
+  "address": "0x0043DDB4",
+  "name": "Anim_TimeTrack_Dtor",
+  "signature": "AnimTimeTrackList* Anim_TimeTrack_Dtor(AnimTimeTrackList* self)",
+  "params": {
+   "self": "animation time-track list"
+  },
+  "summary": "Destroys an animation timeline: resets the timing/ownership fields and unlinks both intrusive lists (including the self-sentinels). Returns self.",
+  "confidence": 0.6,
+  "evidence": "Calls Anim_TimeTrack_Reset then unlinks self+4/self+8 and self->f_10/f_14 sentinels."
+ },
+ {
+  "address": "0x0043DDFC",
+  "name": "maybe_Ui_ListWindow_UpdateRowText",
+  "signature": "int maybe_Ui_ListWindow_UpdateRowText(UiListWindow* self, BattleRowData* row)",
+  "params": {
+   "self": "UI list window (text element at +0x34, row index at +0x28)",
+   "row": "row/record data (id at +0xE8, state at +0xFC)"
+  },
+  "summary": "Updates one row of a data-list window: compares the row against the cached ids, selects the text for the row's state (0/2/3/7/8), sets the primary and secondary strings, enables/disables the second column and handles the actor/icon lookup for the row. Large state machine; several jump-table targets were lost by Ghidra.",
+  "confidence": 0.4,
+  "evidence": "Compares self->f_5E/f_50/f_54/f_58/f_5C with row->f_E8/f_FC/f_100/f_104, calls Ui_TextElement_SetString (0x3A7A2C), func_0043EABC / func_0043EBAC / func_0043E7C4, Ui_SpriteSpan_Select (0x28DDB0), and reads Game_GetWork+0x24A98 actor records; strings/ids 0x4254/0x428C lists."
+ },
+ {
+  "address": "0x0043E7C4",
+  "name": "maybe_Ui_ListWindow_UpdateSecondaryText",
+  "signature": "void maybe_Ui_ListWindow_UpdateSecondaryText(UiListWindow* self, RowData* row)",
+  "params": {
+   "self": "UI list window",
+   "row": "row data"
+  },
+  "summary": "Helper for the list-row update: sets the primary text, toggles the second text element and, for actor/icon rows, resolves the actor or sprite id and updates the icon. Shares its tail with the main row updater.",
+  "confidence": 0.4,
+  "evidence": "Calls Ui_TextElement_SetString, func_0043EBAC, func_002AB62C on +0x4254/+0x428C lists, Ui_SpriteSpan_Select, Game_GetWork; same constants g_0043EA.. as 0x43DDFC."
+ },
+ {
+  "address": "0x0043EBAC",
+  "name": "Ui_TextElement_SetSecondColumn",
+  "signature": "void Ui_TextElement_SetSecondColumn(UiListWindow* self, int enable, u32 text)",
+  "params": {
+   "self": "UI list window",
+   "enable": "non-zero to show the second column",
+   "text": "wide string pointer, or 0"
+  },
+  "summary": "Shows or hides the second text column of a list row and optionally sets its string; also mirrors the visibility bit into the row widget at +0x4C.",
+  "confidence": 0.55,
+  "evidence": "Sets/clears the bit 0 of rowWidget->f_44, calls Ui_Element_SetFlagBit0 (0x3A7974) with (self->f_28<<16)|1 and Ui_TextElement_SetString when text!=0; condition (-arg2 & arg3)==0 decides visibility."
+ },
+ {
+  "address": "0x0043ED2C",
+  "name": "maybe_Ui_ListWindow_UpdateSelectedRow",
+  "signature": "void maybe_Ui_ListWindow_UpdateSelectedRow(UiListWindow* self, RowData* row)",
+  "params": {
+   "self": "UI list window",
+   "row": "selected row data"
+  },
+  "summary": "Updates the selected row: if the row's widget is visible, rebuilds the detailed/secondary text; otherwise sets the main text and the second column.",
+  "confidence": 0.45,
+  "evidence": "Calls row widget vtable+0x170, then func_0043E7C4 or Ui_TextElement_SetString + func_0043EBAC."
+ },
+ {
+  "address": "0x0043EDC0",
+  "name": "Ui_CommandTargetWindow_InitPanes",
+  "signature": "void Ui_CommandTargetWindow_InitPanes(UiCommandTargetWindow* self)",
+  "params": {
+   "self": "command/target window"
+  },
+  "summary": "Binds the two pane texts of the command/target window: registers the format strings 'txt_command' and 'txt_target' and attaches the correct child pane depending on the UI mode.",
+  "confidence": 0.7,
+  "evidence": "Calls vtable+0x34 with s_txt_command_0043EE88 and s_txt_target_0043EE94; then func_0062AB3C to choose g_0043EEA0[0] or [1] and stores the node at self[0x13]."
+ },
+ {
+  "address": "0x0043EEA4",
+  "name": "Ui_CommandTargetWindow_Dtor",
+  "signature": "void Ui_CommandTargetWindow_Dtor(UiCommandTargetWindow* self)",
+  "params": {
+   "self": "command/target window"
+  },
+  "summary": "Trivial destructor of the command/target window: chains to the shared Ui_Object base destructor and frees the object.",
+  "confidence": 0.65,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; found at vtable slot 0x76FABC."
+ },
+ {
+  "address": "0x0043EF84",
+  "name": "Ui_ListWindow_ShowEntryName",
+  "signature": "void Ui_ListWindow_ShowEntryName(UiListWindow* self, int listIndex, int entryIndex)",
+  "params": {
+   "self": "UI list window",
+   "listIndex": "which of the four data lists (0..3)",
+   "entryIndex": "visible entry index"
+  },
+  "summary": "Fills a list row from the game data lists: finds the n-th visible entry in list `listIndex`, resets the 21 row slots, copies the entry name (or 'NONAME' and the display name) into the row text and updates the attached sprite/number widgets.",
+  "confidence": 0.55,
+  "evidence": "Container_List_FindNthVisible (0x2AB9E4) on *(engine+0x5c)+listIndex*0x1C+0x428C; resets 0x15 entries of 8 bytes; func_0063D300 / maybe_std_ThrowWideRange with u_NONAME_0043F10C and \"%ls\"; Ui_TextElement_SetString; func_0043F200/func_0043F304."
+ },
+ {
+  "address": "0x0043F130",
+  "name": "Ui_ListWindow_ShowEntryNameById",
+  "signature": "void Ui_ListWindow_ShowEntryNameById(UiListWindow* self, u32 entryId)",
+  "params": {
+   "self": "UI list window",
+   "entryId": "visible-list entry id"
+  },
+  "summary": "Id-based variant: looks the entry up in the +0x4254 list, resets the 21 row slots, resolves the actor/monster record and copies its name into the row text.",
+  "confidence": 0.5,
+  "evidence": "func_002AB62C(*(engine+0x5c)+0x4254, id), resets 0x15 slots, func_0035EB98(Game_GetWork, f_768), func_006F0DDC formatting, Ui_TextElement_SetString, func_0043F200/func_0043F304."
+ },
+ {
+  "address": "0x0043F208",
+  "name": "maybe_Ui_TextLayer_SetColorByRatio",
+  "signature": "void maybe_Ui_TextLayer_SetColorByRatio(UiTextLayer* self, UiText* text, u32 id)",
+  "params": {
+   "self": "text layer",
+   "text": "text object with ratio getters at vtable+0x90/+0x94",
+   "id": "slot id"
+  },
+  "summary": "Picks a text colour from the value/max ratio of a gauge cell and applies it to the text layer (used for coloured numeric fields such as HP/MP or damage).",
+  "confidence": 0.45,
+  "evidence": "Computes (vtable+0x90)/(vtable+0x94)*g_0043F2E8, compares against the thresholds g_0043F2F0/2F4 and selects one of the colour constants g_0043F2EC/2F8/2FC/300, then Ui_TextLayer_SetText (0x1A629C)."
+ },
+ {
+  "address": "0x0043F304",
+  "name": "Ui_TextLayer_UpdateEnabledItems",
+  "signature": "void Ui_TextLayer_UpdateEnabledItems(UiTextLayer* self, UiRow* row)",
+  "params": {
+   "self": "text layer",
+   "row": "row/record object"
+  },
+  "summary": "Walks the icons/items of a row (ids 0..0xF) and enables or disables the corresponding text-layer slots depending on whether the item exists and on the special ids 0xD/0xE/0xF.",
+  "confidence": 0.5,
+  "evidence": "Loops ids with row vtable+0xE8/+0x10 checks, func_0063E05C(id)->f_40, branch on i==0xD/0xE/0xF, enables slots with g_0043F77C; called by Ui_ListWindow_ShowEntryName*."
+ },
+ {
+  "address": "0x0043F784",
+  "name": "Ui_CommandBar_BindPanes",
+  "signature": "void Ui_CommandBar_BindPanes(UiCommandBar* self, u32 arg2, u32 arg3, u32 arg4, u32 arg5)",
+  "params": {
+   "self": "command/hotbar window",
+   "arg2": "entry count/param",
+   "arg3": "entry param",
+   "arg4": "entry param",
+   "arg5": "mode/param"
+  },
+  "summary": "Builds the 10-slot command/hotbar window: creates the right/left text panes ('txt_Br_%d', 'txt_Bl_%d') and the icon panes ('icon_state_up2o_l_%d'), then attaches them to the window nodes.",
+  "confidence": 0.6,
+  "evidence": "Calls vtable+0x34 with g_0043F98C and the format strings s_txt_Br_d_0043F990, s_txt_Bl_d_0043F99C, s_icon_state_up2o_l_d_0043F9BC for i in 0..9; iterates layout children with func_0053D4C4; found at vtable slot 0x76FB3C."
+ },
+ {
+  "address": "0x0043F9E0",
+  "name": "Ui_Object_DtorWithRowArray",
+  "signature": "void Ui_Object_DtorWithRowArray(UiObject* self)",
+  "params": {
+   "self": "UI object owning a 21-entry row array at +0x3D"
+  },
+  "summary": "Destructor of a window that owns 21 embedded row widgets: destroys the array (stride 0x18C), then chains to the base Ui_Object destructor and frees the object.",
+  "confidence": 0.55,
+  "evidence": "std_destroy_range(arg1+0x3D,g_0043FA18,0x18C,0x15) then Ui_Object_DtorBase + func_0010F6CC; vtable at 0x76FB20."
+ },
+ {
+  "address": "0x0043FA8C",
+  "name": "Battle_ActionAnim_AtkSpellElementDtor",
+  "signature": "void Battle_ActionAnim_AtkSpellElementDtor(BattleActionElement* self)",
+  "params": {
+   "self": "atkspell action-animation element"
+  },
+  "summary": "Destructor of the 'atkspell' battle action element (vtable slot +0x10): if the element is still owned by a live battle object it calls the shared action-element teardown, otherwise it does nothing. The vtable literal is installed by the AtkSpell element constructor at 0x43FAB8.",
+  "confidence": 0.8,
+  "evidence": "Vtable 0x76FBB4 belongs to the AtkSpell ctor (g_0043FAD4); slot +0x10 = 0x43FA8C; body = func_0066A2BC(self->f_28) then maybe_Battle_Action_UpdateTargetMarker (0x38AB68). Neighbouring ctors are named Battle_ActionAnim_AtkSpellElementCtor by another batch."
+ },
+ {
+  "address": "0x0043FBB4",
+  "name": "Battle_ActionAnim_GuardElementDtor",
+  "signature": "void Battle_ActionAnim_GuardElementDtor(BattleActionElement* self)",
+  "params": {
+   "self": "guard_ed action-animation element"
+  },
+  "summary": "Destructor of the 'guard_ed' (guard end) battle action element; same guard-and-teardown body as the other action elements.",
+  "confidence": 0.8,
+  "evidence": "Vtable 0x76FC60 (GuardEnd ctor g_0043FBFC) slot +0x10 = 0x43FBB4; body identical to 0x43FA8C (func_0066A2BC + func_0038AB68)."
+ },
+ {
+  "address": "0x0043FC34",
+  "name": "Battle_ActionAnim_RevSpellElementDtor",
+  "signature": "void Battle_ActionAnim_RevSpellElementDtor(BattleActionElement* self)",
+  "params": {
+   "self": "revspell action-animation element"
+  },
+  "summary": "Destructor of the 'revspell' (revival spell) battle action element; same guard-and-teardown body as the other action elements.",
+  "confidence": 0.8,
+  "evidence": "Vtable 0x76FC94 (RevSpell ctor g_0043FC7C) slot +0x10 = 0x43FC34; body identical to 0x43FA8C."
+ },
+ {
+  "address": "0x0043FC90",
+  "name": "Ui_TextElement_SetListRowText",
+  "signature": "void Ui_TextElement_SetListRowText(UiTextElement* self)",
+  "params": {
+   "self": "text element (text at +0x34, row index at +0x28)"
+  },
+  "summary": "Builds the text of a list row from the row index: converts the low 16 bits of +0x28 into a wide string (bounded to 0xFF) and sets it on the text layer.",
+  "confidence": 0.5,
+  "evidence": "Uses the small static formatter at 0x43FD6C/g_0043FD70 (one-time 0x10-byte block), func_0020DF70 for the length clamp 0xFF, func_006F0F1C to format and Ui_TextElement_SetString (0x3A7A2C); vtable slot 0x76FCDC."
+ },
+ {
+  "address": "0x0043FDC8",
+  "name": "Ui_Window_Ctor",
+  "signature": "UiWindow* maybe_Ui_Window_Ctor(UiWindow* self)",
+  "params": {
+   "self": "window object"
+  },
+  "summary": "Constructor for a window subclass: chains to the base Ui_Window constructor and installs the subclass vtable g_0043FDDC.",
+  "confidence": 0.5,
+  "evidence": "Calls maybe_Ui_WindowBase_Ctor (0x3259B8) and writes *puVar1=g_0043FDDC."
+ },
+ {
+  "address": "0x0043FDE0",
+  "name": "Ui_Window_Dtor",
+  "signature": "void maybe_Ui_Window_Dtor(UiWindow* self)",
+  "params": {
+   "self": "window object"
+  },
+  "summary": "Destructor of the same window subclass: chains to the shared Ui_Object base destructor and frees the object.",
+  "confidence": 0.6,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; found at vtable slot 0x76FCBC."
+ },
+ {
+  "address": "0x0043FDF0",
+  "name": "Field_ObjectSprite_ApplyModelRecord",
+  "signature": "void Field_ObjectSprite_ApplyModelRecord(FieldObjectSprite* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field object sprite (effect slot at +0x297)",
+   "arg2": "model record/param",
+   "arg3": "param",
+   "arg4": "param"
+  },
+  "summary": "Applies a model record to a field-object sprite and re-attaches the sprite's effect-slot pack information; used when a placed object's model changes at runtime.",
+  "confidence": 0.5,
+  "evidence": "Calls maybe_Actor_ApplyModelRecordFast (0x28E37C) then Gfx_Effect2D_AttachPackInfoToSlot (0x3DBFC8) with self->f_297; vtable 0x76FD84."
+ },
+ {
+  "address": "0x0043FE1C",
+  "name": "Field_ObjectSprite_AcquireEffectSlot",
+  "signature": "void Field_ObjectSprite_AcquireEffectSlot(FieldObjectSprite* self, u8* slotId, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field object sprite",
+   "slotId": "pointer to the wanted effect slot id",
+   "arg3": "param",
+   "arg4": "param"
+  },
+  "summary": "Reserves a 2D effect slot for a field-object sprite: stores the slot id at +0x297 and asks the effect-2D manager to acquire it.",
+  "confidence": 0.55,
+  "evidence": "self->f_297=*arg2; Gfx_Effect2D_AcquireSlot (0x3DBBDC)(*(engine+0x64), self->f_297)."
+ },
+ {
+  "address": "0x0043FE4C",
+  "name": "Field_ObjectSprite_ReleaseEffectSlot",
+  "signature": "void Field_ObjectSprite_ReleaseEffectSlot(FieldObjectSprite* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field object sprite",
+   "arg2": "unused",
+   "arg3": "unused",
+   "arg4": "unused"
+  },
+  "summary": "Releases the runtime resources of a field-object sprite: drops its child list, detaches it from the field-object manager and frees the 2D effect slot at +0x297.",
+  "confidence": 0.55,
+  "evidence": "if self->f_41: Field_Object_ReleaseChildList (0x335C24), func_001C90A4(engine+0x54,self), Gfx_Effect2D_ReleaseSlot (0x3DB988)(engine+0x64,self->f_297), f_297=0xFF; vtable slot 0x76FD64."
+ },
+ {
+  "address": "0x0044004C",
+  "name": "Camera_SetupLookAtBasis",
+  "signature": "void Camera_SetupLookAtBasis(Camera* self, Vec3* eye, Vec3* target)",
+  "params": {
+   "self": "camera object",
+   "eye": "eye/world position",
+   "target": "look-at position"
+  },
+  "summary": "Sets up a look-at camera basis: normalises (target-eye), stores the eye at +0x94, the unit forward point at +0xA0 and an up vector at +0xAC obtained by rotating the eye around the forward axis. Used when a camera is built directly from two points.",
+  "confidence": 0.6,
+  "evidence": "Computes delta=arg3-arg2, normalises it (g_0044015C=1.0), stores self->f_94=eye, self->f_A0=eye+dir, builds a quaternion via Math_QuatFromAxisAngle (0x5755C8) and rotates with func_00574548 using the axis at g_00440160; the three stored triples are the classic eye/at/up layout used by Camera_Update."
+ },
+ {
+  "address": "0x004401D4",
+  "name": "Camera_SetupPerspective",
+  "signature": "void Camera_SetupPerspective(Camera* self, u8 fov, float in_s2, float in_s3)",
+  "params": {
+   "self": "camera object",
+   "fov": "field of view / projection flag",
+   "in_s2": "vertical FOV or aspect (register parameter lost by Ghidra)",
+   "in_s3": "near/far pair value (register parameter lost by Ghidra)"
+  },
+  "summary": "Initialises the projection half of a camera: stores the FOV value at +0x38, the two constants 1.0/0.0 at +0x34/+0x3C, copies the parent view matrix into +0x40 and rebuilds the projection matrix. Called by the CameraChange/CameraZoom natives.",
+  "confidence": 0.55,
+  "evidence": "Called from CameraChange (0x14901C), CameraZoom (0x146CA0) and 0x148BA8; calls Camera_BuildProjectionMatrix (0x2AEB74, already named) and func_001CEE24(&self->f_40,&self->f_2c->f_b0) which copies a 4x4 matrix; constants g_00440234=1.0, g_00440238=0.0."
+ },
+ {
+  "address": "0x0044026C",
+  "name": "Camera_CopyViewMatrix",
+  "signature": "void Camera_CopyViewMatrix(Camera* self)",
+  "params": {
+   "self": "camera object"
+  },
+  "summary": "Copies the parent object's view matrix (parent+0xB0) into the camera's own matrix at +0x94. One-line helper used when the camera only needs to mirror its owner.",
+  "confidence": 0.6,
+  "evidence": "Single call func_001CEE24(&arg1->f_94,&arg1->f_2c->f_b0); func_001CEE24 is the matrix copy used by Camera_SetupPerspective."
+ },
+ {
+  "address": "0x00440284",
+  "name": "Camera_SetupLookAtEx",
+  "signature": "void Camera_SetupLookAtEx(Camera* self, Vec3* eye, Vec3* up, Vec3* target, u8 fov)",
+  "params": {
+   "self": "camera object",
+   "eye": "eye position",
+   "up": "up vector",
+   "target": "look-at position",
+   "fov": "field of view"
+  },
+  "summary": "Explicit variant of the camera setup: stores FOV/projection defaults, copies the parent matrix and writes the three supplied vectors into the eye/up/at fields (+0x94, +0xAC, +0xA0). Called by CameraChange when the caller supplies the full orientation.",
+  "confidence": 0.55,
+  "evidence": "Same prologue as Camera_SetupPerspective (constants 1.0/0.0, func_001CEE24), then self->f_94=arg2, self->f_AC=arg3, self->f_A0=arg4; caller list: CameraChange, CSCameraStart, 0x148BA8."
+ },
+ {
+  "address": "0x004403DC",
+  "name": "Camera_InterpolateStereoParameters",
+  "signature": "void Camera_InterpolateStereoParameters(Camera* self, Vec3* leftEye, Vec3* rightEye)",
+  "params": {
+   "self": "camera object",
+   "leftEye": "in/out left eye position",
+   "rightEye": "in/out right eye position"
+  },
+  "summary": "Stereo-camera cross-fade: reads the current 3D display mode from the screen manager (+0x23B1), asks Camera_CalcStereoEyePositions for the two eye positions of that mode, and when the mode changed it blends from the previous mode's eye separation toward the new one using the factor at +0xB8.",
+  "confidence": 0.55,
+  "evidence": "Calls func_004404D8(self, mode, arg2, arg3) (Camera_CalcStereoEyePositions); keeps previous mode at +0x92 and current at +0x91; g_004404D4 default factor 0.0; uses self->f_AC as the trigger threshold and Anim_Interp_EvaluateEx (0x2E44D4). The mode byte comes from *(*(*(*g+8)+0x8c)+0x14)+0x23b1."
+ },
+ {
+  "address": "0x004404D8",
+  "name": "Camera_CalcStereoEyePositions",
+  "signature": "void Camera_CalcStereoEyePositions(Camera* self, u32 mode, Vec3* leftEye, Vec3* rightEye)",
+  "params": {
+   "self": "camera object",
+   "mode": "3D display/parallax mode (1..5)",
+   "leftEye": "out: left eye position",
+   "rightEye": "out: right eye position"
+  },
+  "summary": "Computes the left/right eye positions of the stereoscopic 3D camera: adds the screen-space parallax offset for the current 3D mode (constants +-2.5, +-5, 6) to the camera eye position, producing two laterally separated eye points. This is what makes the 3DS 3D slider deepen the view.",
+  "confidence": 0.75,
+  "evidence": "switch(mode) selects constants g_0044068C/690/694/698/69C/6A0 (0, +-2.5, 6, +-5); output = eye + g_004406A4[0..2] (one direction) + mode offset, and second output uses the same table at +3; values match a symmetric stereo eye offset; func_00668B64 fetches the display surface size."
+ },
+ {
+  "address": "0x004406A8",
+  "name": "maybe_Camera_UpdateStereoSmoothing",
+  "signature": "void maybe_Camera_UpdateStereoSmoothing(Camera* self, float step)",
+  "params": {
+   "self": "camera object",
+   "step": "frame delta used to advance the convergence"
+  },
+  "summary": "Smooths the stereo camera: only while the overworld/free-camera display flags are set, it advances the convergence factor at +0xB8, re-evaluates the two eye positions and slerps the eye and up vectors toward them, then restores the screen-plane constants.",
+  "confidence": 0.45,
+  "evidence": "Guarded by *(*(*g+8)+0x44)==0 and *(*(*g+8)+0x3c)==7 (field/screen mode); calls Camera_InterpolateStereoParameters (0x4403DC), Math_Vec3Slerp twice, writes +0x4/+0x10 vectors and +0x1C..+0x28 from g_004407F0/g_004407F4; g_004407F8=0.01745 (deg->rad)."
+ },
+ {
+  "address": "0x00440944",
+  "name": "Camera_UpdateGyroYaw",
+  "signature": "void Camera_UpdateGyroYaw(Camera* self)",
+  "params": {
+   "self": "camera object"
+  },
+  "summary": "Gyroscope-controlled camera yaw: takes the 3DS gyro vector, projects it on the camera's reference axis (+0x138), converts the angle to degrees (57.29578) and then to a turn fraction (1/360), clamps it and stores the resulting yaw at +0x118/+0x11C plus the yaw quaternion at +0x128.",
+  "confidence": 0.6,
+  "evidence": "Reads func_00634418(... gyro) then dot with self->f_138/13C/140; std_Acosf and sign test on the cross term; constants g_00440A68=57.29578, g_00440A6C=360.0, g_00440A70=1/360, clamps at -1/1; writes f_118/f_11C and Math_QuatMultiply result to f_128..f_134. Same formula as 0x4417EC."
+ },
+ {
+  "address": "0x00440C64",
+  "name": "Camera_ResolveCollision",
+  "signature": "void Camera_ResolveCollision(Camera* self, Vec3* camPos, Vec3* targetPos)",
+  "params": {
+   "self": "field/free camera",
+   "camPos": "in/out camera position",
+   "targetPos": "in/out look-at target position"
+  },
+  "summary": "Camera collision and smoothing for the field camera: casts rays from the target toward the camera (Gfx_Scene_DrawSprite/FindsEntriesAlongLine), shortens the boom when geometry is hit, keeps a 10-entry history of positions and blends the result so the camera glides instead of snapping. Called from Camera_Update.",
+  "confidence": 0.75,
+  "evidence": "Uses Gfx_Scene_FindEntriesAlongLine (0x2E72C8), Gfx_Scene_DrawSpriteVariant (0x2E7F08), Gfx_Scene_DrawSprite (0x2E58E0); maintains 10 positions at +0x1E4 stride 0xC and flags at +0x25C; writes arg2 and arg3; only active when self->f_2C->f_1A0 set."
+ },
+ {
+  "address": "0x004417EC",
+  "name": "maybe_Camera_UpdateGyroFromReference",
+  "signature": "void maybe_Camera_UpdateGyroFromReference(Camera* self)",
+  "params": {
+   "self": "camera object"
+  },
+  "summary": "Second gyro-to-yaw helper: projects the gyro vector onto the global reference axis g_0044196C, converts the projected angle to degrees/turns and stores the yaw at +0x11C; also computes two rotated reference vectors with Math_QuatFromAxisAngle + func_00574548. Used by the cut-scene camera.",
+  "confidence": 0.45,
+  "evidence": "Same acos/clamp/57.29578/1/360 pattern as Camera_UpdateGyroYaw but the reference vector is the global g_0044196C instead of self->f_138; calls func_00575980 twice and func_00574548 twice; writes only self->f_11C."
+ },
+ {
+  "address": "0x00441994",
+  "name": "Camera_SetTransitionTarget",
+  "signature": "void Camera_SetTransitionTarget(Camera* self, Vec3* eye, Vec3* target, Vec3* upOrNull)",
+  "params": {
+   "self": "camera object",
+   "eye": "new eye position",
+   "target": "new look-at position",
+   "upOrNull": "new up vector, or null to keep"
+  },
+  "summary": "Starts a camera transition: snapshots the current eye/target/up into the interpolation sources (+0xA0/+0xD0/+0x104), stores the new pose in the destinations (+0xAC/+0xDC/+0x108), publishes the new eye distance to globals and resets the transition timer; when the transition time is zero it snaps immediately and rebuilds the rotation quaternion.",
+  "confidence": 0.65,
+  "evidence": "Writes f_A0/A4/A8=old eye, f_D0/D4/D8=old target, f_104=old scale, f_AC/B0/B4=new eye, f_DC/E0/E4=new target, f_108=new scale; *g_00441B14=sqrt(new eye) distance, g_00441B18=new target, g_00441B1C=new scale; f_144 is the remaining transition time compared with g_00441B20; Math_QuatMultiply for the final quaternion. Callers: 0x1D8E2C, 0x442480, 0x442608, 0x4429A8, 0x4429E8, 0x59AB54."
+ },
+ {
+  "address": "0x00441B24",
+  "name": "Camera_UpdateTransition",
+  "signature": "void Camera_UpdateTransition(Camera* self, float deltaTime)",
+  "params": {
+   "self": "camera object",
+   "deltaTime": "frame delta in seconds (register parameter lost by Ghidra)"
+  },
+  "summary": "Advances an active camera transition: computes the eased blend factor from the remaining time at +0x144, walks the eye/target/scale from the start pose toward the destination pose, optionally shortens the boom when the line of sight is occluded (modes 1 and 2 via Camera_FindOccludingSegment), and writes the interpolated pose.",
+  "confidence": 0.7,
+  "evidence": "Uses Camera_FindOccludingSegment (0x4B5DA4) and func_004B5BF4 for occlusion; easing selected by self->f_14C (0=linear, 1=out, 2=sine), f_144 duration, f_150 elapsed; slerps f_A0->f_AC into f_94, f_D0->f_DC into f_C4, f_104->f_108 into f_100; on completion copies target to current. Called from Camera_Update (0x442D5C)."
+ },
+ {
+  "address": "0x0044205C",
+  "name": "Camera_UpdateManualYaw",
+  "signature": "void Camera_UpdateManualYaw(Camera* self, float inputYaw)",
+  "params": {
+   "self": "camera object",
+   "inputYaw": "yaw delta from the circle pad"
+  },
+  "summary": "Manual camera yaw from player input: adds the rotated circle-pad input to the camera yaw, blending it with the actor's facing/party orientation flags, and stores the smoothed yaw at +0x11C. Handles the 'hold L/R to rotate the camera' path.",
+  "confidence": 0.55,
+  "evidence": "Checks func_006343CC(pad)==1, reads pad flags f_6c/f_74 bits 0x10/0x20, uses maybe_Party_MemberFlagPairA/B (0x66A604/0x66A660) to bias the yaw by the party leader; formula (sin(x)-x)*k like other camera yaw helpers; writes f_11C."
+ },
+ {
+  "address": "0x00442480",
+  "name": "Camera_ResetState",
+  "signature": "void Camera_ResetState(Camera* self)",
+  "params": {
+   "self": "camera object"
+  },
+  "summary": "Resets a camera to its idle state: snaps the current pose to the stored eye/target, releases the two occlusion object lists and clears the path mode and resource id (+0x170/+0x174).",
+  "confidence": 0.6,
+  "evidence": "Calls Camera_SetTransitionTarget(self,&self->f_94,&self->f_C4,0), releases lists at +0x1A0/+0x1C0 with func_004B6590, sets f_170=0 and f_174=0x0FFFFFFF. Identical body to 0x4429A8 (the two camera subclasses share this reset)."
+ },
+ {
+  "address": "0x004424C0",
+  "name": "Camera_InitGyroReference",
+  "signature": "void Camera_InitGyroReference(Camera* self, int snapOrientation)",
+  "params": {
+   "self": "camera object",
+   "snapOrientation": "non-zero to rebuild the yaw quaternion immediately"
+  },
+  "summary": "Captures the current gyro/sensor vector as the camera's yaw reference (+0x138), re-evaluates the gyro helper and zeroes the yaw accumulator; optionally rebuilds the yaw quaternion. Called by CameraResetFreeCam.",
+  "confidence": 0.5,
+  "evidence": "func_00634418(&local, gyro) then stores f_138/f_13C/f_140; calls func_00443504 (0x443504) and writes f_118=f_11C; Math_QuatMultiply result to f_128..f_134 when arg2!=0. Callers: CameraResetFreeCam (0x156298), 0x1D8E2C."
+ },
+ {
+  "address": "0x00442560",
+  "name": "Camera_InitGyroReferenceInverted",
+  "signature": "void Camera_InitGyroReferenceInverted(Camera* self, int snapOrientation)",
+  "params": {
+   "self": "camera object",
+   "snapOrientation": "non-zero to rebuild the yaw quaternion immediately"
+  },
+  "summary": "Same as Camera_InitGyroReference but stores the negated sensor vector (the 'reverse the 3DS orientation' variant used by the free camera when the player looks behind).",
+  "confidence": 0.5,
+  "evidence": "Identical structure to 0x4424C0 but self->f_140=-gyro.z, f_138=-gyro.x, f_13C=-gyro.y; caller CameraResetFreeCam."
+ },
+ {
+  "address": "0x00442608",
+  "name": "Camera_SetupSinglePath",
+  "signature": "u32 Camera_SetupSinglePath(Camera* self, CameraPathRecord* path, int force)",
+  "params": {
+   "self": "camera object",
+   "path": "camera rail/path record",
+   "force": "reload even when the same path id is already active"
+  },
+  "summary": "Loads a single-CV camera rail: reads the path record (id at +0xC), converts its control points to a point list and hands it to the camera curve object at +0x1A0, switching the camera into path mode 1. Returns 1 when a new path was installed.",
+  "confidence": 0.6,
+  "evidence": "Guards on self->f_174 (current path id) vs *(path+0xC); converts count*0xC points with func_0010F6EC and fills (x,y,z) triples from records of stride 0x50; calls func_004B63D8(&self->f_1a0, heap, count, points, 1) (curve object) and sets self->f_170=1."
+ },
+ {
+  "address": "0x004429A8",
+  "name": "Camera_ResetStateB",
+  "signature": "void Camera_ResetStateB(Camera* self)",
+  "params": {
+   "self": "camera object (second camera subclass)"
+  },
+  "summary": "Identical reset to Camera_ResetState for the other camera subclass: snaps the pose, releases the two occlusion lists and clears the path mode/id.",
+  "confidence": 0.65,
+  "evidence": "Byte-for-byte the same body as 0x442480 (Camera_SetTransitionTarget(self,&f_94,&f_C4,0), two func_004B6590 releases, f_170=0, f_174=0x0FFFFFFF); both appear as separate vtable methods of the two camera classes."
+ },
+ {
+  "address": "0x004429E8",
+  "name": "Camera_SetupDualPath",
+  "signature": "u32 Camera_SetupDualPath(Camera* self, CameraPathPair* paths, int force)",
+  "params": {
+   "self": "camera object",
+   "paths": "pair of camera rail records",
+   "force": "reload even when the same path id is already active"
+  },
+  "summary": "Loads a dual-CV camera rail (two curves, e.g. for cut-scenes that blend between a dolly and a look-at track): builds point lists for both records and hands them to the two curve objects at +0x1A0/+0x1C0, switching the camera into path mode 2.",
+  "confidence": 0.6,
+  "evidence": "Same shape as Camera_SetupSinglePath but resolves two curve resources with func_00642D58(...,*arg2) and (...,*arg2+0x18), copies both point arrays and calls func_004B63D8 twice; sets self->f_170=2."
+ },
+ {
+  "address": "0x00442CD0",
+  "name": "maybe_Camera_UpdateYawSpring",
+  "signature": "void maybe_Camera_UpdateYawSpring(Camera* self, float yaw, int snapOrientation)",
+  "params": {
+   "self": "camera object",
+   "yaw": "target yaw angle",
+   "snapOrientation": "non-zero to rebuild the yaw quaternion"
+  },
+  "summary": "Applies the engine's smooth-yaw filter (sin(angle)-angle)*k to the requested yaw, stores it at +0x118/+0x11C and optionally rebuilds the yaw quaternion.",
+  "confidence": 0.45,
+  "evidence": "Formula (sin(x)-x)*g_00442D50 then stores f_118/f_11C; Math_QuatMultiply writes f_128..f_134 when arg2!=0; identical tail to Camera_InitGyroReference."
+ },
+ {
+  "address": "0x00442D5C",
+  "name": "Camera_Update",
+  "signature": "void Camera_Update(Camera* self, float deltaTime)",
+  "params": {
+   "self": "field/free camera",
+   "deltaTime": "frame delta in seconds (register parameter lost by Ghidra)"
+  },
+  "summary": "Main per-frame update of the field/free camera: advances any running transition, applies gyro or manual yaw, clamps pitch, slerps the orientation quaternion, converts the stored spherical offset into a world position around the target, resolves collision and writes the final eye/target/up vectors used by the renderer.",
+  "confidence": 0.75,
+  "evidence": "First call func_00441B24 (Camera_UpdateTransition); then Camera_UpdateManualYaw or gyro branch; clamps |f_11C-f_118|; quaternion slerp with Math_QuatMultiply/acos; builds position from f_94/98/9C and f_128 quaternion; calls func_00440C64 (Camera_ResolveCollision) and stores +0x4/+0x10/+0x1C; found in the camera vtable at 0x76FEA4 (+0x14) together with Camera_ResetState (dtor slot) and Camera_InterpolateStereoParameters."
+ },
+ {
+  "address": "0x00443504",
+  "name": "maybe_Camera_ComputeYawSpring",
+  "signature": "float maybe_Camera_ComputeYawSpring(float angle)",
+  "params": {
+   "angle": "yaw error in radians"
+  },
+  "summary": "Small math helper shared by the camera yaw code: returns the smooth-yaw filter value (sin(angle)-angle)*k used to damp manual and gyro rotation.",
+  "confidence": 0.4,
+  "evidence": "Only two calls: std_Acosf (0x672A14) then func_006731EC (trig helper); the same (sin-x)*k idiom appears inline in Camera_UpdateManualYaw / Camera_UpdateYawSpring, which call this function."
+ },
+ {
+  "address": "0x004435B4",
+  "name": "Camera_SetupFromActor",
+  "signature": "void Camera_SetupFromActor(Camera* self, int mode, Actor* target)",
+  "params": {
+   "self": "camera object",
+   "mode": "camera mode id (1..0xB)",
+   "target": "actor to frame"
+  },
+  "summary": "Configures the field camera from the current actor: copies the actor's transform into the camera base, computes the yaw needed to look at it (with the same acos/spring filter), sets the boom distance and refreshes the camera's name/target fields. Modes 1/7/0xB have special handling for the actor's flags.",
+  "confidence": 0.55,
+  "evidence": "self->f_3C = g_004437FC, f_120 = 1.0; func_001CEE24(self+4,&arg3->f_68) copies the actor matrix; branches on arg2==1/2/3/4/5/6/7/0xB and reads actor->f_93/f_bc/f_c8; writes f_118/f_11C, quaternion f_128..f_134, f_160/f_164/f_168; func_00634D38(...,\"N_ALL\"); found in the camera vtable at 0x76FE9C (+0xC)."
+ },
+ {
+  "address": "0x00443A90",
+  "name": "Camera_Dtor",
+  "signature": "void Camera_Dtor(Camera* self)",
+  "params": {
+   "self": "field/free camera object"
+  },
+  "summary": "Destructor of the field camera class: installs the camera vtable, releases the two occlusion object lists and frees the camera allocation. Found at vtable slot +8 of the camera vtable next to Camera_Update.",
+  "confidence": 0.75,
+  "evidence": "Sets *self=g_00443AC4; func_004B6590(self+0x68) (release list); func_004B65F4 on self+0x70 and the contained list pair; func_0010F6CC on the base at -0x1A0; vtable 0x76FE90 slot +8."
+ },
+ {
+  "address": "0x004441B8",
+  "name": "maybe_Ui_MessageWindow_OnOpened",
+  "signature": "u32 maybe_Ui_MessageWindow_OnOpened(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Per-frame handler of the message window's 'opened' state: updates the widget and, when the open animation has finished, switches the window state to 2. Always returns 1 to keep the state machine running.",
+  "confidence": 0.45,
+  "evidence": "maybe_Ui_Widget_Update (0x1DAD58)(&self->f_230,&self->f_278); func_0062F680(&self->f_230) != 0 -> self->f_11C=2; found at vtable 0x72C470 next to Ui_MessageWindow_AdvanceRow (0x72C448)."
+ },
+ {
+  "address": "0x0044441C",
+  "name": "maybe_Ui_MessageWindow_AdvanceIfReady",
+  "signature": "u32 maybe_Ui_MessageWindow_AdvanceIfReady(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Updates the window and, when the child widget is done, advances/closes the current message row via the row controller at +0x2A0.",
+  "confidence": 0.45,
+  "evidence": "maybe_Ui_Widget_Update then func_0062F680; calls (*(self+0x2A0)+0x14)(row,1) and +0x10(row); vtable 0x72C440."
+ },
+ {
+  "address": "0x00444474",
+  "name": "maybe_Ui_MessageWindow_SetOpened",
+  "signature": "u32 maybe_Ui_MessageWindow_SetOpened(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Row handler that marks the message window as opened (state 1) once the open animation has finished.",
+  "confidence": 0.45,
+  "evidence": "Same widget update/check as 0x4441B8 but writes self->f_11C=1; vtable 0x72C460."
+ },
+ {
+  "address": "0x004444A4",
+  "name": "maybe_Ui_MessageWindow_SetClosed",
+  "signature": "u32 maybe_Ui_MessageWindow_SetClosed(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Row handler that marks the message window as closed (state 0) once the close animation has finished.",
+  "confidence": 0.45,
+  "evidence": "Same widget update/check as 0x4441B8 but writes self->f_11C=0; vtable 0x72C458."
+ },
+ {
+  "address": "0x00444500",
+  "name": "maybe_Ui_MessageWindow_ConfirmRow",
+  "signature": "u32 maybe_Ui_MessageWindow_ConfirmRow(UiMessageWindow* self)",
+  "params": {
+   "self": "message window"
+  },
+  "summary": "Handles the player's confirm/cancel input on the current message row: checks the input result at +0x2A0 (button 6 for cancel, 1 for confirm) and advances the row controller when accepted.",
+  "confidence": 0.45,
+  "evidence": "func_0062F694(&self->f_230) selects vtable+0x14(row,6) or (row,1), then calls row vtable+0x10; vtable 0x72C468."
+ },
+ {
+  "address": "0x00445008",
+  "name": "maybe_Ui_Window_DispatchAnimation",
+  "signature": "void maybe_Ui_Window_DispatchAnimation(UiWindow* self, u32 state)",
+  "params": {
+   "self": "window/overlay object",
+   "state": "animation state override, or 0 to use the object's own"
+  },
+  "summary": "Drives the open/close animation of a window: updates the widget and, when it is ready, dispatches through the animation function table at +4/+8 to run the next step.",
+  "confidence": 0.45,
+  "evidence": "maybe_Ui_Widget_Update(&child->f_1E18,&self->f_14); func_0062F680; then indirect call through *(self+4) with the table at *(self+8) (Ghidra 'Too many branches' jumptable); vtable 0x76FF1C."
+ },
+ {
+  "address": "0x004457C0",
+  "name": "Ui_ScreenTransition_CreateLayers",
+  "signature": "void maybe_Ui_ScreenTransition_CreateLayers(UiScreenTransition* self)",
+  "params": {
+   "self": "screen transition controller"
+  },
+  "summary": "Starts a screen transition: checks the UI core transition state, creates the four child layers of the transition quad and stores the fade start/end times.",
+  "confidence": 0.5,
+  "evidence": "Ui_GetCore vtable+0x28/+0x14; func_001C7570(engine+0x54,self->f_C); four maybe_Ui_Widget_CreateChildLayer (0x3D2854) calls with indices 0..3 and g_004458B8; copies g_004458BC->f_10/f_14 into self+4/+8; vtable 0x72A7AC."
+ },
+ {
+  "address": "0x00445988",
+  "name": "Ui_ScreenTransition_UpdateTimer",
+  "signature": "void maybe_Ui_ScreenTransition_UpdateTimer(UiScreenTransition* self)",
+  "params": {
+   "self": "screen transition controller"
+  },
+  "summary": "Advances the transition timer: plays the start SE at frame 5 and the end SE at frame 25, and after 60 frames finishes the transition (UI core state 2) if the target screen exists.",
+  "confidence": 0.55,
+  "evidence": "self->f_14++ then Sound_PlaySeById(g_00445A70) at ==5 and 0xE60 at ==0x19; func_005F5818(self->f_C) and f_14>0x3B -> Ui_GetCore vtable+0xC(2) + copy g_00445A78 times; vtable 0x72A7A4."
+ },
+ {
+  "address": "0x00445AC8",
+  "name": "Ui_Transition_CreateFadeQuad",
+  "signature": "void maybe_Ui_Transition_CreateFadeQuad(UiScreenTransition* self, u32 quadId)",
+  "params": {
+   "self": "transition controller",
+   "quadId": "layout/quad id"
+  },
+  "summary": "Creates the full-screen fade quad of a screen transition: checks the layout resource handle, fills the 12-entry quad descriptor and creates the polygon object, then resets the timer.",
+  "confidence": 0.5,
+  "evidence": "Checks the resource handle self->f_C; fills local_80..local_54 from g_00445BC0..g_00445BE8, func_001252C8, maybe_Ui_Overlay_CreateQuadObject (0x4C24C8); stores the new object at self->f_C, resets f_14 and copies g_00445BEC."
+ },
+ {
+  "address": "0x00445D04",
+  "name": "Ui_Transition_Dtor",
+  "signature": "u32* maybe_Ui_Transition_Dtor(UiScreenTransition* self)",
+  "params": {
+   "self": "transition controller"
+  },
+  "summary": "Destructor of the screen transition object: installs the vtable, releases the layout resource handle, tears down the UI core transition and clears the owner flag.",
+  "confidence": 0.55,
+  "evidence": "Sets *arg1=g_00445DB0; releases arg1[3] via func_001C7570 when the handle is valid; Ui_GetCore + func_00626A80; writes *(*(engine+...)+0xDD4)=0; func_0021F8B8(ui->f_C,arg1[4]); vtable 0x76FF34."
+ },
+ {
+  "address": "0x00445EF4",
+  "name": "Ui_HitIcon_SetupSlots",
+  "signature": "void Ui_HitIcon_SetupSlots(UiHitIcon* self, u32 group)",
+  "params": {
+   "self": "hit-icon widget",
+   "group": "hit-icon group/row id"
+  },
+  "summary": "Builds the two 'icon_hit' widgets of a hit-icon row by resolving both child nodes by name and attaching them to the widget.",
+  "confidence": 0.6,
+  "evidence": "Calls func_00445F44(self,group,0..1) then func_00446790(self,node,\"icon_hit\") for each of the two icons; the string s_icon_hit_00445F38 is used by the finder."
+ },
+ {
+  "address": "0x00445F44",
+  "name": "Ui_HitIcon_FindSlotNode",
+  "signature": "int* Ui_HitIcon_FindSlotNode(UiHitIcon* self, u32 group, int slot)",
+  "params": {
+   "self": "hit-icon widget",
+   "group": "hit-icon group/row id",
+   "slot": "slot index 0/1"
+  },
+  "summary": "Finds one hit-icon child node by name: looks up the child named 'icon_hit', then the per-group node id from the table at g_00446020 and returns the resulting widget (or null).",
+  "confidence": 0.55,
+  "evidence": "Calls child-list vtable+0x2C with &g_00446014 ('icon_hit'), compares node type with g_0044601C, indexes g_00446020[group*8+slot*4] and resolves the nested child."
+ },
+ {
+  "address": "0x0044603C",
+  "name": "Ui_HitIcon_UpdateVisibleSlots",
+  "signature": "void Ui_HitIcon_UpdateVisibleSlots(UiHitIcon* self, u32 group)",
+  "params": {
+   "self": "hit-icon widget",
+   "group": "hit-icon group/row id"
+  },
+  "summary": "Refreshes the icons of a hit-icon row: positions the visible icons on their slots and hides the unused ones (up to two icons).",
+  "confidence": 0.5,
+  "evidence": "Loops func_00445F44(self,group,i) while node->f_AC->f_28 != 0, calls func_00446790 with node->f_AC->f_2C-0xA4; if no visible icon, clears both slots with g_004460E8's value."
+ },
+ {
+  "address": "0x004460EC",
+  "name": "Ui_HitIcon_CreateSprites",
+  "signature": "void Ui_HitIcon_CreateSprites(UiHitIcon* self, u32 group, int iconData, u32* layout)",
+  "params": {
+   "self": "hit-icon widget",
+   "group": "hit-icon group/row id",
+   "iconData": "array of 5-byte icon entries (24 rows)",
+   "layout": "layout/resource pointer"
+  },
+  "summary": "Creates the sprite children for a whole hit-icon page: for each of up to 24 rows and 2 slots it reads the icon id from the 5-byte entry array, creates a child sprite from the layout and swaps it into the slot.",
+  "confidence": 0.55,
+  "evidence": "Nested loops local_98<0x18 and i<2; switch(local_30) picks byte 0..4 of the 5-byte entry; func_0053CF14/func_0053DE78/func_006F0B90 + Ui_Layout_CreateChildSprite (0x53D170); detaches/attaches with Ui_ChildSprite_Detach/Attach (0x537EC8/0x537E90)."
+ },
+ {
+  "address": "0x0044645C",
+  "name": "Ui_HitIcon_RebuildSprites",
+  "signature": "void Ui_HitIcon_RebuildSprites(UiHitIcon* self, u32 group, u32 iconSet, u32* layout)",
+  "params": {
+   "self": "hit-icon widget",
+   "group": "hit-icon group/row id",
+   "iconSet": "icon-set index (0..9)",
+   "layout": "layout/resource pointer"
+  },
+  "summary": "Recreates the two hit-icon sprites for one row after the icon set changed: removes the old child sprites, creates the new ones from the layout and attaches them with the 'icon_change' name.",
+  "confidence": 0.6,
+  "evidence": "func_00445F44 then loops 0x28 slots removing old sprites via their vtable+0x10; creates with Ui_Layout_CreateChildSprite; Ui_ChildSprite_Detach/Attach; func_00446790(...,s_icon_change_004466D8); uses g_004466CC icon table."
+ },
+ {
+  "address": "0x00446978",
+  "name": "Ui_HitIcon_Ctor",
+  "signature": "UiHitIcon* Ui_HitIcon_Ctor(void)",
+  "params": {
+   "none": "no arguments"
+  },
+  "summary": "Constructor of the hit-icon widget: chains to the Ui_Object base, installs the vtable, clears the group fields and zero-initialises the 0x1E0-byte icon buffer.",
+  "confidence": 0.6,
+  "evidence": "Ui_Object_CtorBase (0x1A66A0) + *result=g_004469B8; result[0x13]=0, result[0x14]=g_004469BC, result[0x15]=g_004469C0; func_00116AE0(result+0x16,0x1E0); vtable pair 0x76FF40/0x76FF44."
+ },
+ {
+  "address": "0x004469C4",
+  "name": "Ui_HitIcon_Dtor",
+  "signature": "void Ui_HitIcon_Dtor(UiHitIcon* self)",
+  "params": {
+   "self": "hit-icon widget"
+  },
+  "summary": "Trivial destructor of the hit-icon widget: base Ui_Object destructor plus free.",
+  "confidence": 0.7,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; found at vtable slot 0x76FF48."
+ },
+ {
+  "address": "0x00446A94",
+  "name": "Effect_InstancePair_Setup",
+  "signature": "void Effect_InstancePair_Setup(EffectPair* self, EffectPairDesc* desc, Actor* owner)",
+  "params": {
+   "self": "pair of effect instances",
+   "desc": "effect descriptor (two effect ids)",
+   "owner": "actor the effects belong to"
+  },
+  "summary": "Creates the two effect instances described by an effect-pair record: copies the descriptor fields, builds the effect parameters from the owner actor and starts both effects.",
+  "confidence": 0.55,
+  "evidence": "Copies the descriptor (u16 fields) into self; if id at self[2] != g_00446C24 it calls func_00484518 to build params and maybe_Effect_FindOrCreateInstance (0x35FF3C)(effect manager,self[2],0,params,0) storing at +0x18; same for self[3] at +0x1A."
+ },
+ {
+  "address": "0x00447000",
+  "name": "maybe_Ui_EmbeddedObject_Dtor",
+  "signature": "void maybe_Ui_EmbeddedObject_Dtor(UiEmbeddedObject* self, u32 vtable)",
+  "params": {
+   "self": "object embedding a Ui object at +0x120",
+   "vtable": "vtable to install"
+  },
+  "summary": "Destructor of an object that embeds a Ui_Object at +0x120: installs the vtable, destroys the embedded Ui object and its 0x120-byte prefix, then frees the object.",
+  "confidence": 0.45,
+  "evidence": "Sets *arg1=arg2; Ui_Object_DtorBase(arg1+0x48) then func_001D8C2C(base-0x120); func_0010F6CC; vtable 0x770018 area."
+ },
+ {
+  "address": "0x00447110",
+  "name": "maybe_Ui_Object_SetHandle",
+  "signature": "void maybe_Ui_Object_SetHandle(UiObject* self, u32 handle)",
+  "params": {
+   "self": "Ui object with a handle at +0x4C",
+   "handle": "candidate object handle"
+  },
+  "summary": "Stores an object handle at +0x4C after checking that it points at an object of the expected runtime type (the same handle-tag check used all over the UI code).",
+  "confidence": 0.45,
+  "evidence": "Reads *(self+0x4C) tag mask, looks the handle up in the engine handle table g_0044719C, walks vtable f_C until g_004471A0 and only then writes self->f_4C=arg2."
+ },
+ {
+  "address": "0x004471A4",
+  "name": "maybe_Ui_ToggleButton_Ctor",
+  "signature": "UiToggleButton* maybe_Ui_ToggleButton_Ctor(void)",
+  "params": {
+   "none": "no arguments"
+  },
+  "summary": "Constructor of a small toggle/check button widget: chains to the Ui_Object base, installs the vtable and sets the default visible/mask bit at +0x4C.",
+  "confidence": 0.45,
+  "evidence": "Ui_Object_CtorBase + *result=g_004471D4; result[0x13] = result[0x13] & g_004471D8 | g_004471D8; vtable pair 0x770028/0x77002C."
+ },
+ {
+  "address": "0x004471DC",
+  "name": "Ui_ToggleButton_Dtor",
+  "signature": "void maybe_Ui_ToggleButton_Dtor(UiToggleButton* self)",
+  "params": {
+   "self": "toggle/check button widget"
+  },
+  "summary": "Trivial destructor of the toggle/check button: base Ui_Object destructor plus free.",
+  "confidence": 0.6,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; vtable slot 0x77002C."
+ },
+ {
+  "address": "0x00447240",
+  "name": "Ui_ListWindow_SelectSavedEntry",
+  "signature": "void Ui_ListWindow_SelectSavedEntry(UiListWindow* self)",
+  "params": {
+   "self": "list window"
+  },
+  "summary": "Restores the list selection from the window's saved value: gets the list object, combines the saved index (low 16 bits of arg1[10]) with the saved page and asks the list to select that entry.",
+  "confidence": 0.55,
+  "evidence": "Calls vtable+0x58 to get the list, then Ui_List_SelectEntryById (0x1D809C)(list,(u16)arg1[10]<<16 | ...)."
+ },
+ {
+  "address": "0x0044728C",
+  "name": "Ui_MessageWindow_UpdateIcons",
+  "signature": "void Ui_MessageWindow_UpdateIcons(UiMessageWindow* self)",
+  "params": {
+   "self": "message window with 8 icon rows at +0x54"
+  },
+  "summary": "Refreshes the eight speaker/status icons of a message window from the current message's icon list and updates the scroll selection when the icon count shrank.",
+  "confidence": 0.6,
+  "evidence": "Fetches the current message icons with func_0066749C/func_00116C10, loops 8 rows calling Ui_MessageWindow_ShowNextIcons (0x2EA590) with the icon or null, stores count at arg1[0x13]/[0x14], then Ui_List_SelectEntryById when count <= old."
+ },
+ {
+  "address": "0x00447E6C",
+  "name": "Ui_EquipmentRow_Ctor",
+  "signature": "UiEquipmentRow* maybe_Ui_EquipmentRow_Ctor(void)",
+  "params": {
+   "none": "no arguments"
+  },
+  "summary": "Constructor for one equipment-row widget: chains to the Ui_Object base, installs the vtable and marks the row as empty/selectable at +0x49.",
+  "confidence": 0.5,
+  "evidence": "Ui_Object_CtorBase + *puVar1=g_00447E88; *(u8*)((int)puVar1+0x49)=1; vtable pair 0x770100/0x770104."
+ },
+ {
+  "address": "0x00447E8C",
+  "name": "Ui_EquipmentRow_Dtor",
+  "signature": "void maybe_Ui_EquipmentRow_Dtor(UiEquipmentRow* self)",
+  "params": {
+   "self": "equipment-row widget"
+  },
+  "summary": "Trivial destructor of the equipment-row widget.",
+  "confidence": 0.6,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; vtable slot 0x770104."
+ },
+ {
+  "address": "0x00447EA4",
+  "name": "Ui_EquipmentWindow_OpenItemDetails",
+  "signature": "void Ui_EquipmentWindow_OpenItemDetails(UiEquipmentWindow* self, u32 memberIndex)",
+  "params": {
+   "self": "equipment window row",
+   "memberIndex": "party member index"
+  },
+  "summary": "Opens the item/equipment detail pane for a party member: looks up the item record, applies it to the member status, pushes the right detail pane (or the comparison pane when the slot is empty) and clears the equip marks.",
+  "confidence": 0.6,
+  "evidence": "Item_LookupRecord (0x61BD4C), Game_GetWork + func_0035EB98, Party_Status_SetMemberValue (0x238A48), Ui_Window_PushPane (0x6D7508) with g_00447FEC times, func_00617D7C/0x618394, func_002BCD14 decides the comparison pane; vtable slot 0x770174."
+ },
+ {
+  "address": "0x00448030",
+  "name": "Ui_EquipmentWindow_UpdateEquipStatus",
+  "signature": "void Ui_EquipmentWindow_UpdateEquipStatus(UiEquipmentWindow* self)",
+  "params": {
+   "self": "equipment window"
+  },
+  "summary": "Counts the party members that can equip/compare the selected item (two list walks) and updates the equipment status pane: pushes the pane and shows either the 'can equip' or 'cannot equip' rows.",
+  "confidence": 0.5,
+  "evidence": "func_001C7AD0/func_001C7560(engine+0x54,2) list walks, func_0062AB3C UI mode, per-object type check via handle table g_004482A0, func_00640CA0/func_00640D40 item checks, Ui_Window_PushPane + func_00617D7C ids 0x21..0x24."
+ },
+ {
+  "address": "0x00448344",
+  "name": "Ui_EquipmentRow_DtorWidget",
+  "signature": "void maybe_Ui_EquipmentRow_DtorWidget(UiEquipmentRow* self, u32 vtable)",
+  "params": {
+   "self": "equipment-row widget",
+   "vtable": "vtable to install"
+  },
+  "summary": "Destructor helper for an equipment row: installs the vtable and destroys the embedded widget before freeing.",
+  "confidence": 0.5,
+  "evidence": "Sets *arg1=arg2; maybe_Ui_Widget_DtorB (0x29485C); func_0010F6CC; vtable 0x770250 area."
+ },
+ {
+  "address": "0x00448560",
+  "name": "Ui_Object_DtorTrivialB",
+  "signature": "void Ui_Object_DtorTrivialB(UiObject* self)",
+  "params": {
+   "self": "Ui object"
+  },
+  "summary": "Trivial destructor used by several UI widget subclasses: base Ui_Object destructor plus free.",
+  "confidence": 0.7,
+  "evidence": "Body: Ui_Object_DtorBase (0x1A6768) + func_0010F6CC; found at vtable slot 0x770264."
+ },
+ {
+  "address": "0x00448938",
+  "name": "Script_IsSystemReady",
+  "signature": "u32 Script_IsSystemReady(void)",
+  "params": {
+   "none": "no arguments (reads the engine singleton from r3 via the closure)"
+  },
+  "summary": "Returns 1 when the script (Squirrel) subsystem of the current game context is available, else 0; used as a guard before calling into scripts.",
+  "confidence": 0.55,
+  "evidence": "func_006F1EEC(&local) gets the engine block; func_00636AFC(*(engine+8)+0x6C) returns the script context; result = 1 only when it is non-null."
+ },
+ {
+  "address": "0x00448970",
+  "name": "Field_SceneObject_SetupSprite",
+  "signature": "void Field_SceneObject_SetupSprite(FieldSceneObject* self, LayoutSpriteDesc* desc)",
+  "params": {
+   "self": "field scene object",
+   "desc": "layout sprite descriptor (id, box, flags)"
+  },
+  "summary": "Initialises the sprite part of a field scene object from its layout record: stores the sprite id/flags, creates the sprite actor from the sprite table, initialises its box and computes the object's clamped bounding rectangle.",
+  "confidence": 0.55,
+  "evidence": "self->f_3C=desc[3]; f_46/f_47 from desc bytes; Gfx_SpriteActor_CreateFromTable (0x319848) with desc->f_22/desc[8]; Field_ObjectSprite_InitBox (0x39F2DC); maybe_Field_Object_CheckHook (0x2F22C8); stores the rectangle at +0x260/+0x264/+0x268/+0x25C."
+ },
+ {
+  "address": "0x00448B3C",
+  "name": "Field_SceneObject_CallScriptCommand",
+  "signature": "u32 Field_SceneObject_CallScriptCommand(FieldSceneObject* self, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "self": "field scene object",
+   "arg2": "command argument",
+   "arg3": "command argument",
+   "arg4": "command argument"
+  },
+  "summary": "Invokes the object's script command (book/event id at +0x46): plays the interaction SE and calls the Squirrel command handler with the script context, returning its result.",
+  "confidence": 0.55,
+  "evidence": "if self->f_47 != 0: Sound_PlaySeById(9); then Script_CallBookIdCommand (0x255268)(*(engine+8)+0x6C, self->f_46, 0, g_00448C34) and returns its result."
+ },
+ {
+  "address": "0x00448C74",
+  "name": "Field_SceneObject_DtorSprite",
+  "signature": "void Field_SceneObject_DtorSprite(FieldSceneObject* self, u32 vtable)",
+  "params": {
+   "self": "field scene object",
+   "vtable": "vtable to install"
+  },
+  "summary": "Destructor of the sprite-owning field scene object: installs the vtable, destroys the embedded sprite actor (func_0039F388) and the Ui object at -0x48, then frees the object.",
+  "confidence": 0.5,
+  "evidence": "Sets *arg1=arg2; func_0039F388(arg1+0x12) then maybe_Ui_DestroyObject (0x17C334)(base-0x48); func_0010F6CC; vtable 0x770350 area."
+ },
+ {
+  "address": "0x00448C94",
+  "name": "Script_IsSystemReadyB",
+  "signature": "u32 Script_IsSystemReadyB(void)",
+  "params": {
+   "none": "no arguments"
+  },
+  "summary": "Second copy of Script_IsSystemReady (same code emitted for another translation unit); returns 1 when the game's script context exists.",
+  "confidence": 0.5,
+  "evidence": "Identical to 0x448938: func_006F1EEC + func_00636AFC(*(engine+8)+0x6C) != 0."
+ },
+ {
+  "address": "0x00448D88",
+  "name": "Field_SceneObject_AdvanceBookFlag",
+  "signature": "u32 Field_SceneObject_AdvanceBookFlag(FieldSceneObject* self)",
+  "params": {
+   "self": "field scene object (book/event id at +0x46, count at +0x47)"
+  },
+  "summary": "Advances the object's 'book/read' progress counter: increments the per-book flag in the game work (clamped to 0xFF), plays the page SE and calls the book event handler.",
+  "confidence": 0.5,
+  "evidence": "self->f_47 != -1; if f_48!=0 plays SE 9; Game_GetWork()+0x24A98 with func_0066B6D0(id,page) -> count+1 clamped 0xFF, func_00613A70 stores it, func_00254658(scriptCtx,id,page) runs the event."
+ },
+ {
+  "address": "0x00448EE0",
+  "name": "Ui_Part_Ctor",
+  "signature": "UiPart* Ui_Part_Ctor(void)",
+  "params": {
+   "none": "no arguments"
+  },
+  "summary": "Constructor of the Ui_Part base class (the part objects that drive map-jump and other field UI parts): chains to the Ui part base, installs the vtable and initialises the part ids to 'none'.",
+  "confidence": 0.6,
+  "evidence": "func_0017C1C8() allocates the part, sets *puVar1=g_00448F0C, bytes +0x45=0, +0x46=0xFF, +0x47=0xFF, f_12=0; the very next function 0x448F10 is Ui_Part_DeletingDtor and 0x448F20 Ui_Part_StartMapJump."
+ }
+]

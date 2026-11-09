@@ -1,0 +1,1761 @@
+[
+ {
+  "address": "0x00100080",
+  "name": "maybe_std_RunTerminateHandler",
+  "signature": "void maybe_std_RunTerminateHandler(void)",
+  "params": {},
+  "summary": "C++ runtime termination path: fetches the lazily built terminate-state object, invokes the current handler (the function pointer stored at +0x10, or the built-in default at +8 when none is installed) and then calls the no-return runtime abort routine at 0x11C810.",
+  "confidence": 0.45,
+  "evidence": "Body is `obj = func_00100102(); if (obj->f_10) { obj->f_10 = 0; (*obj->f_10)(); } else (**(code**)(obj+8))(); func_0011C810();` - the classic std::terminate shape (handler plus abort, no return). It sits in the Thumb CRT block that follows the constructor-array runner at 0x100050 and precedes InitHeaps, so it is library code, not game code."
+ },
+ {
+  "address": "0x001000BA",
+  "name": "maybe_std_AllocRuntimeBlock",
+  "signature": "void* maybe_std_AllocRuntimeBlock(void)",
+  "params": {},
+  "summary": "Allocates one 0x88-byte zero-initialised block through the game heap (func_002FF628) and only clears its first byte. Used by the terminate-state holder (0x100102) which stores the result at its +0x1c field.",
+  "confidence": 0.3,
+  "evidence": "Asm 0x1000B8: `movs r0,#0x88; blx 0x2ff628; cbz r0; movs r1,#0; strb r1,[r0]` (0x2FF628 is the locked global-heap malloc wrapper). Caller 0x100102 does `str r0,[r4,#0x1c]` after branching on a non-null literal, so this is a lazily allocated 0x88-byte scratch object of the same runtime subsystem. Exact C++ type not recoverable."
+ },
+ {
+  "address": "0x00100102",
+  "name": "maybe_std_GetTerminateState",
+  "signature": "std_TerminateState* maybe_std_GetTerminateState(void)",
+  "params": {},
+  "summary": "Lazily creates (once, in the slot returned by 0x1235D4) the 0x20-byte runtime state record that holds the current terminate handler: stores a default Thumb handler pointer (0x001000FD) and a second callback, zeroes the remaining fields and attaches a 0x88-byte block from 0x1000BA.",
+  "confidence": 0.35,
+  "evidence": "`*puVar3` guard + `func_002FF628(0x20)` + literal 0x001000FD (Thumb entry 0x001000FC = push {r4,lr}; blx 0x11C810) stored at +4; 0x100080 then reads the handler pointer back from this object and calls it before aborting. Same lazy-singleton idiom as the rest of the CRT."
+ },
+ {
+  "address": "0x00100AD6",
+  "name": "std_Utf16CompareN",
+  "signature": "int std_Utf16CompareN(const unsigned short* left, const unsigned short* right, int count)",
+  "params": {
+   "param_1": "left UTF-16 string",
+   "param_2": "right UTF-16 string",
+   "param_3": "maximum number of code units to compare"
+  },
+  "summary": "Compares two UTF-16 strings for at most `count` code units and returns the difference of the first differing unit (0 at the end of `left`). Used by the script/text layer to compare wide-character names with a bounded length.",
+  "confidence": 0.75,
+  "evidence": "Body walks `u16*` pairs: `while (count) { u = *a; if (!u || u != *b) break; a++; b++; count--; } return u - *b;` - exactly wcsncmp over 16-bit units. Callers 0x005142CC, 0x007116A0, 0x007118CC are script/name lookup helpers."
+ },
+ {
+  "address": "0x001051AC",
+  "name": "maybe_Gfx_ReleaseRenderer",
+  "signature": "void maybe_Gfx_ReleaseRenderer(GfxRenderer* renderer)",
+  "params": {
+   "param_1": "renderer state block (byte 0 = initialised, byte 1 = 'owns GL/DSP session')"
+  },
+  "summary": "Shuts the renderer/streaming layer down: clears the 'initialised' byte, and when the session was owned it releases the session (0x10C51C/0x10C534), tears down the global state (0x1073BC) and frees the frame buffers via 0x10C0D8.",
+  "confidence": 0.4,
+  "evidence": "Only body: `if (*p) { *p = 0; if (p[1]) { if (func_0010C51C()) func_0010C534(); func_001073BC(); } func_0010C0D8(g_00107424); }`. 0x1073BC closes two kernel handles (software_interrupt 0x23) and resets the global state word to -1; 0x10C0D8 releases six surface handles and a mutex. Same init/exit pair as 0x10BFB0."
+ },
+ {
+  "address": "0x00106A70",
+  "name": "maybe_Fs_OpenGlobalFile",
+  "signature": "int maybe_Fs_OpenGlobalFile(unsigned int* fileHandle)",
+  "params": {
+   "param_1": "pointer to the global file handle (0 = not opened yet)"
+  },
+  "summary": "Opens the data file whose name and archive are held in the globals at 0x106ABC/0x106AB8 the first time it is needed and remembers the handle in `*fileHandle`; returns the SDK error code.",
+  "confidence": 0.45,
+  "evidence": "`if (*arg1 == 0) { if ((func_00113430() < 0) ...) ; len = func_0011CCA0(g_00106abc); func_001192C0(g_00106ab8, g_00106abc, len, 0); }` - 0x11CCA0 is the strlen used by every lazy open in this region (it computes the name length) and 0x1192C0 is the open-by-name call; the same pair appears in 0x106AD0, 0x10BFB0 and 0x112050."
+ },
+ {
+  "address": "0x00106AD0",
+  "name": "maybe_Fs_OpenSubsystemFiles",
+  "signature": "void maybe_Fs_OpenSubsystemFiles(void)",
+  "params": {},
+  "summary": "One-shot bring-up for a file-backed subsystem: validates the runtime init result against the expected code, opens the named archive/file pair, initialises an intrusive list under a lock and flushes one system-info query (0x10B990).",
+  "confidence": 0.3,
+  "evidence": "Sequence: func_00113430() compared with g_00106b70 and reported through func_0011ED40 on mismatch; func_0011CCA0+func_001192C0 open the file named at g_00106b74; func_0010B6A8(*(g_00106b78+4)); list head built at g_00106b7c+7 then func_0010B9C0; func_00117098() returns a tick that is passed to the system-info wrapper func_0010B990. The mix of file open + kernel handle + tick is the standard subsystem-init prologue of this binary, not gameplay."
+ },
+ {
+  "address": "0x001073BC",
+  "name": "maybe_Gfx_ShutdownGlobalState",
+  "signature": "void maybe_Gfx_ShutdownGlobalState(void)",
+  "params": {},
+  "summary": "Releases the global rendering/streaming state: if the 'running' byte is set it takes the state lock (0x117E50), flushes pending work (0x10BA40) and releases it again, then marks the state dead (-1) and closes the two kernel handles at state+0xc and the companion handle.",
+  "confidence": 0.45,
+  "evidence": "`if (*g_00107410) { func_00117E50(g_00107414); func_0010BA40(); func_00117ED0(g_00107414); } *(u32*)(g_00107414+8) = 0xffffffff; func_0011E8A0(g_00107414+0xc); func_0011E8A0(g2); *g_00107410 = 0;`. 0x11E8A0 is the handle-close helper (software_interrupt 0x23), 0x117E50/0x117ED0 are the paired lock/unlock of the same global."
+ },
+ {
+  "address": "0x00107430",
+  "name": "Os_SendIpcRequest1",
+  "signature": "int Os_SendIpcRequest1(void)",
+  "params": {},
+  "summary": "Sends one request to the game's main IPC service: fills the thread command block with the fixed header from 0x1127A4 (0x00060040 = command 6, one normal parameter) and the parameter 6, issues `svc 0x32` (svcSendSyncRequest) and returns the result word, initialising the runtime first when needed.",
+  "confidence": 0.5,
+  "evidence": "`thread = CP15 c13 c0 3; thread->f_80 = g_001127a4 (=0x00060040 IPC header); thread->f_84 = 6; result = *g_001127a8; software_interrupt(0x32); if (result >= 0) result = thread->f_84;` - 0x32 is svcSendSyncRequest in the CTR ABI, and the 0x00060040 literal is an IPC header (command 6, one normal parameter). Guarded by func_00113990/func_0010CB18 (already-up checks)."
+ },
+ {
+  "address": "0x00107770",
+  "name": "Os_ListAppendNode",
+  "signature": "int Os_ListAppendNode(OsListNode* node, unsigned int key)",
+  "params": {
+   "param_1": "node to append (fields: next at +0, prev at +4, key at +0xc)",
+   "param_2": "key/id stored in the node"
+  },
+  "summary": "Appends `node` to the intrusive circular list rooted in the global at 0x1077FC, holding the list lock (0x117E50/0x117ED0), and stamps the caller key into node+0xc.",
+  "confidence": 0.55,
+  "evidence": "Body is the textbook doubly-linked tail insert (`node->prev = tail; tail->next = node; ... head->prev = node`) around func_00117E50/func_00117ED0 on g_001077fc+0x1c, ending in `return 0`. Callers 0x00102894, 0x0050421C, 0x005042AC and maybe_Svc_InitSharedState all register objects at startup."
+ },
+ {
+  "address": "0x0010B274",
+  "name": "maybe_Snd_ReleaseChannelSlot",
+  "signature": "void maybe_Snd_ReleaseChannelSlot(SndChannelOwner* owner, int* slot)",
+  "params": {
+   "param_1": "object owning four channel slots (f_4c = 4-bit occupancy mask)",
+   "param_2": "address of one of the four slot pointers"
+  },
+  "summary": "Releases one of four channel slots: derives the slot index from the pointer, and when the corresponding bit in the owner's 4-bit mask is set it stops the channel (0x114CFC with gain 0) and clears the bit.",
+  "confidence": 0.4,
+  "evidence": "`uVar1 = (arg2 - (0x1c + self)) >> 2; if (uVar1 < 4 && (self->f_4c & (1 << uVar1))) { if (*arg2) func_00114CFC(*arg2, 0); self->f_4c &= ~bit; }`. The same four-slot mask (`self->f_4c & 0xf`) is allocated in 0x1EC088 when a BGM stream is prepared, and 0x114CFC is the channel gain/stop call used by the BGM player, so this is the sound-channel release path."
+ },
+ {
+  "address": "0x0010B524",
+  "name": "maybe_Snd_CreateStreamDecoder",
+  "signature": "int maybe_Snd_CreateStreamDecoder(int width, int height, int decodeNow, unsigned int size)",
+  "params": {
+   "param_1": "block width in 32-byte units",
+   "param_2": "block height in 24-byte units",
+   "param_3": "non-zero = run one decode pass",
+   "param_4": "size/format word passed to the decoder"
+  },
+  "summary": "Builds a stream/block decoder object: creates it from the vtable global (g_0010B6A4), feeds it a 0x28-byte header describing one block, optionally decodes one block, and computes the output offset as width*0x20 + height*0x18 + block index before destroying the temporary object.",
+  "confidence": 0.25,
+  "evidence": "`local_60[0]=1; [1]=2; uStack_54=0xc; local_60[2]=arg4;` then `func_00111AA0(...)` (a create/query call) and a vtable object built with `*piVar3 = g_0010b6a4`. Result = `arg1*0x20 + arg2*0x18 + iVar2` (tile geometry 32x24) and one optional `vtable[0]` call of 0x28 bytes; vtable[+0x30] is then called as destructor. Matches a block/tile codec used by the streaming layer; the exact codec is not recoverable from the code alone."
+ },
+ {
+  "address": "0x0010B990",
+  "name": "Os_SendIpcParam",
+  "signature": "int Os_SendIpcParam(unsigned int* request, unsigned int param)",
+  "params": {
+   "param_1": "pointer to the IPC request word",
+   "param_2": "request parameter"
+  },
+  "summary": "Thin `svcSendSyncRequest` wrapper for the main IPC service: stamps the fixed header from 0x10B9BC (0x08620040 = command 0x0862, one normal and one translate parameter) plus the caller's parameter into the thread command block, issues `svc 0x32` and returns the result word.",
+  "confidence": 0.6,
+  "evidence": "`thread = CP15 c13 c0 3; thread->f_80 = g_0010b9bc (=0x08620040, an IPC header with one normal and one translate parameter); thread->f_84 = arg2; result = *arg1; svc 0x32; if (ok) result = thread->f_84;`. The identical `thread->f_80 = <header>; svc 0x32` shape is shared by 0x11874C, 0x1196F8, 0x11EBA0, 0x11EBD8 and 0x123D10 - all IPC client stubs of the same service."
+ },
+ {
+  "address": "0x0010BFB0",
+  "name": "maybe_Gfx_InitFrameBuffers",
+  "signature": "int maybe_Gfx_InitFrameBuffers(GfxFrameBufferSet* set, unsigned int size)",
+  "params": {
+   "param_1": "structure receiving six buffer pointers plus a 0x2b0-byte command block",
+   "param_2": "size passed to the IPC query"
+  },
+  "summary": "Allocates the six rendering buffers: issues the IPC query that returns six values (0x1125C8), copies a 0x2b0-byte command block into the set's scratch area and derives the six sub-buffer pointers at fixed offsets 0, 0xa8, 0x108, 0x158, 0x238.",
+  "confidence": 0.4,
+  "evidence": "`func_001125C8(&v0..&v5)` returns six words from the command block (TLS +0x8c..+0xa0) and then `arg1[1]=base; arg1[3]=base+0xa8; arg1[5]=base+0x108; arg1[8]=base+0x158; arg1[10]=base+0x238;` with `func_0011E6F8(arg1+0xb, local_28, 0x2b0, 1)` copying the block. The paired teardown 0x10C0D8 releases exactly five handles (0,2,4,7,9) plus the mutex at +0xb, which is the five-region layout produced here."
+ },
+ {
+  "address": "0x0010C0D8",
+  "name": "maybe_Gfx_FreeFrameBuffers",
+  "signature": "void maybe_Gfx_FreeFrameBuffers(GfxFrameBufferSet* set)",
+  "params": {
+   "param_1": "structure filled by 0x10BFB0 (five handles and a mutex)"
+  },
+  "summary": "Releases the five buffers/handles created by 0x10BFB0 and destroys the mutex: each handle field is atomically cleared, `svc 0x23` (close handle) is issued for it, and the last IPC handle is closed once.",
+  "confidence": 0.45,
+  "evidence": "Five repetitions of `iVar = arg1[n]; arg1[n] = 0; software_interrupt(0x23); if (iVar < 0) func_0011C814();` for indices 0,2,4,7,9 followed by `func_00111E44(arg1+0xb)` (mutex destroy) and the final close of g_0010C1C0. Bit-for-bit the teardown of 0x10BFB0's six-pointer layout."
+ },
+ {
+  "address": "0x0010C548",
+  "name": "maybe_Gfx_FlushPending",
+  "signature": "unsigned int maybe_Gfx_FlushPending(void)",
+  "params": {},
+  "summary": "Flushes pending renderer work under the global renderer lock (0x117E50/0x117ED0 around 0x10BA40) and always reports success.",
+  "confidence": 0.35,
+  "evidence": "`func_00117E50(g_0010c570); func_0010BA40(); func_00117ED0(g_0010c570); return 0;` - the same lock+flush pair that 0x1073BC uses during shutdown; 0x10BA40 appears in every submit path of this layer."
+ },
+ {
+  "address": "0x0010C642",
+  "name": "maybe_Gfx_QueueCommand",
+  "signature": "void maybe_Gfx_QueueCommand(char* obj, unsigned int value, unsigned int extra)",
+  "params": {
+   "param_1": "object holding the pending-command flag",
+   "param_2": "value to queue",
+   "param_3": "extra word for the command"
+  },
+  "summary": "Writes a command record (`value` at +4, a halfword at +2) and, if the global command slot is open, forwards it to the command-stream writer at 0x118D00.",
+  "confidence": 0.25,
+  "evidence": "Body writes `*(short*)(unaff_r6+2)=arg1; *(u32*)(arg1+4)=in_s0;` and then, when the byte at g_0010C834 is non-zero, mirrors the value into that slot and calls `func_00118D00(g_00112CA8, cVar1, arg2, arg3)`. Ghidra could not recover `unaff_r6`/`in_s0`, so the exact parameter layout is approximate; the presence of 0x118D00 (command-stream field writer) identifies it as a command-queue helper."
+ },
+ {
+  "address": "0x0010C694",
+  "name": "maybe_Ui_AcquireAtlasContext",
+  "signature": "int maybe_Ui_AcquireAtlasContext(void)",
+  "params": {},
+  "summary": "Reference-counted acquire of the shared atlas/texture session: on first use it initialises the IPC layer, opens the atlas file by name and then bumps the user count; used by the icon/texture loaders before touching the atlas.",
+  "confidence": 0.45,
+  "evidence": "Callers are Ui_IconAtlas_Load, 0x005017B0 and 0x00509CE0 (icon/texture users). Body takes the lock g_0010C710, and when `*g_0010C714 == 0` runs the standard init+open pair (func_00113430, func_0011CCA0/name at g_0010C718, func_001192C0) then `*piVar2 += 1`. The matching release is 0x10C0D8/0x10C548's family."
+ },
+ {
+  "address": "0x0010C90C",
+  "name": "maybe_Gfx_BeginFrame",
+  "signature": "void maybe_Gfx_BeginFrame(void)",
+  "params": {},
+  "summary": "Starts a rendering/streaming frame: if the global 'frame active' byte is set it arms the completion event, publishes the current surface pointer, clears the dirty flags, executes a data synchronisation barrier and takes the frame mutex.",
+  "confidence": 0.35,
+  "evidence": "`if ((g[0] & g[1]) != 0) { func_00112E38(g_0010c968, 1); g[0]->f_4 = g_0010c96c->f_c0; func_00112834(); g[1]=g[2]=0; coproc_moveto_Data_Synchronization(0); func_00111D50(g+8); }` - the DSB plus the mutex at g+8 and the completion event set up by 0x112E38 identify a begin-frame prologue."
+ },
+ {
+  "address": "0x0010CCB0",
+  "name": "maybe_Os_InsertListNodeByKey",
+  "signature": "void maybe_Os_InsertListNodeByKey(OsListNode* node)",
+  "params": {
+   "param_1": "node (key at +0x10, next/prev at +0/+4)"
+  },
+  "summary": "Inserts a node into the global sorted list at 0x10CD80 ordered by the 32-bit key at +0x10, holding the global lock; used by the timer/queue manager to keep its work list ordered.",
+  "confidence": 0.4,
+  "evidence": "The body walks `piVar4 = *(g_0010cd80+4)` and inserts when `arg1[4] < piVar4[4]`, patching `*arg1`, `arg1[1]`, `*(iVar2+4)`/`*(iVar2+8)` (head/tail) under func_00117E50/func_00117ED0 on g_0010cd7c. Caller 0x00107024 is the timer/queue manager."
+ },
+ {
+  "address": "0x001118D4",
+  "name": "maybe_Gfx_GetCommandSlot",
+  "signature": "unsigned int maybe_Gfx_GetCommandSlot(void)",
+  "params": {},
+  "summary": "Returns the handle of the current command slot: asserts the slot table is marked ready (trap otherwise), publishes the slot pointer into the global state and returns the IPC handle.",
+  "confidence": 0.35,
+  "evidence": "`if ((g_001119a4->f_c & 1) == 0) func_0010009C&g->f_c;` is a deliberately trapping assert; then `*(u32*)(g+4) = g_001119b8; result = func_0011CAB4();` (0x11CAB4 is the 'allocate node from queue' helper) under the g_001119a0 lock. Callers 0x0010B830 and 0x00505058 (renderer submit paths)."
+ },
+ {
+  "address": "0x00111E44",
+  "name": "Os_CloseHandleAndUnlink",
+  "signature": "void Os_CloseHandleAndUnlink(OsHandleBlock* block)",
+  "params": {
+   "param_1": "block with handle at +0x14, list link at +8 and 'linked' byte at +0x18"
+  },
+  "summary": "Closes a kernel handle and removes its block from the owning list: when the block is linked it either just drops the link (no waiter) or waits for the pending operation, unlinks it via 0x11E7A4 and finally closes the handle with `svc 0x23`.",
+  "confidence": 0.5,
+  "evidence": "`if (f_14) { if (*(self+8)) { if (f_18 == 0) { *(self+8)=0; f_c=0; } else { svc 0x20; if (f_14 < 0) abort; func_0011E7A4(g_00111eac, self); } } if (f_14) { svc 0x23; f_14 = 0; } }`. 0x20 is svcCancelTimer/ReleaseSemaphore and 0x23 is svcCloseHandle; 0x11E7A4 unlinks a node under a lock. Callers 0x00509A20/0x0050F0F8 are the handle-owning managers."
+ },
+ {
+  "address": "0x00112050",
+  "name": "maybe_Os_AcquireSharedSession",
+  "signature": "unsigned int maybe_Os_AcquireSharedSession(void)",
+  "params": {},
+  "summary": "Reference-counted acquire of a lazily opened shared session: on first use it opens the named file/port, publishes the handle and marks the session open, then increments the user count; a failing second acquire propagates the error.",
+  "confidence": 0.4,
+  "evidence": "`if (*(g_00112118+8) == 0) { handle = *(g_00112120+4); func_00113430(); if (*piVar2 == 0) { result = func_001192C0(piVar2, handle, func_0011CCA0(handle), 0); if (error) result = g_00112124; } if (ok) *puVar1 = 1; else if (result == g_00112124) return result; } *(int*)(puVar1+8) += 1;` under a lock stored in g_00112118. Caller 0x0010BDF8 is the matching release path."
+ },
+ {
+  "address": "0x0011212C",
+  "name": "maybe_Os_ReleaseSharedSession",
+  "signature": "void maybe_Os_ReleaseSharedSession(int kind)",
+  "params": {
+   "param_1": "0 = release one user, 1 = release call A (0x11820C), 2 = release call B (0x118288)"
+  },
+  "summary": "Releases one user of the shared session opened by 0x112050 and, when the last user goes away, closes the session handle; kinds 1 and 2 dispatch to the two auxiliary release helpers.",
+  "confidence": 0.4,
+  "evidence": "`if (arg1 == 0) { lock; if (count > 0) count--; if (count == 0 && *open) { *open = 0; if (*piVar2) { svc 0x23; *piVar2 = g_001121e0; } } unlock; return; } if (arg1 == 1) func_0011820C(); return; if (arg1 == 2) func_00118288();` - mirror image of 0x112050, whose count lives at g_001121d8+8."
+ },
+ {
+  "address": "0x001121E4",
+  "name": "maybe_Os_ReleaseSharedSessionEx",
+  "signature": "unsigned int maybe_Os_ReleaseSharedSessionEx(unsigned char* state, unsigned int flags, unsigned short* resultOut)",
+  "params": {
+   "param_1": "state byte receiving 0/1/2",
+   "param_2": "flags passed to the release helpers",
+   "param_3": "optional out parameter"
+  },
+  "summary": "Extended release of the shared session: decrements the user count with error propagation, then classifies the session state (0/1/2) through 0x1182FC/0x1183A4 and calls the matching release helper.",
+  "confidence": 0.25,
+  "evidence": "Starts with `uVar3 = func_00112050(); if (ok) *arg1 = 0; else { if (func_001182FC() < 0) { if (func_001183A4() ok) { *arg1 = 2; } } else *arg1 = 1; }` and then repeats the count/close block of 0x11212C. Ghidra reports 'bad instruction data' in the middle, so the control flow is only partially recovered."
+ },
+ {
+  "address": "0x0011223E",
+  "name": "maybe_Gfx_ConfigureMaterialUnits",
+  "signature": "void maybe_Gfx_ConfigureMaterialUnits(unsigned int mode, unsigned short* unit0, unsigned short* unit1, unsigned short value, unsigned int flags, unsigned int a6, unsigned int a7, unsigned int a8, unsigned int a9, unsigned int a10, unsigned int a11, unsigned int a12, unsigned int a13, unsigned int a14, unsigned int a15, unsigned int a16, unsigned int a17)",
+  "params": {
+   "param_1": "value written to the first halfword",
+   "param_2": "first unit record",
+   "param_3": "second unit record (stride 0x34)",
+   "param_4": "value written at +0x14 of each unit",
+   "param_5": "flag mask: bit1 = copy words 0x1c..0x20, bit2 = copy vectors, bit4 = copy adpcm words",
+   "param_12..param_17": "additional per-unit words copied at +0x44..+0x5a"
+  },
+  "summary": "Fills two adjacent unit records (0x34 bytes apart) with a caller-supplied block of words and then pushes both records to the command stream through 0x118E58 and 0x118FD4; the low bits of the flags word select which field groups (adpcm/filter words) are copied.",
+  "confidence": 0.2,
+  "evidence": "Writes `arg2[0x17]=..., arg2[0x22..0x2d]` then loops over the two units calling `func_00118FD4(g_001129f0, index, ...)` and `func_00118E58(g_001129f0, index, &data)` - exactly the two per-unit stream writers used by the state reset helpers 0x112848/0x112888/0x112A00/0x112CAC. The generated C is heavily corrupted (register-allocated varargs, `in_CY`, `register0x00000054`), so the parameter list is a reconstruction, not a verified prototype."
+ },
+ {
+  "address": "0x00112250",
+  "name": "maybe_Os_ReleaseSharedSessionNoArgs",
+  "signature": "void maybe_Os_ReleaseSharedSessionNoArgs(void)",
+  "params": {},
+  "summary": "Argument-less variant of 0x11212C(0): decrements the shared session user count and closes the handle when it reaches zero.",
+  "confidence": 0.35,
+  "evidence": "Byte-for-byte the same count/close sequence as the `arg1 == 0` arm of 0x11212C (uses g_001122C4+8, g_001122C8, g_001122CC) with no dispatch to the auxiliary helpers."
+ },
+ {
+  "address": "0x001123B0",
+  "name": "maybe_Gfx_SetUnitFlagBit",
+  "signature": "unsigned int maybe_Gfx_SetUnitFlagBit(unsigned int handle, unsigned int enable, unsigned int unit, unsigned int bit)",
+  "params": {
+   "param_1": "non-zero = set the bit, zero = clear it",
+   "param_2": "handle to program",
+   "param_3": "unit index",
+   "param_4": "bit index inside the unit (unit+bit selects the bit)"
+  },
+  "summary": "Sets or clears one bit of the 32-bit dirty mask belonging to `unit`, using a read-modify-write pair around 0x11874C, and reports the previous state (bit already set/clear).",
+  "confidence": 0.3,
+  "evidence": "`uVar3 = 1 << ((arg2 + arg3) & 0xff); uVar4 = g_00112444->f_c & uVar3; if (arg1 == 0) { if (!uVar4) return g_00112440; result = func_0011874C(iVar5, 0, arg2, arg3); mask &= ~bit; } else { if (uVar4) return g_00112440; result = func_0011874C(iVar5, arg1, arg2, arg3); mask |= bit; }` - 0x11874C is the IPC stub that programs (handle, arg, unit, bit)."
+ },
+ {
+  "address": "0x001125C8",
+  "name": "Os_SendIpcQuery6",
+  "signature": "int Os_SendIpcQuery6(unsigned int* out0, unsigned int* out1, unsigned int* out2, unsigned int* out3, unsigned int* out4, unsigned int* out5)",
+  "params": {
+   "param_1..param_6": "six output words read back from the IPC result area"
+  },
+  "summary": "Queries the service for six related values in one request (request id 0xA0000) and copies them out of the thread command block; the six results are used to size the six regions that 0x10BFB0 carves out of the shared buffer.",
+  "confidence": 0.55,
+  "evidence": "`thread->f_80 = 0xa0000; result = *g_0011263c; svc 0x32; if (result >= 0) { *arg1 = f_8c; *arg2 = f_90; *arg3 = f_94; *arg4 = f_98; *arg5 = f_9c; *arg6 = f_a0; result = f_84; }`. 0xA0000 is the request id of the 'memory/surface layout' query of this service; the six returned words are exactly the number of buffers 0x10BFB0 then carves out."
+ },
+ {
+  "address": "0x00112800",
+  "name": "maybe_Gfx_ReleaseChannelObjects",
+  "signature": "void maybe_Gfx_ReleaseChannelObjects(GfxContext* ctx)",
+  "params": {
+   "param_1": "context whose 0x18 channel pointers start at +0x18dc"
+  },
+  "summary": "Walks the 24 channel objects hanging off the context and releases the object referenced at +0x68 of each through 0x11EE6C.",
+  "confidence": 0.35,
+  "evidence": "`for (i = 0; i < 0x18; i++) func_0011EE6C(*(u32*)(*(int*)(arg1 + i*4 + 0x18dc) + 0x68));` - a plain teardown loop; 0x18 = 24 channels, the same channel count the DSP layer programs."
+ },
+ {
+  "address": "0x00112848",
+  "name": "maybe_Snd_ResetChannelUnits",
+  "signature": "void maybe_Snd_ResetChannelUnits(unsigned char* block, unsigned char value)",
+  "params": {
+   "param_1": "12-byte per-unit value block",
+   "param_2": "byte written into every field"
+  },
+  "summary": "Fills the 12-byte per-unit value block with a constant and resets both channel units' filter and adpcm fields in the shared command buffer.",
+  "confidence": 0.3,
+  "evidence": "Fills `arg1[0..0xb] = arg2` then, for index 0 and 1, clears the halfword at `iVar1 + idx*0x14 + 2` and calls `func_00118E58(g_001129f0, idx, &one)`; likewise clears `iVar1 + idx*0x34 + 0x2a` and calls `func_00118FD4(g_001129f0, idx, &one)`. Companion of 0x112888 which does the same on a caller-supplied block."
+ },
+ {
+  "address": "0x00112888",
+  "name": "maybe_Snd_ResetChannelUnitsInPlace",
+  "signature": "void maybe_Snd_ResetChannelUnitsInPlace(ChannelState* state)",
+  "params": {
+   "param_1": "per-channel state block (unit 0 at +0, unit 1 at +0x34)"
+  },
+  "summary": "Same reset as 0x112848 but on the live channel state: clears the filter halfword at +2 and the adpcm halfword at +0x2a of both units and pushes the zeroed records to the command stream.",
+  "confidence": 0.35,
+  "evidence": "Loop over index 0/1 with `*(u16*)(arg1 + idx*0x14 + 2) = 0; func_00118E58(g_001129f0, idx, &local_50); *(u16*)(arg1 + idx*0x34 + 0x2a) = 0; func_00118FD4(g_001129f0, idx, &local_50);` - identical offsets to 0x112848, minus the value fill."
+ },
+ {
+  "address": "0x00112A00",
+  "name": "maybe_Snd_ResetChannelUnitsToDefault",
+  "signature": "void maybe_Snd_ResetChannelUnitsToDefault(ChannelState* state)",
+  "params": {
+   "param_1": "per-channel state block"
+  },
+  "summary": "Restores both channel units to the default value in g_00112A58 (written to +0 and +0x28) and re-submits the two unit records.",
+  "confidence": 0.3,
+  "evidence": "`uVar1 = g_00112a58; for idx in 0,1: *(short*)(arg1+idx*0x14) = uVar1; func_00118E58(g_00112a5c, idx); *(short*)(arg1+idx*0x34+0x28) = uVar1; func_00118FD4(g_00112a5c, idx);` - the default-value sibling of 0x112888."
+ },
+ {
+  "address": "0x00112A9C",
+  "name": "maybe_Snd_InitChannelState",
+  "signature": "void maybe_Snd_InitChannelState(ChannelState* state)",
+  "params": {
+   "param_1": "channel state block (0x34-byte units, flags at +0x30/+0x31)"
+  },
+  "summary": "Initialises a full channel state block: writes both units' default fields, resets the 24-byte control area, pushes the default unit records, clears the filter/pan fields, seeds the volume pair to -1/0x7f and finally arms the unit enable flag.",
+  "confidence": 0.35,
+  "evidence": "Long sequence of `if (*self) { *(u32*)(self+4) = g_00112c7c; func_00118D00(g_00112c80); }` repeated for +4, +8, +0xc, +0x10, then `func_00118BAC(...,0,*self+0x30)`, `func_00118BAC(...,1,*self+0x31)`, `func_00118DCC(...,0/1)`, `func_00118C38`, `func_00118D60`, `func_001191A0`, `func_00118B58`. Every one of those is one of the per-unit field writers of the DSP command buffer, and caller 0x0010C738 is the state allocator."
+ },
+ {
+  "address": "0x00112CAC",
+  "name": "maybe_Snd_RestoreChannelState",
+  "signature": "void maybe_Snd_RestoreChannelState(ChannelState* state)",
+  "params": {
+   "param_1": "source channel state block"
+  },
+  "summary": "Re-applies a saved channel state to the hardware/command buffer: pushes both units' enable words, then the pan, volume, filter, output-select, unit-enable and level fields through the 0x118xxx field writers, and clears the saved pending value.",
+  "confidence": 0.4,
+  "evidence": "Calls in order: func_00118D00, then per unit func_00118F5C/118BAC/118DCC, then 0x119140(self+2), 0x118CA0(self+1), 0x118D60(f_28), 0x119254(f_27), 0x118C38(f_2a), 0x1191A0(f_32), `self->f_2c = 0`, 0x118B58(self+3). Mirror of 0x112A9C, so it is the 'apply saved state' half."
+ },
+ {
+  "address": "0x00112E38",
+  "name": "maybe_Snd_InitStreamContext",
+  "signature": "int maybe_Snd_InitStreamContext(StreamContext* ctx, int flags)",
+  "params": {
+   "param_1": "stream context (handle at +0, IPC block at +8, 4-byte flag block at +0x4c7)",
+   "param_2": "non-zero = also initialise the stream buffers"
+  },
+  "summary": "Brings up a streaming context: creates the kernel handle, allocates the transfer buffer, asks for the unit count, and on the 'full' path resets 24 channel objects, restores the channel state, flushes caches and re-arms the two unit defaults.",
+  "confidence": 0.45,
+  "evidence": "`func_0011E99C(); lock(ctx+8); if (thread) { if (!g_00113014[ctx]) { create handle via func_0012038C; func_001123B0(*ctx, 2); func_00112384(&n); ctx[1]=n; func_00112310(0x2000); func_0011302C(ctx, flags); if (flags) { func_00112800(...); func_00112CAC(...); func_0010C720(); func_001129F4(); func_00112A00(); } } }` - the 0x2000 transfer buffer and the 24-object reset identify a DSP/streaming context. The '*-0x34'/'0x18'/0xc0/0xc/0x20 strides and the two 0x131e/0x1322 selector fields confirm a 24-channel, double-buffered command state."
+ },
+ {
+  "address": "0x0011302C",
+  "name": "maybe_Snd_SetupChannelBuffers",
+  "signature": "void maybe_Snd_SetupChannelBuffers(StreamContext* ctx, int doubleBuffer)",
+  "params": {
+   "param_1": "context (channel table at +0x42d, sample storage at +0x4c1)",
+   "param_2": "non-zero = upload the wave buffer before configuring"
+  },
+  "summary": "One-time layout of the stream buffers: uploads the current wave buffer (0x1080 bytes) when asked, requests the bank/format words via two IPC calls, splits the shared region into 24 0xc0-byte sample blocks plus 24 0xc-byte and 24 0x20-byte descriptor blocks, stores the pointers and flips the double-buffer index.",
+  "confidence": 0.45,
+  "evidence": "`func_001185A0(2, &mode, 4); func_00118540(0x4000);` then `svc 0x24/0x19`, `func_001185E8(2, local_b8, 2, ...)`, `func_001185E8(2, local_58, g_001132d8 & (local_b8[0]<<1), ...)`, `func_0011863C(local_58[i]   , local_a8[i])` and `func_0011863C(local_58[i]|0x10000, ...)` for each buffer; then the three pointer arrays with strides 0xc0 / 0xc / 0x20 and `self[0x4c8] = self[0x1322] & 1` (double-buffer index). The '*-0x34'/'0x18'/0xc0/0xc/0x20 strides and the two 0x131e/0x1322 selector fields confirm a 24-channel, double-buffered command state."
+ },
+ {
+  "address": "0x001132DC",
+  "name": "maybe_Snd_TeardownStreamContext",
+  "signature": "int maybe_Snd_TeardownStreamContext(StreamContext* ctx, int releaseBuffers)",
+  "params": {
+   "param_1": "context created by 0x112E38",
+   "param_2": "non-zero = also free the sample buffer"
+  },
+  "summary": "Tears a streaming context down: stops the channels, waits for the pending transfer to complete, unlocks, optionally releases the sample buffer, closes the handle and returns the cached error code.",
+  "confidence": 0.45,
+  "evidence": "`if (!ctx->f_4c7) return 0; lock; if (thread) { func_001185A0(2, &mode, 4); while (!done) { func_0011856C(0, buf); if (buf[0]) func_001188B8(0, &status); if (status == 1) break; func_0011CC94(g_0011341c, 0); } } ctx->f_4c7 = 0; unlock; while (ctx[5] > 0) yield; if (releaseBuffers) func_00116A14(ctx+7, ctx[0x42b], 0x1080); close handle; return ctx[1];` The '*-0x34'/'0x18'/0xc0/0xc/0x20 strides and the two 0x131e/0x1322 selector fields confirm a 24-channel, double-buffered command state."
+ },
+ {
+  "address": "0x00113430",
+  "name": "maybe_Os_WaitRuntimeReady",
+  "signature": "int maybe_Os_WaitRuntimeReady(void)",
+  "params": {},
+  "summary": "Blocks until the runtime/service is ready: initialises the two wait objects once, then polls the completion word (svc wait loop at 0x1169C4) and returns the service result, caching the ready state so later calls return immediately.",
+  "confidence": 0.4,
+  "evidence": "`if (!*g_00113538) { *g_0011353c = 0; func_00111E28(); init 6 words; func_00111E28(+7); *g_00113538 = 1; }` then `lock; if (*(pcVar1+4) > 0) { ++*(pcVar1+4); return g_00113548; } while (1) { uVar5 = func_001169C4(g_0011354c, uVar3); if (error class != -5) break; ... func_0011CC94(g_00113550, 0); } if (ok) { uVar5 = func_00107800(); ++ready; } return uVar5;`. Called from every lazy-open path in this region."
+ },
+ {
+  "address": "0x001135D0",
+  "name": "maybe_Gfx_InitDrawState",
+  "signature": "void maybe_Gfx_InitDrawState(void)",
+  "params": {},
+  "summary": "One-shot initialisation of the global drawing state (g_001136C0): ensures the runtime is up, opens the surface list, seeds the 0x1c-word state block and runs the deferred command list.",
+  "confidence": 0.35,
+  "evidence": "`if (*g_001136c0) return; *g_001136c0 = 1; if (!pcVar1[3]) { func_00113430(); pcVar1[3]=1; } func_001192C0(g_001136c4, *(u32*)(pcVar1+4), func_0011CCA0(), 0); pcVar1->f_14 = pcVar1->f_10; func_001196F8(g_001136cc, *g_001136c8, pcVar1[2]);` then a 0x1c-word clear of g_001136D0 and `func_00119498()` (worker start). The init/serve split matches the 0x119498/0x11F3C0 pair."
+ },
+ {
+  "address": "0x001138B8",
+  "name": "maybe_Gfx_SetSurfaceSlotValue",
+  "signature": "unsigned int maybe_Gfx_SetSurfaceSlotValue(unsigned int value, unsigned int slot)",
+  "params": {
+   "param_1": "new value",
+   "param_2": "slot index 0..6"
+  },
+  "summary": "Stores `value` into one of the seven 32-bit slots of the current draw-state object under its lock and returns the previous content.",
+  "confidence": 0.35,
+  "evidence": "`f1c = g_001138fc->f_1c; if (arg2 < 7) { lock(f1c); iVar2 = f1c + arg2*4; result = iVar2->f_10; iVar2->f_10 = arg1; unlock(f1c); } return result;` - a plain slot exchange; seven slots is the same count as the surface table initialised by 0x1135D0."
+ },
+ {
+  "address": "0x00113A50",
+  "name": "maybe_Gfx_ProcessFrame",
+  "signature": "unsigned int maybe_Gfx_ProcessFrame(void)",
+  "params": {},
+  "summary": "Per-frame driver of the rendering/streaming subsystem: services the vblank/retrace callbacks, handles the 'should close' path, runs the pending command list (func_0011A470/0x11A140), and dispatches the state machine that switches modes 0..4 (pause, resume, sleep, wake).",
+  "confidence": 0.3,
+  "evidence": "Large body calling func_0011A0E8/0x119870/0x10D68C/0x10CC00/0x1198A8/0x11A470/0x11A140/0x119BDC/0x11A11C and the callback table at g_00113EF8 (slots +0xc,+0x10,+0x14,+0x18,+0x1c,+0x20..+0x2c). The `local_24[0] == 2/5/8/9` switch and `func_00113A40(4/5)` state writes make it the frame-level state machine; no caller, so it is driven from a vtable/thread."
+ },
+ {
+  "address": "0x001142A0",
+  "name": "maybe_Gfx_SetVBlankEnable",
+  "signature": "void maybe_Gfx_SetVBlankEnable(unsigned int enable, GfxVBlankState* state)",
+  "params": {
+   "param_1": "non-zero = enable retrace handling",
+   "param_2": "state with a 'pending' byte at +3"
+  },
+  "summary": "Enables or disables the retrace/vblank handler: stores the new flag, calls the block/unblock service (0x1193DC or 0x119444) and reports a failure through 0x118924.",
+  "confidence": 0.35,
+  "evidence": "`if (enabled) { if (*(arg2+3) == 0) return; *(arg2+3) = 0; if (func_00119444() == g_00114308 || == g_0011430c) return; } else { *(arg2+3) = 1; iVar2 = func_001193DC(); } if (iVar2 < 0) func_00118924(iVar2, 0x1142f8/0x1142bc);` - 0x1193DC/0x119444 are the suspend/resume pair of the vblank service."
+ },
+ {
+  "address": "0x001148F0",
+  "name": "maybe_Gfx_FindCommandRoom",
+  "signature": "unsigned int* maybe_Gfx_FindCommandRoom(unsigned int* buf, unsigned int a2, int count, unsigned int* a4, unsigned int* a5, unsigned int* a6)",
+  "params": {
+   "param_1": "command ring header",
+   "param_2": "unused/limit",
+   "param_3": "number of words (max 7)",
+   "param_4..param_6": "in/out positions"
+  },
+  "summary": "Looks for `count` contiguous free words in the command ring and returns the pointer to them, tracking the ring's read/write positions across the wrap.",
+  "confidence": 0.2,
+  "evidence": "Ghidra gave up on most of this function (bad instructions, `in_cr14`/`in_cr4` pseudo-registers) but the recovered skeleton compares `arg1[1]`/`arg1[3]` positions, clamps `arg3` to 7 and calls func_0011C8E0 (ring pop) in the retry loop. Caller 0x0010C1C8 is the command writer, so the purpose is 'reserve room in the ring'; the exact arithmetic is not trustworthy."
+ },
+ {
+  "address": "0x00114CFC",
+  "name": "Snd_FadeChannelToGain",
+  "signature": "void Snd_FadeChannelToGain(SndChannel* channel, int gain)",
+  "params": {
+   "param_1": "channel object (gain at +0x68, state bytes at +0x99/+0x9d/+0xa1)",
+   "param_2": "target gain, 0 stops the channel"
+  },
+  "summary": "Starts (or stops, when gain <= 0) a channel: stores the ramped gain, marks the channel dirty, inserts it into the mixer's priority list (0x11FD1C when the channel has an owner at +0x10) and calls the channel's vtable start slot; a stopped channel goes through the vtable stop slot instead.",
+  "confidence": 0.5,
+  "evidence": "`if (arg2 > 0 && *(self+0xa1) != 2 && ((char)self[0x26] || *(self+0x99))) { lock; s = (float)arg2 * volume; ... self[0x1a] = gain; self[0x1b] = g_00114dcc; self[0x1c] = (int)gain; self[0x1d] = 0; if (self[4]) func_0011FD1C(self[4], self); (**(code**)(*self + 0x24))(self); ... } else (**(code**)(*self + 0x10))(self);`. Callers 0x00105AFC/0x00105ACE/0x00105584 are the BGM player helpers and 0x1EC1D0 (Snd_RequestBgmPlay) passes volume*60.0f into it, which fixes the second parameter as a gain."
+ },
+ {
+  "address": "0x00115018",
+  "name": "maybe_Snd_WaitBufferId",
+  "signature": "void maybe_Snd_WaitBufferId(SndBufferOwner* owner, unsigned int id)",
+  "params": {
+   "param_1": "owner of the buffer ring at +0xb4",
+   "param_2": "buffer id to wait for"
+  },
+  "summary": "Blocks until the buffer ring hands over the entry whose id equals `param_2`, refreshing the 'current entry' fields (+0x178/+0x184/+0x188/+0x18c) on the way.",
+  "confidence": 0.35,
+  "evidence": "`do { piVar1 = func_0011C9EC(&self->f_b4); self->f_178 = piVar1[2]; ... self->f_188 = piVar3[3]; self->f_18c = 0; ... } while (piVar1[2] != arg2);` - 0x11C9EC is the blocking pop of the ring. Callers 0x0010E104, maybe_Fs_Archive_CancelRequest and 0x00546220 all wait for a request id, so the same primitive serves the archive and stream queues."
+ },
+ {
+  "address": "0x00115410",
+  "name": "maybe_Snd_SubmitBuffer",
+  "signature": "unsigned int maybe_Snd_SubmitBuffer(unsigned int* entry)",
+  "params": {
+   "param_1": "entry to append to the submission chain"
+  },
+  "summary": "Appends a buffer entry to the owner's submission chain, publishes it with a memory barrier and either hands it to the queue (0x1166B4) or waits for room, then assigns the next sequence number and returns it.",
+  "confidence": 0.3,
+  "evidence": "`if (!owner->f_170) owner->f_16c = entry; else *owner->f_170 = entry; owner->f_170 = entry; *entry = unaff_r7; result = owner->f_174; coproc_moveto_Data_Memory_Barrier(0); if (!flag) { if (func_0011C96C() == 0) return 0; } else func_001166B4(); *(owner->f_16c + 8) = result; owner->f_174++; owner->f_16c = owner->f_170 = next; return result;`. The tail fields are the producer half of the ring used by 0x11C8E0/0x11C96C."
+ },
+ {
+  "address": "0x001166B4",
+  "name": "maybe_Snd_PushBufferEntry",
+  "signature": "void maybe_Snd_PushBufferEntry(BufferQueue* queue, unsigned int value)",
+  "params": {
+   "param_1": "queue (write index +0x28, capacity +0x20, base +0x24)",
+   "param_2": "value to store"
+  },
+  "summary": "Pushes one word into the bounded producer ring, waiting while it is full, resets the write index when it reaches the end of the ring and signals the consumer.",
+  "confidence": 0.4,
+  "evidence": "`do { increment unsigned, exclusive } while (!exclusive); while (1) { lock(queue+5); uVar4 = queue[10]; if (uVar4 < queue[8]) break; unlock; func_00117D10(queue+3); } func_0011CFAC(queue[9] + uVar4, queue[8], queue[9], uVar4, ...); *(u32*)(*queue + idx*4) = arg2; queue[10]++; if (queue[0xb] > 0) func_00117DC4(queue+1, 1); unlock;`. 0x117D10/0x117DC4 are the semaphore wait/release pair, so this is a blocking ring push."
+ },
+ {
+  "address": "0x00117CBC",
+  "name": "maybe_Os_EventSetAll",
+  "signature": "void maybe_Os_EventSetAll(OsEvent* event)",
+  "params": {
+   "param_1": "event word (negative value = waiters counted down)"
+  },
+  "summary": "Wakes every waiter of an event: negates the counter with an exclusive read-modify-write and, when the event had waiters, issues the kernel wake-all call with the event handle.",
+  "confidence": 0.45,
+  "evidence": "`do { iVar3 = *arg1; iVar2 = -iVar3; } while (!hasExclusiveAccess(arg1)); *arg1 = iVar2; if (iVar3 != -1 && iVar2 > 0) func_0011CC10(*g_00117d0c, arg1, 0, 1, 0, 0);` - the classic CTR event/light-lock wake-all pattern; 0x11CC10 is the kernel sync call. Callers 0x114E60, 0x117E88."
+ },
+ {
+  "address": "0x00117D10",
+  "name": "Os_SemaphoreAcquire",
+  "signature": "void Os_SemaphoreAcquire(OsSemaphore* sem)",
+  "params": {
+   "param_1": "semaphore (count at +0, waiter count at +4)"
+  },
+  "summary": "Blocks until the semaphore count is positive, then atomically decrements it; waiters are registered with the kernel wait call so a release wakes exactly one of them.",
+  "confidence": 0.5,
+  "evidence": "`while (*arg1 < 1) { ClearExclusiveLocal(); waiters++; func_0011CC10(*g_00117dc0, arg1, 1, 1, 0, 0); waiters--; } *arg1 -= 1;` with an exclusive-access loop protecting both fields. This is the counterpart of 0x117DC4 (release) and is used by the blocking ring push in 0x1166B4."
+ },
+ {
+  "address": "0x00117DC4",
+  "name": "Os_SemaphoreRelease",
+  "signature": "int Os_SemaphoreRelease(OsSemaphore* sem, int count)",
+  "params": {
+   "param_1": "semaphore (>0 count, +4 waiter count, +6 capacity)",
+   "param_2": "increment"
+  },
+  "summary": "Releases `count` units of a semaphore (clamped at the capacity), then signals the kernel so a waiting thread can proceed; returns the previous count.",
+  "confidence": 0.5,
+  "evidence": "`do { result = *arg1; iVar2 = (short)*(arg1+6); if (result <= iVar2 - arg2) iVar2 = result + arg2; } while (!hasExclusiveAccess(arg1)); *arg1 = iVar2; if (result < 1 || (short)arg1[1] > 0) func_0011CC10(*g_00117e38, arg1, 0, arg2, 0, 0); return result;`. The clamp/count logic is the semaphore release; callers 0x110FD8 and 0x006E74AC."
+ },
+ {
+  "address": "0x00117E3C",
+  "name": "maybe_Os_Abort",
+  "signature": "void maybe_Os_Abort(void)",
+  "params": {},
+  "summary": "Non-returning fatal-error hook: jumps into the game's panic/abort routine (0x5177DC). Used by the low-level dispatch code when an unrecoverable state is reached.",
+  "confidence": 0.4,
+  "evidence": "Single call `func_005177DC();` with Ghidra's 'Subroutine does not return' marker; eight callers in 0x4FCxxx (the low-level file/stream dispatchers) use it as the hard-failure path."
+ },
+ {
+  "address": "0x00117E50",
+  "name": "Os_LockMonitor",
+  "signature": "void Os_LockMonitor(OsMonitor* monitor)",
+  "params": {
+   "param_1": "monitor (owner thread at +4, recursion count at +8)"
+  },
+  "summary": "Enters a recursive monitor: when the calling thread is not the owner it blocks in the kernel wait (0x11E614) and records the new owner, then increments the recursion count.",
+  "confidence": 0.55,
+  "evidence": "`iVar1 = CP15 c13 c0 3; if (iVar1 != *(int*)(arg1+4)) { func_0011E614(arg1); *(u32*)(arg1+4) = GetThread(); } *(int*)(arg1+8) += 1;` - used 98 times across the binary as the standard lock/unlock pair with 0x117ED0."
+ },
+ {
+  "address": "0x00117E88",
+  "name": "maybe_Os_UnlockMonitor",
+  "signature": "void maybe_Os_UnlockMonitor(OsMonitor* monitor)",
+  "params": {
+   "param_1": "monitor (state byte at +0x76, count at +8)"
+  },
+  "summary": "Leaves the recursive monitor: releases the kernel object, decrements the recursion count and, when it reaches zero, clears the owner and wakes the next waiter.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_76 != 2) { self->f_76 = 1; func_00117ED0(self); func_00117B78(self+100); return; } self->f_76 = 0; if (--*(int*)(self+8) == 0) { *(u32*)(self+4) = 0; func_00117CBC(); }` - the mirror of 0x117E50 with the per-monitor kernel object at +100."
+ },
+ {
+  "address": "0x0011820C",
+  "name": "maybe_Os_CloseSharedSessionA",
+  "signature": "void maybe_Os_CloseSharedSessionA(void)",
+  "params": {},
+  "summary": "Drops one user of a lazily opened shared session; when the count reaches zero it closes the session handle (0x11E8FC) and restores the saved pointer.",
+  "confidence": 0.35,
+  "evidence": "`lock; if (*(g_00118278+4) > 0) --*(g_00118278+4); if (count == 0 && *open) { *open = 0; if (func_0011E8FC(g_0011827c) >= 0) *g_00118284 = *g_00118280; } unlock;` - one of the three identical release stubs (see 0x118288, 0x1182FC) used by 0x11212C."
+ },
+ {
+  "address": "0x00118288",
+  "name": "maybe_Os_CloseSharedSessionB",
+  "signature": "void maybe_Os_CloseSharedSessionB(void)",
+  "params": {},
+  "summary": "Same release pattern as 0x11820C for the second shared session: decrements the user count and, at zero, closes the handle and copies the cached pointer pair back into the live fields.",
+  "confidence": 0.35,
+  "evidence": "`if (count > 0) count--; if (count == 0 && func_0011E8FC(g_001182ec) >= 0) { uVar2 = *g_001182f0; *g_001182f4 = uVar2; *g_001182f8 = uVar2; }` under the g_001182e8 lock; called from 0x11212C(kind == 2)."
+ },
+ {
+  "address": "0x001182FC",
+  "name": "maybe_Os_OpenSharedSessionA",
+  "signature": "int maybe_Os_OpenSharedSessionA(void)",
+  "params": {},
+  "summary": "Reference-counted open of the first auxiliary session: on first use it opens the handle through the IPC stub 0x11E940, stores the result and bumps the user count; the 'already open' error is passed through unchanged.",
+  "confidence": 0.4,
+  "evidence": "`if (*(g_00118390+4) == 0) { result = func_0011E940(g_00118398, *(u32*)(g_00118394+4)); if (result < 0) { if (result == g_001183a0) return result; } else { *puVar1 = 1; *g_0011839c = *g_00118398; } } *(int*)(puVar1+4) += 1; return 0;` - the classic lazy-open/refcount shape of 0x112050; caller 0x1121E4."
+ },
+ {
+  "address": "0x001183A4",
+  "name": "maybe_Os_OpenSharedSessionB",
+  "signature": "int maybe_Os_OpenSharedSessionB(void)",
+  "params": {},
+  "summary": "Reference-counted open of the second auxiliary session (companion of 0x1182FC), using IPC stub 0x11E940 and the error code in g_0011844C.",
+  "confidence": 0.4,
+  "evidence": "`if (*g_00118438 == 0) { result = func_0011E940(g_00118440, *(u32*)(g_0011843c+4)); if (result < 0) { if (result == g_0011844c) return result; } else { uVar4 = *g_00118440; *g_00118444 = uVar4; *g_00118448 = uVar4; } } *piVar1 += 1; return 0;` - same shape as 0x1182FC."
+ },
+ {
+  "address": "0x001185E8",
+  "name": "maybe_Snd_QueryChannelInfo",
+  "signature": "unsigned int maybe_Snd_QueryChannelInfo(unsigned int cmd, unsigned int in, unsigned int size, unsigned short* outCount)",
+  "params": {
+   "param_1": "IPC command",
+   "param_2": "input value",
+   "param_3": "size",
+   "param_4": "receives the number of returned values"
+  },
+  "summary": "Forwards a channel query to the service when the session object is open; with no session it reports zero results and returns the default error.",
+  "confidence": 0.35,
+  "evidence": "`if (*(int*)(g_00118638+8) == 0) { *arg4 = 0; } else { result = func_0011EBD8(*(int*)(g_00118638+8), arg1, 0, arg2, arg3, arg4); }` - the guard on the session's open flag plus the 6-argument IPC stub 0x11EBD8."
+ },
+ {
+  "address": "0x0011874C",
+  "name": "maybe_Snd_SendIpc4",
+  "signature": "unsigned int maybe_Snd_SendIpc4(unsigned int* request, unsigned int a2, unsigned int a3, unsigned int a4)",
+  "params": {
+   "param_1": "request word/header",
+   "param_2..param_4": "three forwarded parameters"
+  },
+  "summary": "Builds a four-parameter IPC request in the thread command block (header from 0x118784) and issues `svc 0x32`, returning the service result.",
+  "confidence": 0.4,
+  "evidence": "`thread->f_80 = g_00118784 (=0x00150082); thread->f_90 = arg2; thread->f_84 = arg3; thread->f_88 = arg4; thread->f_8c = 0; result = *arg1; svc 0x32; if (ok) result = thread->f_84;`. Same stub shape as 0x10B990/0x123D10; caller 0x1123B0 uses it to program a unit flag bit."
+ },
+ {
+  "address": "0x00118788",
+  "name": "maybe_Snd_FlushChannels",
+  "signature": "void maybe_Snd_FlushChannels(void)",
+  "params": {},
+  "summary": "Flushes the channel bank when it is marked active: reconfigures the two unit records, invokes the eight registered flush callbacks and finally releases the wave buffer object.",
+  "confidence": 0.3,
+  "evidence": "`if (*g_0011880c && (*g_0011880c = 0, pcVar1[2])) { func_0011E9C4(pcVar1+0x1c, pcVar1+0x20, *(u16*)(pcVar1+4), *(u16*)(pcVar1+6)); for (i = 0; i < 8; i++) if (g_00118810[i]) g_00118810[i](); pcVar1[2] = 0; if (*(int*)(pcVar1+8)) func_0011EBA0(...); }`. Called from the frame/state machine (0x113A50) so it is the per-frame flush of the active channel bank."
+ },
+ {
+  "address": "0x0011896C",
+  "name": "maybe_Snd_WaitTransferDone",
+  "signature": "void maybe_Snd_WaitTransferDone(Transfer* transfer)",
+  "params": {
+   "param_1": "transfer block (state at +0)"
+  },
+  "summary": "Waits for an asynchronous transfer to complete: polls the completion event, and on the 'still busy' result yields and retries; then retires the transfer record and re-arms the wait object.",
+  "confidence": 0.35,
+  "evidence": "`while (1) { lock; if (*piVar1 != 0 || (uVar5 = func_001169C4(g_00118a74, puVar2[2])) >= 0) { uVar5 = 0; } if (uVar5 >= 0) break; if (uVar5 == uVar3 && *arg1 == 2) { func_0011CC94(g_00118a84, 0); unlock; continue; } ... } func_0011CC7C(arg1+0xc, *puVar2); func_0011ED70(...);` followed by `if (*arg1 != 2 && *arg1 != 5) { func_00111CD8(local, 1); func_00117B78(local); }` - the yield/retry loop plus event re-arm is the wait-for-IO-completion path."
+ },
+ {
+  "address": "0x00118B58",
+  "name": "maybe_Snd_SetUnitLevel",
+  "signature": "void maybe_Snd_SetUnitLevel(ChannelBuffer* buf, unsigned short level)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "level/enable value"
+  },
+  "summary": "Programs the 'level' halfword of the currently selected channel object and marks the unit record dirty (bit 0x10000).",
+  "confidence": 0.4,
+  "evidence": "Selects the object with `*(int*)(arg1 + (u32)*(u16*)(g_00118ba8 + arg1) * 4 + 0x10a4)` (the double-buffered channel table), stores `->f_bc = arg2` and ORs 0x10000 into the dirty word. Part of the same family as 0x118BAC/0x118CA0/0x118D00 which write one field and set one dirty bit. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118BAC",
+  "name": "maybe_Snd_SetUnitAdpcmWord",
+  "signature": "unsigned int maybe_Snd_SetUnitAdpcmWord(ChannelBuffer* buf, int index, unsigned short value)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "0 or 1 (dirty bit 0x100 / 0x200)",
+   "param_3": "value written at +0x28+index*2"
+  },
+  "summary": "Writes one of the two adpcm/loop halfwords of the selected channel and sets the matching dirty bit for that half.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)((int)puVar2 + arg2*2 + 0x28) = arg3; if (arg2 == 0) *puVar2 |= 0x100; else if (arg2 == 1) *puVar2 |= 0x200;` - one field, one dirty bit; callers 0x00518550/0x005185E4 (sound helpers). The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118C38",
+  "name": "maybe_Snd_SetChannelRate",
+  "signature": "unsigned int maybe_Snd_SetChannelRate(ChannelBuffer* buf, unsigned int rate)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "rate/sample value, clamped to 0x8000"
+  },
+  "summary": "Writes the channel's 16-bit rate/step field (+0x22), clamped to 0x8000, and sets dirty bit 0x80000000.",
+  "confidence": 0.4,
+  "evidence": "`if (arg2 > 0x8000) arg2 = 0x8000; *(short*)((int)puVar2 + 0x22) = (short)arg2; *puVar2 |= 0x80000000;` - the clamp and the single-field write identify a rate/pitch setter. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118CA0",
+  "name": "maybe_Snd_SetChannelFormat",
+  "signature": "unsigned int maybe_Snd_SetChannelFormat(ChannelBuffer* buf, unsigned short format)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "format word written at +0x18"
+  },
+  "summary": "Writes the channel's format halfword (puVar2+6) and marks it dirty with bit 0x8000000.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)(puVar2 + 6) = arg2; *puVar2 |= 0x8000000;` - single field + single dirty bit, same shape as the neighbouring setters. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118D00",
+  "name": "maybe_Snd_SetChannelDataAddress",
+  "signature": "void maybe_Snd_SetChannelDataAddress(ChannelBuffer* buf, unsigned int address)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "address/pointer word"
+  },
+  "summary": "Stores a 32-bit word in the channel's second field (puVar2[1]) and sets dirty bit 0x10000.",
+  "confidence": 0.4,
+  "evidence": "`puVar2[1] = in_s0; *puVar2 |= 0x10000;` - note Ghidra lost the second argument (register-allocated `in_s0`); callers 0x10C642/0x114... pass a 32-bit value, consistent with a buffer address. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118D60",
+  "name": "maybe_Snd_SetChannelLength",
+  "signature": "unsigned int maybe_Snd_SetChannelLength(ChannelBuffer* buf, unsigned int length)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "16-bit length, clamped to 0x7fff"
+  },
+  "summary": "Writes the channel's loop length (puVar2+7) clamped to 0x7fff and sets dirty bit 0x20000000.",
+  "confidence": 0.4,
+  "evidence": "`if (arg2 > 0x7fff) arg2 = g_00118dc4; *(short*)(puVar2 + 7) = (short)arg2; *puVar2 |= 0x20000000;` - a clamped halfword, i.e. a length/count field. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118DCC",
+  "name": "maybe_Snd_SetChannelAdpcmState",
+  "signature": "unsigned int maybe_Snd_SetChannelAdpcmState(ChannelBuffer* buf, int index, unsigned short value)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "0 or 1 (dirty bit 0x40 / 0x80)",
+   "param_3": "value written at +0x24+index*2"
+  },
+  "summary": "Writes one of the two adpcm state halfwords (+0x24) and sets the corresponding dirty bit.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)((int)puVar2 + arg2*2 + 0x24) = arg3; if (arg2 == 0) *puVar2 |= 0x40; else if (arg2 == 1) *puVar2 |= 0x80;` - identical idiom to 0x118BAC with a different field base. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118E58",
+  "name": "maybe_Snd_SetChannelFilterInfo",
+  "signature": "unsigned int maybe_Snd_SetChannelFilterInfo(ChannelBuffer* buf, int index, unsigned short* info)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "channel index (0/1)",
+   "param_3": "field block: [0] = mask, [1..] = values"
+  },
+  "summary": "Copies a caller-supplied field block into one channel's 0x14-byte record according to a mask (bit0 = one halfword, bit1 = one word, bit2 = five words) and marks the record dirty (0x400 / 0x800).",
+  "confidence": 0.4,
+  "evidence": "`if (*arg3 & 1) *(u16*)(...+arg2*0x14+0x2e) = arg3[1]; if (*arg3 & 4) { 5 halfwords at +0x32/+0x38..+0x3e } if (*arg3 & 2) puVar2[arg2*5+0xd] = *(u32*)(arg3+4); *(u16*)(puVar2+arg2*5+0xb) = *arg3 | ...; if (arg2 == 0) *puVar2 |= 0x400; else +0x800;`. The mask-driven copy is a structure-assign of a channel filter/loop descriptor. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118F5C",
+  "name": "maybe_Snd_SetUnitLoopInfo",
+  "signature": "void maybe_Snd_SetUnitLoopInfo(ChannelBuffer* buf, int index)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "0/1 selects dirty bit 0x1000000 / 0x2000000"
+  },
+  "summary": "Stores a 32-bit loop/address word in puVar2[index+2] and sets the matching dirty bit; the value arrives in a register Ghidra could not name.",
+  "confidence": 0.4,
+  "evidence": "`puVar2[arg2 + 2] = in_s0; if (arg2 == 0) *puVar2 |= 0x1000000; else if (arg2 == 1) *puVar2 |= 0x2000000;` - two-slot setter; callers 0x112A9C/0x112CAC (channel state init/restore) pass a saved 32-bit word. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00118FD4",
+  "name": "maybe_Snd_SetChannelFilterCoefficients",
+  "signature": "unsigned int maybe_Snd_SetChannelFilterCoefficients(ChannelBuffer* buf, int index, unsigned short* info)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "channel index",
+   "param_3": "field block: mask + up to 13 halfwords"
+  },
+  "summary": "Copies a full 13-halfword filter/loop descriptor into one channel's 0x34-byte record according to the caller's mask and marks it dirty (0x1000 / 0x2000).",
+  "confidence": 0.4,
+  "evidence": "The largest of the field writers: mask bit0 copies one halfword at +0x56, bit2 copies twelve halfwords/words from arg3[3..0x19] into +0x5a/+0x70..+0x86, bit1 copies five words at +0x17..+0x1b; then `*(u16*)(puVar3 + arg2*0xd + 0x15) = *arg3 | ...` and dirty 0x1000/0x2000. Caller 0x00518368 and companions 0x112848/0x112888/0x112A00/0x112CAC push the same descriptor when (re)initialising a channel. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00119140",
+  "name": "maybe_Snd_SetChannelPan",
+  "signature": "unsigned int maybe_Snd_SetChannelPan(ChannelBuffer* buf, unsigned short pan)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "pan/output value written at +0x16"
+  },
+  "summary": "Writes the channel pan/output-select halfword and sets dirty bit 0x4000000.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)((int)puVar2 + 0x16) = arg2; *puVar2 |= 0x4000000;` - single halfword at the position between the length and volume fields; caller 0x00112D98 copies it from a saved state. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x001191A0",
+  "name": "maybe_Snd_SetChannelVolume",
+  "signature": "void maybe_Snd_SetChannelVolume(ChannelBuffer* buf, unsigned short volume)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "16-bit volume"
+  },
+  "summary": "Writes the channel volume halfword (puVar2+4) and sets dirty bit 0x8000.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)(puVar2 + 4) = arg2; *puVar2 |= 0x8000;` - called from 0x112A9C/0x112CAC with the saved `self[0x32]` (a small volume-like value). The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x00119254",
+  "name": "maybe_Snd_SetChannelOutput",
+  "signature": "unsigned int maybe_Snd_SetChannelOutput(ChannelBuffer* buf, unsigned int output)",
+  "params": {
+   "param_1": "command-buffer owner",
+   "param_2": "0 = main, 1 = auxiliary output"
+  },
+  "summary": "Selects which output the channel feeds (value < 2), writes it at +0x1e and sets dirty bit 0x40000000.",
+  "confidence": 0.4,
+  "evidence": "`if (iVar1 != 0 && arg2 < 2) { *(short*)((int)puVar2 + 0x1e) = (short)arg2; *puVar2 |= 0x40000000; return 1; }` - the two allowed values identify an output/bus selector. The 'g_00118xxx' operand in the readable C is a literal-pool address: the value loaded from it is the small field offset 0x1322, which selects one of two 0x60-byte banks of 24 channel pointers based at +0x10A4 (24 = the 3DS DSP channel count); the same bank/channel lookup appears in every writer of this family, which is why they are grouped as channel-register setters."
+ },
+ {
+  "address": "0x001193DC",
+  "name": "maybe_Snd_RequestSuspend",
+  "signature": "int maybe_Snd_RequestSuspend(void)",
+  "params": {},
+  "summary": "Asks the runtime to suspend audio/streaming: if the runtime is up, signals the suspend request through 0x1196F8 and, when the 'in use' predicate holds, flags the runtime object's +0x30 field.",
+  "confidence": 0.35,
+  "evidence": "`if (func_0011F20C() != 0) { result = func_001196F8(func_0011F730(), *g_00119440, 0); if (result >= 0 && func_0011981C() != 0) { iVar = func_0011F720(); func_0011F584(iVar + 0x30, 0); } } else result = g_0011943c; return result;` - uses the same 0x11F6xx/0x11F7xx runtime block as 0x119444, which does the opposite (flag 1)."
+ },
+ {
+  "address": "0x00119444",
+  "name": "maybe_Snd_RequestResume",
+  "signature": "int maybe_Snd_RequestResume(void)",
+  "params": {},
+  "summary": "Counterpart of 0x1193DC: re-enables the runtime object after suspension and returns the runtime's status.",
+  "confidence": 0.35,
+  "evidence": "`if (func_0011F20C() != 0) { func_0011F730(iVar1); result = func_0011F634(); if (result >= 0 && func_0011981C() != 0) { iVar1 = func_0011F720(); func_0011F584(iVar1 + 0x30, 1); } }` - identical structure to 0x1193DC with the flag value 1."
+ },
+ {
+  "address": "0x00119498",
+  "name": "maybe_Snd_InitRuntimeBlock",
+  "signature": "void maybe_Snd_InitRuntimeBlock(SndRuntime* self)",
+  "params": {
+   "param_1": "runtime block (owner handles, queue at +0x64, callback at +0x1078)"
+  },
+  "summary": "Initialises the large audio/streaming runtime block: clears the callback and state fields, creates the owner handle, sizes the transfer buffers from the IPC answer, installs the completion callback and finally starts the worker.",
+  "confidence": 0.4,
+  "evidence": "`func_00111E28(); lock(self); clear f_10..f_2c; create handle (func_0012038C) into f_2c; func_00111CD8(self+100, 0); func_0011F6C0(func_0011F730(), self->f_2c, flags, &local_2c)` then `func_0011E6F8(&self->f_38, local_2c, 0x1000, 0)` and the four buffer pointers derived from `self->f_40 + local_30*0x40/0x80/0x200+0x800`; `func_00111F60(&self->f_6c, &args, g_00119674, &local_18)` registers the worker. Called by 0x1135D0."
+ },
+ {
+  "address": "0x001196F8",
+  "name": "maybe_Snd_SendIpcSuspend",
+  "signature": "unsigned int maybe_Snd_SendIpcSuspend(unsigned int* request, unsigned int value, unsigned char mode)",
+  "params": {
+   "param_1": "request/header word",
+   "param_2": "value passed to the service",
+   "param_3": "mode byte"
+  },
+  "summary": "IPC stub for the suspend/resume request (header 0x160042): stores the mode, value and a zero extra word in the thread command block and issues `svc 0x32`.",
+  "confidence": 0.4,
+  "evidence": "`thread->f_80 = g_00119738 (=0x00160042); thread->f_84 = arg3; thread->f_8c = arg2; thread->f_88 = 0; result = *arg1; svc 0x32; if (ok) result = thread->f_84;`. Callers 0x1135D0/0x1193DC."
+ },
+ {
+  "address": "0x00119764",
+  "name": "maybe_Snd_SendIpc1",
+  "signature": "unsigned int maybe_Snd_SendIpc1(unsigned int* request, unsigned char value)",
+  "params": {
+   "param_1": "request word",
+   "param_2": "byte parameter"
+  },
+  "summary": "One-parameter IPC stub (header 0x0B0040) used by the audio helper at 0x51BCE0.",
+  "confidence": 0.35,
+  "evidence": "`thread->f_80 = g_00119798 (=0x000b0040); thread->f_84 = arg2; result = *arg1; svc 0x32; if (ok) result = thread->f_84;`. Same shape as the other IPC stubs; the only caller is 0x0051BCE0."
+ },
+ {
+  "address": "0x00119AF4",
+  "name": "maybe_Snd_SetMasterEnable",
+  "signature": "void maybe_Snd_SetMasterEnable(int enable)",
+  "params": {
+   "param_1": "0 = resume/enable output, non-zero = mute/pause"
+  },
+  "summary": "Switches the global audio/streaming output on or off: enable requires the runtime thread to be active and arms the DMA/stream (0x118814); disable checks the flag and stops it (0x11ECC0).",
+  "confidence": 0.35,
+  "evidence": "`if (arg1 == 0) { if (func_0011E9B4() == 0) return; func_00118814(); uVar2 = 1; } else { if (*(char*)(g_00119b40+4) == 0) return; func_0011ECC0(); uVar2 = 0; } *(u8*)(g_00119b40+4) = uVar2;` - a single master on/off flag guarding the start/stop helpers. Caller 0x0010CF50 is the pause/mute path of the frame driver."
+ },
+ {
+  "address": "0x0011B048",
+  "name": "maybe_Snd_CalcVolumePan",
+  "signature": "unsigned int maybe_Snd_CalcVolumePan(SndChannel* channel, unsigned int a2, unsigned int a3, int distance)",
+  "params": {
+   "param_1": "channel object (vtable at +0, attenuation at +0xa1)",
+   "param_2": "left/right mode",
+   "param_3": "distance scale",
+   "param_4": "signed distance to the listener"
+  },
+  "summary": "Implements the 3D attenuation curve for a channel: computes the distance to the listener, applies the channel's roll-off/attenuation fields and writes the resulting left/right volume into the two caller-supplied halfwords.",
+  "confidence": 0.2,
+  "evidence": "The C is extensively corrupted (`g_00000059`, `_DAT_00000048`, 'bad instruction'), but the surviving arithmetic is a distance-squared comparison (`result*result + r6*r6` vs `(r7-r8)^2`), a square-root loop using 0x11CD80 for both components, and a final `*unaff_r9 = (short)r6; *unaff_r10 = (short)result; return (short)r11;` - i.e. two computed channels plus a scale. It also touches the vtable at +0x10/+0x14/+0x20, which is the channel interface. Treat the prototype as a reconstruction."
+ },
+ {
+  "address": "0x0011B57C",
+  "name": "maybe_Snd_QueueCommandBuffer",
+  "signature": "void maybe_Snd_QueueCommandBuffer(CommandBuffer* self, unsigned int size, unsigned int flags, int* out)",
+  "params": {
+   "param_1": "command buffer (ring at +0xb4, write ptr +0x16c, tail +0x170, seq +0x174)",
+   "param_2": "size of the command block",
+   "param_3": "flags",
+   "param_4": "out slot"
+  },
+  "summary": "Reserves `size` words of a command ring and links the resulting command block into the submit queue: waits for a free slot, allocates a command node, chains it, bumps the sequence number and advances the write pointer (wrapping at the end of the ring).",
+  "confidence": 0.4,
+  "evidence": "`if (func_0011B8C0(self,4) == 0) { do { if (self->f_16c == 0) { puVar5 = func_0011B8C0(self,4); ... puVar5[3] = self->f_184; ... *self->f_170 = puVar5; self->f_170 = puVar5; } iVar1 = self->f_174; DSB; func_001166B4(self, self->f_16c); *(int*)(self->f_16c+8) = iVar1; self->f_174++; ... } while (...); ... self->f_184 = f184 + arg2; iVar1 = self->f_17c + f184*4;`. The wrap/sequence arithmetic plus the 22 callers in 0x0054xxxx (archive/stream request submission) identify a command-queue submit."
+ },
+ {
+  "address": "0x0011C8E0",
+  "name": "Os_QueueTryPop",
+  "signature": "unsigned int Os_QueueTryPop(OsQueue* queue, unsigned int* out)",
+  "params": {
+   "param_1": "queue (base +0, capacity +0x20, read index +0x24, count +0x28)",
+   "param_2": "receives the popped value"
+  },
+  "summary": "Non-blocking pop: if the ring holds an entry it copies the value out, advances the read index (wrapping), decrements the count and signals the producer; returns 1 on success and 0 when empty.",
+  "confidence": 0.55,
+  "evidence": "`lock(queue+5); if (queue[10] > 0) { *arg2 = *(u32*)(*queue + queue[9]*4); func_0011CFAC(queue[9]+1, queue[8]); queue[9] = r1; queue[10]--; if (queue[0xc] > 0) func_00117DC4(queue+3, 1); unlock; return 1; } unlock; return 0;` - textbook ring pop; used by 0x11B57C for command allocation."
+ },
+ {
+  "address": "0x0011C96C",
+  "name": "Os_QueueTryPush",
+  "signature": "unsigned int Os_QueueTryPush(OsQueue* queue, unsigned int value)",
+  "params": {
+   "param_1": "queue",
+   "param_2": "value to store"
+  },
+  "summary": "Non-blocking push: stores the value at the write index when the ring is not full, advances the index (wrapping), bumps the count and signals the consumer; returns 1/0.",
+  "confidence": 0.55,
+  "evidence": "`lock(queue+5); if (queue[10] < queue[8]) { func_0011CFAC(queue[10]+queue[9]); *(u32*)(*queue + r1*4) = arg2; queue[10]++; if (queue[0xb] > 0) func_00117DC4(queue+1, 1); unlock; return 1; } unlock; return 0;` - the exact counterpart of 0x11C8E0."
+ },
+ {
+  "address": "0x0011C9EC",
+  "name": "Os_QueuePopBlocking",
+  "signature": "unsigned int Os_QueuePopBlocking(OsQueue* queue)",
+  "params": {
+   "param_1": "queue (waiter semaphore at +4)"
+  },
+  "summary": "Blocking pop: waits on the queue's semaphore until an entry is available, then pops it exactly like 0x11C8E0 and returns the value.",
+  "confidence": 0.55,
+  "evidence": "`exclusive++(queue+0xb); while (1) { lock(queue+5); if (queue[10] > 0) break; unlock; func_00117D10(queue+1); } result = *(*queue + queue[9]*4); func_0011CFAC(...); queue[10]--; ... exclusive--(queue+0xb); return result;`. Caller 0x00548150; used by the worker loops that consume request rings."
+ },
+ {
+  "address": "0x0011CAB4",
+  "name": "maybe_Os_QueueAllocNode",
+  "signature": "unsigned int* maybe_Os_QueueAllocNode(OsQueue* queue)",
+  "params": {
+   "param_1": "queue with a free-node list at +0x24"
+  },
+  "summary": "Detaches and returns one node from the queue's free list, bumping the in-use count and (for fixed-size queues) adjusting the node's position; returns 0 when the list is empty.",
+  "confidence": 0.45,
+  "evidence": "`lock; result = self->f_24; if (result) { self->f_24 = *result; self->f_2c++; if (self->f_14 & 1) func_00118B28(result, self->f_18 + (int)result, 0); } unlock; return result;` - a free-list detach with an in-use counter/+0x14 flag, used by 0x10B524 and 0x1118D4 to obtain a work node."
+ },
+ {
+  "address": "0x0011E720",
+  "name": "maybe_Mem_MapPages",
+  "signature": "int maybe_Mem_MapPages(MemPageBlock* block, unsigned int size, unsigned char flags)",
+  "params": {
+   "param_1": "block (handle at +0x14, mapped address at +0x18)",
+   "param_2": "page-aligned size",
+   "param_3": "mapping flags"
+  },
+  "summary": "Allocates a page-aligned region from the memory manager and maps it into the process with the kernel map call; records the mapping in the block and marks it mapped.",
+  "confidence": 0.45,
+  "evidence": "`if (*(int*)(self+8) == 0 && (arg2 & 0xfff) == 0) { if (func_00122ABC(g_0011e79c, self, arg2, 0x1000) != 0) { self->f_10 = arg3; result = self->f_14; software_interrupt(0x1f); if (result >= 0) self->f_18 = 1; } }` - 0xFFF alignment plus `svc 0x1F` (map memory block) is the CTR page-mapping idiom."
+ },
+ {
+  "address": "0x0011E7A4",
+  "name": "Os_ListRemoveNode",
+  "signature": "void Os_ListRemoveNode(OsList* list, OsListNode* node)",
+  "params": {
+   "param_1": "list head (node +0 = head pointer)",
+   "param_2": "node to remove"
+  },
+  "summary": "Unlinks a node from an intrusive circular list under the list lock and clears the node's links and payload words.",
+  "confidence": 0.5,
+  "evidence": "`lock; if (*arg2 == arg2) *(u32*)(arg1+8) = 0; else { if (*(int**)(arg1+8) == arg2) *(int*)(arg1+8) = (*(int**)(arg1+8))[1]; *(int*)arg2[1] = *arg2; *(int*)(*arg2+4) = arg2[1]; } arg2[1] = *arg2 = arg2[2] = arg2[3] = 0; unlock(arg1+0xc);` - standard list unlink, used by 0x111E44."
+ },
+ {
+  "address": "0x0011E8A0",
+  "name": "Os_CloseHandle",
+  "signature": "void Os_CloseHandle(OsHandle* handle)",
+  "params": {
+   "param_1": "handle wrapper (handle at +0x14, state at +8/+0xc/+0x18)"
+  },
+  "summary": "Closes a kernel handle: cancels the pending operation when one is armed (non-waiting handles just drop their state), notifies the owner (0x1181A8) and finally closes the handle with `svc 0x23`.",
+  "confidence": 0.55,
+  "evidence": "`if (self->f_14) { if (*(int*)(self+8)) { if (self->f_18 == 0) { *(u32*)(self+8) = 0; self->f_c = 0; } else { svc 0x20; func_001181A8(self); } } if (self->f_14) { svc 0x23; self->f_14 = 0; } }` - 0x23 = svcCloseHandle; the lighter variant of 0x111E44 without the list unlink."
+ },
+ {
+  "address": "0x0011E8FC",
+  "name": "Os_CloseHandleSimple",
+  "signature": "int Os_CloseHandleSimple(OsHandle* handle)",
+  "params": {
+   "param_1": "handle word (0 = already closed)"
+  },
+  "summary": "Closes a handle word and resets it to the 'empty' sentinel; returns the old handle or the 'nothing to do' code.",
+  "confidence": 0.5,
+  "evidence": "`iVar1 = *arg1; result = g_0011e938; if (iVar1 != 0) { svc 0x23; if (iVar1 < 0) abort; *arg1 = *g_0011e93c; result = iVar1; } return result;` - direct svcCloseHandle with the sentinel reload."
+ },
+ {
+  "address": "0x0011E940",
+  "name": "maybe_Snd_OpenHandleIpc",
+  "signature": "unsigned int maybe_Snd_OpenHandleIpc(unsigned int* handleOut, unsigned int name, unsigned int a3, unsigned int a4, int a5, unsigned int flags, int a7)",
+  "params": {
+   "param_1": "receiver of the created handle",
+   "param_2": "service/handle name word",
+   "param_6": "flags",
+   "param_7": "signed mode"
+  },
+  "summary": "Opens/creates the service session belonging to the audio layer: allocates the handle through the IPC stub, applies the symbol-name resolution (0x11CCA0+0x1192C0) on first use and returns the handle or an error.",
+  "confidence": 0.35,
+  "evidence": "Large reconstructed body: `func_00113430()`; `if (*arg1 == 0) { uVar3 = func_0011CCA0(arg2); result = func_001192C0(arg1, arg2, uVar3, 0); ... }`; then the `arg6 & 0x20000` branch fills three signed range checks into bits 0x8000000/0x4000000/0x1000000 of the handle word; finally `func_0011EAB4(*(u32*)(...), arg5, arg6, arg7)` between an event wait/signal pair. Callers 0x1182FC/0x1183A4 (the lazy-open helpers)."
+ },
+ {
+  "address": "0x0011EBA0",
+  "name": "maybe_Snd_SendIpc2",
+  "signature": "unsigned int maybe_Snd_SendIpc2(unsigned int* request, unsigned char value)",
+  "params": {
+   "param_1": "request word",
+   "param_2": "byte parameter"
+  },
+  "summary": "One-parameter IPC stub (header 0x200040) used when releasing the audio session.",
+  "confidence": 0.35,
+  "evidence": "`thread->f_80 = g_0011ebd4 (=0x00200040); thread->f_84 = arg2; result = *arg1; svc 0x32; if (ok) result = thread->f_84;`. Caller 0x0011ECC0 (the stop path of 0x119AF4)."
+ },
+ {
+  "address": "0x0011EBD8",
+  "name": "maybe_Snd_SendIpcBuffer",
+  "signature": "int maybe_Snd_SendIpcBuffer(unsigned int* request, unsigned int a2, unsigned int a3, unsigned int address, unsigned short size, unsigned short* outSize)",
+  "params": {
+   "param_1": "request word",
+   "param_2": "value at +0x84",
+   "param_3": "zero extra",
+   "param_4": "32-bit address written into the command block",
+   "param_5": "size/format halfword",
+   "param_6": "receives the returned size"
+  },
+  "summary": "Submits a buffer descriptor to the audio service: packs the size into the command header, stores the address in the thread command block, issues `svc 0x32`, restores the modified command words and returns the service status plus the reported size.",
+  "confidence": 0.4,
+  "evidence": "`thread->f_80 = g_0011ec3c; thread->f_84 = arg2; thread->f_88 = arg3; thread->f_8c = arg5; puVar4 = &thread->f_180; uVar5 = *puVar4; f184 = thread->f_184; *puVar4 = (u32)arg5 << 0xe | 2; thread->f_184 = arg4; result = *arg1; svc 0x32; *puVar4 = uVar5; thread->f_184 = f184; if (ok) { *arg6 = thread->f_88; result = thread->f_84; }` - the save/restore of the two command words and the size<<14 packing are the 'submit buffer' request of the service (caller 0x1185E8)."
+ },
+ {
+  "address": "0x0011EDA8",
+  "name": "Mem_HeapAlloc",
+  "signature": "void* Mem_HeapAlloc(MemHeap* heap, unsigned int size, unsigned int align, unsigned int low, unsigned int high, unsigned int flags)",
+  "params": {
+   "param_1": "heap object (allocator state at +0x18)",
+   "param_2": "size in bytes",
+   "param_3": "alignment",
+   "param_4..param_6": "allocator bounds/flags forwarded to the heap"
+  },
+  "summary": "General heap allocation used by the whole game: forwards the request bounds to the allocator, carves a block with the requested size/alignment and counts the live allocation.",
+  "confidence": 0.7,
+  "evidence": "Calls func_00122E38/0x122E48/0x122E68 (store the three bounds) then `func_00122CF0(&heap->f_18, size, align)`; when the result is non-null it increments `heap->f_54`, the live-allocation counter. 0x122CF0 rounds the size to 4 bytes (`(size+3)&~3`), walks the free lists and splits a block through 0x123E6C, which fixes this as the allocator's public entry."
+ },
+ {
+  "address": "0x0011EE78",
+  "name": "maybe_Snd_UpdateChannelState",
+  "signature": "void maybe_Snd_UpdateChannelState(SndChannel* channel)",
+  "params": {
+   "param_1": "channel (dirty mask at +0x6c, gain at +0x28, format bytes at +0xe/+0xf, volume table at +0x48)"
+  },
+  "summary": "Applies the pending parameter updates of one channel: for each dirty bit (position, format, adpcm, filter, volume, gain curve) it calls the matching field writer, recomputes the channel's gain/offset from the volume table and finally clears the dirty mask.",
+  "confidence": 0.3,
+  "evidence": "The body is a chain of `if (self[0x1b] & N) func_00122Exx/0x1230xx(...)` with N = 1,2,4,8,0x10,0x20,0x40 and `*self & 0xff` as the channel index; it accumulates the command size as `self[0xb] = uVar7 + iVar3 * 0x113 * 8` (0x113 = 275) and ends with `self->f_1b &= 0x8000`. This is the batched 'commit channel registers' routine of the DSP/stream layer; the exact meaning of each dirty bit is inferred from the writer it calls."
+ },
+ {
+  "address": "0x0011F3C0",
+  "name": "maybe_Snd_ChannelWorker",
+  "signature": "void maybe_Snd_ChannelWorker(SndWorker* worker)",
+  "params": {
+   "param_1": "worker (callback table at +0x10, queue at +0x34, state at +0x76/+0x77)"
+  },
+  "summary": "Worker loop of the audio/streaming layer: waits on the worker event, drains the 52-byte command records of the request ring (tracking the read index with an exclusive access), dispatches each record to the callback in the worker's function table and, for 'stop' records, signals the waiters.",
+  "confidence": 0.35,
+  "evidence": "`while (1) { svc 0x24; if (f_2c < 0) abort; svc 0x19; if (f_2c < 0) abort; if (f_77) break; while (1) { ... uVar8 = (uVar11 & 0xff) + 1; exclusive; *puVar12 = ... ; ... if (*(char*)(f_34+2) == 1) iVar9 = iVar5; ... uVar8 = in_r12 & 0xff; lock; pcVar10 = *(code**)(self + uVar8*4 + 0x10); if (pcVar10) (*pcVar10)(); f_76 = 2; if (f_76_old == 1) func_00111D50(self+100); unlock; } }`. The 0x34-byte record stride is visible as the `*-0x34` modulo in the index update. Started by 0x119498 via 0x111F60."
+ },
+ {
+  "address": "0x0011F634",
+  "name": "maybe_Snd_SendIpcNoArg",
+  "signature": "unsigned int maybe_Snd_SendIpcNoArg(unsigned int* request)",
+  "params": {
+   "param_1": "request word"
+  },
+  "summary": "Argument-less IPC stub (header 0x00170002-ish literal at 0x117000) used by the resume path.",
+  "confidence": 0.3,
+  "evidence": "`thread->f_80 = &LAB_00170000; result = *arg1; svc 0x32; if (ok) result = thread->f_84;` - the header is stored as an address (Ghidra could not turn the literal into a value), but the stub shape is identical to 0x1196F8. Caller 0x00119444."
+ },
+ {
+  "address": "0x0011F6C0",
+  "name": "maybe_Snd_SendIpcStatus",
+  "signature": "int maybe_Snd_SendIpcStatus(unsigned int* request, unsigned int a2, unsigned int a3, unsigned int* out0, unsigned int* out1)",
+  "params": {
+   "param_1": "request word",
+   "param_2": "handle passed to the service",
+   "param_3": "flags",
+   "param_4/param_5": "two output words"
+  },
+  "summary": "IPC status query of the audio layer: sends the handle and flags and copies back two result words.",
+  "confidence": 0.35,
+  "evidence": "`thread->f_80 = g_0011f70c (=0x00130042); thread->f_8c = arg2; thread->f_84 = arg3; thread->f_88 = 0; result = *arg1; svc 0x32; if (ok) { *arg5 = thread->f_88; *arg4 = thread->f_90; result = thread->f_84; }`. Caller 0x00119498 with the transfer size and flags."
+ },
+ {
+  "address": "0x0011FD1C",
+  "name": "maybe_Snd_InsertChannelByPriority",
+  "signature": "void maybe_Snd_InsertChannelByPriority(SndMixer* mixer, SndChannel* channel)",
+  "params": {
+   "param_1": "mixer (channel list head at +0x10, list length at +0xc)",
+   "param_2": "channel"
+  },
+  "summary": "Inserts a channel into the mixer's priority-ordered list: computes the channel's current priority (volume + pan, clamped to 0..0x7f) and places it before the first channel with a higher value.",
+  "confidence": 0.4,
+  "evidence": "`func_0011FCBC(&self->f_c, &channel->f_108);` then walks the list from `self->f_10` comparing `clamp(piVar1[-0x2e] + *(u8*)((int)piVar1 - 0x6b), 0, 0x7f)` against the new channel's value (two variants for the `self->f_58` flag), then `func_0011FCF8(&self->f_c, piVar1, &channel->f_108)`. The 0..0x7f clamp is the same range as the volume field, so this is priority-ordered insertion of a channel. Caller 0x114CFC."
+ },
+ {
+  "address": "0x00122200",
+  "name": "maybe_Snd_SetupChannelBuffer",
+  "signature": "unsigned int maybe_Snd_SetupChannelBuffer(unsigned int a1, unsigned int a2, int x, unsigned int w, int y, unsigned int h, unsigned int flags)",
+  "params": {
+   "param_1": "service handle/queue id",
+   "param_2": "buffer size/id",
+   "param_3": "x origin",
+   "param_4": "x fraction (1/8 pixel units)",
+   "param_5": "y origin",
+   "param_6": "y fraction (1/8 pixel units)",
+   "param_7": "format/flags"
+  },
+  "summary": "Configures one channel buffer: opens the service session on first use, prepares the buffer object and submits a rectangular descriptor (position + fraction, size, format), then stores the returned buffer handle in the global block.",
+  "confidence": 0.3,
+  "evidence": "`func_0011E80C(g_001223a4, arg1, arg2, 1, 3); result = func_00123D10(g->f_14, arg2, arg3+arg4, arg4>>3, arg5+arg6, arg6>>3, arg7);` - position plus fraction rounded to pixels (`>>3`), which is the 8.8 coordinate convention of the 2D engine; on success `func_00123A6C(g_001223ac, handle+0x10, arg3+arg4+0x10, arg4>>3, 0, 1)`. Caller 0x0010BB34."
+ },
+ {
+  "address": "0x00122ABC",
+  "name": "Mem_AllocAddressRange",
+  "signature": "unsigned int Mem_AllocAddressRange(MemRange* range, MemRangeNode* node, unsigned int size, unsigned int align)",
+  "params": {
+   "param_1": "range (base +0, end +4, free-list head +8)",
+   "param_2": "node receiving base/size",
+   "param_3": "size",
+   "param_4": "alignment/gap"
+  },
+  "summary": "First-fit allocation inside a linear address range: searches the sorted free-range list for a gap that fits `size+align`, splits it, links the caller's node into the list at the right place and returns the chosen base address.",
+  "confidence": 0.5,
+  "evidence": "The body compares `arg3 + arg4` against `result - (piVar3[3] + piVar3[2])`, walks the address-ordered free list, handles insertion before/after the head, and finally writes `arg2[2] = result; arg2[3] = arg3;`. Range base/end come from `*arg1`/`arg1[1]`. Caller 0x11E720 uses it to reserve page-aligned memory before mapping it."
+ },
+ {
+  "address": "0x00122CF0",
+  "name": "Mem_HeapAllocBlock",
+  "signature": "unsigned int Mem_HeapAllocBlock(MemHeapState* state, unsigned int size, int align)",
+  "params": {
+   "param_1": "heap state (free lists at +0x24/+0x28, allocation counter at +0x54)",
+   "param_2": "requested size (rounded up to 4)",
+   "param_3": "alignment (negative = search the descending list)"
+  },
+  "summary": "Core block allocator: rounds the size to 4 bytes, walks the free list best-fit for the given alignment (two directions), and carves the block through 0x123E6C, which also updates the heap's statistics.",
+  "confidence": 0.65,
+  "evidence": "`if (arg2 == 0) arg2 = 1; uVar3 = (arg2+3) & 0xfffffffc;` then the two list walks (`self->f_28` for align < 0, `self->f_24` otherwise) aligning with `~(align-1)` and calling `func_00123E6C(&self->f_24, block, offset, uVar3, 0/1)`. This is the routine 0x11EDA8 uses for every game allocation."
+ },
+ {
+  "address": "0x00122E78",
+  "name": "maybe_Snd_SetChannelMode",
+  "signature": "unsigned int maybe_Snd_SetChannelMode(SndMixer* mixer, int channel, int mode, unsigned char priority)",
+  "params": {
+   "param_1": "mixer/command block (double-buffered index at 0x122EF4)",
+   "param_2": "channel index",
+   "param_3": "mode (0 = stopped, 1 = playing, 2 = paused)",
+   "param_4": "priority used when mode = 0"
+  },
+  "summary": "Sets the play mode of one channel and, for the stopped mode, its priority; marks the channel's parameter block dirty (bit 0x20000).",
+  "confidence": 0.4,
+  "evidence": "`puVar2 = *(u32**)(arg1 + (*(u16*)(g_00122ef4+arg1) & 1)*0x60 + arg2*4 + 0x10b4); puVar2->f_e = (char)arg3; if (arg3 == 0) *(u8*)((int)puVar2 + 0x39) = arg4; *puVar2 |= 0x20000;` - the double-buffer selector and the dirty bit are shared with every other setter in this family; caller 0x11EE78 passes mode 0/1/2 for the channel state. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00122EF8",
+  "name": "maybe_Snd_SetChannelParam1",
+  "signature": "unsigned int maybe_Snd_SetChannelParam1(SndMixer* mixer, int channel, unsigned int value)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3": "32-bit value"
+  },
+  "summary": "Writes one 32-bit channel parameter (word at +0x34) and marks it dirty (0x40000).",
+  "confidence": 0.4,
+  "evidence": "`puVar2[0xd] = in_s0; *puVar2 |= 0x40000;` with the same channel lookup as 0x122E78; caller 0x11EE78 passes the computed gain (`self[10]`) here. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00122F74",
+  "name": "maybe_Snd_SetChannelWaveData",
+  "signature": "unsigned int maybe_Snd_SetChannelWaveData(SndMixer* mixer, int channel, unsigned int* data)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3": "source data pointer"
+  },
+  "summary": "Copies a 0x20-byte wave/loop descriptor into the channel's buffer slot and marks it dirty (bit 4).",
+  "confidence": 0.4,
+  "evidence": "`func_00116A14(*(u32*)(self + self->f_1322*0x60 + arg2*4 + 0x1234), arg3, 0x20); *puVar2 |= 4;` - a 32-byte memcpy from the wave buffer table into the channel block; the same 0x1234-based table is used when the buffers are set up in 0x11302C. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00123000",
+  "name": "maybe_Snd_SetChannelParam2",
+  "signature": "unsigned int maybe_Snd_SetChannelParam2(SndMixer* mixer, int channel, unsigned short value)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3": "16-bit value"
+  },
+  "summary": "Writes a 16-bit channel parameter (+0x3a) and sets dirty bit 0x400000.",
+  "confidence": 0.4,
+  "evidence": "`*(u16*)((int)puVar2 + 0x3a) = arg3; *puVar2 |= 0x400000;` with the family's channel lookup; caller 0x11EE78 (dirty bit 4). Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00123070",
+  "name": "maybe_Snd_SetChannelLoopPoints",
+  "signature": "unsigned int maybe_Snd_SetChannelLoopPoints(SndMixer* mixer, int channel, unsigned short start, unsigned short end)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3": "start position",
+   "param_4": "end position"
+  },
+  "summary": "Writes the channel's loop start/end pair (byte at +0xf, halfword at +0x3e) and sets dirty bit 0x800000.",
+  "confidence": 0.4,
+  "evidence": "`puVar2->f_f = arg3; *(u16*)((int)puVar2 + 0x3e) = arg4; *puVar2 |= 0x800000;` - a paired position write, the loop points of the channel. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x001230E8",
+  "name": "maybe_Snd_SetChannelAdpcmParams",
+  "signature": "unsigned int maybe_Snd_SetChannelAdpcmParams(SndMixer* mixer, int channel, unsigned short a3, unsigned short a4, unsigned short a5, unsigned short a6, unsigned short a7)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3..param_7": "five 16-bit adpcm parameters"
+  },
+  "summary": "Writes the five adpcm/decoder parameters of a channel (+0x40..+0x46) and sets dirty bit 0x1000000.",
+  "confidence": 0.4,
+  "evidence": "`puVar2->f_10 = arg7; *(u16*)((int)puVar2 + 0x42) = arg6; puVar2->f_11 = arg5; *(u16*)((int)puVar2 + 0x46) = arg4; puVar2->f_12 = arg3; *puVar2 |= 0x1000000;` - five consecutive fields, the shape of the DSP ADPCM decoder info block. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00123174",
+  "name": "maybe_Snd_SetChannelMatrix",
+  "signature": "void maybe_Snd_SetChannelMatrix(SndMixer* mixer, SndChannel* channel)",
+  "params": {
+   "param_1": "channel (matrix source at +0x38..+0x64, scale at +0x68)"
+  },
+  "summary": "Scales the channel's twelve matrix/vector coefficients by its gain and pushes the 3x4 result to the mixer's channel slot.",
+  "confidence": 0.4,
+  "evidence": "Twelve multiplies `local_xx = (float)arg1[0xe..0x19] * (float)arg1[0x1a]` followed by `func_00124050(g_00123258, *arg1 & 0xff, &local_48)` - a 4x3 matrix scaled by a scalar, exactly the 3D positioning matrix of a channel; caller 0x11EE78 (dirty bit 1). Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00123260",
+  "name": "maybe_Os_ReleaseSharedHandle",
+  "signature": "int maybe_Os_ReleaseSharedHandle(unsigned int lock)",
+  "params": {
+   "param_1": "lock/monitor object used while updating the shared handle"
+  },
+  "summary": "Releases one reference to a shared kernel handle: when it is the last user it closes the handle and restores the empty sentinel, otherwise it just decrements the count; returns the closed handle or the cached value.",
+  "confidence": 0.35,
+  "evidence": "`lock; if (*(int*)(g_001232e8+4) < 2) { result = *g_001232f0; svc 0x23; if (ok) *(int*)(g_001232e8+4)--; if (result < 0) abort; if (ok) *piVar1 = *g_001232f4; } else { *(int*)(g_001232e8+4)--; result = g_001232ec; } unlock; return result;`"
+ },
+ {
+  "address": "0x00123564",
+  "name": "maybe_Snd_DetachChannel",
+  "signature": "void maybe_Snd_DetachChannel(SndMixer* mixer, SndChannel* channel)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel (flag at +0x18, link at +0x110)"
+  },
+  "summary": "Detaches a channel from the mixer's list and clears the channel's active flag.",
+  "confidence": 0.3,
+  "evidence": "`func_0011FCBC(arg1, &arg2->f_110); arg2->f_18 = 0;` - 0x11FCBC is the list-link helper used together with 0x11FD1C (insert by priority), so this is the removal half."
+ },
+ {
+  "address": "0x00123BB0",
+  "name": "maybe_Snd_CreateChannelBuffers",
+  "signature": "int maybe_Snd_CreateChannelBuffers(unsigned int width, unsigned int height, char* mode)",
+  "params": {
+   "param_1": "width/stride in bytes",
+   "param_2": "height/lines",
+   "param_3": "flags byte"
+  },
+  "summary": "Allocates the pair of channel buffers: rounds the two dimensions up (the +4/+5 difference is the format-dependent header) with an 8-byte minimum, calls 0x122200 to create the buffer and then 0x122484 to finish it.",
+  "confidence": 0.3,
+  "evidence": "`if (*arg3 == 0) { arg1 = (arg1<0x40? arg1+4 : arg1+5); if (arg1 < 8) arg1 = 8; [same for arg2]; result = func_00122200(g_00123c50->f_c, 0x1000, arg2, 8, arg1, 8, g_00123c4c->f_10); if (result >= 0) result = func_00122484(); }` - the +4/+5 (nibble vs byte header) rounding and the 8-byte minimum are buffer-size arithmetic; 0x122200 then programs the channel."
+ },
+ {
+  "address": "0x00123D10",
+  "name": "maybe_Snd_SendIpcChannel",
+  "signature": "unsigned int maybe_Snd_SendIpcChannel(unsigned int handle, unsigned int a2, unsigned int a3, unsigned int a4, unsigned int a5, unsigned int a6, unsigned char a7)",
+  "params": {
+   "param_1": "object/handle at +0xa0",
+   "param_2..param_6": "five packed values",
+   "param_7": "flags byte"
+  },
+  "summary": "Seven-parameter IPC submission (header 0x180182) used to hand a channel descriptor to the service: fills the thread command block, issues `svc 0x32` and returns the result.",
+  "confidence": 0.4,
+  "evidence": "`thread->f_80 = g_00123d60 (=0x01800182); thread->f_84 = arg2; ... f_a0 = arg1; f_9c = 0; result = *puVar1; svc 0x32; if (ok) result = thread->f_84;`. Caller 0x122200 passes the position/size pair, i.e. the channel buffer descriptor."
+ },
+ {
+  "address": "0x00124050",
+  "name": "maybe_Snd_WriteChannelMatrix",
+  "signature": "unsigned int maybe_Snd_WriteChannelMatrix(SndMixer* mixer, int channel, unsigned int* matrix)",
+  "params": {
+   "param_1": "mixer/command block",
+   "param_2": "channel index",
+   "param_3": "pointer to the 12-word matrix, minus the 2-word preamble"
+  },
+  "summary": "Copies the twelve 32-bit matrix words (three groups of four) into the channel's matrix area and marks the fields dirty (0xE000000).",
+  "confidence": 0.4,
+  "evidence": "Three copy loops of 4 iterations each: from `arg3-2` to `puVar4+2`, from `arg3+0xe` to `puVar4+0x12`, from `arg3+0x1e` to `puVar4+0x22`, then `*puVar4 |= 0xe000000;`. Twelve words = a 4x3 transform; the caller 0x123174 scales the channel matrix by its gain. Here too the 'g_00122xxx' literal holds the offset 0x131E, the second double-buffer selector of the same context, followed by the same 24-entry channel pointer table at +0x10B4; the 32-bit word at the start of each channel block is a dirty mask whose bits the setters OR in."
+ },
+ {
+  "address": "0x00125E58",
+  "name": "std_UInt64Divide",
+  "signature": "unsigned long long std_UInt64Divide(unsigned int numLo, unsigned int numHi, unsigned int denLo, unsigned int denHi)",
+  "params": {
+   "param_1": "numerator low word",
+   "param_2": "numerator high word",
+   "param_3": "denominator low word",
+   "param_4": "denominator high word"
+  },
+  "summary": "Unsigned 64/64-bit division helper: normalises both operands, uses the reciprocal table at 0x126108 for the quotient estimate and corrects the remainder, returning the 64-bit quotient; returns 0 (or traps) when the denominator is zero or the quotient overflows.",
+  "confidence": 0.85,
+  "evidence": "Textbook `__aeabi_uldivmod` core: `uVar10 = LZCOUNT(den); den <<= uVar10+1; ... g_00126108[uVar9 >> 0x1c]` (the 16-entry reciprocal table), three Newton correction steps (`uVar5 += -(estimate * uVar5) >> 32`), then two remainder corrections. The wrap at `if ((int)uVar5 < 0) return func_00115E6C(0,0,...)` is the divide-by-zero/overflow path."
+ },
+ {
+  "address": "0x00126198",
+  "name": "std_Int64Divide",
+  "signature": "long long std_Int64Divide(int numLo, int numHi, int denLo, int denHi)",
+  "params": {
+   "param_1": "numerator low word",
+   "param_2": "numerator high word",
+   "param_3": "denominator low word",
+   "param_4": "denominator high word"
+  },
+  "summary": "Signed 64/64-bit division wrapper: takes the absolute values of both operands (using the sign bits), calls the unsigned core 0x125E58 and negates the quotient when the operand signs differ.",
+  "confidence": 0.85,
+  "evidence": "`uVar2 = arg2 >> 1; uVar1 = arg4 >> 1; if (arg2 < 0) { arg1 = -arg1; arg2 = -(arg2 + carry); } [same for arg3/arg4]; result = func_00125E58(arg1,arg2,arg3,arg4); if (((uVar2 ^ uVar1) & 0x40000000) != 0) result = -result;` - exactly `__aeabi_ldivmod`; eleven callers include the time/clock conversions (Field_Clock_ConvertTimestamp) and 0x2CE7B8."
+ },
+ {
+  "address": "0x0014BB08",
+  "name": "Mem_AllocSubHeapA",
+  "signature": "void* Mem_AllocSubHeapA(unsigned int tag, unsigned int size)",
+  "params": {
+   "param_1": "tag/owner value passed to the allocator",
+   "param_2": "size in bytes"
+  },
+  "summary": "Allocates `size` bytes with 4-byte alignment from the subsystem heap whose object lives at 0x007C840C (passed as tag/owner in the extra allocator arguments).",
+  "confidence": 0.55,
+  "evidence": "`func_0011EDA8(g_0014bb34, arg2, 4, arg1, arg1, arg1);` - the literal at 0x14BB34 holds 0x007C840C, a .bss heap object; 0x11EDA8 is the game's heap allocator (size, align, bounds). No callers inside the decompiled code, so it is most likely reached through a native/function table entry. A byte search of build/code.bin for the entry addresses (with and without the Thumb bit) finds no pointer to this function anywhere in the image and the decompiled call graph has no caller, so it is an unreferenced allocator stub - most likely a per-subsystem 'operator new' that the linker kept but the game never calls."
+ },
+ {
+  "address": "0x0014FB34",
+  "name": "Mem_AllocSubHeapB",
+  "signature": "void* Mem_AllocSubHeapB(unsigned int tag, unsigned int size)",
+  "params": {
+   "param_1": "tag/owner value passed to the allocator",
+   "param_2": "size in bytes"
+  },
+  "summary": "Same allocator trampoline as 0x14BB08 but for the heap object at 0x007C83B4 (literal pool entry at 0x14FB60).",
+  "confidence": 0.55,
+  "evidence": "`func_0011EDA8(g_0014fb60, arg2, 4, arg1, arg1, arg1);`; the literal at 0x14FB60 is `b4 83 7c 00` = 0x007C83B4 (checked in build/code.bin and in asm/text/text_00140048.s). The four trampolines differ only in their heap object (0x7C840C, 0x7C83B4, 0x7C8464, 0x7C835C). A byte search of build/code.bin for the entry addresses (with and without the Thumb bit) finds no pointer to this function anywhere in the image and the decompiled call graph has no caller, so it is an unreferenced allocator stub - most likely a per-subsystem 'operator new' that the linker kept but the game never calls."
+ },
+ {
+  "address": "0x00152EA8",
+  "name": "maybe_Game_UndecodedCallback",
+  "signature": "void maybe_Game_UndecodedCallback(void)",
+  "params": {},
+  "summary": "The bytes at this address do not decode as a valid function in the Ghidra project (the decompiler reports 'bad instruction' and truncates immediately). It is either an ARM function reached through an interworking thunk, an inline literal pool, or a jump table; callers must be checked before treating it as code.",
+  "confidence": 0.1,
+  "evidence": "decomp/readable/functions/FUN_00152EA8_00152ea8.c contains only `halt_baddata()`; the entry is reached from func_006B95E4, which uses it as a callback target. Kept in the batch for coverage, but no behavioural naming is possible without disassembling the surrounding bytes by hand."
+ },
+ {
+  "address": "0x00156114",
+  "name": "Mem_AllocSubHeapC",
+  "signature": "void* Mem_AllocSubHeapC(unsigned int tag, unsigned int size)",
+  "params": {
+   "param_1": "tag/owner value passed to the allocator",
+   "param_2": "size in bytes"
+  },
+  "summary": "Allocator trampoline for the third subsystem heap (object at 0x007C8464).",
+  "confidence": 0.55,
+  "evidence": "`func_0011EDA8(g_00156140, arg2, 4, arg1, arg1, arg1);` with the literal at 0x156140 holding 0x007C8464 (per the literal pool dump). Same three-argument shape as 0x14BB08/0x14FB34. A byte search of build/code.bin for the entry addresses (with and without the Thumb bit) finds no pointer to this function anywhere in the image and the decompiled call graph has no caller, so it is an unreferenced allocator stub - most likely a per-subsystem 'operator new' that the linker kept but the game never calls."
+ },
+ {
+  "address": "0x00156FE4",
+  "name": "Mem_AllocSubHeapD",
+  "signature": "void* Mem_AllocSubHeapD(unsigned int tag, unsigned int size)",
+  "params": {
+   "param_1": "tag/owner value passed to the allocator",
+   "param_2": "size in bytes"
+  },
+  "summary": "Allocator trampoline for the fourth subsystem heap (object at 0x007C835C).",
+  "confidence": 0.5,
+  "evidence": "`func_0011EDA8(g_00157010, arg2, 4, arg1, arg1, arg1);` - the literal at 0x157010 holds 0x007C835C. Companion of 0x14BB08/0x14FB34/0x156114; used by code that allocates into one of the boot-time heaps created by InitHeaps (0x102EF8). A byte search of build/code.bin for the entry addresses (with and without the Thumb bit) finds no pointer to this function anywhere in the image and the decompiled call graph has no caller, so it is an unreferenced allocator stub - most likely a per-subsystem 'operator new' that the linker kept but the game never calls."
+ },
+ {
+  "address": "0x001580CC",
+  "name": "maybe_Fs_SeekStream",
+  "signature": "unsigned int maybe_Fs_SeekStream(Stream* stream, unsigned int posLo, unsigned int posHi, unsigned int limit)",
+  "params": {
+   "param_1": "stream (current +0x10/+0x14, new position +0x18/+0x1c, vtable object +0x4c)",
+   "param_2": "new position low word",
+   "param_3": "new position high word",
+   "param_4": "comparison value"
+  },
+  "summary": "Seeks a stream to a new 64-bit position when it is inside the allowed range, updates the current/end/hint positions, notifies the stream object through its vtable (+0x40) and clears the pending event.",
+  "confidence": 0.4,
+  "evidence": "`if ((int)(uVar2 - (arg4 + (self[4] < arg3))) ...) { lock(self+0x15); self[6] = arg3; self[7] = arg4; *self = arg3; self[1] = arg4; self[2] = arg3; self[3] = arg4; (**(code**)(*(int*)self[0x13] + 0x40))((int*)self[0x13], arg3, 0); unlock; software_interrupt(0x18); ... result = 1; }` - the 64-bit bounds check and the vtable seek call identify a stream seek; the 64-bit arithmetic is the same as 0x125E58's users."
+ },
+ {
+  "address": "0x00159F54",
+  "name": "maybe_Fs_ReadStreamWrapped",
+  "signature": "unsigned int maybe_Fs_ReadStreamWrapped(Stream* stream, unsigned int* bufferOut)",
+  "params": {
+   "param_1": "stream (read pos +0x10/+0x18, wrap point +0x1c, backing buffer +0x24)",
+   "param_2": "receives the buffer pointer"
+  },
+  "summary": "Returns a contiguous chunk of the stream's 0x80000-byte ring buffer, splitting (and copying) the data when the requested range wraps around the end of the ring.",
+  "confidence": 0.4,
+  "evidence": "`uVar3 = arg1[4] - arg1[6]; if (uVar3 > arg1[0xb]) uVar3 = arg1[0xb]; if (uVar3 <= (u32)(arg1[2] - *arg1)) { iVar2 = 0x80000; func_00126198(*arg1, arg1[1], 0x80000, 0); if (iVar2 + uVar3 < 0x80001) iVar2 = arg1[8] + iVar2; else { ... allocate/grow the buffer at arg1[9] ... func_00116A14(arg1[9], arg1[8]+iVar2, iVar1); func_00116A14(arg1[9]+iVar1, arg1[8], uVar3-iVar1); iVar2 = arg1[9]; } *arg2 = iVar2; return 1; }` - the 0x80000 ring size matches the streaming helpers 0x500ABC and 0x126198's use."
+ },
+ {
+  "address": "0x00163858",
+  "name": "maybe_Os_NotifyQueueEmpty",
+  "signature": "void maybe_Os_NotifyQueueEmpty(unsigned int queue, QueueNode* node)",
+  "params": {
+   "param_1": "queue/owner",
+   "param_2": "node whose count at +4 reached zero"
+  },
+  "summary": "Decrements the node's pending count and, when it drops to zero, invokes the queue's vtable notification at +8 (the 'queue became empty' callback).",
+  "confidence": 0.25,
+  "evidence": "`iVar1 = *(int*)(arg2+4) - 1; *(int*)(arg2+4) = iVar1; if (iVar1 == 0) (**(code**)(**(int**)(unaff_r6+4) + 8))();` - the `unaff_r6` register is not recovered, so the owner and the exact callback object are approximate; the shape is a refcount-to-zero notification."
+ },
+ {
+  "address": "0x00165CF4",
+  "name": "maybe_Gfx_ConvertTextureTiles",
+  "signature": "unsigned int maybe_Gfx_ConvertTextureTiles(TextureConvertJob* job)",
+  "params": {
+   "param_1": "job (source +0x0/+0xc, dest +0x4/+0x10, width +0x20, height +0x24, format +0x2c, flags +0x30, mode +0x34)"
+  },
+  "summary": "Converts a texture from tiled to linear layout (or back): validates the descriptor, picks one of three converters by format class (<0x101, <0x201, <=0x400) and runs it once per requested plane, using the 0x73-byte swizzle tables at 0x165F78 (two halves 0x25 apart).",
+  "confidence": 0.45,
+  "evidence": "Checks `0x24 < job[10]-0xc` and `0xc <= job[0xb] <= 0x30` (tile width/height ranges), indexes the tables `*(u8*)(job[10] + g_00165f78)` / `+0x25` and `*(u8*)(job[0xb] + g_00165f78 + 0x25)`, then dispatches `(*(code*)*g_00165f7c/0x165f80/0x165f84)(&local)` by format and calls the same three again for the second plane with `>>1` coordinates. The 4x4 tile swizzle tables and the three-format dispatch are the standard CTR texture conversion."
+ },
+ {
+  "address": "0x001B7340",
+  "name": "maybe_Battle_ComputeRewardShare",
+  "signature": "int maybe_Battle_ComputeRewardShare(BattleWork* work)",
+  "params": {
+   "param_1": "work object (tables at +0xab0/+0xa88, result fields +0x1028/+0x102c)"
+  },
+  "summary": "One-shot preparation of battle reward values: looks up two table entries, divides the resulting quantity by a third value (64-bit division at 0x126198), scales it by a 32-bit factor and stores the 64-bit result in the work object.",
+  "confidence": 0.25,
+  "evidence": "`if (!self->f_1054) { if (self->f_104c != 7 && self->f_db0) { func_004FFA70(&self->f_ab0,0/1); func_004FF974(...); v0 = func_004FF968(...); result = func_004FF4B4(...); v1 = func_004FF4B4(...); func_004FD794(&self->f_c4, self->f_3c, self->f_3c, g_001b750c, result, v1); ... lVar1 = (u64)g_001b7510 * result->f_10; uVar7 = func_00126198(lVar1, hi, result->f_c, 0); self->f_1028 = uVar7; uVar5 = func_004FF254(&self->f_ab0, result); ... } }` - the 64-bit divide and the multiply-accumulate into f_1028/f_102c look like a reward/EXP split, but the surrounding battle/party object is not named yet, so the subsystem tag is a guess."
+ },
+ {
+  "address": "0x001CEEA4",
+  "name": "Mem_AllocAlignedFromObject",
+  "signature": "void* Mem_AllocAlignedFromObject(MemOwner* owner, unsigned int size, unsigned int align)",
+  "params": {
+   "param_1": "object owning a heap at +4",
+   "param_2": "size in bytes",
+   "param_3": "alignment"
+  },
+  "summary": "Allocates `size` bytes with the caller-supplied alignment from the heap embedded in `owner+4`.",
+  "confidence": 0.6,
+  "evidence": "`func_0011EDA8(arg1 + 4, arg2, arg3, 0, 0, 0);` - 0x11EDA8 is the game heap allocator (heap, size, align, ...), and the heap pointer is the object's own +4 field instead of a global. No callers in the decompiled set, so it is likely a table/vtable entry."
+ },
+ {
+  "address": "0x001CFFCC",
+  "name": "maybe_Os_OpenConnection",
+  "signature": "unsigned int maybe_Os_OpenConnection(Connection* conn, unsigned int* errorOut, unsigned int* reasonOut)",
+  "params": {
+   "param_1": "connection (handle +0x18)",
+   "param_2": "receives the status code",
+   "param_3": "receives an extended error"
+  },
+  "summary": "Opens (or re-checks) a connection/session: creates the handle on first use, queries the connection state into a 512-byte buffer and validates it, closing the handle again when the state is stale.",
+  "confidence": 0.25,
+  "evidence": "`if (*(char*)(g_001d0124 + self) == 0) { if (func_0050166C()) return 1; if (self->f_18) { svc 0x23; self->f_18 = 0; } func_0012038C(&local, 0); self->f_18 = local; uVar2 = func_0050175C(auStack_228); *arg2 = uVar2; if (ok) { uVar2 = func_005016CC(auStack_228, &self->f_18); *arg2 = uVar2; if (ok) self->f_9c54 = 1; else if (*arg2 + g_001d012c == 0) *arg3 = g_001d0130; } } else { ... func_0050171C() / func_00501744(arg3) ... }` - the 512-byte state buffer and the handle create/close pair identify a network/Wi-Fi style session; the service itself is not identifiable without the 0x50xxxx callees."
+ },
+ {
+  "address": "0x001D6CEC",
+  "name": "maybe_Game_ReleaseStreamIfOpen",
+  "signature": "unsigned int maybe_Game_ReleaseStreamIfOpen(GameStream* stream)",
+  "params": {
+   "param_1": "stream wrapper (handle/pointer at +4)"
+  },
+  "summary": "Releases the stream held by the wrapper when one is open, then reports success.",
+  "confidence": 0.3,
+  "evidence": "`if (*(int*)(arg1 + 4) != 0) func_00500ABC(); return 0;` - 0x500ABC is the async read pump of the 0x80000-byte ring, so this is the matching release; no callers in the decompiled set."
+ },
+ {
+  "address": "0x001DBD58",
+  "name": "maybe_Fs_AsyncLoadWorker",
+  "signature": "unsigned int maybe_Fs_AsyncLoadWorker(FsLoadWorker* worker)",
+  "params": {
+   "param_1": "worker (state byte +4, flags +8, stream +0x10, callback object +0x44)"
+  },
+  "summary": "Worker for asynchronous loads: while the worker is enabled it waits on its lock, checks the pending request flags, drives the stream (read at 0x514CB4 / seek at 0x51482C) and calls the completion callback; a failed request aborts through 0x100B74.",
+  "confidence": 0.3,
+  "evidence": "`if (*(char*)(self+4) != 0) { do { lock(self+0x444); uVar4 = *(u32*)(self+8); if (uVar4) { iVar2 = func_005144E4(&self->f_44); if (iVar2 > 5) ... ; if (uVar4 & 1) { func_0051482C(&self->f_10, &local, 0, local_48) ... } else if (uVar4 & 2) { func_00514CB4(&self->f_10, &local, 0, &self->f_44) ... } ... if (self->f_c) func_00100B74(&self->f_44); ... } unlock; func_0011CC94(g_001dbff8, 0); } while (*(char*)(self+4) != 0); }` - the request flag bit 1 = seek, bit 2 = read, and the 0x80000/0x600 constants of the 0x514xxx helpers are the same stream ring as 0x500ABC."
+ },
+ {
+  "address": "0x001EC088",
+  "name": "Snd_PrepareBgmStream",
+  "signature": "unsigned char Snd_PrepareBgmStream(SndPlayer* player, unsigned int soundId, unsigned int bankId, unsigned int resourceKey)",
+  "params": {
+   "param_1": "BGM player (current id at +0x68, stream owner +0x38, four-slot mask +0x4c)",
+   "param_2": "sound id (< 0x9e)",
+   "param_3": "bank/stream id",
+   "param_4": "resource key"
+  },
+  "summary": "Prepares one BGM stream: if a different sound is already prepared it releases it, looks the sound up in the sound table, finds a free stream slot among four and starts the stream on it.",
+  "confidence": 0.55,
+  "evidence": "Called by PrepareBGM. Body: `if (self->f_68 == arg2) return 1; if (self->f_38) { func_0010B26C(self); self->f_68 = -1; self->f_38 = 0; } puVar3 = func_0011CB38(&key); puVar3 = func_0011BAC0(*puVar3, arg2);` (sound-table lookup), then `for (uVar6 = ~self->f_4c & 0xf; ...) { self->f_4c |= 1 << slot; cVar2 = func_00543130(stream, slotPtr, *puVar3, 0); if (!cVar2) { self->f_38 = slotPtr; self->f_68 = arg2; return 1; } }`. The 0x9e bound and the four-slot mask match the four channel slots released by 0x10B274."
+ },
+ {
+  "address": "0x001EC1D0",
+  "name": "Snd_RequestBgmPlay",
+  "signature": "unsigned char Snd_RequestBgmPlay(SndPlayer* player, unsigned int soundId, float volume)",
+  "params": {
+   "param_1": "BGM player (64-entry request ring at +0x1848)",
+   "param_2": "sound id (< 0x9e)",
+   "param_3": "volume (float, in s0)"
+  },
+  "summary": "Queues a BGM play request: records the sound id and volume in the 64-entry request ring, applies the volume to the current stream when one is already prepared, and kicks the player if the ring was empty.",
+  "confidence": 0.5,
+  "evidence": "`if (arg2 < 0x9e) { ... pcVar7 = (char*)(self + idx*8 + 0x1848); ... if (self->f_1a50 == 1) { f34 = self->f_34; ... func_00114CFC(iVar3, (int)(in_s0 * g_001ec334)); self->f_1a50 = 2; } *pcVar7 = 1; *(short*)(pcVar7+2) = (short)arg2; *(float*)(pcVar7+4) = in_s0; if (self->f_1a50) func_001EC088(self, arg2 & 0xff); if (bVar1) func_00105AFC(self); return 1; }` - the 0x42700000 (60.0f) volume scale is the same one used by SetBGMVolume's path. Called from fifteen UI/field sites (Ui_LoadingScreen_Create, PlayFieldBGM helpers)."
+ },
+ {
+  "address": "0x001EC55C",
+  "name": "Snd_StopPendingBgm",
+  "signature": "unsigned char Snd_StopPendingBgm(SndPlayer* player)",
+  "params": {
+   "param_1": "BGM player (pending stream +0x3c, pending id +0x60)"
+  },
+  "summary": "Stops the currently pending BGM stream: when one is prepared it releases the stream object, clears the slot and invalidates the pending id.",
+  "confidence": 0.5,
+  "evidence": "`if ((*(u8*)(self+4) & 1) == 0) return ...; uVar1 = self->f_60; if (uVar1 < 0x9e) { f3c = self->f_3c; if (f3c && *f3c) { func_0010B26C(self); self->f_3c = 0; self->f_60 = -1; return 1; } } return 0;` - called by StopPauseBGM (0x1F35EC) and 0x1F36B8, and 0x10B26C is the same stream-release used by 0x1EC088."
+ },
+ {
+  "address": "0x001ED8A4",
+  "name": "Snd_SetBgmVolume",
+  "signature": "unsigned char Snd_SetBgmVolume(SndPlayer* player, int fade, float volume, float fadeTime)",
+  "params": {
+   "param_1": "BGM player (left/right channel handles at +0x58/+0x64, saved volume +0x6c)",
+   "param_2": "non-zero = use the first channel",
+   "param_3": "target volume",
+   "param_4": "fade duration (in frames, scaled by 60.0f)"
+  },
+  "summary": "Sets the BGM volume, fading over the requested number of frames: applies the volume to both channel handles through 0x116DA4, remembering the last value so repeated calls are free.",
+  "confidence": 0.55,
+  "evidence": "Called by SetBGMVolume. `if (self->f_6c != volume) { self->f_6c = volume; func_00116DA4(self, self->f_58, self->f_34, (int)(fadeTime * g_001ed93c)); func_00116DA4(self, *(u32*)(self+100), self->f_40, 0); } return 1;` and the constant 0x42700000 = 60.0f, i.e. fade time converted from seconds to frames at 60 Hz."
+ },
+ {
+  "address": "0x001EE028",
+  "name": "Snd_ApplyPendingBgmVolume",
+  "signature": "unsigned int Snd_ApplyPendingBgmVolume(SndPlayer* player, float volume)",
+  "params": {
+   "param_1": "BGM player (state +0x1a50, channel handle +0x34)",
+   "param_2": "volume"
+  },
+  "summary": "Applies the pending volume to the current BGM channel when the player is in one of the active/paused states, clamps it at zero and records the 'volume applied' state.",
+  "confidence": 0.5,
+  "evidence": "`if (f1a50 is 1..5) { f34 = self->f_34; if (f34 && *f34) { iVar4 = (int)(in_s0 * g_001ee098); if (iVar4 < 0) iVar4 = 0; func_00114CFC(iVar3, iVar4); self->f_1a50 = 2; return 1; } } return 0;` - the state 1..5 set and the 60.0f scale are the same ones used by Snd_RequestBgmPlay and Snd_SetBgmVolume."
+ },
+ {
+  "address": "0x001EE4F8",
+  "name": "Snd_RequestBgmStop",
+  "signature": "unsigned char Snd_RequestBgmStop(SndPlayer* player, float fadeTime)",
+  "params": {
+   "param_1": "BGM player (channels +0x34/+0x44, ring +0x1848)",
+   "param_2": "fade duration (float, in s0)"
+  },
+  "summary": "Queues a BGM stop/fade request: starts the fade-out on the current channel (or the secondary one when in state 6), writes a type-3 entry into the player's request ring and kicks the player.",
+  "confidence": 0.5,
+  "evidence": "Selects a free ring entry (`for (iVar7 = f_1a48; iVar7 != f_1a4c; ...) if (*pcVar9 == 3)`) and then either fades `self->f_34` (states 1/3/4/5) or `self->f_44` (state 6) with `func_00114CFC(channel, (int)(fadeTime * 60.0f))`, writes `*pcVar9 = 3; *(u32*)(pcVar9+4) = in_s1;` and calls 0x105AFC. Callers 0x00284C40, 0x005D8E50, 0x005DF29C."
+ },
+ {
+  "address": "0x001EE728",
+  "name": "Snd_ReleaseBgmChannels",
+  "signature": "void Snd_ReleaseBgmChannels(SndPlayer* player, float fadeTime)",
+  "params": {
+   "param_1": "BGM player (secondary channel +0x44, stream +0x48)",
+   "param_2": "fade duration (float, in s0)"
+  },
+  "summary": "Clears every queued stop request, releases the secondary stream object and fades the secondary channel out, invalidating its id.",
+  "confidence": 0.5,
+  "evidence": "`for (iVar1 = self->f_1a48; iVar1 != self->f_1a4c; ...) if (*pcVar2 == 4) *pcVar2 = 0; if (self->f_48) { if (*self->f_48) func_0011AE20(); self->f_48 = 0; } if (self->f_44) { if (*self->f_44) func_00114CFC(iVar1, (int)(fadeTime * 60.0f)); self->f_44 = 0; self->f_5c = -1; }`"
+ },
+ {
+  "address": "0x001EE7F8",
+  "name": "maybe_Snd_SetAllBgmVoiceVolume",
+  "signature": "void maybe_Snd_SetAllBgmVoiceVolume(SndPlayer* player, int onlyAux, float volume)",
+  "params": {
+   "param_1": "BGM player (bitmap +0x80, entry array +0x7c, count +0x88)",
+   "param_2": "0 = main voices, non-zero = auxiliary voices only",
+   "param_3": "volume"
+  },
+  "summary": "Applies a volume to every active voice of the player: walks the bitmap of 0x14-byte voice entries, filters by the entry's type byte (+0x11) and calls the gain setter for each match.",
+  "confidence": 0.45,
+  "evidence": "`bVar10 = (arg2 == 0) ? 3 : 1; while (i < (f84 + 0x1f) >> 5 && iVar6 > 0) { for (uVar5 = *(u32*)(f80 + i*4); uVar5; uVar5 >>= 1) { if (uVar5 & 1) { piVar1 = (int*)(f7c + iVar7*0x14); if (((*(u8*)((int)piVar1 + 0x11) & bVar10) == 0) && (iVar2 = *piVar1)) func_00114CFC(iVar2, iVar11); } } }` - entry stride 0x14 with a type mask at +0x11."
+ },
+ {
+  "address": "0x001F336C",
+  "name": "maybe_Gfx_SetLayerStateA",
+  "signature": "void maybe_Gfx_SetLayerStateA(unsigned int layer, int enabled, int value)",
+  "params": {
+   "param_1": "layer 0..3",
+   "param_2": "non-zero = enable",
+   "param_3": "per-layer value"
+  },
+  "summary": "Tracks the enabled state of up to four rendering layers in the first of four independent tables: keeps a global count of enabled layers and stores a per-layer value; enabling an already-enabled layer or disabling a disabled one is a no-op.",
+  "confidence": 0.35,
+  "evidence": "`lock(g_001f33d8); if (arg1 < 4) { piVar2 = g_001f33dc + arg1*2 + 1; iVar3 = *piVar2; if (arg2 == 0) { if (iVar3 != 0) *g_001f33dc -= 1; } else if (iVar3 == 0) *g_001f33dc += 1; *piVar2 = arg2; piVar1[arg1*2+2] = arg3; } unlock;`. The three identical siblings 0x1F33E0/0x1F3454/0x1F34C8 use their own tables (0x1F3450/0x1F34C4/0x1F3538); all four are called together by 0x1B7514, maybe_Gfx_ResetRenderer, Ui_LoadIconTextures, 0x383EC8 and 0x5EB0E0, i.e. one state per render pass."
+ },
+ {
+  "address": "0x001F33E0",
+  "name": "maybe_Gfx_SetLayerStateB",
+  "signature": "void maybe_Gfx_SetLayerStateB(unsigned int layer, int enabled, int value)",
+  "params": {
+   "param_1": "layer 0..3",
+   "param_2": "non-zero = enable",
+   "param_3": "per-layer value"
+  },
+  "summary": "Second copy of the four-layer state tracker (table at 0x1F3450); identical logic to 0x1F336C.",
+  "confidence": 0.35,
+  "evidence": "Byte-identical body to 0x1F336C with the globals 0x1F344C/0x1F3450 instead of 0x1F33D8/0x1F33DC; same five callers (0x1B7514, maybe_Gfx_ResetRenderer, Ui_LoadIconTextures, 0x383EC8, 0x5EB0E0)."
+ },
+ {
+  "address": "0x001F3454",
+  "name": "maybe_Gfx_SetLayerStateC",
+  "signature": "void maybe_Gfx_SetLayerStateC(unsigned int layer, int enabled, int value)",
+  "params": {
+   "param_1": "layer 0..3",
+   "param_2": "non-zero = enable",
+   "param_3": "per-layer value"
+  },
+  "summary": "Third copy of the four-layer state tracker (table at 0x1F34C4).",
+  "confidence": 0.35,
+  "evidence": "Byte-identical body to 0x1F336C with the globals 0x1F34C0/0x1F34C4; same five callers as the other three copies."
+ },
+ {
+  "address": "0x001F34C8",
+  "name": "maybe_Gfx_SetLayerStateD",
+  "signature": "void maybe_Gfx_SetLayerStateD(unsigned int layer, int enabled, int value)",
+  "params": {
+   "param_1": "layer 0..3",
+   "param_2": "non-zero = enable",
+   "param_3": "per-layer value"
+  },
+  "summary": "Fourth copy of the four-layer state tracker (table at 0x1F3538).",
+  "confidence": 0.35,
+  "evidence": "Byte-identical body to 0x1F336C with the globals 0x1F3534/0x1F3538; same five callers."
+ },
+ {
+  "address": "0x001F35EC",
+  "name": "Snd_StopPausedBgm",
+  "signature": "void Snd_StopPausedBgm(void)",
+  "params": {},
+  "summary": "Stops the BGM stream that was paused for a menu/loading screen: fetches the active player through 0x6F1DF8 and calls Snd_StopPendingBgm on it.",
+  "confidence": 0.55,
+  "evidence": "`local_8[0] = in_r3; func_006F1DF8(local_8); func_001EC55C(local_8[0]);` and caller StopPauseBGM (plus LoadRespawnJump) fix the intent; 0x6F1DF8 is the global player/work accessor used by the other Snd_* functions."
+ },
+ {
+  "address": "0x001F3820",
+  "name": "Snd_CommitPendingBgmId",
+  "signature": "void Snd_CommitPendingBgmId(SndBgmRequest* request)",
+  "params": {
+   "param_1": "request (sound id +4, pending flag +6, other id +5)"
+  },
+  "summary": "Commits a queued BGM id: compares it with the current and pending stream ids, chooses between 'request play' and 'request stop', then clears the pending flags.",
+  "confidence": 0.5,
+  "evidence": "`func_006F1DF8(&player); if (*(char*)(arg1+6) == 0) { cur = (player[4] & 2) ? player->f_64 : player->f_58; if (cur == id) goto clear; if (player->f_60 == id) { func_001EE4F8(); goto clear; } } func_001EC1D0(player, id); clear: *(u8*)(arg1+6) = 0; if (*(char*)(arg1+5) != -1) *(u8*)(arg1+5) = 0xff;` - called by PlayFieldBGM and the field event paths."
+ },
+ {
+  "address": "0x001F3AC4",
+  "name": "Snd_ResolveSceneBgmId",
+  "signature": "void Snd_ResolveSceneBgmId(SndBgmRequest* request, unsigned short* sceneInfo)",
+  "params": {
+   "param_1": "request (resolved id written to +4)",
+   "param_2": "scene info (field id, area, time, weather bytes)"
+  },
+  "summary": "Resolves which BGM should play for a scene: looks the scene/field id up in the sound tables, walks the per-zone entries and their story/time-of-day conditions, and stores the first matching sound id (or 0 = silence) into the request.",
+  "confidence": 0.5,
+  "evidence": "Uses the sound tables through 0x0063CC1C/0x0063D9BC/0x0063F82C (id -> entry -> zone list), the story flags at Work+0x2A444/0x27508 via 0x006F20C0+0x0066B17C, and the per-entry condition bytes (+2/+3 = day/night, +4/+6 = condition ids). `*(char*)(arg1+4) = cVar11;` writes the result. Callers: RequestChangeFieldBGMEx, PlayFieldBGM, 0x1A0AE4, 0x1A1DBC, 0x1A342C and the battle paths."
+ },
+ {
+  "address": "0x001F3D38",
+  "name": "Snd_PlayBgmById",
+  "signature": "void Snd_PlayBgmById(SndBgmRequest* request, unsigned int soundId)",
+  "params": {
+   "param_1": "request (pending flag +6)",
+   "param_2": "sound id"
+  },
+  "summary": "Starts a BGM id directly: if it differs from the playing and pending ids it requests the play (or resumes the pending stream when it matches), then clears the pending flag.",
+  "confidence": 0.55,
+  "evidence": "`func_006F1DF8(&player); if (*(char*)(arg1+6) == 0) { cur = (player[4] & 2) ? player->f_64 : player->f_58; if (cur == arg2) return; if (player->f_60 == arg2) { func_001EE4F8(); goto clear; } } func_001EC1D0(player, arg2); clear: *(u8*)(arg1+6) = 0;` - called by PlayBGM (the Squirrel native) and 0x1634CC, which fixes it as the immediate-play path."
+ },
+ {
+  "address": "0x002CE7B8",
+  "name": "std_UInt64Mod256",
+  "signature": "unsigned int std_UInt64Mod256(unsigned int lo, unsigned int hi, unsigned int scale)",
+  "params": {
+   "param_1": "unused low word",
+   "param_2": "unused high word",
+   "param_3": "value"
+  },
+  "summary": "Returns `value & 0xff` after calling the 64-bit divide helper, i.e. the remainder of a division by 256 (the compiler emitted a division-by-power-of-two helper call and then kept only the low byte).",
+  "confidence": 0.5,
+  "evidence": "`func_00125E58(); return arg3 & 0xff;` - the arguments to the divide are lost (the call is made with whatever is in r0-r3), but the returned low byte is exactly the remainder modulo 256, the usual shape of a byte-extraction that the optimiser turned into a divide."
+ },
+ {
+  "address": "0x002FF628",
+  "name": "Mem_Alloc",
+  "signature": "void* Mem_Alloc(unsigned int size)",
+  "params": {
+   "param_1": "size in bytes"
+  },
+  "summary": "The game's general heap allocation entry: takes the global heap lock and allocates `size` bytes with 4-byte alignment from the heap object pointed to by 0x7B0078.",
+  "confidence": 0.75,
+  "evidence": "`iVar3 = *g_002ff688; lock(iVar3 + 0x58); result = func_0011EDA8(iVar3, arg1, 4, 0, 0, 0); unlock(iVar3 + 0x58); return result;`. 0x2FF628 is called by the CRT (0x1000BA, 0x100102) and every subsystem allocator that does not use its own heap, which is the signature of the global `malloc` replacement."
+ },
+ {
+  "address": "0x00316B4C",
+  "name": "maybe_Game_FlushAsyncOperation",
+  "signature": "void maybe_Game_FlushAsyncOperation(void)",
+  "params": {},
+  "summary": "Hands the value passed in r3 to the async-operation accessor (0x6F2224) and forwards the resulting object to 0x383C18, which flushes/queues it.",
+  "confidence": 0.2,
+  "evidence": "`auStack_8[0] = in_r3; puVar1 = func_006F2224(auStack_8); func_00383C18(*puVar1);` - the argument arrives in r3 (Ghidra did not recover the prototype) and 0x6F2224 is the global work accessor used by the field/scene layer; too little is visible to name the operation precisely."
+ }
+]

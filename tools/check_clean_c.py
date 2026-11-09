@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "dqxi-tools"
+LOCAL = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "opencode-tools"
 CANDIDATES = [
     shutil.which("arm-none-eabi-gcc"),
     str(LOCAL / "xpack-arm-none-eabi-gcc-15.2.1-1.1" / "bin" / "arm-none-eabi-gcc.exe"),

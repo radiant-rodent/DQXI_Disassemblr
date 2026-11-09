@@ -210,6 +210,10 @@ fn editor_rejects_non_finite_transforms() {
         rotation: [0.0, 0.0, 0.0],
         record_offset: "0x0".into(),
         field_offsets: Default::default(),
+        shape: 120,
+        deleted: false,
+        new_from: None,
+        props: Vec::new(),
     };
     assert!(crate::ui::panels::editor::validate_objects(&[obj.clone()]).is_err());
     obj.position[1] = 1.0;

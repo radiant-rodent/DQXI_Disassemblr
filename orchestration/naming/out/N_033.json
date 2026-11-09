@@ -1,0 +1,1845 @@
+[
+ {
+  "address": "0x00383B6C",
+  "name": "maybe_Ui_IconCache_BeginLoad",
+  "signature": "u32 maybe_Ui_IconCache_BeginLoad(UiIconLoader* self)",
+  "params": {
+   "self": "loader state object (flags at +0x68, state at +0x7C)"
+  },
+  "summary": "First stage of the asynchronous icon/catalogue load: it tests the flag word at +0x68 and either asks 0x0050D864 whether the external content is present, or records a failure state and clears the shared 5-word result block at 0x007C9980. Returns 0 while the load is still in progress and 1 once it has finished or failed, so the caller keeps polling it from its window update.",
+  "confidence": 0.42,
+  "evidence": "Called by maybe_Ui_Window_GotoState7 (0x00316D00) and maybe_Ui_ProfileScreen_ResetCursor (0x004664D8); the next function in the batch (0x00383C18) completes the same load with Ui_IconAtlas_Init/0x0050B824; it uses the 0x007C9980 result block that 0x00383C18 then consumes, and 0x0050D864 performs the 'content present' query against the cecd/nim client at 0x00504554."
+ },
+ {
+  "address": "0x00383C18",
+  "name": "maybe_Ui_IconCache_FinishLoad",
+  "signature": "u8 maybe_Ui_IconCache_FinishLoad(UiIconLoader* self)",
+  "params": {
+   "self": "loader state object"
+  },
+  "summary": "Second stage of the icon load: takes the global lock, opens a temporary icon-atlas object on the stack (0x8D8 bytes), asks 0x0050B824 to read the entry table, and on success clears the shared result block and the completion flags. Returns 1 when the table was read and 0 when it failed or the load had not been started.",
+  "confidence": 0.45,
+  "evidence": "Calls Ui_IconAtlas_Init (0x0050C11C), 0x0050B824 (read entry table), 0x0050C208 (atlas release) and 0x00509D40(0,1) to re-arm the service; the 2240-byte stack object is the same atlas class whose ctor/dtor are 0x0050C11C/0x0050C208; caller 0x004662D4 stores a screen argument at +0x29D first."
+ },
+ {
+  "address": "0x004662D4",
+  "name": "maybe_Ui_IconCache_LoadForPanel",
+  "signature": "void maybe_Ui_IconCache_LoadForPanel(ProfilePanel* self, u8 mode, u32 unused, u32 id)",
+  "params": {
+   "self": "profile/UI panel",
+   "mode": "stored to panel+0x29D",
+   "id": "lookup key for the singleton"
+  },
+  "summary": "Convenience entry used by the profile screen: stores a mode byte in the panel, resolves a global object from 0x006F2224 with the id, then runs the icon-cache finish stage on it. It is the one-call 'show the icons for this panel' path.",
+  "confidence": 0.4,
+  "evidence": "Tiny 0x1C-byte wrapper: only writes self+0x29D, builds a one-word descriptor for 0x006F2224 and calls 0x00383C18 (icon load stage 2); no other callers, so the UI batches that named the surrounding profile-screen code are the only context."
+ },
+ {
+  "address": "0x004FC230",
+  "name": "maybe_Gfx_MovieTrack_Create",
+  "signature": "u32 maybe_Gfx_MovieTrack_Create(u32 channel, u32 streamId, u32 frameCount)",
+  "params": {
+   "channel": "stored at slot+0x3C",
+   "streamId": "stored at slot+0x40",
+   "frameCount": "number of 0x18-byte frame entries to allocate"
+  },
+  "summary": "Allocates one of the 0x70-byte movie track slots (count at 0x007AE168, array at 0x007AE160) and a frameCount*0x18 frame-descriptor table for it, then opens the decoder channel with 0x0051649C and resets the per-track counters. Returns the slot index, 0 on allocation failure and 0xFFFFFFFF when no slot is free.",
+  "confidence": 0.42,
+  "evidence": "The manager block is the static struct at 0x007AE154 (array +0x0C, count +0x14, ring indices +0x18/+0x1C) and is shared by 0x004FC4CC, 0x004FC598, 0x004FC694, 0x004FC8A8, 0x004FCC28, 0x004FCEA0 and 0x004FD0C4; slots are 0x70 bytes with a handle at +0 and a 0x18-byte-per-frame table at +4; only caller is 0x004FDEE8 (movie buffer ctor)."
+ },
+ {
+  "address": "0x004FC4CC",
+  "name": "maybe_Gfx_MovieTrack_Pause",
+  "signature": "void maybe_Gfx_MovieTrack_Pause(u32 track)",
+  "params": {
+   "track": "track slot index"
+  },
+  "summary": "Pauses a movie track by sending decoder state 2 to its handle, under the player lock. Out-of-range indices are ignored.",
+  "confidence": 0.42,
+  "evidence": "Same guard (arg < count at 0x007AE168) and same lock/sleep dance as the neighbouring track functions; the payload is 0x0051A4AC(handle, 2), and 0x0051A4AC sets the decoder state byte and calls the channel stop helper 0x00518D04."
+ },
+ {
+  "address": "0x004FC598",
+  "name": "maybe_Gfx_MovieTrack_Resume",
+  "signature": "void maybe_Gfx_MovieTrack_Resume(u32 track)",
+  "params": {
+   "track": "track slot index"
+  },
+  "summary": "Resumes a paused movie track by sending decoder state 0 to its handle, under the player lock.",
+  "confidence": 0.42,
+  "evidence": "Identical to 0x004FC4CC except for the state argument (0 instead of 2) passed to 0x0051A4AC; both are unlocked public helpers over the 0x007AE154 track table."
+ },
+ {
+  "address": "0x004FC694",
+  "name": "maybe_Gfx_MovieTrack_QueueBuffer",
+  "signature": "u32 maybe_Gfx_MovieTrack_QueueBuffer(u32 track, void* data, u32 size)",
+  "params": {
+   "track": "track slot index",
+   "data": "buffer to hand to the decoder",
+   "size": "buffer size"
+  },
+  "summary": "Queues one input buffer for a movie track: it refuses when the track has no pending frame or when the 64-entry completion ring is full, flushes the buffer for DMA with 0x001122D0 and pushes {track,data,size} into the ring at 0x007C805C. Returns 1 when queued and 0 otherwise.",
+  "confidence": 0.45,
+  "evidence": "The ring is 0x40 * 0x0C entries indexed by '+0x18 & 0x3F' and drained by 0x004FC8A8; '+0x50' counts outstanding buffers and '+0x38' is the expected frame count written by 0x004FC230; the 'already busy' condition (f_18 - f_1C == 0x40) matches a fixed 64-entry queue."
+ },
+ {
+  "address": "0x004FC794",
+  "name": "maybe_Gfx_Movie_WaitForTracks",
+  "signature": "u32 maybe_Gfx_Movie_WaitForTracks(void)",
+  "params": {},
+  "summary": "Flushes the movie player until every track reports idle: it sets the 'draining' byte, calls the update pump 0x004FC8A8 while no track has work left and sleeps 5,000,000 ticks (0x004C4B40) between polls. This is vtable slot 2 of the movie player (base 0x00780C14).",
+  "confidence": 0.45,
+  "evidence": "Sits in vtable 0x00780C14 = [0x004FC7FC, 0x004FC7EC, 0x004FC794] (slot 2); the sleep constant 0x004C4B40 = 5,000,000 is the same 5-second poll used by 0x004FE6F4/0x004FE94C; the loop condition is the manager byte at 0x007AE155."
+ },
+ {
+  "address": "0x004FC808",
+  "name": "maybe_Gfx_MoviePlayer_AddRef",
+  "signature": "void maybe_Gfx_MoviePlayer_AddRef(GfxMovieContext* self)",
+  "params": {
+   "self": "movie context; the reference counter is global at 0x007AE164"
+  },
+  "summary": "Adds one reference to the global movie-context counter and, on the first reference, initialises the mixer/buffer object embedded at +0xAB0. Used by the window code before starting playback.",
+  "confidence": 0.4,
+  "evidence": "Increments the same global word (+0x10 of 0x007AE154) that 0x004FC85C decrements; it calls 0x004FE0A4 on self+0xC88 and 0x004FE88C on self+0xAB0 only while the 'initialised' byte at +0x1051 is clear, mirroring the teardown in 0x004FC85C."
+ },
+ {
+  "address": "0x004FC85C",
+  "name": "maybe_Gfx_MoviePlayer_ReleaseRef",
+  "signature": "void maybe_Gfx_MoviePlayer_ReleaseRef(GfxMovieContext* self)",
+  "params": {
+   "self": "movie context"
+  },
+  "summary": "Drops one reference to the movie context and, when it was initialised, shuts the embedded buffer object down. Exact counterpart of 0x004FC808.",
+  "confidence": 0.4,
+  "evidence": "Decrements the 0x007AE154 reference count and calls 0x004FE9D4/0x004FE304 in the opposite order to 0x004FC808's 0x004FE0A4/0x004FE88C pair; both functions test the same +0x1051 initialised byte."
+ },
+ {
+  "address": "0x004FC8A8",
+  "name": "maybe_Gfx_MovieTrack_UpdateAll",
+  "signature": "void maybe_Gfx_MovieTrack_UpdateAll(void)",
+  "params": {},
+  "summary": "The per-frame pump of the movie player: takes the player lock, feeds every due frame from the completion ring into the decoder (0x00518820/0x00518278/0x0051A210), advances the per-track timestamps and gives finished frames back. This is the function that turns queued buffers into decoded video/audio.",
+  "confidence": 0.47,
+  "evidence": "Drains the 0x40-entry ring at 0x007C805C, consumes 0x18-byte frame descriptors whose type byte +0x11 is 3, accumulates 64-bit sample/byte counters at +0x60, and calls the decoder API 0x00518010/0x0051A544/0x00518820/0x00518278/0x0051A210/0x0051867C; the only caller is the player's vtable-2 wait loop 0x004FC794."
+ },
+ {
+  "address": "0x004FCC28",
+  "name": "maybe_Gfx_Movie_ShutdownTracks",
+  "signature": "void maybe_Gfx_Movie_ShutdownTracks(void)",
+  "params": {},
+  "summary": "Tears the whole movie player down: stops every track, releases the deferred stopping event, frees each slot's handle and frame table, then frees the slot array itself and marks the manager closed. Called from the renderer reset path.",
+  "confidence": 0.47,
+  "evidence": "Called from maybe_Gfx_ResetRenderer (0x001B78F4) together with 0x004FE6F4; it calls 0x0051A4AC(handle,1) for all slots, uses software_interrupt(0x24)/0x23 (svcWaitSynchronization/svcCloseHandle), calls 0x00118100 on wait failure and frees the array through allocator slot +4; the '0xFFFFFFFF' written at 0x007AE160+8 is the closed marker."
+ },
+ {
+  "address": "0x004FCEA0",
+  "name": "maybe_Gfx_MovieTrack_Destroy",
+  "signature": "void maybe_Gfx_MovieTrack_Destroy(u32 track)",
+  "params": {
+   "track": "track slot index"
+  },
+  "summary": "Frees one movie track: closes its decoder handle (0x00519BE4) and gives the frame table back to the player allocator. Out-of-range indices are ignored.",
+  "confidence": 0.45,
+  "evidence": "Same index guard as the other track helpers over 0x007AE154; it is the per-slot body of the shutdown loop in 0x004FCC28 (identical 0x00519BE4 + allocator-free sequence)."
+ },
+ {
+  "address": "0x004FCF9C",
+  "name": "maybe_Gfx_MovieTrack_Start",
+  "signature": "void maybe_Gfx_MovieTrack_Start(u32 track)",
+  "params": {
+   "track": "track slot index"
+  },
+  "summary": "Starts a prepared movie track: records the track's own index/array in the slot, then configures and starts the decoder channel (priority/stream id, volume or plane pointers, 0x0051A1CC/0x0051A1EC/0x00519D24/0x00519F94/0x00518A1C) and un-pauses it.",
+  "confidence": 0.42,
+  "evidence": "The sequence of decoder calls is the mirror of the pause/resume helpers (0x0051A4AC last with 0); slot fields +0x68/+0x6C are filled with 'track*7' and the slot array pointer, which only this function does; no callers, so it is invoked through a table or a script binding."
+ },
+ {
+  "address": "0x004FD0C4",
+  "name": "maybe_Gfx_MovieTrack_ResetQueue",
+  "signature": "void maybe_Gfx_MovieTrack_ResetQueue(u32 track)",
+  "params": {
+   "track": "track slot index"
+  },
+  "summary": "Drops all pending work for one track: stops its decoder channel, removes its entries from the 64-entry completion ring by pointer comparison, and zeroes the frame counters and timestamps.",
+  "confidence": 0.45,
+  "evidence": "It scans the same 0x007C805C ring as 0x004FC8A8 but nulls every entry that points at the slot, then clears +0x44/+0x48/+0x4C/+0x50/+0x58..+0x64; called from nowhere in the readable tree (table/vtable dispatch)."
+ },
+ {
+  "address": "0x004FD3DC",
+  "name": "maybe_Gfx_Movie_WaitSurfacesIdle",
+  "signature": "u32 maybe_Gfx_Movie_WaitSurfacesIdle(GfxMovieSurfaces* self)",
+  "params": {
+   "self": "surface set (4 ring slots at +0x18, 0x14 bytes each)"
+  },
+  "summary": "Blocks until all four decoded-frame surfaces are free: it keeps pulling from 0x004FD4F4 and, when the ring is non-empty, counts how many slots are still in state 1 and waits on the surface event. Returns 1 when everything is idle and 0 when nothing was pending.",
+  "confidence": 0.4,
+  "evidence": "The ring mask is '&3' (4 surfaces) with 0x14-byte stride and state byte +0x18; the wait uses software_interrupt(0x24) (svcWaitSynchronization) plus 0x00118100 on error; callers 0x004FE6F4, 0x004FF3DC and 0x004FED58 are all movie teardown/flush paths."
+ },
+ {
+  "address": "0x004FD4F4",
+  "name": "maybe_Gfx_Movie_PresentFrame",
+  "signature": "u32 maybe_Gfx_Movie_PresentFrame(GfxMovieSurfaces* self)",
+  "params": {
+   "self": "surface set with 4 ring slots"
+  },
+  "summary": "Presents one decoded frame: it asks the current ring slot how many lines are ready (source vtable +0x10), optionally halves the height for interlaced/field output, fetches the plane pointers (+0x18) and hands the Y/U/V rectangles to the Y2R conversion command 0x00501300, then advances the ring. Returns 1 when a frame was presented.",
+  "confidence": 0.45,
+  "evidence": "The callee 0x00501300 programs the Y2R service opened at 0x005012BC ('y2r:u' string at 0x005012F4): width/height plus three plane addresses with half-size chroma, exactly a YUV420 frame; the '&3' ring index and state byte +0x18 match 0x004FD3DC; SLOT 0x006B8D34 is consulted for the odd 'field' case."
+ },
+ {
+  "address": "0x004FD794",
+  "name": "maybe_Gfx_MovieSurface_Ctor",
+  "signature": "u32 maybe_Gfx_MovieSurface_Ctor(GfxMovieSurfaces* self, u32 w, u32 h, u32 a, u32 b, u32 c)",
+  "params": {
+   "self": "surface set to build",
+   "w": "frame width",
+   "h": "frame height",
+   "a": "decoder param",
+   "b": "decoder param",
+   "c": "decoder param"
+  },
+  "summary": "Constructor of the decoded-frame surface set (vtable 0x00780C3C, slot 0): allocates the two/three plane groups (3 channels x 2 buffers, 0x318 and 0x108 bytes each), converts the size words to floats for the decoder and wires the per-channel release helpers. Called once when a movie starts.",
+  "confidence": 0.45,
+  "evidence": "Occupies slot 0 of vtable 0x00780C3C = [0x004FD794, maybe_Gfx_StreamSlot_ReleaseSurfaces, 0x004FDE1C, 0x004FDE04]; it calls 0x004FE3F8/0x004FDAB4/0x00500F18 and VectorUnsignedToFloat on the plane sizes; the only caller is the movie setup at 0x001B7340."
+ },
+ {
+  "address": "0x004FDEE8",
+  "name": "maybe_Gfx_MovieBuffer_Ctor",
+  "signature": "u32 maybe_Gfx_MovieBuffer_Ctor(GfxMovieBuffer* self, u32 fmt, u32 info, int frames, u32 streamId)",
+  "params": {
+   "self": "buffer object",
+   "fmt": "format descriptor (8 * stride * channels)",
+   "info": "decoder info block",
+   "frames": "frame count",
+   "streamId": "decoder stream id"
+  },
+  "summary": "Constructor of the decoded-frame buffer (vtable 0x00780C5C, slot 0): sizes the PCM/frame buffer as 8*stride*channels*frames*2 bytes, allocates it with the 32-byte alignment used by the DMA engine, and creates the matching track with 0x004FC230. Returns 1 on success.",
+  "confidence": 0.47,
+  "evidence": "Slot 0 of vtable 0x00780C5C = [0x004FDEE8, maybe_Gfx_StreamSlot_Destroy, 0x004FDFA4]; the size formula '*(info+8) * info->f_c * frames * 2' and the 0x20 alignment are what the later mixer/consumer 0x004FE6F4 expects; caller 0x001B7340 (movie setup) passes 1 and 0x10."
+ },
+ {
+  "address": "0x004FDFA4",
+  "name": "maybe_Gfx_MovieBuffer_Read",
+  "signature": "bool maybe_Gfx_MovieBuffer_Read(GfxMovieBuffer* self, void* dst, u32 size)",
+  "params": {
+   "self": "buffer object",
+   "dst": "destination address",
+   "size": "bytes wanted"
+  },
+  "summary": "Copies finished frames out of the ring into a caller buffer and registers the copy with the completion queue (0x004FC694), keeping the ring's read/write positions in sync. Returns true when 'size' bytes were available and copied.",
+  "confidence": 0.42,
+  "evidence": "Slot 2 of vtable 0x00780C5C; it converts the ring's tick count to bytes via 0x004FCBB0/0x00300E18, then memcpy 0x00116A14 + 0x004FC694(track, dst, size) and advances the 64-bit counters at +0x18/+0x1C; '+0x14' is the wrap size and '+0x20' the partial count."
+ },
+ {
+  "address": "0x004FE6F4",
+  "name": "maybe_Gfx_MovieBuffer_Consume",
+  "signature": "u32 maybe_Gfx_MovieBuffer_Consume(GfxMovieBuffer* self, u32 unused2, u32 unused3, int arg4)",
+  "params": {
+   "self": "buffer/decoder object with a mutex at +0x20",
+   "arg4": "initial value handed to the state machine"
+  },
+  "summary": "Feeds the decoder as many frames as it can take: it waits for the buffer thread state to settle (0x7/0x8), computes how many frames fit from the current free space, and calls the consume entry of each of the two streams that many times. Returns 1 when the object is in a usable state.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x004FD4E4/0x004FD3DC/0x004FFD00 plus maybe_Os_MutexLock(0x00111D50) and sleeps 500,000 ticks between polls; the two stream slots at +0x484 are consumed through vtable '+0x1C' exactly like 0x004FF3DC; called from 0x001B78F4 and 0x004FE174 (movie frame pump)."
+ },
+ {
+  "address": "0x004FE88C",
+  "name": "maybe_Gfx_MovieThread_Stop",
+  "signature": "u32 maybe_Gfx_MovieThread_Stop(GfxMovieThread* self, u32 ticks)",
+  "params": {
+   "self": "thread object at +0xAB0 of the movie context",
+   "ticks": "timestamp passed to the decoder"
+  },
+  "summary": "Moves the decoder thread object from 'running' (3) to 'stopping' (6), recording a tick stamp computed from the argument, and takes the object mutex. Returns 1 when the state allowed it and 0 otherwise.",
+  "confidence": 0.35,
+  "evidence": "State machine on self->f_c (3/6) shared with 0x004FE94C/0x004FE9D4; the timestamp arithmetic uses the 64-bit magic pair 0x20C49BA5E353F7CF (divide by 1000) at 0x004FE940..0x004FE948 and svc 0x28 (svcGetSystemTick); called from 0x004FC808, 0x004FE174 and 0x001B70E8."
+ },
+ {
+  "address": "0x004FE94C",
+  "name": "maybe_Gfx_MovieThread_Start",
+  "signature": "u32 maybe_Gfx_MovieThread_Start(GfxMovieThread* self)",
+  "params": {
+   "self": "thread object"
+  },
+  "summary": "Moves the decoder thread object to state 5 ('starting') and waits, with 500,000-tick sleeps, until the worker reports state 3 ('running'). Returns 1 when the worker came up and 0 if it reported an error or shutdown.",
+  "confidence": 0.35,
+  "evidence": "Same state machine and 0x0007A120 (500,000) sleep constant as 0x004FE6F4; it uses maybe_Os_MutexLock on self+0x20 and the 0x0011CC94 sleep wrapper; called from 0x004FE174 and the movie setup 0x001B7340 right after creating the buffer."
+ },
+ {
+  "address": "0x004FE9D4",
+  "name": "maybe_Gfx_MovieThread_Join",
+  "signature": "u32 maybe_Gfx_MovieThread_Join(GfxMovieThread* self)",
+  "params": {
+   "self": "thread object"
+  },
+  "summary": "Stops the decoder worker (6 -> 5) and once it reports idle (3) adds the elapsed ticks to the two 64-bit counters at +0x150 and +0x158. Returns 1 when the worker stopped cleanly.",
+  "confidence": 0.32,
+  "evidence": "Mostly the same 64-bit tick arithmetic as 0x004FE88C but accumulating deltas into four words (+0x150..+0x15C) and comparing against the stored stamp at +0x168; the state sequence 6->5->3 matches 0x004FE94C/0x004FE88C; caller 0x004FC85C releases the reference that 0x004FC808 took."
+ },
+ {
+  "address": "0x004FED80",
+  "name": "maybe_Gfx_MovieDecoder_FeedVideo",
+  "signature": "void maybe_Gfx_MovieDecoder_FeedVideo(GfxMovieDecoder* self)",
+  "params": {
+   "self": "decoder object (stream handles at +0x540)"
+  },
+  "summary": "Pulls finished video samples from the demuxer ring and pushes them through the frame decoder into the surface that was just allocated: for every available sample it asks for the address/length (0x006B99B8), feeds the decoder vtable (+0x10/+0x14) and then hands the decoded surface to the output sink (+8). Active only while the selected video stream is not stopped.",
+  "confidence": 0.4,
+  "evidence": "Uses 0x006B9920/0x006B9948/0x006B99B8/0x006B9BB4, the VPU/VRAM block API already named Gfx_Vram_*/Gfx_GpuCmd_* by another batch, and the sink vtable at self+0x1D8 slot +8; the stream-select index at +0x560 and the ring mask '% 0x10' (16 entries) are shared with 0x004FEEF4."
+ },
+ {
+  "address": "0x004FEEF4",
+  "name": "maybe_Gfx_MovieDecoder_FeedAudio",
+  "signature": "void maybe_Gfx_MovieDecoder_FeedAudio(GfxMovieDecoder* self)",
+  "params": {
+   "self": "decoder object"
+  },
+  "summary": "Second half of the demux pump: for each of the two audio/aux streams it takes finished samples, stores their timestamps in the per-stream 16-entry ring at +0x2A0/+0x4C0, forwards the payload to the stream decoder (+0x14) and releases the sample. Also flips the object into 'playing' when no data is left.",
+  "confidence": 0.38,
+  "evidence": "Two stream slots at +0x484/+0x488 with cmd 0x464/0x540, 16-entry stamp rings ('% 0x10') of 8 bytes, and the same 0x006B98B4/0x006B9948/0x006B99B8/0x006B9BB4 block API as 0x004FED80; state transitions use the shared 0..8 codes (4 = end of stream)."
+ },
+ {
+  "address": "0x004FF278",
+  "name": "maybe_Gfx_MovieDecoder_CheckEndOfStream",
+  "signature": "void maybe_Gfx_MovieDecoder_CheckEndOfStream(GfxMovieDecoder* self)",
+  "params": {
+   "self": "decoder object"
+  },
+  "summary": "Checks whether the movie reached its end: it asks the demuxer for the stream status and, for codes 0x11/0x10/0x03, either marks the object finished (state 8) or failed (state 7) depending on whether frames are still buffered.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x006B9BF4 (stream status) and compares against the literal codes 3/0x10/0x11 which are the demuxer's 'eof/error' values; it sets f_c = 7/8 and the flags 0x568 which 0x00500134 then interprets; caller 0x00500134 is the movie update entry."
+ },
+ {
+  "address": "0x004FF3DC",
+  "name": "maybe_Gfx_Movie_FlushStreams",
+  "signature": "void maybe_Gfx_Movie_FlushStreams(GfxMovieContext* self, u32 arg2, u32 arg3, int arg4)",
+  "params": {
+   "self": "movie context",
+   "arg4": "initial state value"
+  },
+  "summary": "Flushes the two active stream slots of the movie player: drops every consumed frame from the surface ring, rewinds the read positions (0x48C/0x494) and stops the surface set. Called when a stream is released or re-selected.",
+  "confidence": 0.4,
+  "evidence": "Same body shape as 0x004FE6F4 (0x004FD4E4 + 0x004FD3DC + 0x004FFD00 then a 2-iteration loop over +0x484), but without the thread state machine; called only from Gfx_StreamSlot_Release (0x00500564)."
+ },
+ {
+  "address": "0x004FF4D4",
+  "name": "maybe_Gfx_Movie_ReadTrackInfo",
+  "signature": "void maybe_Gfx_Movie_ReadTrackInfo(GfxMovieContext* self)",
+  "params": {
+   "self": "movie context (track tables at +0x2E0/+0x464/+0x540)"
+  },
+  "summary": "Reads the movie's track table from the demuxer and sorts each track into the video (up to 8), audio (8) and text (8) arrays, storing the track ids and flags; on overflow it fails the object with the matching 0x568 flag bit. Also sets the 'tracks valid' byte at +0x11.",
+  "confidence": 0.45,
+  "evidence": "Uses 0x006B9920 (track count) and 0x006B9A8C(i,&info) where info word 0 selects the three arrays at +0x304 (0x28-byte video desc), +0x4A0 (0x10-byte audio desc) and +0x2A0 (8-byte text desc); the 0x568 bits 1/4/0x10 and 2/8/0x20 are set on overflow exactly as 0x001B7340 expects."
+ },
+ {
+  "address": "0x004FF73C",
+  "name": "maybe_Gfx_Movie_ReadTextSamples",
+  "signature": "void maybe_Gfx_Movie_ReadTextSamples(GfxMovieContext* self)",
+  "params": {
+   "self": "movie context"
+  },
+  "summary": "Loads the subtitle/text samples: for every text track it fetches a sample, checks the 0x10-byte header (track id, size) against the video tracks, allocates a buffer with the context allocator and copies the payload; sets 'ready' (state 1) when done.",
+  "confidence": 0.42,
+  "evidence": "Text tracks live at +0x2E0 (8 max) and each sample is copied through func_00116A14 after a 0x10 header subtract; the same 0x006B99B8/0x006B9BB4 sample API as the video/audio feeders and the same 0x568 failure bits 0x80/0x100/0x200/0x400."
+ },
+ {
+  "address": "0x004FF974",
+  "name": "maybe_Gfx_Movie_SelectAudioTrack",
+  "signature": "u32 maybe_Gfx_Movie_SelectAudioTrack(GfxMovieContext* self, int track)",
+  "params": {
+   "self": "movie context",
+   "track": "audio track index or -1"
+  },
+  "summary": "Switches the audible audio track: it waits until no frame is being handed over, detaches the previous track from the audio device (vtable +0xC), attaches the new one (+8) and returns 1 on success. -1 mutes the movie.",
+  "confidence": 0.45,
+  "evidence": "Uses the audio track array at +0x4A0 and the device object at +0x1D0/+0x1D8 (slots +8/+0xC take the context, the channel and the track descriptor); the 500,000-tick wait on the in-flight byte +0x564 matches 0x004FED80's handshake; called from 0x001B7340."
+ },
+ {
+  "address": "0x004FFA70",
+  "name": "maybe_Gfx_Movie_SelectVideoTrack",
+  "signature": "u32 maybe_Gfx_Movie_SelectVideoTrack(GfxMovieContext* self, int slot, int track)",
+  "params": {
+   "self": "movie context",
+   "slot": "which of the two video surfaces (0/1)",
+   "track": "video track index or -1"
+  },
+  "summary": "Binds a video track to one of the two decode surfaces: detaches the previous track (vtable +4) and attaches the new track descriptor (vtable +0), keeping the index table at +0x304 in sync. Returns 1 on success, 0 for an out-of-range track.",
+  "confidence": 0.45,
+  "evidence": "Video track indices are compared against the count at +0x300 and the per-slot index lives at +0x484/+0x488; the vtable at +0x1D0 slot 0 takes (context, channel, video descriptor) and slot +4 releases it; called twice from 0x001B7340 (slot 0 and 1)."
+ },
+ {
+  "address": "0x004FFD00",
+  "name": "maybe_Gfx_Movie_AdvanceTimeline",
+  "signature": "void maybe_Gfx_Movie_AdvanceTimeline(GfxMovieContext* self)",
+  "params": {
+   "self": "movie context"
+  },
+  "summary": "Advances the playback timeline: it drains the surface ring through 0x004FD498/0x004FD2F4, moves both stream read cursors forward by one or two frames depending on the track's interlace flag and stores the timestamp of the next frame to present (+0x158/+0x15C). Waits 500,000 ticks while the needed frame is not decoded yet.",
+  "confidence": 0.4,
+  "evidence": "It is the only place that writes +0x158/+0x15C from the 8-byte stamp rings at +0x48/+0x4C, and it uses the '+0x32C < 2 ? 2 : 1' interlace rule also seen in 0x004FE6F4; called from 0x004FE6F4, 0x004FF3DC and 0x004FE174."
+ },
+ {
+  "address": "0x00500134",
+  "name": "maybe_Gfx_Movie_Update",
+  "signature": "void maybe_Gfx_Movie_Update(GfxMovieContext* self, u32 arg2, u32 arg3, int arg4)",
+  "params": {
+   "self": "movie context",
+   "arg2": "state argument",
+   "arg3": "state argument",
+   "arg4": "state argument"
+  },
+  "summary": "Main movie state machine, called once per frame: drives the 0..8 states (open -> prepare tracks -> play -> end), reads track info, feeds the demuxer and drops already-shown frames. This is where a movie is actually advanced.",
+  "confidence": 0.48,
+  "evidence": "It is the only caller of 0x004FF4D4/0x004FF73C/0x004FED80/0x004FEEF4/0x004FF278 and dispatches on self->f_c (values 0,1,2,5,6,7,8), using the 0x568 flag word and the 0x1C byte as 'tracks valid'; called from 0x004FD264 (movie object tick)."
+ },
+ {
+  "address": "0x00500ABC",
+  "name": "maybe_Gfx_Movie_ReadThread",
+  "signature": "void maybe_Gfx_Movie_ReadThread(GfxMovieReader* self)",
+  "params": {
+   "self": "reader thread state (double buffer at self[2], handle pair at +0x68)"
+  },
+  "summary": "Worker thread that streams the movie file: it waits on the two synchronisation handles, and whenever the 0x80000-byte double buffer has a free 0x40000 half it reads the next chunk through the file object's read slot (+0x24) and updates the 64-bit file position. Exits when the stop handle is signalled.",
+  "confidence": 0.45,
+  "evidence": "It waits with 0x005098E8 on two handles (self+0x68), guards the ring with the recursive lock at self+0x54, checks '0x80000 - (write - read)' and reads at most 0x40000 bytes through vtable +0x24, and calls 0x0011C814 on short reads; called from 0x001D6CEC."
+ },
+ {
+  "address": "0x005012BC",
+  "name": "Gfx_Y2r_Init",
+  "signature": "void Gfx_Y2r_Init(void)",
+  "params": {},
+  "summary": "Opens the 3DS 'y2r:u' colour-conversion service (YUV -> RGB) and stores the session handle at 0x007AE17C; also initialises the conversion registers. Called once before the first movie frame is converted.",
+  "confidence": 0.6,
+  "evidence": "The literal at 0x005012F4 is the service name string 'y2r:u' (verified at 0x0072D6F4 in the image) and it is passed to 0x001192C0 (srvGetServiceHandle) after 0x0011CCA0 (strlen); the handle lands in the global at 0x007AE17C which 0x00501300 then uses."
+ },
+ {
+  "address": "0x00501300",
+  "name": "Gfx_Y2r_Convert",
+  "signature": "void Gfx_Y2r_Convert(u32 srcY, u32 srcU, u32 srcV, u32 format, u32 a, u32 dstRgb, u32 dstRgb2, u32 dstRgb3, short w, short h, short stride, u32 fmtFlags, short outStride)",
+  "params": {
+   "srcY": "luma plane",
+   "srcU": "chroma U plane",
+   "srcV": "chroma V plane",
+   "format": "input YUV format",
+   "dstRgb": "RGB output plane",
+   "w": "width",
+   "h": "height",
+   "outStride": "output stride"
+  },
+  "summary": "Programs the Y2R unit for one frame - input Y/U/V plane addresses and sizes (U/V at half resolution), input format, output RGBA format, block/stride - and starts the conversion. This is the step that turns the decoded YUV movie frame into the RGB texture the renderer samples.",
+  "confidence": 0.6,
+  "evidence": "Every callee 0x0051A734/0x0051A750/0x0051A808/0x0051A8C0/0x0051A9B4/0x0051AB4C/0x0051AB84 writes a Y2R register block and the driver asserts on error via 0x00118100; the chroma planes are sized (w/2)*(h/2) while luma is w*h; only caller is the movie frame presenter 0x004FD4F4."
+ },
+ {
+  "address": "0x00501470",
+  "name": "Gfx_Y2r_IsDone",
+  "signature": "u32 Gfx_Y2r_IsDone(void)",
+  "params": {},
+  "summary": "Polls the Y2R unit's busy flag and returns 1 when the conversion has finished (it inverts the driver's 'still busy' result). Used by the frame presenter before reusing the output surface.",
+  "confidence": 0.55,
+  "evidence": "One call to 0x0051ABAC plus '^ 1'; 0x0051ABAC reads the Y2R status register used by 0x00501300's driver, and the only caller is the presenter 0x004FD4F4 which must not overwrite a surface still being converted."
+ },
+ {
+  "address": "0x00501554",
+  "name": "Svc_AcClient_OpenSession",
+  "signature": "int Svc_AcClient_OpenSession(void)",
+  "params": {},
+  "summary": "Reference-counted opener of the 'ac:u' service session: if the session is not open it allocates the service handle with 0x001192C0, bumps the reference counter and publishes the state. Returns 0 on success or the srv error code.",
+  "confidence": 0.55,
+  "evidence": "The literal at 0x00501660 is the service name 'ac:u' (verified at 0x0072FB84); it is combined with 0x0011CCA0 (strlen) and 0x001192C0 (srvGetServiceHandle), guarded by the recursive lock at 0x007E7900 and counted at 0x007AE908; caller-less in the readable tree because it is reached through 0x005016D8."
+ },
+ {
+  "address": "0x0050166C",
+  "name": "maybe_Svc_AcClient_CheckSession",
+  "signature": "int maybe_Svc_AcClient_CheckSession(void)",
+  "params": {},
+  "summary": "Cheap availability probe used by the UI: returns 0 when the 'ac:u' session is neither open nor usable, otherwise issues the small query 0x005019F4 and returns its first result byte.",
+  "confidence": 0.48,
+  "evidence": "Reads the same counter at 0x007AE908 as 0x00501554/0x00501774 and forwards the caller's r3 through 0x005019F4, which fills the IPC header 0x003E0042; called from 0x001CFFCC and maybe_Os_CriticalSectionTeardown (0x00501CFC)."
+ },
+ {
+  "address": "0x0050171C",
+  "name": "maybe_Svc_AcClient_GetAccountState",
+  "signature": "int maybe_Svc_AcClient_GetAccountState(void)",
+  "params": {},
+  "summary": "Returns the cached account state; when the value changed it refreshes it first (0x00501890) so the caller always sees a current answer.",
+  "confidence": 0.45,
+  "evidence": "Compares the result of command 0x00501B34 (IPC header 0x00050002) against the sentinel 0xE1209C46 and calls the close/reopen helper 0x00501890 on mismatch; called from 0x001CFFCC."
+ },
+ {
+  "address": "0x00501774",
+  "name": "Svc_AcClient_IsSessionOpen",
+  "signature": "bool Svc_AcClient_IsSessionOpen(void)",
+  "params": {},
+  "summary": "Takes the client lock and reports whether the 'ac:u' session handle at 0x007AF094 is non-zero.",
+  "confidence": 0.5,
+  "evidence": "Three-instruction predicate over the global 0x007AF094 that 0x00501554 fills with the srv session; used as the fast path in 0x00501554 and 0x0050166C."
+ },
+ {
+  "address": "0x005017B0",
+  "name": "maybe_Svc_AcClient_Query",
+  "signature": "int maybe_Svc_AcClient_Query(u32 cmd, u32* out, u32 arg3, u32 arg4)",
+  "params": {
+   "cmd": "command selector",
+   "out": "receives the result word",
+   "arg3": "command argument",
+   "arg4": "command argument"
+  },
+  "summary": "Generic command dispatcher for the 'ac:u' client: it sends the command via 0x00501B70, lazily opens the session (0x0010C694 + 0x0050F200) when needed, then forwards to one of the command senders (0x00501C8C/0x00501A98/0x00501A40). Returns the command result.",
+  "confidence": 0.48,
+  "evidence": "Its callees are exactly the IPC wrappers of this batch (0x00501B70/0x00501C8C/0x00501A98/0x00501A40) and it brackets them with the session counter at 0x007AE904 and the lock 0x007E7900; only caller is 0x005016D8."
+ },
+ {
+  "address": "0x00501890",
+  "name": "Svc_AcClient_CloseSession",
+  "signature": "int Svc_AcClient_CloseSession(void)",
+  "params": {},
+  "summary": "Closes the 'ac:u' session if it is open, dropping the service handle (0x0050F244) and clearing the open flag. Safe to call repeatedly.",
+  "confidence": 0.5,
+  "evidence": "Mirror of 0x00501554: tests the open byte at 0x007AE904, calls 0x0050F244 (handle release) and 0x0050F2C4 (refcount decrement), all under 0x007E7900; called by 0x0050171C, 0x00501D14 and the critical-section teardown."
+ },
+ {
+  "address": "0x005019F4",
+  "name": "Svc_AcClient_Cmd003E0042",
+  "signature": "int Svc_AcClient_Cmd003E0042(u32 arg1, u8* outByte)",
+  "params": {
+   "arg1": "request value",
+   "outByte": "receives the reply byte"
+  },
+  "summary": "Raw IPC request with header 0x003E0042 (command 0x3E) to the 'ac:u' session; writes the reply byte and returns the response word.",
+  "confidence": 0.5,
+  "evidence": "It fills the thread-local IPC buffer at +0x80 with the header literal 0x003E0042, stores the argument at +0x84, issues software_interrupt(0x32) (svcSendSyncRequest) and returns the reply in +0x84; only caller 0x0050166C."
+ },
+ {
+  "address": "0x00501A40",
+  "name": "maybe_Svc_AcClient_Cmd0004",
+  "signature": "u32 maybe_Svc_AcClient_Cmd0004(u32 arg1, u32 arg2)",
+  "params": {
+   "arg1": "request value",
+   "arg2": "request value"
+  },
+  "summary": "Raw IPC request with header 0x00040006 (command 0x04) to the 'ac:u' session, returning the response word.",
+  "confidence": 0.48,
+  "evidence": "Header literal 0x00040006 at 0x00501A8C plus the extra descriptor 0x00800402; the pattern (thread-local +0x80 header, +0x84.. payload, svc 0x32) is the same as the other 0x00501Axx command senders in this batch."
+ },
+ {
+  "address": "0x00501A98",
+  "name": "maybe_Svc_AcClient_Cmd0024",
+  "signature": "u32 maybe_Svc_AcClient_Cmd0024(u32 arg1, u32 arg2, u32 arg3)",
+  "params": {
+   "arg1": "buffer handle",
+   "arg2": "buffer address",
+   "arg3": "request value"
+  },
+  "summary": "Raw IPC request with header 0x00240042 (command 0x24) that also maps a caller buffer into the request, saving/restoring the thread-local descriptor pair at +0x180.",
+  "confidence": 0.48,
+  "evidence": "Header 0x00240042 at 0x00501AEC plus descriptor 0x00800002, and the explicit save/restore of the thread-local +0x180/+0x184 pair before svc 0x32 - the standard way to pass a buffer."
+ },
+ {
+  "address": "0x00501B34",
+  "name": "maybe_Svc_AcClient_Cmd0005",
+  "signature": "u32 maybe_Svc_AcClient_Cmd0005(void)",
+  "params": {},
+  "summary": "Raw IPC request with header 0x00050002 (command 0x05) to the 'ac:u' session, returning the response word; the account-state getter compares it with 0xE1209C46.",
+  "confidence": 0.48,
+  "evidence": "Header literal 0x00050002 at 0x00501B68; the caller 0x0050171C compares the result to the 'not initialised' sentinel 0xE1209C46."
+ },
+ {
+  "address": "0x00501B70",
+  "name": "maybe_Svc_AcClient_Cmd0027",
+  "signature": "int maybe_Svc_AcClient_Cmd0027(u32 arg1, u8* outByte)",
+  "params": {
+   "arg1": "request value",
+   "outByte": "receives the reply byte"
+  },
+  "summary": "Raw IPC request with header 0x00270002 (command 0x27) that returns one reply byte; used by the query dispatcher to test whether the service accepted a command.",
+  "confidence": 0.48,
+  "evidence": "Header 0x00270002 at 0x00501BB4 plus descriptor 0x00800402; only caller 0x005017B0 which branches on the returned byte."
+ },
+ {
+  "address": "0x00501BFC",
+  "name": "maybe_Svc_AcClient_Cmd0040",
+  "signature": "u32 maybe_Svc_AcClient_Cmd0040(u32 arg1)",
+  "params": {
+   "arg1": "request value"
+  },
+  "summary": "Raw IPC request with header 0x00400042 (command 0x40) to the 'ac:u' session, returning the response word.",
+  "confidence": 0.48,
+  "evidence": "Header literal 0x00400042 at 0x00501C34; called once from the session opener 0x00501554 right after the handle was obtained."
+ },
+ {
+  "address": "0x00501C8C",
+  "name": "maybe_Svc_AcClient_Cmd002D",
+  "signature": "u32 maybe_Svc_AcClient_Cmd002D(u32 buf1, u32 buf2, u8 a, u8 b)",
+  "params": {
+   "buf1": "input buffer handle",
+   "buf2": "input buffer address",
+   "a": "request value",
+   "b": "request value"
+  },
+  "summary": "Raw IPC request with header 0x002D0082 (command 0x2D) that maps two caller buffers; it saves/restores the thread-local descriptor pair around the request like 0x00501A98.",
+  "confidence": 0.48,
+  "evidence": "Header 0x002D0082 at 0x00501CF0 plus descriptor 0x00800002 and the +0x180/+0x184 save/restore; only caller 0x005017B0."
+ },
+ {
+  "address": "0x00501D14",
+  "name": "Svc_AcClient_ReleaseSession",
+  "signature": "int Svc_AcClient_ReleaseSession(void)",
+  "params": {},
+  "summary": "Drops one reference to the 'ac:u' session and closes it when the counter reaches zero; returns the total srv result it got while closing.",
+  "confidence": 0.5,
+  "evidence": "Decrements the same counter at 0x007AE908, calls 0x00501890 to close, and on the last reference issues software_interrupt(0x23) (svcCloseHandle) exactly like 0x00501890 does internally; no readable callers, so it is exported to the UI/title code."
+ },
+ {
+  "address": "0x00504050",
+  "name": "maybe_Svc_Ipc_CreateObjectFromBlock",
+  "signature": "int maybe_Svc_Ipc_CreateObjectFromBlock(u32* out, u32 arg2, u32 arg3, u32 arg4, u32 size, u32 a6, u32 a7, u32 a8, u32 a9, u32 a10)",
+  "params": {
+   "out": "receives the object handle",
+   "size": "payload size"
+  },
+  "summary": "Thin wrapper that builds an IPC object from a short argument block (0x00505058) and returns it with a -1 tag; used to open a sub-object of the unnamed service.",
+  "confidence": 0.4,
+  "evidence": "Forwards five stack words plus the caller's arguments to 0x00505058 (which allocates the object, sends the request and installs the vtable) and writes 0xFFFFFFFF next to the returned handle; only caller is 0x005024A8."
+ },
+ {
+  "address": "0x0050421C",
+  "name": "maybe_Svc_ObjectPool_InitA",
+  "signature": "void maybe_Svc_ObjectPool_InitA(u32 count, void* obj)",
+  "params": {
+   "count": "0x209 elements",
+   "obj": "object whose +0x10 gets the pool"
+  },
+  "summary": "Initialises one of the service's object pools (0x209 slots at 0x007E7AB8) and tells the kernel the pool layout with 0x0051A6FC.",
+  "confidence": 0.42,
+  "evidence": "Calls 0x00107770(pool, 0x209) - the generic free-list pool initialiser also used by 0x0011CAB4's owner - then 0x0051A6FC (svc command 0x90040); panic 0x0011ED40 on failure; the literal 0x209 is the slot count."
+ },
+ {
+  "address": "0x005042AC",
+  "name": "maybe_Svc_ObjectPool_InitB",
+  "signature": "void maybe_Svc_ObjectPool_InitB(u32 count, void* obj)",
+  "params": {
+   "count": "0x207 elements",
+   "obj": "object whose +0x10 gets the pool"
+  },
+  "summary": "Second object pool of the same service (0x207 slots at 0x007E7AA4), initialised the same way as 0x0050421C.",
+  "confidence": 0.42,
+  "evidence": "Identical body to 0x0050421C with pool 0x007E7AA4 and count 0x207; the two pools match the two vtable object families 0x00780EAC and 0x00780EF0."
+ },
+ {
+  "address": "0x00504334",
+  "name": "maybe_Svc_ObjectPool_DestroyB",
+  "signature": "void maybe_Svc_ObjectPool_DestroyB(void)",
+  "params": {},
+  "summary": "Releases pool B (0x207 slots) back to the kernel with 0x0051A6C4/0x0051A5E4.",
+  "confidence": 0.42,
+  "evidence": "Calls 0x0051A6C4 (svc command 0xA0040) then 0x0051A5E4 (free-list teardown) with the same count 0x207 that 0x005042AC initialised."
+ },
+ {
+  "address": "0x00504378",
+  "name": "maybe_Svc_Object_CreateWithPayload",
+  "signature": "int maybe_Svc_Object_CreateWithPayload(u32* outSize, u32 arg2, u32 arg3, u32 arg4, int count1, int count2, int withHeader)",
+  "params": {
+   "outSize": "receives the computed size",
+   "count1": "row count",
+   "count2": "column count",
+   "withHeader": "whether to query the header"
+  },
+  "summary": "Creates a service object for a payload of count1*0x20 + count2*0x18 bytes: it sends the create request (header 0x0004008C, command 0x04), takes an entry from the pool and installs vtable 0x00780EAC, optionally querying the 0x28-byte header first.",
+  "confidence": 0.4,
+  "evidence": "Uses the IPC sender 0x00111AA0 directly with header literal 0x0004008C and magic 0x2345678A, the pool allocator 0x0011CAB4 with global 0x007E7B58, vtable 0x00780EAC = [0x00505448, 0x00505510, ...], and the size formula 0x20/0x18; only caller 0x00504518."
+ },
+ {
+  "address": "0x00504518",
+  "name": "maybe_Svc_Object_CreateSimple",
+  "signature": "void maybe_Svc_Object_CreateSimple(u32* outSize, u32 arg2, u32 arg3, u32 count1, u32 count2, int withHeader)",
+  "params": {
+   "outSize": "receives the size",
+   "count1": "row count",
+   "count2": "column count"
+  },
+  "summary": "Simplified entry point of 0x00504378 with the third argument fixed to 0, used when no extra flag word is needed.",
+  "confidence": 0.38,
+  "evidence": "One-line forwarder: 'return func_00504378(arg1,arg2,0,arg3,...)'."
+ },
+ {
+  "address": "0x00504554",
+  "name": "maybe_Svc_FetchContentInfo",
+  "signature": "int maybe_Svc_FetchContentInfo(u32** out)",
+  "params": {
+   "out": "receives the info block"
+  },
+  "summary": "Queries the unnamed service for a small info record: it sends command 0x0C with a 3-word descriptor, and when the reply carries data it creates a second object (command 0x0C, tag 'icon') and asks it for the 0x??-byte record. Used by the icon cache and the content-presence check 0x0050D864.",
+  "confidence": 0.38,
+  "evidence": "Called from 0x0050D864 and 0x00658858 (cecd/clock cluster); it uses 0x00505920 (header 0x080C00C2), 0x0055C8 (creates the vtable-0x00780EF0 object), the 4CC literal 0x6E6F6369 = 'icon' and the 2-word reply loop with 0x00655710/0x00505980."
+ },
+ {
+  "address": "0x005047E0",
+  "name": "maybe_Svc_Object_Write",
+  "signature": "int maybe_Svc_Object_Write(SvcObject* obj, u32 arg2, int offset, u32 dst, u32 src, u32 size)",
+  "params": {
+   "obj": "object with an optional backing file",
+   "offset": "write offset",
+   "dst": "destination address",
+   "src": "source data",
+   "size": "byte count"
+  },
+  "summary": "Writes size bytes to the object: when the object has a file backend it picks the backend slot from the current error/size class and calls its write entry, otherwise it is a plain memcpy into the mapped buffer at *obj + offset.",
+  "confidence": 0.4,
+  "evidence": "It buckets the backend index from a 64-bit delta (-8..8 -> slots 0..4) and calls vtable slot 0 with (obj, stack, obj[3]+offset, 0, src, size); the fallback is func_00116A14 (memcpy); callers 0x007116A0/0x0071180C/0x007118CC are in the text/font module."
+ },
+ {
+  "address": "0x005049DC",
+  "name": "maybe_Svc_Object_Release",
+  "signature": "void maybe_Svc_Object_Release(SvcObject* obj)",
+  "params": {
+   "obj": "object to release"
+  },
+  "summary": "Releases a service object: calls its close entry (vtable +0x34) and returns the object to the free list embedded in its owner, decrementing the owner's live counter.",
+  "confidence": 0.45,
+  "evidence": "The 'obj = owner->f_dc; owner->f_dc = obj; owner->f_e4--' push is the free-list pattern of 0x0011CAB4; it is also slot 0 of vtable 0x00780E48 = [0x005049DC, 0x00504ADC]."
+ },
+ {
+  "address": "0x00504AE0",
+  "name": "maybe_Svc_Content_OpenRecord",
+  "signature": "u32 maybe_Svc_Content_OpenRecord(SvcContent* self, u32* out, int* typeAndIndex)",
+  "params": {
+   "self": "content object with three sub-contexts at +0x20/+0x48",
+   "out": "receives the record object",
+   "typeAndIndex": "record type + index"
+  },
+  "summary": "Opens one record of the service's content store and builds the 0x30-byte accessor object for it: it asks context +0x20 for the record's name/size, folds the name into a 64-bit checksum (rotate-xor-5 over UTF-16 words seeded with 0x123456789), verifies it through context +0x48 and fills the object with the total/offset fields. Returns 0 on success.",
+  "confidence": 0.4,
+  "evidence": "The rotate-xor-5 over u16 words with seed 0x075BCD15 (123456789) and the '0x11/0x6F' error-code test are all in this function; the 0x30-byte object is allocated from the pool at 0x007E7B58 with magic 0xD8604659; callers are 0x00504554's family and 0x0050D864's content check."
+ },
+ {
+  "address": "0x00505058",
+  "name": "maybe_Svc_Object_CreateFromDescriptor",
+  "signature": "u32 maybe_Svc_Object_CreateFromDescriptor(u32* out, u32* desc, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7)",
+  "params": {
+   "out": "receives the new object",
+   "desc": "descriptor block",
+   "a3": "size",
+   "a4": "flags"
+  },
+  "summary": "Creates a service object from a descriptor block: allocates the 0x130-byte handle object, sends the create request (header 0x2345678A descriptor pair) and then runs the object's open entry (vtable +0x18) so the record is readable. Returns 0 on success.",
+  "confidence": 0.4,
+  "evidence": "It calls 0x001118D4 (allocate 0x130), 0x001119BC, 0x00111AA0 with magic 0x2345678A, 0x0011CAB4 for the pool object with vtable 0x00780EAC (via global 0x00505210) and 0x001114F4; the same magic appears in 0x00504378, which is the paired creator."
+ },
+ {
+  "address": "0x005052B8",
+  "name": "maybe_Svc_Object_Cmd3",
+  "signature": "void maybe_Svc_Object_Cmd3(SvcObject* obj, u32* desc)",
+  "params": {
+   "obj": "object",
+   "desc": "descriptor with size at +8"
+  },
+  "summary": "Command 3 (header 0x08040142) of the object protocol: passes the 3-word descriptor to the service when its size is below 0x201.",
+  "confidence": 0.45,
+  "evidence": "It is slot 2 of vtable 0x00780EF0 = [0x005055C8, 0, 0x005052B8, 0]; the payload is 0x005058D0 whose header literal is 0x08040142, and the 0x201 limit matches the other commands of this batch."
+ },
+ {
+  "address": "0x00505314",
+  "name": "maybe_Svc_Object_ReleaseRef",
+  "signature": "void maybe_Svc_Object_ReleaseRef(SvcObject* obj)",
+  "params": {
+   "obj": "object"
+  },
+  "summary": "Closes an object (vtable +0x34) and pushes it back onto the global free list at 0x007E7B48, decrementing the live counter at +0x2C.",
+  "confidence": 0.45,
+  "evidence": "Slot 1 of vtable 0x00780F1C = [0x00505364, 0x00505314, 0x00505688]; the free-list push at 0x007E7B48+0x24 with lock at +0x30 is identical in shape to 0x005053D8/0x0050572C/0x005049DC."
+ },
+ {
+  "address": "0x00505364",
+  "name": "maybe_Svc_Object_Cmd1",
+  "signature": "void maybe_Svc_Object_Cmd1(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "request value",
+   "arg4": "request value"
+  },
+  "summary": "Command 1 (header 0x08120080) of the object protocol; sends the current session and two arguments to the service.",
+  "confidence": 0.45,
+  "evidence": "Slot 0 of vtable 0x00780F1C; it forwards to 0x005059B0 whose header literal is 0x08120080, using the object's session at +8 and tag at +0xC."
+ },
+ {
+  "address": "0x00505398",
+  "name": "maybe_Svc_Object_Cmd5",
+  "signature": "void maybe_Svc_Object_Cmd5(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "request value"
+  },
+  "summary": "Command 5 (header 0x080C0000) of the object protocol; a no-payload request.",
+  "confidence": 0.45,
+  "evidence": "One-line forwarder to 0x00505BC4, whose header literal is 0x080C0000."
+ },
+ {
+  "address": "0x005053B8",
+  "name": "maybe_Svc_Object_Cmd6",
+  "signature": "void maybe_Svc_Object_Cmd6(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "request value"
+  },
+  "summary": "Command 6 (header 0x080A0040) of the object protocol; a single-argument request.",
+  "confidence": 0.45,
+  "evidence": "Slot 1 of vtable 0x00780EC0 = [0x00505488, 0x005053B8]; forwards to 0x00505B94 (header 0x080A0040)."
+ },
+ {
+  "address": "0x005053D8",
+  "name": "maybe_Svc_Object_Destroy",
+  "signature": "void maybe_Svc_Object_Destroy(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "unused"
+  },
+  "summary": "Destructor of the small service object: optionally closes the underlying handle (0x00505C54), calls vtable +0x34 and gives the object back to the free list at 0x007E7B58.",
+  "confidence": 0.45,
+  "evidence": "Slot 0 of vtable 0x00780EDC = [0x005053D8, 0x005055A0]; the free-list push over 0x007E7B58+0x24 under lock +0x30 is the same as 0x005049DC/0x00505314."
+ },
+ {
+  "address": "0x00505448",
+  "name": "maybe_Svc_Object_Cmd4",
+  "signature": "void maybe_Svc_Object_Cmd4(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4, u32 arg5, u32 arg6)",
+  "params": {
+   "obj": "object",
+   "arg2": "request value",
+   "arg3": "request value",
+   "arg5": "request value"
+  },
+  "summary": "Command 4 (header 0x080200C2) of the object protocol, with a buffer descriptor; slot 0 of the object vtable 0x00780EAC.",
+  "confidence": 0.45,
+  "evidence": "Forwards to 0x00505BFC whose header literal is 0x080200C2; it is the first slot of vtable 0x00780EAC, the class that 0x00504378/0x00505058 instantiate."
+ },
+ {
+  "address": "0x00505494",
+  "name": "maybe_Svc_Object_Cmd7",
+  "signature": "void maybe_Svc_Object_Cmd7(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "flag byte",
+   "arg3": "flag byte",
+   "arg4": "flag byte"
+  },
+  "summary": "Command 7 (header 0x08030102) of the object protocol; packs three flag bytes into one word and sends it.",
+  "confidence": 0.45,
+  "evidence": "It builds '(arg2|arg4)&0xff | (arg3&0xff)<<16' and calls 0x00505C80, whose header literal is 0x08030102."
+ },
+ {
+  "address": "0x00505510",
+  "name": "maybe_Svc_Object_Cmd8",
+  "signature": "void maybe_Svc_Object_Cmd8(SvcObject* obj, u32 arg2, u32 arg3, u32 arg4, u32 arg5, u32 arg6, u32 arg7)",
+  "params": {
+   "obj": "object",
+   "arg2": "request value",
+   "arg5": "request value",
+   "arg7": "flag byte"
+  },
+  "summary": "Command 8 (header 0x08030102) with two payload words; slot 1 of the object vtable 0x00780EAC.",
+  "confidence": 0.45,
+  "evidence": "Forwards six arguments plus the packed 'arg7&0xff | <<16' word to 0x00505C80, the same sender as 0x00505494."
+ },
+ {
+  "address": "0x005055C8",
+  "name": "maybe_Svc_Object_CreateWithBuffer",
+  "signature": "int maybe_Svc_Object_CreateWithBuffer(u32* obj, u32* out, u32* desc, u32 flags)",
+  "params": {
+   "obj": "source object/session",
+   "out": "receives the new object",
+   "desc": "descriptor with size at +8",
+   "flags": "request flag"
+  },
+  "summary": "Creates a second-generation object that wraps a buffer descriptor: sends command 0x02 (header 0x080201C2) with the descriptor's address/size, takes an object from the pool and installs vtable 0x00780EAC. Returns 0 on success.",
+  "confidence": 0.45,
+  "evidence": "Slot 0 of vtable 0x00780EF0 = [0x005055C8, 0, 0x005052B8, 0]; it calls 0x00505B20 (header 0x080201C2) and 0x0011CAB4 with the pool at 0x007E7B58; the 0x201 size limit is shared with 0x005052B8."
+ },
+ {
+  "address": "0x00505688",
+  "name": "maybe_Svc_Object_Cmd9",
+  "signature": "u32* maybe_Svc_Object_Cmd9(u32* obj, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "obj": "object",
+   "arg2": "unused",
+   "arg3": "unused"
+  },
+  "summary": "Reset/finalise entry of the object protocol: installs vtable 0x00780EF0, releases the buffer it holds (0x00505980) and clears the session handle. Slot 2 of vtable 0x00780F1C.",
+  "confidence": 0.42,
+  "evidence": "Writes the literal vtable 0x00780EF0 into *arg1, calls 0x00505980 (header 0x080E0080) with the stored buffer, then zeroes arg1[1..3]; part of the 0x00780F1C vtable."
+ },
+ {
+  "address": "0x005056E0",
+  "name": "maybe_Svc_Object_CreateBare",
+  "signature": "u32 maybe_Svc_Object_CreateBare(u32 arg1, u32* out, u32 handle)",
+  "params": {
+   "arg1": "unused",
+   "out": "receives the object",
+   "handle": "session handle to store"
+  },
+  "summary": "Allocates a bare object of the 0x00780EAC class from the pool and stores the given handle, without sending any command. Returns 0 or the 'out of memory' sentinel 0xD8604659.",
+  "confidence": 0.45,
+  "evidence": "Only calls 0x0011CAB4 with the pool at 0x007E7B58, then writes vtable 0x00780EAC and the handle; the 0xD8604659 sentinel is the same one used by 0x00504378/0x005055C8."
+ },
+ {
+  "address": "0x0050572C",
+  "name": "maybe_Svc_Object_ReleaseRefB",
+  "signature": "void maybe_Svc_Object_ReleaseRefB(SvcObject* obj)",
+  "params": {
+   "obj": "object"
+  },
+  "summary": "Closes an object (vtable +0x34) and returns it to the free list kept in the object at 0x007AEA48, decrementing its live counter. Slot 1 of vtable 0x00780F60.",
+  "confidence": 0.45,
+  "evidence": "The free-list push 'owner->f_24 = obj; owner->f_2c--' under the lock at owner+0x30 matches 0x005049DC/0x00505314 but uses the global owner 0x007AEA48; part of vtable 0x00780F60 = [0x005058C4, 0x0050572C, 0x00505780]."
+ },
+ {
+  "address": "0x00505804",
+  "name": "maybe_Svc_CreateContentHandle",
+  "signature": "int maybe_Svc_CreateContentHandle(u32* out, u32 count)",
+  "params": {
+   "out": "receives the handle object",
+   "count": "number of descriptor words"
+  },
+  "summary": "Creates a content handle for the service from 'count' descriptor words: sends command 0x0C (header 0x080C00C2), takes a 0x00780EF0-class object from the pool and stores the two returned values in it. Returns 0 on success.",
+  "confidence": 0.42,
+  "evidence": "Calls 0x00505920 (header 0x080C00C2), allocates through 0x0011CAB4 with the pool at 0x007E7B1C and vtable 0x00780EF0, and falls back to 0x00505980 (header 0x080E0080) on error; only caller 0x00503E08."
+ },
+ {
+  "address": "0x005058D0",
+  "name": "Svc_Ipc_Send08040142",
+  "signature": "u32 Svc_Ipc_Send08040142(u32* session, u32 a2, u32 a3, u32 a4, u32 a5, u32 a6, int size)",
+  "params": {
+   "session": "session handle word",
+   "a2": "request value",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "request value",
+   "a6": "buffer address",
+   "size": "buffer size"
+  },
+  "summary": "Hand-written IPC request with header 0x08040142 (command 0x04, buffer descriptor) to the unnamed service; returns the response word.",
+  "confidence": 0.5,
+  "evidence": "The header literal 0x08040142 is written to the thread-local IPC block at +0x80 and the call ends in software_interrupt(0x32) (svcSendSyncRequest); the same shape as the other 0x080xxxxx senders in this batch."
+ },
+ {
+  "address": "0x00505920",
+  "name": "Svc_Ipc_Send080C00C2",
+  "signature": "int Svc_Ipc_Send080C00C2(int* session, u32* out, u32 a2, u32 a3, u32 a4, int size)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives two reply words",
+   "a2": "request value",
+   "a4": "buffer address",
+   "size": "buffer size"
+  },
+  "summary": "IPC request with header 0x080C00C2 (command 0x0C) that returns two 32-bit values; used to create and to query content handles.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080C00C2 at 0x0050597C plus the 'size<<14 | 2' descriptor; callers are 0x00504554 and 0x00505804."
+ },
+ {
+  "address": "0x00505980",
+  "name": "Svc_Ipc_Send080E0080",
+  "signature": "u32 Svc_Ipc_Send080E0080(u32* session, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "session": "session handle word",
+   "a3": "request value",
+   "a4": "request value"
+  },
+  "summary": "IPC request with header 0x080E0080 (command 0x0E), a two-word payload; used as the 'close/release' call of the content handle.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080E0080 at 0x005059AC; called from 0x00504554, 0x00505688 and 0x00505804 on error paths."
+ },
+ {
+  "address": "0x005059B0",
+  "name": "Svc_Ipc_Send08120080",
+  "signature": "int Svc_Ipc_Send08120080(int* session, u32* out, u32 a3, u32 a4)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives two reply words",
+   "a3": "request value",
+   "a4": "request value"
+  },
+  "summary": "IPC request with header 0x08120080 (command 0x12) returning two words; the 'bind/reference' call of the object protocol.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x08120080 at 0x005059E8; sole caller 0x00505364."
+ },
+ {
+  "address": "0x00505B20",
+  "name": "Svc_Ipc_Send080201C2",
+  "signature": "int Svc_Ipc_Send080201C2(int* session, u32* out, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7, u32 a8, int a9, u32 a10, u32 a11)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives the reply word",
+   "a5": "session/tag value",
+   "a9": "buffer size",
+   "a10": "buffer address"
+  },
+  "summary": "Largest IPC request of this protocol (header 0x080201C2, command 0x02): sends eight words plus a mapped buffer and returns one reply word. Used to create the buffer-backed object.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080201C2 at 0x00505B90 with descriptors 'a9<<14|2' and 'a9'; sole caller 0x005055C8."
+ },
+ {
+  "address": "0x00505B94",
+  "name": "Svc_Ipc_Send080A0040",
+  "signature": "u32 Svc_Ipc_Send080A0040(u32* session, u32 a2)",
+  "params": {
+   "session": "session handle word",
+   "a2": "request value"
+  },
+  "summary": "IPC request with header 0x080A0040 (command 0x0A), one payload word.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080A0040 at 0x00505BC0; sole caller 0x005053B8."
+ },
+ {
+  "address": "0x00505BC4",
+  "name": "Svc_Ipc_Send080C0000",
+  "signature": "int Svc_Ipc_Send080C0000(int* session, u32* out)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives the reply word"
+  },
+  "summary": "IPC request with header 0x080C0000 (command 0x0C) with no payload, returning one word.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080C0000 at 0x00505BF8; sole caller 0x00505398."
+ },
+ {
+  "address": "0x00505BFC",
+  "name": "Svc_Ipc_Send080200C2",
+  "signature": "int Svc_Ipc_Send080200C2(int* session, u32* out, u32 a3, u32 a4, u32 a5, int size)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives the reply word",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "buffer address",
+   "size": "buffer size"
+  },
+  "summary": "IPC request with header 0x080200C2 (command 0x02) carrying a buffer; the 'write/append' call of the object protocol.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x080200C2 at 0x00505C50 and the descriptor 'size<<4 | 0xC'; sole caller 0x00505448."
+ },
+ {
+  "address": "0x00505C54",
+  "name": "Svc_Ipc_Send08080000",
+  "signature": "u32 Svc_Ipc_Send08080000(u32* session)",
+  "params": {
+   "session": "session handle word"
+  },
+  "summary": "IPC request with header 0x08080000 (command 0x08), no payload; the 'delete/close' call used by the small object destructor.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x08080000 at 0x00505C7C; sole caller 0x005053D8."
+ },
+ {
+  "address": "0x00505C80",
+  "name": "Svc_Ipc_Send08030102",
+  "signature": "int Svc_Ipc_Send08030102(int* session, u32* out, u32 a3, u32 a4, u32 a5, int size, u32 flags)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives the reply word",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "buffer address",
+   "size": "buffer size",
+   "flags": "packed flag word"
+  },
+  "summary": "IPC request with header 0x08030102 (command 0x03) carrying a buffer and a packed flag word; used for both the 'set flags' and 'write with flags' commands.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x08030102 at 0x00505CDC and descriptor 'size<<4 | 10'; callers 0x00505494 and 0x00505510."
+ },
+ {
+  "address": "0x00505CE0",
+  "name": "Svc_Ipc_Send08040000",
+  "signature": "int Svc_Ipc_Send08040000(int* session, u32* out)",
+  "params": {
+   "session": "session handle word",
+   "out": "receives two reply words"
+  },
+  "summary": "IPC request with header 0x08040000 (command 0x04) returning two words; the close entry (vtable slot 3) of the 0x00780EAC class.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x08040000 at 0x00505D14; it is vtable slot 3 (0x00655738) of the object class 0x00780EAC and is therefore invoked from 0x00655738."
+ },
+ {
+  "address": "0x00509A20",
+  "name": "maybe_Svc_SyncObject_DestroyA",
+  "signature": "int maybe_Svc_SyncObject_DestroyA(SvcSyncHandle* self)",
+  "params": {
+   "self": "object whose +0x14 is a kernel handle"
+  },
+  "summary": "Destroys a synchronisation object of the first kind (mutex/event via 0x00111E44) and closes the kernel handle at +0x14.",
+  "confidence": 0.45,
+  "evidence": "Generic destructor shape: library call 0x00111E44 on the object then svcCloseHandle (software_interrupt(0x23)) on +0x14; the sibling 0x00509B40 does the same with 0x0011E8A0, so both are handle owners of a different sync primitive."
+ },
+ {
+  "address": "0x00509B40",
+  "name": "maybe_Svc_SyncObject_DestroyB",
+  "signature": "int maybe_Svc_SyncObject_DestroyB(SvcSyncHandle* self)",
+  "params": {
+   "self": "object whose +0x14 is a kernel handle"
+  },
+  "summary": "Destroys a synchronisation object of the second kind (condition/address-arbiter via 0x0011E8A0) and closes the kernel handle at +0x14.",
+  "confidence": 0.45,
+  "evidence": "Same shape as 0x00509A20 but with 0x0011E8A0; the two are used as pairs by the content cache (0x0050A714 waits on both handles)."
+ },
+ {
+  "address": "0x00509D40",
+  "name": "maybe_Ui_IconCache_EnsureService",
+  "signature": "int maybe_Ui_IconCache_EnsureService(int which, int blocking)",
+  "params": {
+   "which": "selects service/page (0 or 1)",
+   "blocking": "wait for the service to reach the ready state"
+  },
+  "summary": "Makes sure the external content service is running before the icon cache touches it: it starts the service if needed (0x0050F2A4), sleeps 16 ms and then either polls up to 60 times for the ready state or returns the cached state word. Returns the service result.",
+  "confidence": 0.4,
+  "evidence": "The 0x00F42400 (16,000,000) sleep and the '0x3C' (60) retry loop with software_interrupt(0x24) are in this function, and it calls the protocol wrappers 0x0050CAFC(0x0B/0x0C) which are the start/stop commands (0x0B/0x0C) of the same service; callers are the icon atlas init/load path (0x00383C18, 0x0050B0E0, 0x0050BED4...)."
+ },
+ {
+  "address": "0x00509EF0",
+  "name": "maybe_Ui_IconCache_ReleaseService",
+  "signature": "u32 maybe_Ui_IconCache_ReleaseService(int force)",
+  "params": {
+   "force": "release even when the caller still holds the service"
+  },
+  "summary": "Counterpart of 0x00509D40: when the last user is gone it sends the stop command (0x0E) and clears the 'started' flag, otherwise it only decrements. Returns the previous state word.",
+  "confidence": 0.4,
+  "evidence": "Calls 0x0050CB38(0x0E) (stop) and 0x0050F284 (release) with the global state block at 0x007AE9E0; paired with 0x00509D40 by the same byte flags 0/1/2."
+ },
+ {
+  "address": "0x0050A010",
+  "name": "maybe_Ui_IconCache_StartServiceDeferred",
+  "signature": "int maybe_Ui_IconCache_StartServiceDeferred(void)",
+  "params": {},
+  "summary": "Starts the content service without waiting (the 16 ms delay is queued) so the caller can continue and poll later; returns 0 if it was already started.",
+  "confidence": 0.4,
+  "evidence": "Uses the same state bytes 1/2 at 0x007AE9E0 as 0x00509D40, calls 0x0050F2A4 and then sleeps 16,000,000 ticks without the retry loop; callers 0x0050ACF0 and 0x0050B3CC are the cache open paths."
+ },
+ {
+  "address": "0x0050A09C",
+  "name": "maybe_Ui_IconCache_StopService",
+  "signature": "int maybe_Ui_IconCache_StopService(void)",
+  "params": {},
+  "summary": "Stops the content service and tears the cache down when it is running: releases the start reference, asks the protocol layer to close (0x0050C4C0) and clears the global 'running' byte.",
+  "confidence": 0.42,
+  "evidence": "Calls 0x0050F2C4 (reference drop), 0x0050C4C0 (close) and 0x0050C24C (reset) in that order; sole caller 0x00383EC8 (the screen that owns the icon cache)."
+ },
+ {
+  "address": "0x0050A100",
+  "name": "maybe_Ui_IconCache_ReadEntryHeaders",
+  "signature": "int maybe_Ui_IconCache_ReadEntryHeaders(UiIconCache* self, UiIconPage* page, int* outPtrs, u32 size, int pageIndex)",
+  "params": {
+   "self": "cache object",
+   "page": "page descriptor (count at +0x14)",
+   "outPtrs": "receives the entry pointers",
+   "size": "requested byte size",
+   "pageIndex": "0 or 1 selects the two handler sets"
+  },
+  "summary": "Reads a page of icon entries from the content service: it queries the page size with the object's 'stat' entry, allocates a temporary buffer (0x30-byte entries, count at page+0x14), copies the page header, validates the 'gg'-style magic and the per-entry tag, and stores the entry pointers in outPtrs.",
+  "confidence": 0.42,
+  "evidence": "The fixed 0x70-byte entry stride, the 'count*0x70 + 0x20' size check, the 'ss'/'gg' u16 tags (local_a8[0] vs 0x6060) and the two mirrored handler sets (+0x7F vs +0xEB, +0x21C vs +0x3CC) are all visible here; it uses the object vtable slots +8/+0x30/+0x34 (query/read) and allocates via 0x0050D708."
+ },
+ {
+  "address": "0x0050A628",
+  "name": "maybe_Ui_IconCache_RequestPage",
+  "signature": "int maybe_Ui_IconCache_RequestPage(UiIconCache* self, int pageIndex, u32 size)",
+  "params": {
+   "self": "cache object",
+   "pageIndex": "0 or 1",
+   "size": "byte size to read"
+  },
+  "summary": "Issues the read request for one icon page (command 0x14 via vtable +0x30) and then parses the reply with 0x0050A100; clears the matching 'page valid' byte on success.",
+  "confidence": 0.42,
+  "evidence": "For page 0 it sends size 0x20 with vtable +0x30(...,3,0x14) then 0x0050A100(...,+0x7F,+0x87,track,0), and for page 1 the mirrored call with 4/0x14 and +0xEB/+0xF3; byte +0x0A and +0x0B are cleared, matching the flags read by 0x0050A714."
+ },
+ {
+  "address": "0x0050A714",
+  "name": "maybe_Ui_IconCache_CommitEntry",
+  "signature": "int maybe_Ui_IconCache_CommitEntry(UiIconCache* self, UiIconEntry* entry, u32 slot, u32 flags, int unused5)",
+  "params": {
+   "self": "cache object",
+   "entry": "0x70-byte entry",
+   "slot": "0 or 1 selects the page",
+   "flags": "whether to write immediately"
+  },
+  "summary": "Writes one icon entry into the cache: validates the entry against the page bounds and timestamps, copies the 0x70-byte record into the page buffer, sends the write command (vtable +0x20/+0x28) and notifies the protocol layer with the new timestamps.",
+  "confidence": 0.4,
+  "evidence": "This is the only function that copies 0x70 bytes out of an entry (0x00116A14 of 0x70) and updates the page windows at +0x81/+0xED and the mirrored +0x221/+0x229 sets; it mixes 0x00658BFC/0x00658618/0x00658D18 timestamp helpers and 0x0050EFA4 (Svc_GetTimeMs) and calls 0x0050A628/0x0050B170."
+ },
+ {
+  "address": "0x0050ACF0",
+  "name": "maybe_Ui_IconCache_Open",
+  "signature": "int maybe_Ui_IconCache_Open(UiIconCache* self, u32 recordId, int expectedCount)",
+  "params": {
+   "self": "cache object",
+   "recordId": "record/title id to open",
+   "expectedCount": "entry count the caller expects"
+  },
+  "summary": "Opens the icon cache for one content record: starts the service, looks the record up (0x006587C8), verifies the entry count, builds the two pages (0x0050A100) and records the current timestamp. Returns 0 on success, or the 'not found'/'count mismatch' error code.",
+  "confidence": 0.45,
+  "evidence": "Called by Ui_LoadIconTextures (0x00383764) and 0x004121B4 - the UI paths that need icon textures; it uses the state block at 0x007AE9E4, 0x0050A010/0x0050AEE4 for the service lifecycle and 0x0050EFA4 (Svc_GetTimeMs) + 0x00658D18 (Field_Clock_ConvertTimestamp) for the stamp at +0x1D0."
+ },
+ {
+  "address": "0x0050AEE4",
+  "name": "maybe_Ui_IconCache_Close",
+  "signature": "void maybe_Ui_IconCache_Close(UiIconCache* self, int arg2)",
+  "params": {
+   "self": "cache object",
+   "arg2": "when 0 also stops the service"
+  },
+  "summary": "Closes the icon cache: closes both pages, drops the record handle, wipes the two page buffers (0x18C and 0x318 bytes), releases the two temporary buffers and, when arg2 is 0, releases the service reference too.",
+  "confidence": 0.45,
+  "evidence": "It zeroes exactly the two page structures +0x87 (0x18C) and +0xF3 (0x18C) plus +0x159 (0x318) that 0x0050A100 fills, and calls 0x0050A628 to close each page; the trailing '+0x62'/'+0x67' u16 writes are the empty-page magic values (0x6262/0x6767) also checked in 0x0050B170."
+ },
+ {
+  "address": "0x0050B0E0",
+  "name": "maybe_Ui_IconCache_WriteWithRetry",
+  "signature": "void maybe_Ui_IconCache_WriteWithRetry(u32 self, u32 id, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7, u32 a8)",
+  "params": {
+   "self": "cache object",
+   "id": "record id",
+   "a3": "size",
+   "a4": "buffer"
+  },
+  "summary": "Writes a record through the protocol layer and, when the service reports 'not started' (0xC8A10BF0), starts it once and retries the write. This is the public write entry used by the UI.",
+  "confidence": 0.42,
+  "evidence": "The retry pattern 'if (result == 0xC8A10BF0) { 0x00509D40(1,0); flag=1; retry; }' is shared with 0x0050BED4/0x0050BF64/0x0050BFE8; the actual work is 0x0050C328 (open raw file)."
+ },
+ {
+  "address": "0x0050B170",
+  "name": "maybe_Ui_IconCache_ReadEntryTable",
+  "signature": "int maybe_Ui_IconCache_ReadEntryTable(UiIconCache* self)",
+  "params": {
+   "self": "cache object"
+  },
+  "summary": "Reads the small index (command 0x05): asks for its size, allocates 800 bytes, reads the header, verifies the 0x6767 magic and the declared count, and converts the 8-byte entries into pointers stored at +0x159. Returns the number of entries.",
+  "confidence": 0.45,
+  "evidence": "The 0x320-byte temporary buffer, the 0x6767 magic compare, the 'count == (size-8)>>3' check and the 8-byte stride copies (0x0011FFFC) are all here; it retries the read once after a seek(0) via vtable +0x28; callers 0x0050A714/0x0050ACF0/0x0050B3CC/0x0050B970."
+ },
+ {
+  "address": "0x0050B3CC",
+  "name": "maybe_Ui_IconCache_Create",
+  "signature": "int maybe_Ui_IconCache_Create(UiIconCache* self, u32 recordId, int a3, int a4, u32 size1, u32 size2, u32 count1, u32 count2, u32 max1, u32 max2, u32 max3, u32 max4, u32 max5)",
+  "params": {
+   "self": "cache object",
+   "recordId": "record id",
+   "size1": "page 0 size",
+   "size2": "page 1 size",
+   "count1": "page 0 entry limit",
+   "count2": "page 1 entry limit",
+   "max1": "max page 0 bytes (1 MB)",
+   "max2": "max entry count (98)",
+   "max3": "max stride (0x19000)"
+  },
+  "summary": "Creates the two icon pages of a record: validates the size/count limits (1 MB, 98 entries, 0x19000), sends the create commands (0x0B/0x0C/0x0D), reads the two page headers, reads the entry table and stores the record's own timestamp. Returns 0 on success and a negative error otherwise.",
+  "confidence": 0.45,
+  "evidence": "The 0x100000/0x62/0x19000 limit triple and the sequence 'command 0x0B (create page 0), 0x0C (page 1), 0x0D (commit)' via vtable +0x24/+8/+0x28 are the core of this function; it ends by copying the record id (0x20 bytes) and the timestamp into +0x1A8..+0x1D8, exactly what 0x0050ACF0 then reads back."
+ },
+ {
+  "address": "0x0050B824",
+  "name": "Ui_IconAtlas_LoadEntries",
+  "signature": "u32 Ui_IconAtlas_LoadEntries(UiIconAtlas* self, u32 count)",
+  "params": {
+   "self": "icon atlas object (0x8D8 bytes)",
+   "count": "number of entries to load"
+  },
+  "summary": "Loads the atlas entry table: issues command 0x0B with the entry count, commits the request and closes the object; returns the protocol result. This is the single call the UI screen uses after Ui_IconAtlas_Init.",
+  "confidence": 0.5,
+  "evidence": "The only caller is 0x00383C18 (the icon load stage 2) which pairs it with Ui_IconAtlas_Init (0x0050C11C) and Ui_IconAtlas_Release (0x0050C208); the body is the compact 'vtable +0x24 / 0x0050BD60 / 0x0050AEE4' sequence."
+ },
+ {
+  "address": "0x0050B970",
+  "name": "maybe_Ui_IconCache_SetPage",
+  "signature": "int maybe_Ui_IconCache_SetPage(UiIconCache* self, int page)",
+  "params": {
+   "self": "cache object",
+   "page": "1 = page 1, anything else = page 0"
+  },
+  "summary": "(Re)selects and re-reads one of the two icon pages: sends the page command (0x0D for page 1, 0x0C for page 0), reads the page header and refreshes the entry list.",
+  "confidence": 0.42,
+  "evidence": "The two branches differ only by command 0x0D vs 0x0C and by the page pointers +0xEB/+0x7F; the trailing call is 0x0050A628 (request page) exactly as in 0x0050A714; caller 0x004121B4."
+ },
+ {
+  "address": "0x0050BBD8",
+  "name": "maybe_Ui_IconCache_ReadHeader",
+  "signature": "int maybe_Ui_IconCache_ReadHeader(UiIconCache* self)",
+  "params": {
+   "self": "cache object"
+  },
+  "summary": "Reads and validates the 0x18C-byte cache header: checks the short read, the 0x6868 magic and the per-entry tags, then updates the entry count. Returns the header size or 0 when invalid.",
+  "confidence": 0.45,
+  "evidence": "It reads 0x18C bytes through vtable +0x34, compares the u16 at +0x10 with 0x6868, and loops over the declared entries issuing command 0x0B for each tag via 0x0050C2AC; the 0x18C header size matches 0x0050AEE4's wipe length."
+ },
+ {
+  "address": "0x0050BD60",
+  "name": "maybe_Ui_IconCache_Commit",
+  "signature": "void maybe_Ui_IconCache_Commit(UiIconCache* self)",
+  "params": {
+   "self": "cache object"
+  },
+  "summary": "Commits a pending page operation: reads the 8-byte status (command 0x0A), sends the commit/sync command 0x01 with the whole 0x18C buffer and then reads the status back.",
+  "confidence": 0.45,
+  "evidence": "The 8-byte status buffer, vtable +8 with command 0x0A and the following vtable +0x30/+0x34 pair with command 0x01 on 0x18C bytes are the exact commit pattern; callers 0x0050B3CC/0x0050B824/0x0050BBD8."
+ },
+ {
+  "address": "0x0050BDF4",
+  "name": "maybe_Ui_IconCache_IsPresent",
+  "signature": "int maybe_Ui_IconCache_IsPresent(UiIconCache* self)",
+  "params": {
+   "self": "cache object"
+  },
+  "summary": "Cheap existence test for a cached record: queries two status items (0x0001/0x0002, then 0x0001/0x0003); returns the 'present' sentinel 0xC8810BEA when the store is absent, 0 when present, and the service error otherwise.",
+  "confidence": 0.4,
+  "evidence": "Calls vtable +0x2C with (1,2) then (1,3) - the same 'get status' entry used by 0x0050A714 - and falls back to 0x00658858 (the cecd state query) filling the cached byte at 0x007AE9E7; the 0xC8810BEA sentinel is the same one returned by 0x00509EF0/0x0050A628."
+ },
+ {
+  "address": "0x0050BED4",
+  "name": "maybe_Svc_Cecd_CreateWithRetry",
+  "signature": "void maybe_Svc_Cecd_CreateWithRetry(u32 self, u32 id, u32 size, u32 a4, u32 a5, u32 a6, u32 a7, u32 a8)",
+  "params": {
+   "self": "cecd client object",
+   "id": "file id",
+   "size": "size"
+  },
+  "summary": "Protocol entry 0 (vtable 0x00780FE4 slot 0): opens a raw CECD file and retries once after starting the service if it answered 'not started'.",
+  "confidence": 0.45,
+  "evidence": "Vtable 0x00780FE4 = [0x0050BED4, 0x0050BF64, 0x0050BFE8, 0x006589A8, 0x0065874C, 0x006586D4]; the retry sentinel 0xC8A10BF0 and the 0x00509D40(1,0) start call are shared with its two siblings."
+ },
+ {
+  "address": "0x0050BF64",
+  "name": "maybe_Svc_Cecd_ReadWithRetry",
+  "signature": "void maybe_Svc_Cecd_ReadWithRetry(u32 self, u32 id, u32 size, u32 buf, u32 a5, u32 a6)",
+  "params": {
+   "self": "cecd client object",
+   "id": "file id",
+   "buf": "destination"
+  },
+  "summary": "Protocol entry 1 (vtable 0x00780FE4 slot 1): reads a raw CECD file (command 0x03) and retries once after starting the service when needed.",
+  "confidence": 0.45,
+  "evidence": "Forwards to 0x0050D004 which dispatches between the two command variants 0x0050C9C0 (0x00080102) and 0x0050CF04 (0x00080102+0x2000); same retry pattern as 0x0050BED4."
+ },
+ {
+  "address": "0x0050BFE8",
+  "name": "maybe_Svc_Cecd_DeleteWithRetry",
+  "signature": "void maybe_Svc_Cecd_DeleteWithRetry(u32 self, u32 id, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "self": "cecd client object",
+   "id": "file id"
+  },
+  "summary": "Protocol entry 2 (vtable 0x00780FE4 slot 2): deletes a raw CECD file (command 0x0A) and retries once after starting the service when needed.",
+  "confidence": 0.45,
+  "evidence": "Forwards to 0x0050D050 -> 0x0050D08C -> 0x0050CA64/0x0050CFA8 with header 0x000A00C4; same retry-on-0xC8A10BF0 pattern as its siblings."
+ },
+ {
+  "address": "0x0050C060",
+  "name": "Ui_IconAtlas_Close",
+  "signature": "u32 Ui_IconAtlas_Close(UiIconAtlas* self)",
+  "params": {
+   "self": "icon atlas object"
+  },
+  "summary": "Closes an icon atlas object: releases the two page buffers, closes the pages, drops the service reference and clears the 'open' byte. Safe on an already closed object.",
+  "confidence": 0.5,
+  "evidence": "Called by Ui_IconAtlas_Release (0x0050C208) and Ui_IconAtlas_Dtor (0x0050C1E0); it calls 0x0050AEE4 and frees the buffers at +0x3A8/+0x558 through 0x0050D634, guarded by the byte flags at 0x007AE9E8/0x007AE9E9."
+ },
+ {
+  "address": "0x0050C1E0",
+  "name": "Ui_IconAtlas_Dtor",
+  "signature": "void Ui_IconAtlas_Dtor(UiIconAtlas* self)",
+  "params": {
+   "self": "icon atlas object"
+  },
+  "summary": "Deleting destructor of the icon atlas: installs the class vtable (0x00780FC4), closes the object and frees the allocation.",
+  "confidence": 0.5,
+  "evidence": "Writes vtable 0x00780FC4 = [0x0050C208, 0x0050C1E0, 0x00658928, 0] then 0x0050C060 + func_0010F6CC (operator delete); it is vtable slot 1 of that class."
+ },
+ {
+  "address": "0x0050C208",
+  "name": "Ui_IconAtlas_Release",
+  "signature": "u32* Ui_IconAtlas_Release(UiIconAtlas* self)",
+  "params": {
+   "self": "icon atlas object"
+  },
+  "summary": "Non-deleting destructor / release of the icon atlas: installs the class vtable and closes the object, returning the same pointer.",
+  "confidence": 0.5,
+  "evidence": "Slot 0 of vtable 0x00780FC4 = [0x0050C208, 0x0050C1E0, 0x00658928, 0]; it is the function 0x00383C18 calls after reading the entry table."
+ },
+ {
+  "address": "0x0050C24C",
+  "name": "maybe_Svc_Cecd_ResetMailbox",
+  "signature": "void maybe_Svc_Cecd_ResetMailbox(u32 arg1, u32 arg2)",
+  "params": {
+   "arg1": "unused",
+   "arg2": "new state flags (bytes at +8/+9/+10)"
+  },
+  "summary": "Resets the CECD message-box state block: stores the three state bytes, marks the box invalid (0xFFFFFFFF) and calls the library reset 0x0050E5D8, clearing all pending flags.",
+  "confidence": 0.45,
+  "evidence": "Operates on the library block at 0x007AF0DC/+0x7EF020, writes the 0xFFFFFFFF 'no message' marker and calls 0x0050E5D8; sole caller 0x0050A09C (icon cache stop)."
+ },
+ {
+  "address": "0x0050C328",
+  "name": "maybe_Svc_Cecd_OpenRawFile",
+  "signature": "void maybe_Svc_Cecd_OpenRawFile(u32 arg1)",
+  "params": {
+   "arg1": "open parameters"
+  },
+  "summary": "Opens a raw file in the CECD message box: dispatches to the command block 0x0050C63C (or its duplicate 0x0050CB74) depending on which of the two session slots is active.",
+  "confidence": 0.45,
+  "evidence": "The 'if (g_007B005C == 0) { if (g_007B0058 != 0) ... }' dispatch between 0x0050C63C and 0x0050CB74 is repeated in 0x0050C3CC/0x0050C474/0x0050C55C; header literal 0x00030104 corresponds to command 0x03 with a buffer."
+ },
+ {
+  "address": "0x0050C3CC",
+  "name": "maybe_Svc_Cecd_WriteRawFile",
+  "signature": "void maybe_Svc_Cecd_WriteRawFile(u32 arg1)",
+  "params": {
+   "arg1": "write parameters"
+  },
+  "summary": "Writes a raw file in the CECD message box, dispatching between the 0x0012-command variants 0x0050C6F8/0x0050CC30.",
+  "confidence": 0.45,
+  "evidence": "Same two-session dispatch as 0x0050C328 but forwards to 0x0050C6F8 (header 0x00120104) or 0x0050CC30; sole caller 0x006586D4."
+ },
+ {
+  "address": "0x0050C474",
+  "name": "maybe_Svc_Cecd_DeleteRawFile",
+  "signature": "void maybe_Svc_Cecd_DeleteRawFile(u32 arg1)",
+  "params": {
+   "arg1": "delete parameters"
+  },
+  "summary": "Deletes a raw file in the CECD message box, dispatching between the 0x0011-command variants 0x0050C7B0/0x0050CCE8.",
+  "confidence": 0.45,
+  "evidence": "Forwards to 0x0050C7B0 (header 0x00110104) or 0x0050CCE8 (the 0x0011 variant on the other session); sole caller 0x0065874C."
+ },
+ {
+  "address": "0x0050C520",
+  "name": "Svc_Cecd_OpenService",
+  "signature": "void Svc_Cecd_OpenService(void)",
+  "params": {},
+  "summary": "Opens the CECD service session ('cecd:u') used by the icon/content cache and stores the handle in the global session slot 0x007B0058.",
+  "confidence": 0.6,
+  "evidence": "The literal at 0x0050C554 is the string 'cecd:u' (verified at 0x007418AC in the image); it is passed through 0x0011CCA0 (strlen) to 0x001192C0 (srvGetServiceHandle) after 0x00113430 (GetThreadId guard); callers are Ui_IconAtlas_Load (0x00509CD0) and 0x00509CE0."
+ },
+ {
+  "address": "0x0050C55C",
+  "name": "maybe_Svc_Cecd_ReadRawFile",
+  "signature": "void maybe_Svc_Cecd_ReadRawFile(u32 arg1)",
+  "params": {
+   "arg1": "read parameters"
+  },
+  "summary": "Reads a raw file from the CECD message box, dispatching between the 0x0007-command variants 0x0050C808/0x0050CD40.",
+  "confidence": 0.45,
+  "evidence": "Same dispatch shape as the other three CECD wrappers, forwarding to 0x0050C808 or 0x0050CD40 (both header 0x00070106); sole caller 0x0050BED4."
+ },
+ {
+  "address": "0x0050C63C",
+  "name": "Svc_Cecd_Cmd0003",
+  "signature": "int Svc_Cecd_Cmd0003(u32 a1, u8 a2, u32 a3, int a4, u32* out, u32 a6, int a7)",
+  "params": {
+   "a1": "request value",
+   "a2": "request byte",
+   "a3": "input buffer",
+   "a4": "input size",
+   "out": "receives the reply byte",
+   "a6": "output buffer",
+   "a7": "output size"
+  },
+  "summary": "Raw CECD request with header 0x00030104 (command 0x03): maps one input and one output buffer and returns one reply byte. This is the CECD 'open/read raw file' command used for the icon data.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x00030104 at 0x0050C6B4, descriptors 'a4<<4|10' and 'a7<<4|0xC', sent to the session at 0x007B0058 with svc 0x32; only caller 0x0050C328."
+ },
+ {
+  "address": "0x0050C6F8",
+  "name": "Svc_Cecd_Cmd0012",
+  "signature": "int Svc_Cecd_Cmd0012(u32 ctx, int a2, u32* out, u32 a4, u32 a5, u32 a6)",
+  "params": {
+   "ctx": "mapping context",
+   "a2": "size",
+   "out": "receives the reply byte",
+   "a4": "request value",
+   "a5": "request value",
+   "a6": "request value"
+  },
+  "summary": "Raw CECD request with header 0x00120104 (command 0x12): passes the process mapping context and one buffer, returns one reply byte.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x00120104 and the explicit mapping-context argument (arg1) stored at +0xA0 are unique to this sender; only caller 0x0050C3CC."
+ },
+ {
+  "address": "0x0050C7B0",
+  "name": "Svc_Cecd_Cmd0011",
+  "signature": "u32 Svc_Cecd_Cmd0011(u32 ctx, int a2, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "ctx": "mapping context",
+   "a2": "size",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "request value"
+  },
+  "summary": "Raw CECD request with header 0x00110104 (command 0x11) carrying the mapping context and one buffer.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x00110104 at 0x0050C800 plus the 'size<<4|10' descriptor; only caller 0x0050C474."
+ },
+ {
+  "address": "0x0050C808",
+  "name": "Svc_Cecd_Cmd0007",
+  "signature": "u32 Svc_Cecd_Cmd0007(u32 a1, u8 a2, u32 a3, int a4, u32 a5, int a6, u32 a7)",
+  "params": {
+   "a1": "request value",
+   "a2": "request byte",
+   "a3": "request value",
+   "a4": "input size",
+   "a5": "input buffer",
+   "a6": "output size",
+   "a7": "output buffer"
+  },
+  "summary": "Raw CECD request with header 0x00070106 (command 0x07) with two mapped buffers; the 'write raw file' command.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x00070106 at 0x0050C87C plus the extra descriptor 0x0000020A and the two size<<4 descriptors; only caller 0x0050C55C's dispatch partner."
+ },
+ {
+  "address": "0x0050C9C0",
+  "name": "Svc_Cecd_Cmd0008",
+  "signature": "u32 Svc_Cecd_Cmd0008(u32 a1, u32 a2, u8 a3, u32 a4, int a5)",
+  "params": {
+   "a1": "request value",
+   "a2": "request value",
+   "a3": "request byte",
+   "a4": "buffer address",
+   "a5": "buffer size"
+  },
+  "summary": "Raw CECD request with header 0x00080102 (command 0x08) with one buffer; the delete/replace variant used by 0x0050D004.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x00080102 at 0x0050CA14; only caller 0x0050D004."
+ },
+ {
+  "address": "0x0050CA64",
+  "name": "Svc_Cecd_Cmd000A",
+  "signature": "u32 Svc_Cecd_Cmd000A(u32 a1, int a2, u32 a3, u32 a4, int a5)",
+  "params": {
+   "a1": "mapping context",
+   "a2": "size",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "buffer size"
+  },
+  "summary": "Raw CECD request with header 0x000A00C4 (command 0x0A) carrying the mapping context and one buffer.",
+  "confidence": 0.5,
+  "evidence": "Header literal 0x000A00C4 at 0x0050CAB8 plus descriptors 'a5<<4|10' and 'a2<<4|0xC'; only caller 0x0050D08C."
+ },
+ {
+  "address": "0x0050CB74",
+  "name": "Svc_Cecd_Cmd0003B",
+  "signature": "int Svc_Cecd_Cmd0003B(u32 a1, u8 a2, u32 a3, int a4, u32* out, u32 a6, int a7)",
+  "params": {
+   "a1": "request value",
+   "a2": "request byte",
+   "a3": "input buffer",
+   "a4": "input size",
+   "out": "receives the reply byte",
+   "a6": "output buffer",
+   "a7": "output size"
+  },
+  "summary": "Duplicate of 0x0050C63C (header 0x00030104) for the second session slot at 0x007B005C.",
+  "confidence": 0.5,
+  "evidence": "Byte-identical body to 0x0050C63C but reads the session from 0x007B005C instead of 0x007B0058; only caller 0x0050C328's else-branch."
+ },
+ {
+  "address": "0x0050CC30",
+  "name": "Svc_Cecd_Cmd0012B",
+  "signature": "int Svc_Cecd_Cmd0012B(u32 ctx, int a2, u32* out, u32 a4, u32 a5, u32 a6)",
+  "params": {
+   "ctx": "mapping context",
+   "a2": "size",
+   "out": "receives the reply byte"
+  },
+  "summary": "Duplicate of 0x0050C6F8 (header 0x00120104) for the second session slot.",
+  "confidence": 0.5,
+  "evidence": "Same body as 0x0050C6F8 with the session global 0x007B005C; only caller 0x0050C3CC's else-branch."
+ },
+ {
+  "address": "0x0050CCE8",
+  "name": "Svc_Cecd_Cmd0011B",
+  "signature": "u32 Svc_Cecd_Cmd0011B(u32 ctx, int a2, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "ctx": "mapping context",
+   "a2": "size"
+  },
+  "summary": "Duplicate of 0x0050C7B0 (header 0x00110104) for the second session slot.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x0050C7B0 with the session global 0x007B005C; only caller 0x0050C474's first branch."
+ },
+ {
+  "address": "0x0050CD40",
+  "name": "Svc_Cecd_Cmd0007B",
+  "signature": "u32 Svc_Cecd_Cmd0007B(u32 a1, u8 a2, u32 a3, int a4, u32 a5, int a6, u32 a7)",
+  "params": {
+   "a1": "request value",
+   "a2": "request byte",
+   "a4": "input size",
+   "a5": "input buffer",
+   "a6": "output size",
+   "a7": "output buffer"
+  },
+  "summary": "Duplicate of 0x0050C808 (header 0x00070106) for the second session slot.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x0050C808 with the session global 0x007B005C; only caller 0x0050C55C's else-branch."
+ },
+ {
+  "address": "0x0050CF04",
+  "name": "Svc_Cecd_Cmd0008B",
+  "signature": "u32 Svc_Cecd_Cmd0008B(u32 a1, u32 a2, u8 a3, u32 a4, int a5)",
+  "params": {
+   "a1": "request value",
+   "a2": "request value",
+   "a3": "request byte",
+   "a4": "buffer address",
+   "a5": "buffer size"
+  },
+  "summary": "Duplicate of 0x0050C9C0 (header 0x00080102) for the second session slot.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x0050C9C0 with the session global 0x007B005C; only caller 0x0050D004's first branch."
+ },
+ {
+  "address": "0x0050CFA8",
+  "name": "Svc_Cecd_Cmd000AB",
+  "signature": "u32 Svc_Cecd_Cmd000AB(u32 a1, int a2, u32 a3, u32 a4, int a5)",
+  "params": {
+   "a1": "mapping context",
+   "a2": "size",
+   "a3": "request value",
+   "a4": "request value",
+   "a5": "buffer size"
+  },
+  "summary": "Duplicate of 0x0050CA64 (header 0x000A00C4) for the second session slot.",
+  "confidence": 0.5,
+  "evidence": "Identical body to 0x0050CA64 with the session global 0x007B005C; only caller 0x0050D08C's first branch."
+ },
+ {
+  "address": "0x0050D004",
+  "name": "Svc_Cecd_ReadDispatch",
+  "signature": "void Svc_Cecd_ReadDispatch(u32 arg1)",
+  "params": {
+   "arg1": "request parameters"
+  },
+  "summary": "Dispatches a read to whichever of the two CECD sessions is open (0x0050C9C0 or 0x0050CF04).",
+  "confidence": 0.5,
+  "evidence": "Two-branch session test over 0x007B005C/0x007B0058 identical to 0x0050C328's; called from 0x0050BF64."
+ },
+ {
+  "address": "0x0050D08C",
+  "name": "Svc_Cecd_DeleteDispatch",
+  "signature": "void Svc_Cecd_DeleteDispatch(u32 arg1)",
+  "params": {
+   "arg1": "request parameters"
+  },
+  "summary": "Dispatches a delete to whichever of the two CECD sessions is open (0x0050CA64 or 0x0050CFA8).",
+  "confidence": 0.5,
+  "evidence": "Same two-branch session test; called from 0x006589A8 (the delete entry of the CECD vtable)."
+ },
+ {
+  "address": "0x0050D6CC",
+  "name": "maybe_Ui_IconCache_CopyTimestamp",
+  "signature": "u32 maybe_Ui_IconCache_CopyTimestamp(u32 out, int kind)",
+  "params": {
+   "out": "destination stamp",
+   "kind": "0 = library stamp, else 8-byte copy"
+  },
+  "summary": "Copies a timestamp: kind 0 goes through the library converter 0x006722EC, otherwise it is a plain 8-byte move, and returns the destination pointer.",
+  "confidence": 0.4,
+  "evidence": "Two-way dispatch on a single 'kind' argument, used right after the two read paths of 0x0050A714 and by 0x00658618; the stack stamp is then passed to 0x0011FFFC."
+ },
+ {
+  "address": "0x0050D864",
+  "name": "maybe_Ui_IconCache_IsContentReady",
+  "signature": "bool maybe_Ui_IconCache_IsContentReady(void)",
+  "params": {},
+  "summary": "Tells the UI whether the external content (icon catalogue) is usable: it asks the kernel for the content version into a 4-byte local, fetches the content info via 0x00504554 and compares the stored halfword at +0x2C with the low half of the version. Returns true when the cache is new enough.",
+  "confidence": 0.42,
+  "evidence": "Called from 0x00383B6C (icon load stage 1) and 0x005016D8; the software_interrupt-based 0x001184F0(size 4, 0xD0000) version query and the 0x0079F000->f_2C comparison are the whole body; it also takes the lock at 0x007E796C."
+ },
+ {
+  "address": "0x0050E5B8",
+  "name": "maybe_Text_Font_ReleaseRef",
+  "signature": "void maybe_Text_Font_ReleaseRef(TextFont* self)",
+  "params": {
+   "self": "font object with a refcount at +0x54"
+  },
+  "summary": "Releases one reference to a font/text object and destroys the embedded glyph cache when the count reaches zero.",
+  "confidence": 0.4,
+  "evidence": "Decrements the counter at +0x54 and calls 0x0050E69C on the embedded object at +0x18; sole caller 0x006E7624, in the font module that 0x0050F3B4/0x0050F9A8 also belong to."
+ },
+ {
+  "address": "0x0050F0F8",
+  "name": "maybe_Svc_SyncObject_DestroyC",
+  "signature": "int* maybe_Svc_SyncObject_DestroyC(SvcSyncBundle* self)",
+  "params": {
+   "self": "object holding up to six kernel handles"
+  },
+  "summary": "Closes every kernel handle a CECD/content-object owns (six slots at +0, +8, +0x10, +0x1C, +0x24, +0x40) and destroys the mutex at +0x2C.",
+  "confidence": 0.45,
+  "evidence": "Six svcCloseHandle (software_interrupt(0x23)) sequences plus 0x00111E44 on self+0x2C; the same 'close all then destroy the mutex' shape as 0x00509A20 but for a bundle."
+ },
+ {
+  "address": "0x0050F2C4",
+  "name": "maybe_Svc_RefCount_Release",
+  "signature": "int maybe_Svc_RefCount_Release(void)",
+  "params": {},
+  "summary": "Drops a reference on the shared content-service object: at count 1 it closes the stored handle and zeroes it, otherwise it just decrements. Returns the error of the close when it happened.",
+  "confidence": 0.42,
+  "evidence": "Operates on the refcount block at 0x007AF1AC (count +0, handle +4) under the lock at 0x007EF144, calling software_interrupt(0x23) on the last reference; callers 0x005017B0, 0x00501890 and 0x0050A09C."
+ },
+ {
+  "address": "0x0050F3B4",
+  "name": "maybe_Text_LayoutParagraph",
+  "signature": "u32 maybe_Text_LayoutParagraph(TextLayoutState** state, TextRun* run, u16* text, int start, int limit, int* outLine, u32* outIndex)",
+  "params": {
+   "state": "layout state",
+   "run": "current text run",
+   "text": "UTF-16 string",
+   "start": "start index",
+   "limit": "flags",
+   "outLine": "receives the line start",
+   "outIndex": "receives the char index"
+  },
+  "summary": "Lays out one paragraph of UTF-16 text: it detects whitespace runs (space, tab, 0x2028/0x2029, 0x85), breaks lines at explicit newlines, emits a run per style change (codes 2/4/8/0x62) and looks each glyph up through 0x00712028. Used by the message/font renderer.",
+  "confidence": 0.45,
+  "evidence": "The 0x85 ellipsis, 0x0D/0x0A pair, 0x2028/0x2029 line separators and the 0x00712028 glyph lookup are all here; the emitted 'run' codes 4/8 and the mask 0x62 are consumed by 0x0050F6C8's sibling; only caller 0x005150B4 (text layout driver)."
+ },
+ {
+  "address": "0x0050F6C8",
+  "name": "maybe_Text_LayoutSingleLine",
+  "signature": "int maybe_Text_LayoutSingleLine(TextLayoutState** state, int run, u16* text)",
+  "params": {
+   "state": "layout state",
+   "run": "current text run",
+   "text": "UTF-16 string"
+  },
+  "summary": "Same glyph/line classification as 0x0050F3B4 but for one line only: it emits the runs, stops at the terminator and returns the 'needs more' flag.",
+  "confidence": 0.45,
+  "evidence": "Shares the 0x85/0x0D/0x0A/0x2028/0x2029 classification and the 0x00712028 glyph lookup with 0x0050F3B4, and ends with the same 'code | 0x62' emit; only caller 0x005145E8."
+ },
+ {
+  "address": "0x0050F978",
+  "name": "maybe_Text_FatalError",
+  "signature": "void maybe_Text_FatalError(u32 a1, u32 a2, u32 code)",
+  "params": {
+   "code": "error code passed to the fatal handler"
+  },
+  "summary": "Reports a fatal text-parser error: forwards the third argument to the non-returning handler 0x00100B74.",
+  "confidence": 0.4,
+  "evidence": "A three-line tail call to 0x00100B74 marked 'does not return'; part of the text parser (caller 0x005150B4)."
+ },
+ {
+  "address": "0x0050F9A8",
+  "name": "maybe_Text_ParseRun",
+  "signature": "int maybe_Text_ParseRun(TextParser* p, int mode, int textPtr, int* cursor)",
+  "params": {
+   "p": "parser state (text at +0xC, length at +0x14, index at +0x10)",
+   "mode": "parse mode",
+   "textPtr": "UTF-16 text",
+   "cursor": "current index"
+  },
+  "summary": "Tokeniser/parser of the game's inline text markup: walks the UTF-16 string, honours the \\Q...\\E quoting escapes, splits on spaces, and dispatches ordinary characters through a 0x60-entry jump table to per-character run builders (0x00510208 for non-ASCII).",
+  "confidence": 0.48,
+  "evidence": "It compares 0x5C ('\\') with the following 0x51/'Q' and 0x45/'E' to enter/leave quote mode, tests 0x20 and 0x3000 as separators, and indexes a table at 0x007AF2E0 with 8-byte entries for chars 0x20..0x7F; caller 0x005145E8."
+ },
+ {
+  "address": "0x0050FDC4",
+  "name": "maybe_Regex_ParseRepeat7",
+  "signature": "u32 maybe_Regex_ParseRepeat7(RegexParser* self, int* node, u32 unused, int base)",
+  "params": {
+   "self": "parser (text at +0xC, length at +0x14)",
+   "node": "node being built",
+   "base": "base context"
+  },
+  "summary": "Parses a brace quantifier '{...}' and stores it as node type 8 (exact repeat count); returns 9 when the input is not a valid quantifier.",
+  "confidence": 0.45,
+  "evidence": "Tests 0x7B ('{') then calls 0x005142CC (parse decimal) and writes kind 8 plus the parsed count into the node; identical in shape to 0x00510050 which produces kind 7."
+ },
+ {
+  "address": "0x00510050",
+  "name": "maybe_Regex_ParseRepeat8",
+  "signature": "u32 maybe_Regex_ParseRepeat8(RegexParser* self, int* node, u32 unused, int base)",
+  "params": {
+   "self": "parser (text at +0xC, length at +0x14)",
+   "node": "node being built",
+   "base": "base context"
+  },
+  "summary": "Parses a brace quantifier '{...}' and stores it as node type 7 (range/repeat); returns 9 when the input is not a valid quantifier.",
+  "confidence": 0.45,
+  "evidence": "Byte-for-byte the same structure as 0x0050FDC4 but writes kind 7; both call 0x005142CC for the number and only differ in the node kind and resulting semantics."
+ },
+ {
+  "address": "0x005108A4",
+  "name": "maybe_Text_Buffer_Init",
+  "signature": "u32 maybe_Text_Buffer_Init(TextBuffer* self, u32 size, u32 count, int clear)",
+  "params": {
+   "self": "buffer object",
+   "size": "element size",
+   "count": "element count",
+   "clear": "zero the memory"
+  },
+  "summary": "Initialises a text/glyph scratch buffer: allocates (count+0xF)>>4 units, optionally clears the first size elements and stores the capacity/size fields. Returns 1 on success.",
+  "confidence": 0.42,
+  "evidence": "The allocation size expression '(arg3 + 0xf) >> 4' and the 2-byte clear loop are visible; the object fields +0x18/+0x1C/+0x14/+0x8 are the same ones consumed by 0x005108A4's callers (0x005127B0/0x005131E4/0x005133C8 of the text module)."
+ },
+ {
+  "address": "0x00510A28",
+  "name": "maybe_Text_FatalError2",
+  "signature": "void maybe_Text_FatalError2(u32* out, u32 a2, u32 code)",
+  "params": {
+   "out": "receives the code",
+   "code": "error code"
+  },
+  "summary": "Second fatal-error path of the text/parser module: stores the code and jumps to the non-returning handler 0x00100B74.",
+  "confidence": 0.4,
+  "evidence": "Two statements: '*arg1 = arg3;' then a tail call to 0x00100B74 with the code; called from 0x005145E8."
+ },
+ {
+  "address": "0x00510D58",
+  "name": "maybe_Regex_MatchLoop",
+  "signature": "u32 maybe_Regex_MatchLoop(int* ctx, u32* out, u32* cursor, code* fallback)",
+  "params": {
+   "ctx": "match context (node pointer at *ctx, type byte at +8)",
+   "out": "receives the match end",
+   "cursor": "current input position",
+   "fallback": "default matcher"
+  },
+  "summary": "Inner matcher loop: for the current node type it calls the type-specific matcher and its 'advance' counterpart until one reports a match; returns the matcher's status code.",
+  "confidence": 0.45,
+  "evidence": "It indexes a 0x98-byte dispatch table at 0x007AF1B0 by the node's type byte and calls entry/entry+0x98 alternately, exactly the regex node dispatch; callers 0x00512464/0x005126CC."
+ },
+ {
+  "address": "0x00510E50",
+  "name": "maybe_Regex_NodeAlloc",
+  "signature": "void maybe_Regex_NodeAlloc(u32* out, RegexNodeList* list, int node)",
+  "params": {
+   "out": "receives the new node",
+   "list": "list head",
+   "node": "node to insert"
+  },
+  "summary": "Allocates a list node from the regex allocator and links it into the doubly linked list at *arg2.",
+  "confidence": 0.45,
+  "evidence": "It allocates 2 units from 0x00514390, sets the self-referencing list pointers and inserts after the head - the classic intrusive list insert used by 0x0051150C/0x00510EB8."
+ },
+ {
+  "address": "0x00510EB8",
+  "name": "maybe_Regex_MatchNode",
+  "signature": "int maybe_Regex_MatchNode(int* ctx, u32 state)",
+  "params": {
+   "ctx": "match context",
+   "state": "match state"
+  },
+  "summary": "Recursive matcher for one regex node: handles alternation (kind 5), concatenation (0/2), groups (3/4), 'any char' (6/7) and 'match everything' (8/0x12), recursing into the sub-nodes and switching between the 'enter' and 'leave' callbacks of the group state.",
+  "confidence": 0.48,
+  "evidence": "The kinds 0,2,3,4,5,6,7,8,0x12 and the calls to 0x0051384C/0x00513F78 (charclass build), 0x00513A38/0x005139F0 (state stack) and 0x00514264 are the grammar walk of a backtracking matcher; callers are 0x00511DC0 and 0x00511ED8."
+ },
+ {
+  "address": "0x0051150C",
+  "name": "maybe_Regex_MatchSequence",
+  "signature": "u32 maybe_Regex_MatchSequence(int* ctx, int* out, int* cursor, code* fallback)",
+  "params": {
+   "ctx": "match context",
+   "out": "receives the match result",
+   "cursor": "input position",
+   "fallback": "default matcher"
+  },
+  "summary": "Matches a whole sequence against the input: it first runs the generic loop, then for kind-1 nodes (sequence) walks each element, building match positions and threading them through the group stacks.",
+  "confidence": 0.48,
+  "evidence": "It calls 0x00510D58 (generic loop), checks kind 1, allocates through 0x00514390 and uses 0x006E78EC/0x006E7890 for stack juggling; callers 0x00512464/0x005126CC are the two public match entry points."
+ }
+]

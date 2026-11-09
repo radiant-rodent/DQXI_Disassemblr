@@ -34,10 +34,14 @@ using SixLabors.ImageSharp;
 System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 
-if (args.Length < 3 || (args[0] != "textures" && args[0] != "skin" && args[0] != "materials" && args[0] != "obj" && args[0] != "matanims"))
+if (args.Length < 3 || (args[0] == "rig" && args.Length < 4) || (args[0] != "textures" && args[0] != "skin" && args[0] != "materials" && args[0] != "obj" && args[0] != "matanims" && args[0] != "rig"))
 {
     Console.Error.WriteLine("usage: SpicaRef textures|materials|skin <list.txt> <out> [root]");
     return 2;
+}
+if (args[0] == "rig")
+{
+    return DumpRig(args[1], args[2], Path.GetFullPath(args[3]));
 }
 if (args[0] == "matanims")
 {
@@ -365,5 +369,154 @@ static int DumpMaterialAnims(string bchPath, string outPath)
     }
     File.WriteAllText(outPath, JsonSerializer.Serialize(anims, new JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine($"{anims.Count} material animations -> {outPath}");
+    return 0;
+}
+
+// `rig`: skeleton + per-vertex skin weights of a model (vertices in the same order
+// as `obj`) and every skeletal animation of a motion BCH, sampled once per frame
+// as a local bone matrix. Little-endian binary, read by viewer_rs (data/rig.rs):
+//   "DQRG" u32 bones { u16 len, name, i16 parent, f32[12] bindLocal, f32[12] bindWorldInverse }
+//   u32 vertices { f32[3] bindPos, u8[4] bone, f32[4] weight }
+//   u32 anims { u16 len, name, f32 frames, u8 loop, u32 tracks { u16 bone, u32 frames, f32[12] local x frames } }
+static void WriteM(BinaryWriter w, System.Numerics.Matrix4x4 m)
+{
+    w.Write(m.M11); w.Write(m.M12); w.Write(m.M13);
+    w.Write(m.M21); w.Write(m.M22); w.Write(m.M23);
+    w.Write(m.M31); w.Write(m.M32); w.Write(m.M33);
+    w.Write(m.M41); w.Write(m.M42); w.Write(m.M43);
+}
+
+static void WriteStr(BinaryWriter w, string text)
+{
+    var b = System.Text.Encoding.UTF8.GetBytes(text ?? "");
+    w.Write((ushort)b.Length); w.Write(b);
+}
+
+static System.Numerics.Matrix4x4 Euler(System.Numerics.Vector3 sc, System.Numerics.Vector3 ro, System.Numerics.Vector3 tr)
+{
+    var m = System.Numerics.Matrix4x4.CreateScale(sc);
+    m *= System.Numerics.Matrix4x4.CreateRotationX(ro.X);
+    m *= System.Numerics.Matrix4x4.CreateRotationY(ro.Y);
+    m *= System.Numerics.Matrix4x4.CreateRotationZ(ro.Z);
+    m *= System.Numerics.Matrix4x4.CreateTranslation(tr);
+    return m;
+}
+
+static int DumpRig(string modelPath, string motionPath, string outPath)
+{
+    var h3d = H3D.Open(File.ReadAllBytes(modelPath));
+    if (h3d.Models.Count == 0) { Console.Error.WriteLine("no model"); return 1; }
+    var skel = h3d.Models[0].Skeleton;
+    int nb = skel.Count;
+    using var fs = File.Create(outPath);
+    using var w = new BinaryWriter(fs);
+    w.Write(System.Text.Encoding.ASCII.GetBytes("DQRG"));
+    w.Write((uint)nb);
+    for (int i = 0; i < nb; i++)
+    {
+        System.Numerics.Matrix4x4.Invert(skel[i].GetWorldTransform(skel), out var inv);
+        WriteStr(w, skel[i].Name);
+        w.Write((short)skel[i].ParentIndex);
+        WriteM(w, skel[i].Transform);
+        WriteM(w, inv);
+    }
+    var verts = new List<(System.Numerics.Vector3 p, byte[] b, float[] wt)>();
+    foreach (var m in h3d.Models)
+        foreach (var mesh in m.Meshes)
+        {
+            var wv = SPICA.Formats.Common.MeshTransform.GetWorldSpaceVertices(m.Skeleton, mesh);
+            var raw = mesh.GetVertices();
+            var info = new (byte[] b, float[] wt)?[wv.Length];
+            foreach (var sm in mesh.SubMeshes)
+                foreach (ushort idx in sm.Indices)
+                {
+                    if (info[idx] != null) continue;
+                    var v = raw[idx];
+                    var bi = new byte[4]; var wt = new float[4];
+                    if (sm.Skinning == SPICA.Formats.CtrH3D.Model.Mesh.H3DSubMeshSkinning.Smooth)
+                    {
+                        for (int k = 0; k < 4; k++)
+                        {
+                            float wk = v.Weights[k];
+                            int bk = v.Indices[k];
+                            if (wk > 0 && bk < sm.BoneIndices.Length) { bi[k] = (byte)sm.BoneIndices[bk]; wt[k] = wk; }
+                        }
+                    }
+                    else
+                    {
+                        bi[0] = (byte)sm.BoneIndices[v.Indices[0]]; wt[0] = 1;
+                    }
+                    info[idx] = (bi, wt);
+                }
+            for (int i = 0; i < wv.Length; i++)
+            {
+                var (bi, wt) = info[i] ?? (new byte[4], new float[] { 1, 0, 0, 0 });
+                verts.Add((new System.Numerics.Vector3(wv[i].Position.X, wv[i].Position.Y, wv[i].Position.Z), bi, wt));
+            }
+        }
+    w.Write((uint)verts.Count);
+    foreach (var (p, b, wt) in verts)
+    {
+        w.Write(p.X); w.Write(p.Y); w.Write(p.Z);
+        w.Write(b);
+        for (int k = 0; k < 4; k++) w.Write(wt[k]);
+    }
+    var anims = new List<SPICA.Formats.CtrH3D.Animation.H3DAnimation>();
+    if (motionPath != "-")
+        anims.AddRange(H3D.Open(File.ReadAllBytes(motionPath)).SkeletalAnimations);
+    var byName = new Dictionary<string, int>();
+    for (int i = 0; i < nb; i++) byName[skel[i].Name] = i;
+    w.Write((uint)anims.Count);
+    foreach (var anim in anims)
+    {
+        WriteStr(w, anim.Name);
+        w.Write(anim.FramesCount);
+        w.Write((byte)((anim.AnimationFlags & SPICA.Formats.CtrH3D.Animation.H3DAnimationFlags.IsLooping) != 0 ? 1 : 0));
+        int frames = Math.Max(1, (int)Math.Ceiling(anim.FramesCount) + 1);
+        var tracks = new List<(int bone, System.Numerics.Matrix4x4[] m)>();
+        foreach (var e in anim.Elements)
+        {
+            if (!byName.TryGetValue(e.Name, out int bi)) continue;
+            var bone = skel[bi];
+            var ms = new System.Numerics.Matrix4x4[frames];
+            bool ok = true;
+            for (int f = 0; f < frames && ok; f++)
+            {
+                switch (e.Content)
+                {
+                    case SPICA.Formats.CtrH3D.Animation.H3DAnimTransform t:
+                    {
+                        var sc = bone.Scale; var ro = bone.Rotation; var tr = bone.Translation;
+                        if (t.ScaleExists) sc = new System.Numerics.Vector3(t.ScaleX.GetFrameValue(f), t.ScaleY.GetFrameValue(f), t.ScaleZ.GetFrameValue(f));
+                        if (t.RotationExists) ro = new System.Numerics.Vector3(t.RotationX.GetFrameValue(f), t.RotationY.GetFrameValue(f), t.RotationZ.GetFrameValue(f));
+                        if (t.TranslationExists) tr = new System.Numerics.Vector3(t.TranslationX.GetFrameValue(f), t.TranslationY.GetFrameValue(f), t.TranslationZ.GetFrameValue(f));
+                        ms[f] = Euler(sc, ro, tr); break;
+                    }
+                    case SPICA.Formats.CtrH3D.Animation.H3DAnimQuatTransform q:
+                    {
+                        var sc = q.HasScale ? q.GetScaleValue(f) : bone.Scale;
+                        var tr = q.HasTranslation ? q.GetTranslationValue(f) : bone.Translation;
+                        if (q.HasRotation)
+                            ms[f] = System.Numerics.Matrix4x4.CreateScale(sc) * System.Numerics.Matrix4x4.CreateFromQuaternion(q.GetRotationValue(f)) * System.Numerics.Matrix4x4.CreateTranslation(tr);
+                        else
+                            ms[f] = Euler(sc, bone.Rotation, tr);
+                        break;
+                    }
+                    case SPICA.Formats.CtrH3D.Animation.H3DAnimMtxTransform mt:
+                        ms[f] = mt.GetTransform(f).ToMatrix4x4(); break;
+                    default:
+                        ok = false; break;
+                }
+            }
+            if (ok) tracks.Add((bi, ms));
+        }
+        w.Write((uint)tracks.Count);
+        foreach (var (bi, ms) in tracks)
+        {
+            w.Write((ushort)bi); w.Write((uint)ms.Length);
+            foreach (var m in ms) WriteM(w, m);
+        }
+    }
+    Console.WriteLine($"{nb} bones, {verts.Count} vertices, {anims.Count} animations -> {outPath}");
     return 0;
 }

@@ -1,0 +1,1779 @@
+[
+ {
+  "address": "0x00100990",
+  "name": "std_strncat",
+  "signature": "char* std_strncat(char* dest, const char* src, int count)",
+  "params": {
+   "param_1": "dest",
+   "param_2": "src",
+   "param_3": "count"
+  },
+  "summary": "Appends src to the NUL-terminated string in dest, copying at most count bytes and always writing a terminator when the budget runs out. This is the Thumb CRT strncat used all over the model/UI code.",
+  "confidence": 0.9,
+  "evidence": "Thumb leaf: first loop scans dest for its NUL, second copies src bytes until count hits 0 then writes 0. 12 callers including 0x00222E90, 0x002232FC, 0x002C5E40 and CRT callers at 0x006105B4/0x00707A7C; exact strncat semantics."
+ },
+ {
+  "address": "0x00107FC0",
+  "name": "Container_HashTableInsert",
+  "signature": "void* Container_HashTableInsert(Container* table, const void* key, u32 value)",
+  "params": {
+   "param_1": "table",
+   "param_2": "key",
+   "param_3": "value"
+  },
+  "summary": "Inserts a key (and optional value) into the engine hash table, growing/rehashing the bucket array when the load factor is exceeded and returning the stored bucket.",
+  "confidence": 0.6,
+  "evidence": "Calls the CRT memory/string helpers 0x0010E540, 0x0010EC00, 0x0010EC14, 0x0010EE9C, 0x0011142C and 0x00115358; same call pattern as 0x001E88E4 (string hash map insert). 0x0010F050 removes entries from the same container layout (+0x18 owner, +0x2cc bitmask, +0x2d0 count)."
+ },
+ {
+  "address": "0x00109DC8",
+  "name": "Mem_AllocAligned",
+  "signature": "void* Mem_AllocAligned(u32 size, void* heap, u32 align)",
+  "params": {
+   "param_1": "size",
+   "param_2": "heap",
+   "param_3": "align"
+  },
+  "summary": "Aligned heap allocation: rounds the request, allocates size + align + 8 bytes so an 8-byte header can hold the original pointer, and returns the aligned payload. It is the single allocator used by nearly every constructor in this batch.",
+  "confidence": 0.75,
+  "evidence": "Signature is preserved as three arguments (size, heap, align); calls 0x0011CFAC (round size), stores the original block in the 8-byte header and returns header+8. Called by ~100 constructors, always with a struct size and an alignment of 4/8/0x10."
+ },
+ {
+  "address": "0x0010F050",
+  "name": "maybe_Container_RemoveSmallSetEntry",
+  "signature": "void maybe_Container_RemoveSmallSetEntry(u32 owner, int element, Container* set)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "element",
+   "param_3": "set"
+  },
+  "summary": "Removes one of at most four tracked elements from the container's 4-bit occupancy set, clears the bit and decrements the live count. The index is derived from the element address relative to the container.",
+  "confidence": 0.45,
+  "evidence": "Index = (arg2 - set - 0xa8) / stride via the magic constant g_0010f0c4, shifted by 0x27 and required to be < 4; tests 1 << index against set+0x2cc, calls 0x00114C58 to release the slot and decrements set+0x2d0. Small-set semantics are clear, the owner type is not."
+ },
+ {
+  "address": "0x00114C58",
+  "name": "maybe_Mem_PoolDestroy",
+  "signature": "void maybe_Mem_PoolDestroy(Pool* pool, u32 block, u32 count, u32 flags)",
+  "params": {
+   "param_1": "pool",
+   "param_2": "block",
+   "param_3": "count",
+   "param_4": "flags"
+  },
+  "summary": "Releases a pool block: walks the pool's free/used lists, merges neighbouring free chunks and disposes of the pool descriptor. Called when a small-set entry is removed and from pool teardown.",
+  "confidence": 0.45,
+  "evidence": "Callees 0x0011ADAC (pool init), 0x0011AE20 and 0x0011AE5C (list link/unlink); global g_00114cec; caller 0x0010F050. Free-list merge logic, but the exact pool API name is inferred."
+ },
+ {
+  "address": "0x0011ADAC",
+  "name": "maybe_Mem_PoolInit",
+  "signature": "void maybe_Mem_PoolInit(Pool* pool)",
+  "params": {
+   "param_1": "pool"
+  },
+  "summary": "Initializes a memory pool descriptor: fills the free list over the backing block and sets the sentinel/end pointers.",
+  "confidence": 0.45,
+  "evidence": "0xB0 bytes, callee 0x0011FE34 (block fill), global g_0011ae10, caller 0x00114C58. Same descriptor layout that 0x00114C58 tears down."
+ },
+ {
+  "address": "0x0011AE5C",
+  "name": "maybe_Container_ListAppend",
+  "signature": "void maybe_Container_ListAppend(List* list, void* node)",
+  "params": {
+   "param_1": "list",
+   "param_2": "node"
+  },
+  "summary": "Links node at the tail of an intrusive doubly-linked list, patching the previous tail and the list head.",
+  "confidence": 0.45,
+  "evidence": "0x2C-byte leaf that calls 0x0011AE18 (list splice) and 0x0011FE24; caller 0x00114C58. Pointer patching matches a tail append."
+ },
+ {
+  "address": "0x001470B0",
+  "name": "maybe_World_EnsureTimeZoneState",
+  "signature": "u8 maybe_World_EnsureTimeZoneState(char* key)",
+  "params": {
+   "param_1": "key"
+  },
+  "summary": "Lazily creates the global world/time state object keyed by the supplied name and returns 1 when it had to create it, 0 when it already existed.",
+  "confidence": 0.35,
+  "evidence": "Returns undefined1; allocates via 0x0011CFAC/0x0011FE8C and calls 0x001DBCFC; uses globals g_00147164/g_00147168/g_0014716c and treats arg1 as a C string (name lookup). Subsystem guess only."
+ },
+ {
+  "address": "0x00148E28",
+  "name": "maybe_Map_CheckCellBlocked",
+  "signature": "u32 maybe_Map_CheckCellBlocked(u32 x, u32 y, u32 mask, u32 flags)",
+  "params": {
+   "param_1": "x",
+   "param_2": "y",
+   "param_3": "mask",
+   "param_4": "flags"
+  },
+  "summary": "Tests whether a map grid cell is blocked: walks a table of 6-byte collision entries, consults a per-entry enable table, and returns 1 when blocked. On the free path it allocates a 24-byte cell node and stores the cell coordinates shifted left by 3.",
+  "confidence": 0.45,
+  "evidence": "Entries at self+0x14, id at +2 and flag bytes at 0/1/4; per-id table at self+0x2a70; node coords stored as short <<3 at +0x12/+0x14; allocator 0x00109DC8 and 0x001235A4. Caller-less leaf, so this replaces the earlier encounter-monster guess."
+ },
+ {
+  "address": "0x0016096C",
+  "name": "maybe_Field_CreateGridObject",
+  "signature": "void* maybe_Field_CreateGridObject(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs an instance of the 400-cell field grid class by installing the vtable at g_0016098c.",
+  "confidence": 0.35,
+  "evidence": "Allocator + 0x00579974 then *obj = g_0016098c. That vtable's slots 0x0018FC30/0x0018FC34/0x0018FC84 belong to 0x0018F974, the constructor that allocates the 400 x 0x40 cell array and geometry block."
+ },
+ {
+  "address": "0x00161160",
+  "name": "maybe_Script_CreateIntTable",
+  "signature": "void* maybe_Script_CreateIntTable(void)",
+  "params": {},
+  "summary": "Allocates a script integer-table object, installs its vtable and clears the 9 handle words at +0x20..+0x28 plus a 12-entry parameter array.",
+  "confidence": 0.4,
+  "evidence": "Sets vtable g_001611dc (0x75b34, methods 0x00193FA0/0x001941D0/0x00194220, the same family as 0x00193F54 Script_GetIntTable1) and calls 0x00100050(dst, g_001611e0, 0xc, 4) to build 12 entries."
+ },
+ {
+  "address": "0x00161974",
+  "name": "maybe_Field_UpdateEffectColor",
+  "signature": "void maybe_Field_UpdateEffectColor(Actor* actor, const EffectParams* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "params"
+  },
+  "summary": "Twin of 0x00181C94: on first use creates the effect handle for an actor, afterwards rewrites the effect colour/alpha floats (offsets 0x5b4..0x5c4) and notifies the attached effect list.",
+  "confidence": 0.35,
+  "evidence": "Ghidra merged the entry point into 0x00161974; the recovered body searches a child by type, calls 0x005F6E50/0x005F708C, writes RGBA float fields 0x5b8/0x5bc/0x5c0/0x5c4 from g_00225c80/g_00225c84 and loops calling 0x00225BF4. Colour semantics inferred from the four adjacent floats."
+ },
+ {
+  "address": "0x00161DC4",
+  "name": "maybe_Container_CreateObject",
+  "signature": "void* maybe_Container_CreateObject(void)",
+  "params": {},
+  "summary": "Allocates a container object, installs its vtable and initializes the embedded handle at +0x60 with the constant at g_00161dfc.",
+  "confidence": 0.3,
+  "evidence": "Allocator + 0x00579974, *obj = g_00161df8, obj[0x18] = g_00161dfc, obj[0x19] = 0. Vtable 0x75a6c8 slots 0x001E6C3C/0x001E6BE8/0x001E6C0C belong to FUN_001E6B34, next to the string-map code at 0x001E88E4."
+ },
+ {
+  "address": "0x00162084",
+  "name": "maybe_Ui_CreatePanel",
+  "signature": "void* maybe_Ui_CreatePanel(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs a UI panel object by installing the vtable at g_001620a4.",
+  "confidence": 0.3,
+  "evidence": "Allocator + 0x00579974, *obj = g_001620a4; vtable 0x75e6ac slots 0x002A5448/0x002A53FC/0x002A5400 point into FUN_002A5244, in the 0x2A5xxx UI block."
+ },
+ {
+  "address": "0x00162278",
+  "name": "maybe_Mem_CreatePoolObject",
+  "signature": "void* maybe_Mem_CreatePoolObject(void)",
+  "params": {},
+  "summary": "Constructs an allocator/pool object, initializes the embedded handle at +0x60 through 0x0055A93C and returns the payload pointer (object - 0x60).",
+  "confidence": 0.3,
+  "evidence": "Installs vtable g_001622a0 (0x75f958, methods 0x002BD5A0/0x002BD558/0x0055A90C), calls 0x0055A93C(obj+0x60) and returns result - 0x60. 0x55A90C is inside FUN_0055A500, the allocator/pool code."
+ },
+ {
+  "address": "0x00162758",
+  "name": "maybe_Field_CreateActorObject",
+  "signature": "void* maybe_Field_CreateActorObject(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs a field actor object by installing the vtable at g_00162778.",
+  "confidence": 0.3,
+  "evidence": "Allocator + 0x00579974, *obj = g_00162778; vtable 0x762fec slots 0x00315EDC/0x00315EB4/0x00315EB8 belong to FUN_00315BB8, which 0x001EB390 (field object resize) calls."
+ },
+ {
+  "address": "0x00162DA8",
+  "name": "maybe_Sound_CreatePlayer",
+  "signature": "void* maybe_Sound_CreatePlayer(void)",
+  "params": {},
+  "summary": "Constructs a sound-player object: installs its vtable, initializes the embedded voice table at +0x60 via 0x0056EE88, clears the state word at +0x24 and returns the payload pointer (object - 0x60).",
+  "confidence": 0.3,
+  "evidence": "vtable g_00162dd8 (0x7730f8, methods 0x0046CFB0/0x0056ED58/0x0056EE60), calls 0x0056EE88(obj+0x60) then result->f_24 = 0 and returns result - 0x60; 0x56xxxx is the sound/audio function block."
+ },
+ {
+  "address": "0x00162DE8",
+  "name": "maybe_Field_CreateTaggedObject",
+  "signature": "void* maybe_Field_CreateTaggedObject(void)",
+  "params": {},
+  "summary": "Allocates an object, installs the vtable at g_00162e10 and zeroes the handle at +0x60.",
+  "confidence": 0.3,
+  "evidence": "Allocator + 0x00579974, *obj = g_00162e10, obj[0x18] = 0. Vtable 0x776a64 slots 0x004B3620/0x004B35D0/0x004B35F4 belong to FUN_004B3528; the Ghidra string annotation djw comes from the vtable target bytes, not from the object."
+ },
+ {
+  "address": "0x00168200",
+  "name": "maybe_Field_InitSharedParams",
+  "signature": "void maybe_Field_InitSharedParams(FieldState* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "One-time initializer for a shared field parameter block: allocates a 500-byte object, installs its vtable and copies roughly one hundred global values from g_00168a50 into the block at offsets 0x1ec..0x1e8.",
+  "confidence": 0.35,
+  "evidence": "Guarded by self->f_e4 == 0; allocates 500 bytes, calls 0x0021C2DC, writes g_00168a48, stores self at +0x20, calls 0x00100050(dst, g_00168a4c, 0x18, 0x13) (19 x 24 bytes) and then copies field pairs from g_00168a50/g_00168a44. Caller 0x00206408."
+ },
+ {
+  "address": "0x001774B4",
+  "name": "Text_SetupDualLayers",
+  "signature": "void Text_SetupDualLayers(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds the two main and two null text layers (txt_l1, txt_l2, null_txt_l1, null_txt_l2) into a widget's text system.",
+  "confidence": 0.6,
+  "evidence": "0x10C bytes; literal strings 0x00177590 txt_l1, 0x001775A0 txt_l2, 0x001775A8 null_txt_l1, 0x001775B4 null_txt_l2; writes layer handles to g_00177588/g_00177598. Same shape as 0x0018FE5C and 0x00212CF0."
+ },
+ {
+  "address": "0x00177720",
+  "name": "maybe_Field_SetupNpcActionVtable",
+  "signature": "void maybe_Field_SetupNpcActionVtable(void* obj)",
+  "params": {},
+  "summary": "Installs the NPC-action vtable/type word on the object returned by 0x0019C8F4 and stores the companion constant at +0x2c.",
+  "confidence": 0.35,
+  "evidence": "obj = 0x0019C8F4(); obj[0xb] = g_00177744; obj[0] = g_00177748. Called only from 0x00177864 Field_SetupNpcActionScript, immediately after the NPC action object is created."
+ },
+ {
+  "address": "0x00177864",
+  "name": "Field_SetupNpcActionScript",
+  "signature": "void Field_SetupNpcActionScript(NpcAction* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds an NPC action object from script data: reads the action, appear, disappear and notice tables, allocates the action entries and installs the NPC-action vtable.",
+  "confidence": 0.6,
+  "evidence": "0x4E4 bytes; strings action/appear/disappear/notice at 0x00177D10..0x00177D38; allocates through 0x00109DC8, parses with 0x0011142C/0x0011CCA0 and calls 0x00177720 (vtable setup) plus 0x001D0B50/0x001D101C."
+ },
+ {
+  "address": "0x00177D48",
+  "name": "Field_SetupEnemyAi",
+  "signature": "void Field_SetupEnemyAi(Actor* self, u32 mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Parses the enemy AI parameter tables into an actor: collision size, walk/stop and back-off rates, rush/chase speeds and wait/escape weights.",
+  "confidence": 0.7,
+  "evidence": "0x6F4 bytes; strings collision, moveWa/backWa/moveSt/backSt, s_rush/s_chase, w_stop/w_esc at 0x00178124..0x001784xx; allocates AI nodes with 0x00109DC8 and table lookups via 0x0011CB38/0x0011CCA0."
+ },
+ {
+  "address": "0x00178B08",
+  "name": "Monster_SetupEcology",
+  "signature": "void Monster_SetupEcology(Actor* self, const void* ecoTable, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "ecoTable",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Applies monster ecology parameters to an actor: spawn/ecology chance plus main and sub colony setup from the ecoRn/ecoCh/ecoCoMain/ecoCoSub table entries.",
+  "confidence": 0.65,
+  "evidence": "0x2C8 bytes; strings ecoRn, ecoCh, ecoCoMain, ecoCoSub at 0x00178DA8..0x00178DC4; allocates ecology state with 0x00109DC8 and looks values up through 0x00330F40/0x00331748."
+ },
+ {
+  "address": "0x00179398",
+  "name": "Field_ApplyNpcActionState",
+  "signature": "void Field_ApplyNpcActionState(Actor* self, const u8* state)",
+  "params": {
+   "param_1": "self",
+   "param_2": "state"
+  },
+  "summary": "Copies a 12-byte NPC action state into the actor and dispatches on the action id: idle/run/wait use the movement helpers, while operation actions create opeJo/opeFr objects and send the matching actor notification.",
+  "confidence": 0.55,
+  "evidence": "0x37C bytes; copies state[0..5] to +0xc9..+0x329 and state[8..0x10] to +0x32c..; switch cases 0..0xb call 0x0017A508/0x0017A6EC/0x005E7848 and the object creation path uses the literal opeJo at 0x00179704 (opeFr at 0x0017970C); caller 0x001D43C0."
+ },
+ {
+  "address": "0x001799D0",
+  "name": "maybe_Field_SetEncounterParams",
+  "signature": "void maybe_Field_SetEncounterParams(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Assembles a battle/encounter parameter block from the actor's monster record: copies the float stat block, tags it with the shortRange/battle names and queues it.",
+  "confidence": 0.4,
+  "evidence": "0x3AC bytes; allocates 0x50 bytes via 0x00109DC8 then 0x004E5B3C; builds a stack structure from g_00179d4c..g_00179d64; uses strings shortRange (0x00179D66) and battle (0x00179D74) through 0x0011CCA0; calls 0x00336054/0x0046E8B8/0x0063EEAC."
+ },
+ {
+  "address": "0x0017A508",
+  "name": "Field_ApplyMovementFlags",
+  "signature": "void Field_ApplyMovementFlags(Actor* self, u32 mode, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Writes an actor's movement mode and derived flags: selects walk/stop and back-off settings from the parameter table and updates the movement state.",
+  "confidence": 0.65,
+  "evidence": "0x1E4 bytes; strings moveWa (0x0017A6D0), moveSt (0x0017A6D8), backWa (0x0017A6E0) plus g_0017a6e8; called from 0x00179398 and 0x0019C574; allocates a movement record with 0x00109DC8 and uses 0x002A8BA4/0x002B2F40/0x006D5CB0."
+ },
+ {
+  "address": "0x0017F5A2",
+  "name": "maybe_Field_CreateSmallEffect",
+  "signature": "void maybe_Field_CreateSmallEffect(Actor* actor)",
+  "params": {
+   "param_1": "actor"
+  },
+  "summary": "Creates a 40-byte field effect object (and, for actors above level 3, a 0x28 object) and submits it to the effect dispatcher when the actor is active.",
+  "confidence": 0.3,
+  "evidence": "Thumb entry with unaff_r4/r6 (Ghidra lost the ABI); allocates 0x28 via 0x00109DC8 then 0x004A7B7C, calls 0x002273B0 and 0x002A8BA4, and invokes vtable slot +4 on the created objects. Decompilation is incomplete, so only the object kinds are reliable."
+ },
+ {
+  "address": "0x0017FF58",
+  "name": "Field_RegisterNpcActions",
+  "signature": "void Field_RegisterNpcActions(Npc* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Registers NPC action handlers from the action table, creating the nut/flw action objects and attaching them to the NPC.",
+  "confidence": 0.65,
+  "evidence": "0x310 bytes; strings action (0x0018023C), nut (0x0018024C), flw (0x00180250); calls 0x001DC214/0x002273B0/0x002A8BA4 and allocates through 0x00109DC8."
+ },
+ {
+  "address": "0x00181350",
+  "name": "Field_RegisterActorActions",
+  "signature": "void Field_RegisterActorActions(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Registers the actor's turn and movement actions (rTurn/mTurn, move, talk) by building the corresponding action objects from the action table.",
+  "confidence": 0.65,
+  "evidence": "0x3D4 bytes; strings action (0x001816F4), rTurn (0x00181700), mTurn (0x00181710), move (0x00181708), talk (0x00181718), nut (0x001816FC); calls 0x001DC3E0/0x00227C54/0x0036C2BC and allocates with 0x00109DC8."
+ },
+ {
+  "address": "0x00181C94",
+  "name": "Field_UpdateEffectParams",
+  "signature": "void Field_UpdateEffectParams(Actor* actor, const EffectParams* params)",
+  "params": {
+   "param_1": "actor",
+   "param_2": "params"
+  },
+  "summary": "Updates an attached effect's parameter block: on first use creates the effect handle, then writes the four colour/alpha floats (0x5b8..0x5c4) and notifies the effect list after adjusting the effect's timing fields.",
+  "confidence": 0.55,
+  "evidence": "Merged into the recovered 0x00161974 body: searches a child by type id, calls 0x005F708C/0x00225BF4, writes f_5b4/f_5b8/f_5bc/f_5c0/f_5c4 from g_00225c80/g_00225c84 and walks the list at +0x6b4. Names 0x00161974 and this entry are twins with different entry points."
+ },
+ {
+  "address": "0x00182960",
+  "name": "maybe_Field_CreateActorSound",
+  "signature": "void maybe_Field_CreateActorSound(Actor* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Creates the 0xc0-byte actor sound/effect resource with a 28-byte configuration block (flags 0x10, 0xe, count 5, enabled) and binds it to the actor.",
+  "confidence": 0.35,
+  "evidence": "0xC8 bytes; builds a 28-byte stack config (local_28..local_18) and calls 0x0030B120(handle, uVar4, &config); allocates 0xC0 with 0x00109DC8 then 0x0030BE18; global g_00182a24. Callers are the field actor constructors 0x00183C90/0x00184168/0x001846EC/0x001849F0."
+ },
+ {
+  "address": "0x00184ADC",
+  "name": "maybe_Field_CreateActorData",
+  "signature": "void* maybe_Field_CreateActorData(u32 id, const void* desc)",
+  "params": {
+   "param_1": "id",
+   "param_2": "desc"
+  },
+  "summary": "Constructs a large actor/render data block via 0x00336A38 and fills it with default colour, flag and culling values, returning the interior pointer at -0x2b0.",
+  "confidence": 0.35,
+  "evidence": "0x1C8 bytes; calls 0x00336A38(id, &local, g_00184c80); writes defaults 0xfffffff, 1, 0xff, 0xffffffff, 0xfffff800 over ~0x100 bytes and returns iVar5 - 0x2b0. Callers 0x004753E4 and 0x006C2B18."
+ },
+ {
+  "address": "0x0018F2D0",
+  "name": "maybe_Ui_FinalizeWidget",
+  "signature": "void maybe_Ui_FinalizeWidget(Widget* self, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Finalizes a widget: releases its child list and clears the layout/draw state before the object is freed.",
+  "confidence": 0.35,
+  "evidence": "0xA4-byte leaf with no callees; walks the child list at +0x1c and clears handles at +0x18/+0x20 based on the mode argument. No strings or known callees, so the widget role is inferred from the surrounding UI block."
+ },
+ {
+  "address": "0x0018F974",
+  "name": "maybe_Field_CreateGridSystem",
+  "signature": "void* maybe_Field_CreateGridSystem(GridSystem* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the field grid system: installs the vtable, lazily allocates a shared cell pool, creates the collision/height sub-objects and builds a 400-entry cell array of 0x40 bytes each.",
+  "confidence": 0.35,
+  "evidence": "0x2C4 bytes; *self = g_0018fc00 (vtable 0x758a60, slots 0x0018FC30/0x0018FC34/0x0018FC84), allocates a 0x10-byte-stride pool, builds 0x4000 bytes and calls 0x00100050(dst, g_0018fc2c, 400, 0x40); caller 0x001F0FEC. Grid geometry is plausible but not proven."
+ },
+ {
+  "address": "0x0018FE5C",
+  "name": "Text_SetupDualLayersDefault",
+  "signature": "void Text_SetupDualLayersDefault(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Variant of Text_SetupDualLayers that binds the same txt_l1/txt_l2 and null_txt_l1/null_txt_l2 layers but resets the layer handles to the defaults first.",
+  "confidence": 0.6,
+  "evidence": "0xFC bytes; same four literal strings at 0x0018FF30/0x0018FF38/0x0018FF40/0x0018FF4C as 0x001774B4, with the handle clear path in front."
+ },
+ {
+  "address": "0x00193F54",
+  "name": "Script_GetIntTable1",
+  "signature": "int Script_GetIntTable1(ScriptTable* table, int index)",
+  "params": {
+   "param_1": "table",
+   "param_2": "index"
+  },
+  "summary": "Returns an integer from the first of the three parallel script integer tables, creating/populating the table on first use.",
+  "confidence": 0.6,
+  "evidence": "0x4C-byte leaf with callees 0x0011CCA0 (name lookup) and 0x00659668 (table access); identical structure to 0x00194300 and 0x0019434C, differing only in the global/table id."
+ },
+ {
+  "address": "0x00194300",
+  "name": "Script_GetIntTable2",
+  "signature": "int Script_GetIntTable2(ScriptTable* table, int index)",
+  "params": {
+   "param_1": "table",
+   "param_2": "index"
+  },
+  "summary": "Second of the three parallel script integer-table getters; same code as Script_GetIntTable1 with a different table id.",
+  "confidence": 0.6,
+  "evidence": "0x4C bytes, callees 0x0011CCA0 and 0x00659668, byte-for-byte sibling of 0x00193F54 and 0x0019434C."
+ },
+ {
+  "address": "0x0019434C",
+  "name": "Script_GetIntTable3",
+  "signature": "int Script_GetIntTable3(ScriptTable* table, int index)",
+  "params": {
+   "param_1": "table",
+   "param_2": "index"
+  },
+  "summary": "Third of the three parallel script integer-table getters; same code as Script_GetIntTable1 with a different table id.",
+  "confidence": 0.6,
+  "evidence": "0x50 bytes, callees 0x0011CCA0 and 0x00659668, sibling of the two preceding getters."
+ },
+ {
+  "address": "0x001948CC",
+  "name": "Ui_BindGaugeParts",
+  "signature": "void Ui_BindGaugeParts(GaugeWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds the gauge's fill and outline layers (gauge/out) and registers the gauge update callback.",
+  "confidence": 0.55,
+  "evidence": "0x94 bytes; strings gauge (0x00194954) and out (g_00194950), layer handles g_0019494c/g_00194950; calls the layer binder 0x003E00CC/0x003E043C and 0x00649BD4."
+ },
+ {
+  "address": "0x00196B80",
+  "name": "Ui_SetupPagerTextLayers",
+  "signature": "void Ui_SetupPagerTextLayers(PagerWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds a pager widget's text layers: four left columns, four right columns and the level-text layer, wiring each to its layout slot.",
+  "confidence": 0.7,
+  "evidence": "0x564 bytes; literal layer names txt_l1..txt_l4, txt_r1..txt_r4, txt_lv_l1 at 0x00196F50..0x00196F90, plus further pager layer names; calls 0x003D2E2C and 0x001970E4/0x001A629C/0x001A6680."
+ },
+ {
+  "address": "0x001980E8",
+  "name": "maybe_Field_ReleaseResources",
+  "signature": "int maybe_Field_ReleaseResources(Field* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases the field object's owned resources and returns a status flag indicating whether anything was freed.",
+  "confidence": 0.4,
+  "evidence": "0x4C-byte leaf with no callees: tests the handles at +0xc/+0x10/+0x14, clears them and returns 0/1. Callers are the scene teardown routines 0x001A2FEC and 0x001A3760."
+ },
+ {
+  "address": "0x0019C574",
+  "name": "maybe_Monster_SetupEcologyForId",
+  "signature": "u32 maybe_Monster_SetupEcologyForId(Actor* self, u32 monsterId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "monsterId"
+  },
+  "summary": "Looks up the monster record for an id and forwards it to Monster_SetupEcology so the actor gets the spawn/colony parameters for that species.",
+  "confidence": 0.4,
+  "evidence": "0x1A4 bytes; calls 0x00178B08 (Monster_SetupEcology) and 0x005E7848, reads globals g_0019c614/g_0019c618/g_0019c61c (lookup tables); argument is treated as a monster id."
+ },
+ {
+  "address": "0x0019C7A0",
+  "name": "maybe_Script_ResolveTwoIds",
+  "signature": "void maybe_Script_ResolveTwoIds(ScriptCtx* ctx, u32 id1, u32 id2)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "id1",
+   "param_3": "id2"
+  },
+  "summary": "Resolves two script ids to objects and fills a five-word result structure used by the caller's script command.",
+  "confidence": 0.35,
+  "evidence": "0x154 bytes; callees 0x00116AE0 (fill), 0x0011CFAC/0x0011CFDC (allocation), 0x002D71AC (id lookup); writes a 5-word block at g_0019c864..g_0019c874. Called from the script table initializer 0x001E4A40."
+ },
+ {
+  "address": "0x0019CD50",
+  "name": "Field_InitSceneObjects",
+  "signature": "void Field_InitSceneObjects(Scene* scene, int areaId)",
+  "params": {
+   "param_1": "scene",
+   "param_2": "areaId"
+  },
+  "summary": "Allocates and initializes the scene's object tables for a loaded area: map data, actor list, collision grid and effect slots.",
+  "confidence": 0.5,
+  "evidence": "Largest function in the batch (0x1584 bytes); dozens of allocations through 0x00109DC8/0x0011CFAC, table builds with 0x00100050, area id copied into globals g_0019d6f4..g_0019d7xx; called by the map-jump path 0x001D9D7C."
+ },
+ {
+  "address": "0x0019E318",
+  "name": "maybe_Field_ApplySceneFade",
+  "signature": "void maybe_Field_ApplySceneFade(Scene* scene, u32 from, u32 to, u32 flags)",
+  "params": {
+   "param_1": "scene",
+   "param_2": "from",
+   "param_3": "to",
+   "param_4": "flags"
+  },
+  "summary": "Drives a scene fade/transition: interpolates the change over the scene's timer and forwards the colour values to the renderer transition helpers.",
+  "confidence": 0.4,
+  "evidence": "0x144 bytes; calls 0x001A178C, 0x002AC944/0x002ACED4 and 0x0061074C plus the 0x0066CD28/0x0066CD38/0x006F25xx helpers; global g_0019e458 stores the fade state."
+ },
+ {
+  "address": "0x001A2FEC",
+  "name": "Field_DestroyScene",
+  "signature": "void Field_DestroyScene(Scene* scene)",
+  "params": {
+   "param_1": "scene"
+  },
+  "summary": "Tears down a field scene: releases actors, models, effects and map data, then clears the scene's own state.",
+  "confidence": 0.6,
+  "evidence": "0x440 bytes; calls 0x001980E8 (resource release), 0x0011CFAC/0x0011FE8C (frees), 0x0010F6CC, 0x002E64xx and 0x001A178C; also called by 0x001A3760."
+ },
+ {
+  "address": "0x001A3760",
+  "name": "Field_DeleteScene",
+  "signature": "void Field_DeleteScene(Scene* scene)",
+  "params": {
+   "param_1": "scene"
+  },
+  "summary": "Deletes a scene object: calls Field_DestroyScene and then releases the scene descriptor itself.",
+  "confidence": 0.6,
+  "evidence": "0x28-byte wrapper: tail-calls 0x001A2FEC then 0x0010F6CC on the descriptor; global g_001a3784. Callers use it as the field-scene destructor."
+ },
+ {
+  "address": "0x001A476C",
+  "name": "maybe_Field_CreateMapObject",
+  "signature": "void* maybe_Field_CreateMapObject(Scene* scene, int defId)",
+  "params": {
+   "param_1": "scene",
+   "param_2": "defId"
+  },
+  "summary": "Creates a map object from a definition id: allocates the object, resolves its model/placement data and registers it with the scene.",
+  "confidence": 0.4,
+  "evidence": "0x16C bytes; allocates with 0x00109DC8, resolves the definition through 0x00319848/0x0062AE90 and parses names via 0x0011142C/0x0011CCA0; defaults written into g_001a49cc..g_001a49d8."
+ },
+ {
+  "address": "0x001A49DC",
+  "name": "maybe_Field_CreateActor",
+  "signature": "void maybe_Field_CreateActor(Scene* scene, const u16* def)",
+  "params": {
+   "param_1": "scene",
+   "param_2": "def"
+  },
+  "summary": "Creates a field actor from a script definition record, initializing its transform, model and action state before adding it to the scene.",
+  "confidence": 0.45,
+  "evidence": "0x270 bytes; allocates with 0x00109DC8, calls 0x0029E41C/0x002D1304/0x002D1F28/0x00319848, resolves names through 0x0011142C/0x0011CCA0; the definition is read as u16 fields."
+ },
+ {
+  "address": "0x001A6230",
+  "name": "maybe_Event_DispatchAction",
+  "signature": "void maybe_Event_DispatchAction(u32 ctx, int* args, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "args",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5",
+   "param_6": "a6",
+   "param_7": "a7"
+  },
+  "summary": "Forwards a seven-argument event/action request to the script dispatcher at 0x0053D4C4.",
+  "confidence": 0.35,
+  "evidence": "0x6C-byte wrapper whose only callee is 0x0053D4C4; all five registers and two stack words are passed through unchanged. Also called as an action callback from the UI time-display setup."
+ },
+ {
+  "address": "0x001B64D4",
+  "name": "Anim_CreateAnimSlots",
+  "signature": "void Anim_CreateAnimSlots(AnimOwner* owner, int count, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "count",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Creates count animation slots named anim_00..anim_NN and binds them to the owner so animations can be selected by slot index.",
+  "confidence": 0.75,
+  "evidence": "0x74 bytes; format string anim_%02d at 0x001B653C; calls 0x003E00CC to bind each generated name and 0x006F0A50 to register it."
+ },
+ {
+  "address": "0x001B6FAC",
+  "name": "Gfx_InitVramBanks",
+  "signature": "bool Gfx_InitVramBanks(void* config)",
+  "params": {
+   "param_1": "config"
+  },
+  "summary": "Initializes the GPU VRAM banks and display buffers from a configuration block, returning false when a bank cannot be reserved.",
+  "confidence": 0.7,
+  "evidence": "Returns bool; calls the 0x006B87F0/0x006B8BB0/0x006B8F8C/0x006B90A8/0x006B94D0/0x006B9Bxx bank setup routines and 0x0050E588; globals g_001b70a8..g_001b70c8 hold the bank descriptors; g_00140000 is the VRAM base."
+ },
+ {
+  "address": "0x001B78F4",
+  "name": "maybe_Gfx_ResetRenderer",
+  "signature": "void maybe_Gfx_ResetRenderer(int device)",
+  "params": {
+   "param_1": "device"
+  },
+  "summary": "Resets the renderer for a device and re-registers the render-pass callbacks and their state blocks.",
+  "confidence": 0.45,
+  "evidence": "0xF8 bytes; calls 0x001F336C/0x001F33E0/0x001F3454/0x001F34C8 (four pass resets), 0x004FCC28/0x004FE06C/0x004FE3xx, and stores the descriptor at g_001b79e8."
+ },
+ {
+  "address": "0x001B79EC",
+  "name": "maybe_Field_CreateRenderNodeA",
+  "signature": "void maybe_Field_CreateRenderNodeA(u32 a1, u32 a2, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Creates a render node through the shared 0x00193D84 constructor, installing the vtable at g_001b7a20.",
+  "confidence": 0.35,
+  "evidence": "0x38-byte wrapper: calls 0x00193D84 with five arguments and writes g_001b7a20 as the node vtable. The sibling 0x001B7D60 uses g_001b7d9c."
+ },
+ {
+  "address": "0x001B7D60",
+  "name": "maybe_Field_CreateRenderNodeB",
+  "signature": "void maybe_Field_CreateRenderNodeB(u32 a1, u32 a2, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "a1",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Creates a render node through 0x00193D84 with a different vtable (g_001b7d9c), the sibling of CreateRenderNodeA.",
+  "confidence": 0.35,
+  "evidence": "0x40-byte wrapper sharing the 0x00193D84 constructor with 0x001B79EC; only the vtable constant g_001b7d9c differs."
+ },
+ {
+  "address": "0x001BB9FC",
+  "name": "maybe_Ui_AddResourceEntry",
+  "signature": "void maybe_Ui_AddResourceEntry(ResContainer* self, int parent, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "parent",
+   "param_3": "flags"
+  },
+  "summary": "Allocates a UI resource entry, hashes/duplicates its name and inserts it under the given parent container.",
+  "confidence": 0.4,
+  "evidence": "0x210 bytes; allocates with 0x00109DC8, uses the string helpers 0x0011CB38/0x001235A4/0x0012416C/0x00124D48/0x00124FA0 and 0x003882xx, writes globals g_001bbbe8..g_001bbc00; shape matches a tree/hash insert."
+ },
+ {
+  "address": "0x001BBE30",
+  "name": "maybe_Ui_AddNamedEntry",
+  "signature": "void maybe_Ui_AddNamedEntry(ResContainer* self, int parent, u32 name)",
+  "params": {
+   "param_1": "self",
+   "param_2": "parent",
+   "param_3": "name"
+  },
+  "summary": "Adds a named child entry to a resource container, hashing the name and linking the new node into the parent's child list.",
+  "confidence": 0.35,
+  "evidence": "0x9C bytes; allocates with 0x00109DC8, uses 0x0011CCA0 (name lookup), 0x001235A4/0x00123660 (hash/insert) and 0x004BB77C; same container layout as 0x001BB9FC."
+ },
+ {
+  "address": "0x001BBF84",
+  "name": "maybe_Ui_BuildResourceTree",
+  "signature": "void maybe_Ui_BuildResourceTree(ResContainer* self, int parent, u32 def, u32 depth)",
+  "params": {
+   "param_1": "self",
+   "param_2": "parent",
+   "param_3": "def",
+   "param_4": "depth"
+  },
+  "summary": "Recursively builds a UI resource tree from a descriptor, adding entries and descending into child descriptors up to the requested depth.",
+  "confidence": 0.35,
+  "evidence": "0x1B4 bytes; allocates with 0x00109DC8, calls 0x0011CB38/0x001235A4 (hashing) and 0x0047EA10/0x0063F60C (descriptor walk), uses globals g_001bc128/g_001bc130; depth is the fourth argument."
+ },
+ {
+  "address": "0x001C26B0",
+  "name": "maybe_Model_UpdateAttachedParts",
+  "signature": "void maybe_Model_UpdateAttachedParts(Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Updates the model's attached parts and their colour/material state, calling the text-colour helpers and rebuilding the material descriptor when needed.",
+  "confidence": 0.4,
+  "evidence": "0x24C bytes; calls 0x00229C48/0x00229CC4 (Ui_ApplyTextColor family), 0x001C2EF4 (material descriptor), 0x0018C184/0x001A62C0/0x001C2C84 and 0x001235A4; global g_001c28f4."
+ },
+ {
+  "address": "0x001C28FC",
+  "name": "maybe_Text_DrawComplex",
+  "signature": "void maybe_Text_DrawComplex(TextCtx* ctx, u32 x, u32 y, u32 flags)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "x",
+   "param_3": "y",
+   "param_4": "flags"
+  },
+  "summary": "Lays out and draws a complex text run, allocating per-glyph vertex buffers and emitting the draw commands for each layer.",
+  "confidence": 0.3,
+  "evidence": "0x244 bytes; heavy allocation through 0x00109DC8/0x0011CFAC/0x0011FE8C, glyph state via 0x001113EC/0x00116AE0/0x00116C10, globals g_001c2b20..g_001c2b3c. Ghidra body is heavily optimised, so the text role is inferred from the buffer pattern."
+ },
+ {
+  "address": "0x001C2EF4",
+  "name": "maybe_Model_CreateMaterialDesc",
+  "signature": "void* maybe_Model_CreateMaterialDesc(void* out, u32 modelId, u32 materialId, u8 variant)",
+  "params": {
+   "param_1": "out",
+   "param_2": "modelId",
+   "param_3": "materialId",
+   "param_4": "variant"
+  },
+  "summary": "Builds a model material descriptor from the material table: copies texture and blend fields and stores the variant byte.",
+  "confidence": 0.4,
+  "evidence": "0x234 bytes; calls 0x0018C1B8 (material table lookup), reads globals g_001c3108..g_001c3120, writes texture indices and a flag byte; returns the descriptor pointer."
+ },
+ {
+  "address": "0x001C3128",
+  "name": "maybe_Model_SetupTransition",
+  "signature": "void maybe_Model_SetupTransition(Model* self, u32 slot, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot",
+   "param_3": "mode"
+  },
+  "summary": "Starts a model transition/animation blend: configures the transition slot and forwards the mode to the animation dispatcher.",
+  "confidence": 0.35,
+  "evidence": "0x90 bytes; calls 0x001DAAE0/0x001DAB30 (transition state), 0x002BBAD0 and 0x006D7A90; global g_001c318c. Called from 0x00257704 with slot 0x27 and mode 0x2f."
+ },
+ {
+  "address": "0x001C6218",
+  "name": "maybe_Script_InitSystemString",
+  "signature": "void* maybe_Script_InitSystemString(void* obj)",
+  "params": {
+   "param_1": "obj"
+  },
+  "summary": "Initializes a script object with the System tag/name and registers it in the script string table.",
+  "confidence": 0.35,
+  "evidence": "0x144 bytes; literal System at 0x001C6340, registers through 0x0011142C/0x0011CCA0, stores handles at g_001c6348..g_001c6358. Called from 0x001F2BC8."
+ },
+ {
+  "address": "0x001C7370",
+  "name": "Field_CreateActorFromId",
+  "signature": "int Field_CreateActorFromId(int owner, u32 actorId)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "actorId"
+  },
+  "summary": "Creates a field actor from an id: allocates the actor, applies the enemy AI and action setup and returns the new actor handle.",
+  "confidence": 0.6,
+  "evidence": "0x1B4 bytes; allocates with 0x00109DC8, calls 0x00177D48 (Field_SetupEnemyAi), 0x0017ACBC and 0x002F20E8/0x006177xx; actor id is resolved through 0x0011CB38/0x001235A4."
+ },
+ {
+  "address": "0x001C88A4",
+  "name": "maybe_Model_CreateAttachmentA",
+  "signature": "int maybe_Model_CreateAttachmentA(int owner, u32 partId)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "partId"
+  },
+  "summary": "Creates an attachment node on a model, allocating the node and resolving the part through the attachment table.",
+  "confidence": 0.4,
+  "evidence": "0x140 bytes; allocates with 0x00109DC8, uses 0x001235A4 and 0x00212A78, and writes a handle at g_001c8950; sibling of 0x001C94B4 with a different lookup callee."
+ },
+ {
+  "address": "0x001C94B4",
+  "name": "maybe_Model_CreateAttachmentB",
+  "signature": "int maybe_Model_CreateAttachmentB(int owner, u32 partId)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "partId"
+  },
+  "summary": "Creates a second kind of model attachment node, resolving the part through a different table than AttachmentA.",
+  "confidence": 0.4,
+  "evidence": "0xB4 bytes; allocates with 0x00109DC8, uses 0x001235A4 and 0x003D4974, writes g_001c9560; same shape as 0x001C88A4."
+ },
+ {
+  "address": "0x001C9DF0",
+  "name": "maybe_Effect_CreateVariant",
+  "signature": "void maybe_Effect_CreateVariant(EffectOwner* owner, int effectId, u32 a3, u32 a4, int count, int flags)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "effectId",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "count",
+   "param_6": "flags"
+  },
+  "summary": "Creates one or more effect instances from an effect id, allocating the instance array and registering it with the effect owner.",
+  "confidence": 0.35,
+  "evidence": "0x1AC bytes; allocates with 0x00109DC8, calls 0x001E4A40 (script triplet table) and 0x0028D4E4 (effect lookup), writes g_001c9f94..; count/flags are the last two arguments."
+ },
+ {
+  "address": "0x001CA1C8",
+  "name": "maybe_Ui_BindFourParts",
+  "signature": "void maybe_Ui_BindFourParts(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds four child parts/layers into a widget by walking the widget's four slots and attaching the bound objects.",
+  "confidence": 0.4,
+  "evidence": "0x70 bytes; calls 0x005F87C4 once per slot, writes handle g_001ca234; the four-iteration pattern matches the text-layer binders in this block."
+ },
+ {
+  "address": "0x001CA378",
+  "name": "maybe_Ui_InitColor",
+  "signature": "void maybe_Ui_InitColor(Color* color)",
+  "params": {
+   "param_1": "color"
+  },
+  "summary": "Initializes a UI colour value (RGBA or tint) to its default state.",
+  "confidence": 0.3,
+  "evidence": "0x28-byte leaf: calls 0x00113590 (colour convert) and writes one 32-bit field. Too small to confirm which colour structure it belongs to."
+ },
+ {
+  "address": "0x001CF488",
+  "name": "Ui_SetupKyoukaiSelectWindow",
+  "signature": "void Ui_SetupKyoukaiSelectWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the kyoukai (skill-board) selection window: binds the base and null text layers and creates the select lists win_kyoukai_select3..7.",
+  "confidence": 0.7,
+  "evidence": "0x2A4 bytes; strings null_txt_l1, win_kyoukai_select3..7 at 0x001CF694..0x001CF6F0 and txt_l1 in g_001cf68c; calls 0x003E00CC and 0x001CF274; sibling of the other Ui_Setup*Window constructors."
+ },
+ {
+  "address": "0x001D0B50",
+  "name": "maybe_Field_CreateSmallObject",
+  "signature": "void* maybe_Field_CreateSmallObject(void)",
+  "params": {},
+  "summary": "Allocates a small field object from the shared field factory and initializes its default fields.",
+  "confidence": 0.3,
+  "evidence": "0x20-byte factory wrapper: calls 0x0019C8F4 (the shared field object factory) then writes g_001d0b6c into the result. No strings, so the object kind is unknown."
+ },
+ {
+  "address": "0x001D101C",
+  "name": "maybe_Field_InitConfig",
+  "signature": "void* maybe_Field_InitConfig(void)",
+  "params": {},
+  "summary": "Creates and initializes a field configuration object, filling defaults from the constants at g_001d1098..g_001d10ac.",
+  "confidence": 0.3,
+  "evidence": "0x94 bytes; calls 0x0019C8F4, writes 5 handles/constants including the float pattern at g_001d10a8; returns the object pointer. Named from its role as a default-value initializer, not proven."
+ },
+ {
+  "address": "0x001D5BDC",
+  "name": "Model_ApplyFaceTexture",
+  "signature": "void Model_ApplyFaceTexture(Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Selects and applies the high- or low-detail face texture (Face_high_MT / Face_low_MT) to the model's face material.",
+  "confidence": 0.6,
+  "evidence": "0xB8 bytes; literal strings Face_high_MT (0x001D5C78) and Face_low_MT (0x001D5C88); calls 0x0011CCA0 (name lookup) and 0x0064179C/0x00659668 (material/texture lookup)."
+ },
+ {
+  "address": "0x001D6770",
+  "name": "Field_HandleMapJump",
+  "signature": "void Field_HandleMapJump(u32 fromMap, u32 toMap)",
+  "params": {
+   "param_1": "fromMap",
+   "param_2": "toMap"
+  },
+  "summary": "Handles a map jump/area transition: frees the current map resources and loads the destination map with its entry point.",
+  "confidence": 0.65,
+  "evidence": "0x1E8 bytes; calls 0x0011CFAC/0x0011CFDC/0x0011FE8C (frees) and 0x00613528/0x0063CCxx (map/area lookup), 0x00237198; globals g_001d6944..g_001d6954 hold the transition state."
+ },
+ {
+  "address": "0x001D7B84",
+  "name": "Ui_SetupCursorIcons",
+  "signature": "void Ui_SetupCursorIcons(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Loads the cursor icon set (default, word2, word3 and keyboard icons) and binds them to the widget's cursor handles.",
+  "confidence": 0.65,
+  "evidence": "0x190 bytes; literal strings icon_keyboard_3d (0x001D7CC0), icon_cursor_default (0x001D7CD4), icon_cursor_word2 (0x001D7CE8), icon_cursor_word3 (0x001D7CFC); calls 0x003DFF34/0x003E00CC/0x003E043C and 0x001D8474."
+ },
+ {
+  "address": "0x001D7F5C",
+  "name": "maybe_Ui_AddItemNode",
+  "signature": "void maybe_Ui_AddItemNode(int owner, u32 a2, u32 a3, u32 a4, u32 a5, u8 a6, u8 a7)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5",
+   "param_6": "a6",
+   "param_7": "a7"
+  },
+  "summary": "Allocates an item/list node, copies the payload and appends it to the owner's item chain.",
+  "confidence": 0.35,
+  "evidence": "0xC8 bytes; allocates with 0x00109DC8 then copies with 0x001235A4; global g_001d8000 holds the node head. Two trailing byte arguments suggest icon/state flags."
+ },
+ {
+  "address": "0x001D8BD4",
+  "name": "maybe_Field_DestroyNode",
+  "signature": "void maybe_Field_DestroyNode(FieldNode* node, u32 flags)",
+  "params": {
+   "param_1": "node",
+   "param_2": "flags"
+  },
+  "summary": "Destroys a field node: releases its payload and unlinks it from the node list.",
+  "confidence": 0.4,
+  "evidence": "0x5C bytes; calls 0x0010F6CC (free), 0x003A7AF8 (list unlink) and 0x0053DED0; sibling of 0x001D8C30 which does the lookup side."
+ },
+ {
+  "address": "0x001D8C30",
+  "name": "maybe_Field_GetNode",
+  "signature": "int maybe_Field_GetNode(void* parent, u32 index)",
+  "params": {
+   "param_1": "parent",
+   "param_2": "index"
+  },
+  "summary": "Returns the field node stored at the given index under a parent, or zero when out of range.",
+  "confidence": 0.3,
+  "evidence": "0x50-byte leaf with callees 0x003A7AF8/0x0053DED0; bounds-checks the index against the parent's count. Only the list-access shape is certain."
+ },
+ {
+  "address": "0x001D9D7C",
+  "name": "Field_HandleMapJumpEvent",
+  "signature": "void Field_HandleMapJumpEvent(int scene, const u8* eventData)",
+  "params": {
+   "param_1": "scene",
+   "param_2": "eventData"
+  },
+  "summary": "Executes a map-jump event: decodes the destination/entry from the event record, tears down the current scene and starts loading the destination.",
+  "confidence": 0.55,
+  "evidence": "0x518 bytes; calls 0x0017C054/0x00192BE8 (movement/event state) and 0x0033CDC4/0x0033D99C (map load), 0x0066AA7C/0x0066AA9C/0x006F1Exx; global g_001da290. Companion of 0x001D6770."
+ },
+ {
+  "address": "0x001DA65C",
+  "name": "maybe_Field_CreateStateObject",
+  "signature": "void* maybe_Field_CreateStateObject(void* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Allocates and initializes a field state object, filling its handle table through 0x00116AE0.",
+  "confidence": 0.35,
+  "evidence": "0x124 bytes; calls 0x00116AE0 (block fill), writes g_001da69c as the vtable/type word and returns the object. No strings, so only the constructor role is certain."
+ },
+ {
+  "address": "0x001DBA38",
+  "name": "Gfx_InitRenderDevice",
+  "signature": "u32 Gfx_InitRenderDevice(int device, int mode, u8 flags, u32 config)",
+  "params": {
+   "param_1": "device",
+   "param_2": "mode",
+   "param_3": "flags",
+   "param_4": "config"
+  },
+  "summary": "Initializes a render device: reserves the frame/display buffers, sets the mode and flag bytes and installs the renderer reset routine.",
+  "confidence": 0.6,
+  "evidence": "0x13C bytes; calls 0x001B6F98/0x001B7514/0x001B78F4 (the VRAM/renderer reset chain), 0x00109DC8/0x0010F6CC; globals g_001dbb2c/g_001dbb30 hold the device state."
+ },
+ {
+  "address": "0x001DC214",
+  "name": "maybe_Gfx_CreateNodeA",
+  "signature": "void maybe_Gfx_CreateNodeA(void)",
+  "params": {},
+  "summary": "Creates a graphics node through 0x001B79EC and stores it in the global node slot.",
+  "confidence": 0.35,
+  "evidence": "0x20-byte wrapper: calls 0x001B79EC (CreateRenderNodeA) and writes g_001dc230. Used by the NPC action registration 0x0017FF58."
+ },
+ {
+  "address": "0x001DC3E0",
+  "name": "maybe_Gfx_CreateNodeB",
+  "signature": "void maybe_Gfx_CreateNodeB(void)",
+  "params": {},
+  "summary": "Creates a graphics node through 0x001B7D60 and stores it in the global node slots at g_001dc40c/g_001dc410/g_001dc414.",
+  "confidence": 0.35,
+  "evidence": "0x38-byte wrapper: calls 0x001B7D60 (CreateRenderNodeB) and writes three globals. Used by the actor action registration 0x00181350."
+ },
+ {
+  "address": "0x001E4A40",
+  "name": "maybe_Script_InitTripletTable",
+  "signature": "void maybe_Script_InitTripletTable(int owner, int* desc, u32 a3, u8 count, int a5)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "desc",
+   "param_3": "a3",
+   "param_4": "count",
+   "param_5": "a5"
+  },
+  "summary": "Builds a table of three-word script entries, initializing the entry array and resolving each entry through 0x0019C7A0.",
+  "confidence": 0.3,
+  "evidence": "0x10C bytes; calls 0x00100050 (array build), 0x00100BE0, 0x00109DC8, 0x0010F6CC and 0x0019C7A0; globals g_001e4b40/g_001e4b44 are the two-word entry templates."
+ },
+ {
+  "address": "0x001E88E4",
+  "name": "Container_StringHashMapInsert",
+  "signature": "int* Container_StringHashMapInsert(int table, char* key, int value)",
+  "params": {
+   "param_1": "table",
+   "param_2": "key",
+   "param_3": "value"
+  },
+  "summary": "Inserts a string key into the engine's string hash map, duplicating the key, growing the bucket array and returning the stored entry.",
+  "confidence": 0.65,
+  "evidence": "0x2E8 bytes; calls the CRT string/memory helpers 0x0010EC00/0x0010EC14/0x0010EE9C/0x00115358/0x00115390 and allocates with 0x00109DC8; globals g_001e8bc4/g_001e8bc8 hold the table; sibling of 0x00107FC0."
+ },
+ {
+  "address": "0x001E8BCC",
+  "name": "Container_BuildStringMap",
+  "signature": "u32 Container_BuildStringMap(u32* self, u32 count, int flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "count",
+   "param_3": "flags"
+  },
+  "summary": "Builds a string hash map of the requested size, allocating the bucket array and inserting each source string through Container_StringHashMapInsert.",
+  "confidence": 0.55,
+  "evidence": "0x240 bytes; allocates through 0x00109DC8/0x0011CFAC/0x0011FE8C, calls 0x001E88E4 (string map insert) and 0x00193FA0, 0x00293A00, 0x003608xx; globals g_001e8df4..g_001e8e08."
+ },
+ {
+  "address": "0x001EB390",
+  "name": "maybe_Field_ResizeObject",
+  "signature": "void maybe_Field_ResizeObject(FieldObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resizes/rebuilds a field object's backing storage, reallocating the array and copying the live entries.",
+  "confidence": 0.35,
+  "evidence": "0x9C bytes; calls 0x00109DC8 and 0x0010F6CC (alloc/free), 0x0031481C (size compute) and 0x00315BB8 (object resize); no strings."
+ },
+ {
+  "address": "0x001EB470",
+  "name": "maybe_Sound_InitPlayers",
+  "signature": "void maybe_Sound_InitPlayers(SoundSystem* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initializes the sound system's player/voice slots, allocating the per-voice structures and registering the audio callbacks.",
+  "confidence": 0.45,
+  "evidence": "0x410 bytes; allocates with 0x00109DC8, calls the 0x005422AC/0x005424F0/0x0054F6xx audio helpers and 0x0010EBB0/0x0010F6EC/0x0011AE20; globals g_001eb868..g_001eb87c; called from 0x001EB880."
+ },
+ {
+  "address": "0x001EB880",
+  "name": "Sound_InitSystem",
+  "signature": "void Sound_InitSystem(SoundSystem* self, u32 config)",
+  "params": {
+   "param_1": "self",
+   "param_2": "config"
+  },
+  "summary": "Top-level sound system initializer: calls the player-slot setup and starts the audio thread/callback pump.",
+  "confidence": 0.5,
+  "evidence": "0x48 bytes; calls 0x001EB470 (player init) and 0x001EC420 (thread/update start), writes g_001eb8c4. Thinnest but clearest member of the sound-init chain."
+ },
+ {
+  "address": "0x001F2450",
+  "name": "maybe_Script_TriggerEventObject",
+  "signature": "bool maybe_Script_TriggerEventObject(char* name, int id, u32 value)",
+  "params": {
+   "param_1": "name",
+   "param_2": "id",
+   "param_3": "value"
+  },
+  "summary": "Looks up a named event object in the script event table and triggers it with the given id/value, returning whether the event was found.",
+  "confidence": 0.45,
+  "evidence": "Returns bool; calls 0x001F22FC (event list search), 0x0014C3EC and 0x0071342C (script runtime); globals g_001f2524/g_001f2528 hold the event registry; arg1 is a C string."
+ },
+ {
+  "address": "0x001F252C",
+  "name": "maybe_Script_TriggerEventObjectSlot",
+  "signature": "u32 maybe_Script_TriggerEventObjectSlot(int owner, int slot, int value)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "slot",
+   "param_3": "value"
+  },
+  "summary": "Triggers the event object in a specific registry slot, forwarding the value and returning the event result.",
+  "confidence": 0.4,
+  "evidence": "0xA4 bytes; same callees as 0x001F2450 (0x0014C3EC, 0x0071342C) but indexes the registry by slot instead of name; globals g_001f25c8/g_001f25cc."
+ },
+ {
+  "address": "0x001F2AEC",
+  "name": "maybe_Effect_CreateVariant2",
+  "signature": "void maybe_Effect_CreateVariant2(int owner, int effectId, int a3, int a4)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "effectId",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Creates a second effect variant through the script triplet-table builder and registers it with the owner.",
+  "confidence": 0.35,
+  "evidence": "0xB8 bytes; calls 0x001E4A40 (triplet table) and allocates with 0x00109DC8; global g_001f2ba0. Same family as 0x001C9DF0."
+ },
+ {
+  "address": "0x001F2BC8",
+  "name": "maybe_Script_RegisterSystemObjects",
+  "signature": "void maybe_Script_RegisterSystemObjects(u32 scriptCtx, u32 count)",
+  "params": {
+   "param_1": "scriptCtx",
+   "param_2": "count"
+  },
+  "summary": "Registers the built-in script system objects (including the System-tagged object) with the script runtime.",
+  "confidence": 0.35,
+  "evidence": "0x88 bytes; calls 0x001C6218 (Script_InitSystemString), 0x00107FC0 (hash insert), 0x002D55B8, 0x00600B90 and 0x00109DC8."
+ },
+ {
+  "address": "0x00206408",
+  "name": "maybe_Field_InitObjectTable",
+  "signature": "void maybe_Field_InitObjectTable(Field* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the field object table: allocates the entry array, initializes each entry's shared parameter block and stores the table on the field.",
+  "confidence": 0.4,
+  "evidence": "0x6DC bytes; calls 0x00168200 (shared params init), 0x0021C2DC, 0x002AB618 and 0x00100050 to build arrays; globals g_00206acc..g_00206ae0."
+ },
+ {
+  "address": "0x00208960",
+  "name": "maybe_Model_CreateActorModel",
+  "signature": "int* maybe_Model_CreateActorModel(int owner, int modelId, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "modelId",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Creates the model instance used by a field actor, resolving the model resource and initializing the render/attachment state.",
+  "confidence": 0.4,
+  "evidence": "0x280 bytes; allocates with 0x00109DC8 and resolves through 0x0010EBE4/0x0011CB38/0x001CAE90/0x001CC3EC/0x00401A00/0x004853xx; globals g_00208bd4..g_00208bdc."
+ },
+ {
+  "address": "0x0020C08C",
+  "name": "maybe_Gfx_InitDisplayList",
+  "signature": "void maybe_Gfx_InitDisplayList(void)",
+  "params": {},
+  "summary": "Thumb helper that initializes a display-list builder by resetting its command buffer through 0x003D13C4.",
+  "confidence": 0.3,
+  "evidence": "Thumb 0x3C-byte leaf whose only callee is 0x003D13C4, shared with 0x0020C494 (the display-list builder) and 0x0020E4FC (byte writer). Body is too small to identify more."
+ },
+ {
+  "address": "0x0020C494",
+  "name": "Gfx_BuildDisplayList",
+  "signature": "void Gfx_BuildDisplayList(u32 cmd)",
+  "params": {
+   "param_1": "cmd"
+  },
+  "summary": "Builds a GPU display list: appends the command stream through the 0x003D13C4 writer and flushes it to the renderer.",
+  "confidence": 0.5,
+  "evidence": "0x37C bytes; the large member of the 0x20C08C/0x20C494/0x20E4FC trio, all of which call 0x003D13C4; emits sequential command words, which is the display-list writer pattern."
+ },
+ {
+  "address": "0x0020E4FC",
+  "name": "maybe_Gfx_WriteDisplayListByte",
+  "signature": "void maybe_Gfx_WriteDisplayListByte(int list, u8 value, int count)",
+  "params": {
+   "param_1": "list",
+   "param_2": "value",
+   "param_3": "count"
+  },
+  "summary": "Appends a byte value to the display list, repeated count times, through the shared 0x003D13C4 command writer.",
+  "confidence": 0.35,
+  "evidence": "0x58-byte leaf; loops writing the byte argument into the stream and calls 0x003D13C4; same builder as 0x0020C494."
+ },
+ {
+  "address": "0x00212CF0",
+  "name": "Text_SetupTripleNullLayers",
+  "signature": "void Text_SetupTripleNullLayers(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds three null text layers (null_txt_l1..l3), used for widgets that hide their text until populated.",
+  "confidence": 0.65,
+  "evidence": "0xE4 bytes; literal strings null_txt_l1 (0x00212DB0), null_txt_l2 (0x00212DBC), null_txt_l3 (0x00212DC8); same layer-binder pattern as 0x001774B4/0x0018FE5C."
+ },
+ {
+  "address": "0x00213108",
+  "name": "maybe_Ui_CreateTextWidget",
+  "signature": "void* maybe_Ui_CreateTextWidget(void)",
+  "params": {},
+  "summary": "Constructs a text-widget object by calling the base UI widget constructor and installing the derived vtable at g_00213124.",
+  "confidence": 0.4,
+  "evidence": "Wrapper around 0x002B09BC then *obj = g_00213124. Vtable 0x75b978 slots 0x00213084/0x0021309C/0x002130F8 live in FUN_00212F18, next to the text-layer setups 0x00212CF0 and 0x00213160."
+ },
+ {
+  "address": "0x00213160",
+  "name": "Ui_SetupStartButton",
+  "signature": "void Ui_SetupStartButton(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds the start-button layer and its pressed/disabled states into the widget.",
+  "confidence": 0.6,
+  "evidence": "0x44 bytes; literal start at 0x0021319C; calls the layer binder 0x003E00CC and 0x003E043C."
+ },
+ {
+  "address": "0x00213DAC",
+  "name": "maybe_Ui_RecreatePanel",
+  "signature": "void maybe_Ui_RecreatePanel(Widget* self, u32 mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Recreates a UI panel: frees the old panel object and rebuilds it for the requested mode.",
+  "confidence": 0.4,
+  "evidence": "0x98 bytes; calls 0x00109DC8 (alloc) and 0x0032C4BC (panel build), frees through the allocator's matching free; only one mode argument."
+ },
+ {
+  "address": "0x00213E44",
+  "name": "maybe_Ui_RecreateIcon",
+  "signature": "void maybe_Ui_RecreateIcon(Widget* self, u32 iconId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "iconId"
+  },
+  "summary": "Recreates a UI icon by releasing the previous icon object and loading the one for iconId.",
+  "confidence": 0.35,
+  "evidence": "0x50 bytes; calls 0x00109DC8 and 0x002D5A08 (icon load); sibling of 0x00213DAC."
+ },
+ {
+  "address": "0x002146C4",
+  "name": "maybe_Ui_InitDrawContext",
+  "signature": "void maybe_Ui_InitDrawContext(DrawContext* ctx, int mode)",
+  "params": {
+   "param_1": "ctx",
+   "param_2": "mode"
+  },
+  "summary": "Initializes a UI draw context, resolving the draw callback and setting the context flags/defaults.",
+  "confidence": 0.35,
+  "evidence": "0x108 bytes; calls 0x002EB2D0 and 0x004C47A8, writes g_002147c0..g_002147c8; no strings, so the context kind is inferred from the UI block."
+ },
+ {
+  "address": "0x00214C18",
+  "name": "Ui_SetupDouguDoSelectWindow",
+  "signature": "void Ui_SetupDouguDoSelectWindow(Window* self, int mode, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Builds the equipment (dougu) selection window: binds five left text layers plus their null counterparts and the window's child lists.",
+  "confidence": 0.7,
+  "evidence": "0x294 bytes; literal strings txt_l1..txt_l5 and null_txt_l1..l5 at 0x00214E00..0x00214E4C; layer binder 0x003E00CC; window name matches the dougu family 0x0027C56C."
+ },
+ {
+  "address": "0x00216DD4",
+  "name": "maybe_Ui_UpdateWindowParts",
+  "signature": "void maybe_Ui_UpdateWindowParts(Window* self, int part, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "part",
+   "param_3": "mode"
+  },
+  "summary": "Updates one window part: rebuilds the part's child widgets and refreshes its layout state.",
+  "confidence": 0.45,
+  "evidence": "0x4BC bytes; calls many per-window setup helpers (0x0017CD58/0x0017DAD8/0x0017FD0C/0x001C560C/0x001E3E78/0x002135xx) and allocates with 0x00109DC8; global g_0021718c."
+ },
+ {
+  "address": "0x00217DAC",
+  "name": "maybe_Ui_RebuildParts",
+  "signature": "void maybe_Ui_RebuildParts(Window* self, const u8* desc, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "desc",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Rebuilds a window's part list from a layout descriptor, freeing the previous parts and recreating them from the description.",
+  "confidence": 0.4,
+  "evidence": "0x44C bytes; allocates/frees with 0x00109DC8 and 0x0010F6CC, walks 0x001E0024/0x001E0258/0x002427D0/0x002F7528/0x002F75xx; globals g_002181f0/g_002181f4."
+ },
+ {
+  "address": "0x0021E3E4",
+  "name": "Ui_SetupTimeDisplay",
+  "signature": "void Ui_SetupTimeDisplay(int owner, int* layout, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "layout",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Builds the play-time display: creates the loop/time-number layers and the colon separators so hours, minutes and seconds can be drawn.",
+  "confidence": 0.75,
+  "evidence": "0x264 bytes; literal strings loop_5, time_num2, num%d_%d, time_num%d, colon%d_1, colon%d_2 at 0x0021E600..0x0021E638 plus in_1/in_5; calls 0x001A6230 and the layer binders 0x003E00CC/0x003E043C/0x006F0A50."
+ },
+ {
+  "address": "0x0021FCC0",
+  "name": "Ui_SetupLoopOutParts",
+  "signature": "void Ui_SetupLoopOutParts(int owner, int loop, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "owner",
+   "param_2": "loop",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Binds the loop and out layers used by the time/loop display widget.",
+  "confidence": 0.5,
+  "evidence": "0x78 bytes; literal strings loop (g_0021fd28) and out (g_0021fd30), handles g_0021fd24/g_0021fd28; layer binder 0x003E00CC."
+ },
+ {
+  "address": "0x0021FF04",
+  "name": "Ui_SetupStatusTextLayers",
+  "signature": "void Ui_SetupStatusTextLayers(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Binds five left and four right status text layers plus their numeric sub-layers into a status widget.",
+  "confidence": 0.6,
+  "evidence": "0x434 bytes; literal strings txt_l1..txt_l5 and txt_r1..txt_r4 at 0x0022025C..0x002202A4; calls 0x003E00CC and 0x001A61FC/0x002BCFF4."
+ },
+ {
+  "address": "0x00221AA8",
+  "name": "maybe_Ui_ApplyLayoutConfig",
+  "signature": "void maybe_Ui_ApplyLayoutConfig(Window* self, const u16* config)",
+  "params": {
+   "param_1": "self",
+   "param_2": "config"
+  },
+  "summary": "Applies a binary layout configuration to a window, allocating the child widgets and copying each placement record from the config array.",
+  "confidence": 0.4,
+  "evidence": "0x694 bytes; allocates with 0x00109DC8, copies with 0x00116AE0/0x00116C10/0x0011CFAC/0x0011CFDC/0x0011FExx, reads u16 records from arg2; globals g_002220e8..g_00222108."
+ },
+ {
+  "address": "0x00222E90",
+  "name": "Model_AttachAimParts",
+  "signature": "void Model_AttachAimParts(Model* self, u32 slot, int partId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "slot",
+   "param_3": "partId"
+  },
+  "summary": "Attaches the aim parts to a character model, selecting the low- or high-detail aim bone (cblb_aim_ / cbhb_aim_) and binding it to the weapon slot.",
+  "confidence": 0.6,
+  "evidence": "0x1A0 bytes; literal strings cbhb_aim_ (0x0022301C) and cblb_aim_ (0x00223010); builds the part name with 0x00100990 (std_strncat) and looks it up via 0x0056B458/0x00641738."
+ },
+ {
+  "address": "0x002232FC",
+  "name": "Model_SetupCharacterModel",
+  "signature": "void Model_SetupCharacterModel(Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Sets up a character model: binds the base body parts (cblm_base/cbhm_base and their mantles), applies the face texture and registers the model's attachment slots.",
+  "confidence": 0.6,
+  "evidence": "0x5FC bytes; literal strings cblm_base, cbhm_base, cblm_base_mant, cbhm_base_mant, N_ALL at 0x002236B8..0x002236F8; calls 0x001D58DC/0x001D5BDC (face texture) and 0x002221xx; uses std_strncat 0x00100990."
+ },
+ {
+  "address": "0x002238F8",
+  "name": "maybe_Model_UpdateConfig2",
+  "signature": "void maybe_Model_UpdateConfig2(Model* self, u8 mode, u32* config)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode",
+   "param_3": "config"
+  },
+  "summary": "Applies a secondary model configuration, copying the config words and rebuilding the attached-part state for the requested mode.",
+  "confidence": 0.35,
+  "evidence": "0xFC bytes; calls 0x00116C10 (copy) and 0x002239F4 (attachment rebuild); third argument is a pointer to config words, second is a mode byte."
+ },
+ {
+  "address": "0x002239F4",
+  "name": "maybe_Effect_CreateAttached2",
+  "signature": "void maybe_Effect_CreateAttached2(Model* self, int effectId)",
+  "params": {
+   "param_1": "self",
+   "param_2": "effectId"
+  },
+  "summary": "Creates an effect attached to a model, allocating the effect state and resolving the effect resource by id.",
+  "confidence": 0.4,
+  "evidence": "0x1B0 bytes; allocates with 0x00109DC8, copies with 0x00116AE0/0x00116C10, resolves via 0x0011CFAC/0x0011CFDC/0x0011FExx and 0x0030AFxx; globals g_00223b90..g_00223ba0."
+ },
+ {
+  "address": "0x00223E08",
+  "name": "Model_UpdateAttachMatrix",
+  "signature": "void Model_UpdateAttachMatrix(Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Recomputes the attachment matrices from the model's bone transforms and uploads them to the renderer.",
+  "confidence": 0.5,
+  "evidence": "0x108 bytes; calls 0x002230C4 (attachment lookup), 0x00574428 and 0x005754C0 (matrix math/upload); globals g_00223f08/g_00223f0c hold the matrix state."
+ },
+ {
+  "address": "0x00223F10",
+  "name": "maybe_Model_ReleaseResource",
+  "signature": "void maybe_Model_ReleaseResource(Model* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Releases a model's GPU resources and detaches its parts, returning them to the model resource cache.",
+  "confidence": 0.45,
+  "evidence": "0x14C bytes; calls 0x00116C10 (copy/clear), 0x00220F78, 0x0030A0E0/0x0030B5F4 (resource release) and 0x0036B528/0x00641960 (model cleanup); no direct free, so cache semantics are inferred."
+ },
+ {
+  "address": "0x002261E0",
+  "name": "maybe_Pack_DecodeStringData",
+  "signature": "void maybe_Pack_DecodeStringData(int pack, u32 offset, u32 size, u32 flags)",
+  "params": {
+   "param_1": "pack",
+   "param_2": "offset",
+   "param_3": "size",
+   "param_4": "flags"
+  },
+  "summary": "Decodes a packed string/table blob: removes the pack header, decompresses the payload into a buffer and registers the decoded block.",
+  "confidence": 0.35,
+  "evidence": "0x538 bytes; calls the CRT memory helpers 0x001064D4/0x0010E8C0/0x0010EAB0/0x0010EBB0/0x0010F6EC/0x00111Exx and allocates with 0x00109DC8; globals g_00226690..g_002266ac include the UUUU marker."
+ },
+ {
+  "address": "0x002273B0",
+  "name": "maybe_Gfx_CreateRenderNodeC",
+  "signature": "void maybe_Gfx_CreateRenderNodeC(void)",
+  "params": {},
+  "summary": "Creates a render node through 0x001B79EC and stores it in the global node handles.",
+  "confidence": 0.4,
+  "evidence": "0x6C-byte wrapper: calls 0x001B79EC (CreateRenderNodeA) and writes g_00227410/g_00227414/g_00227418. Companion of 0x001DC214."
+ },
+ {
+  "address": "0x00227C54",
+  "name": "maybe_Gfx_CreateRenderNodeD",
+  "signature": "void maybe_Gfx_CreateRenderNodeD(void)",
+  "params": {},
+  "summary": "Creates a render node through 0x001B7D60 and stores it in the global node handles.",
+  "confidence": 0.4,
+  "evidence": "0x74-byte wrapper: calls 0x001B7D60 (CreateRenderNodeB) and writes g_00227cb8..g_00227cc4. Companion of 0x001DC3E0."
+ },
+ {
+  "address": "0x00229AC8",
+  "name": "Ui_SetTextColorTint",
+  "signature": "void Ui_SetTextColorTint(TextWidget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Computes and stores the text tint/colour values for a widget from its current state.",
+  "confidence": 0.6,
+  "evidence": "0x12C bytes; called by both 0x00229C48 and 0x00229CC4 (Ui_ApplyTextColor variants), writes the colour block at g_00229bf0, calls 0x001A629C (text layer lookup)."
+ },
+ {
+  "address": "0x00229C48",
+  "name": "Ui_ApplyTextColor",
+  "signature": "void Ui_ApplyTextColor(TextWidget* self, u32 color, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "color",
+   "param_3": "flags"
+  },
+  "summary": "Applies a text colour to a widget by setting the tint and pushing it to the widget's text layers.",
+  "confidence": 0.55,
+  "evidence": "0x7C bytes; calls 0x00229AC8 (tint), 0x0022A6B8 (bind strings), 0x0018C184/0x0035EB98/0x0058F9E4/0x006F20C0 (colour/layer path); sibling of 0x00229CC4."
+ },
+ {
+  "address": "0x00229CC4",
+  "name": "Ui_ApplyTextColorAlt",
+  "signature": "void Ui_ApplyTextColorAlt(TextWidget* self, u32 color, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "color",
+   "param_3": "flags"
+  },
+  "summary": "Alternate text-colour path (different colour source lookup) that applies a tint to a widget's text layers.",
+  "confidence": 0.55,
+  "evidence": "0x7C bytes, same callees as 0x00229C48 except it uses 0x0018C1B8 instead of 0x0018C184 for the colour source; otherwise byte-for-byte sibling."
+ },
+ {
+  "address": "0x0022A6B8",
+  "name": "Ui_BindTextStrings",
+  "signature": "void Ui_BindTextStrings(Widget* self, u32 textId, u32 layer)",
+  "params": {
+   "param_1": "self",
+   "param_2": "textId",
+   "param_3": "layer"
+  },
+  "summary": "Binds a text string id to a specific text layer of a widget, resolving the string and storing the layer handle.",
+  "confidence": 0.5,
+  "evidence": "0x8C bytes; calls the text-layer setup 0x001A6680 and 0x006F0E5C; global g_0022a738. Called from both colour-apply paths just before the colour is pushed."
+ },
+ {
+  "address": "0x0022A744",
+  "name": "Ui_SetupTitlePager",
+  "signature": "void Ui_SetupTitlePager(Widget* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds a titled pager: binds the title text and the left/center/right pager number layers.",
+  "confidence": 0.65,
+  "evidence": "0x160 bytes; literal strings txt_title (0x0022A86C), pager_num_r (0x0022A878), pager_num_c (0x0022A884), pager_num_l (0x0022A890); handles g_0022a89c/g_0022a8a0."
+ },
+ {
+  "address": "0x0022ACDC",
+  "name": "Ui_SetupCursor",
+  "signature": "void Ui_SetupCursor(Widget* self, int* layout, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "self",
+   "param_2": "layout",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Binds the selection cursor and its select/disabled icon states to a widget.",
+  "confidence": 0.7,
+  "evidence": "0x134 bytes; literal strings cursor_select (0x0022ADE4), cursor_disabled (0x0022ADF4), icon_cursor (0x0022AE04) plus txt0 in g_0022addc; calls 0x003E00CC and 0x0011FFC4."
+ },
+ {
+  "address": "0x00232418",
+  "name": "Monster_UpdateBehavior",
+  "signature": "void Monster_UpdateBehavior(Monster* self, int state, int mode, u32 flags)",
+  "params": {
+   "param_1": "self",
+   "param_2": "state",
+   "param_3": "mode",
+   "param_4": "flags"
+  },
+  "summary": "Runs the monster behaviour state machine: follow/egg/bee/dragon/dulneigh/hell transitions, choosing the next action from the behaviour table and updating movement.",
+  "confidence": 0.65,
+  "evidence": "Largest function (0x1320) with behaviour keyword literals follow, eggjmps/eggjmpl, beejmp, drajmps/drajmpl, dulneigh, helltcl/hellbrk at 0x00232864..0x0023346C; calls 0x001E1AD4/0x00294B48/0x002A8874/0x002A8BA4/0x00301774; globals g_00232858..g_00232878."
+ },
+ {
+  "address": "0x0024107C",
+  "name": "Ui_SetupAdventureLogWindow",
+  "signature": "void Ui_SetupAdventureLogWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Builds the adventure-log (play record) window: creates the label/number layer pairs for play time, wins, monsters, medals, smithing, items, recipes and title.",
+  "confidence": 0.75,
+  "evidence": "0x4A0 bytes; literal strings txt_play, txt_play_num, txt_win, txt_win_num, txt_monster1/2, txt_medal, txt_smith, txt_item, txt_recipe, txt_title at 0x0024140C..0x00241510; layer ids are built as (u16 self+10) << 16 | index and bound through vtable +0x34 and +0x5c."
+ },
+ {
+  "address": "0x00257704",
+  "name": "maybe_Ui_UpdateTransition",
+  "signature": "void maybe_Ui_UpdateTransition(int self, u32 a2, u32 a3, u32 a4)",
+  "params": {
+   "param_1": "self",
+   "param_2": "a2",
+   "param_3": "a3",
+   "param_4": "a4"
+  },
+  "summary": "Advances a UI/world transition: when the two timer fields differ it updates the transition target and flags, otherwise restarts the animation through the transition helper.",
+  "confidence": 0.35,
+  "evidence": "0x7C bytes; compares obj+4 fields 0xd58/0xd5c, calls 0x0029D100, 0x006D7A90(obj+0x13c, obj+0xd80, g_0025777c[8], g_0025777c[0xc], 1) and sets f_10=1/f_15=3; fallback calls 0x001C3128(self,0x27,0x2f,arg4). Region and callees are UI/animation, role not proven."
+ },
+ {
+  "address": "0x00258C94",
+  "name": "Ui_SetupCharaStatusWindow",
+  "signature": "void Ui_SetupCharaStatusWindow(Window* self, int* layout, u32 a3, u32 a4, u32 a5)",
+  "params": {
+   "param_1": "self",
+   "param_2": "layout",
+   "param_3": "a3",
+   "param_4": "a4",
+   "param_5": "a5"
+  },
+  "summary": "Builds the character status window: name, level, title, experience/next-level numbers, right-hand stat rows, the character icon and weapon selection slots.",
+  "confidence": 0.75,
+  "evidence": "0x40C bytes; literal strings txt_name, txt_lv_num, txt_title, txt_ex_num, txt_next_num, txt_r_l3/l4, icon_chara, select_weapon_1/2 at 0x00258FAC..0x00259090; layer templates txt_r2_r0/r2_r0/txt_r2_e0 etc. in g_00258fec..g_00259034; layer binder 0x003E00CC."
+ },
+ {
+  "address": "0x002595CC",
+  "name": "maybe_Ui_UpdateCharaStatus",
+  "signature": "void maybe_Ui_UpdateCharaStatus(int self, int mode)",
+  "params": {
+   "param_1": "self",
+   "param_2": "mode"
+  },
+  "summary": "Refreshes the character status panel, recomputing the displayed stats and rebuilding the rows when the mode changes.",
+  "confidence": 0.35,
+  "evidence": "0x2E8 bytes; allocates with 0x00109DC8, calls 0x003EB474/0x0062359C/0x00623698, writes globals g_00259884..g_0025989c. Sits directly after the chara-status window builder, but no strings confirm the role."
+ },
+ {
+  "address": "0x00265878",
+  "name": "maybe_Save_CreateSlot",
+  "signature": "void* maybe_Save_CreateSlot(void)",
+  "params": {},
+  "summary": "Creates and initializes a save-slot object, linking it into the save-slot list.",
+  "confidence": 0.3,
+  "evidence": "0x5C-byte factory: calls 0x001FF200 and 0x003CDD68, stores g_002658cc. Region and caller chain suggest save/slot management, but no strings prove it."
+ },
+ {
+  "address": "0x0027A9C8",
+  "name": "Ui_InitWindowManager",
+  "signature": "void Ui_InitWindowManager(WindowManager* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initializes the UI window manager: allocates the window table, installs the window factory entries and links the manager into the global UI state.",
+  "confidence": 0.6,
+  "evidence": "0xB40 bytes; uses 0x00100050 to build arrays, allocates with 0x00109DC8/0x00123594, calls 0x0021C2DC and 0x0027B86C (window registration); directly precedes the per-window constructors 0x0027B508..0x0027DF28."
+ },
+ {
+  "address": "0x0027B508",
+  "name": "maybe_Ui_InitFourSubWidgets",
+  "signature": "void maybe_Ui_InitFourSubWidgets(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initializes four equally sized sub-widgets (0x48-byte stride), each bound to the window's shared layout and state, then sets their parent link.",
+  "confidence": 0.4,
+  "evidence": "0x60 bytes; loop i = 0..3 over self + i*0x48: calls 0x003900D4(&elem->f_294, i, &self->f_98, self->f_10, &self->f_d4, self), sets elem->f_2c4 = self+0x3c4 and calls 0x0038BF68(&elem->f_294)."
+ },
+ {
+  "address": "0x0027C56C",
+  "name": "Ui_SetupDouguWindow",
+  "signature": "void Ui_SetupDouguWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the equipment (dougu) window from the named 2D layer win_dougu.",
+  "confidence": 0.75,
+  "evidence": "0x70 bytes; literal win_dougu at 0x0027C5D0; allocates with 0x00109DC8, calls window/layer helpers 0x001D85EC and 0x003242E0. Part of the window-constructor run 0x0027C56C..0x0027DF28 that all use their win_* literal."
+ },
+ {
+  "address": "0x0027CB08",
+  "name": "Ui_SetupEnemyWindow",
+  "signature": "void Ui_SetupEnemyWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the enemy window from win_enemy and its win_enemy_00 sub-layer.",
+  "confidence": 0.75,
+  "evidence": "0xFC bytes; literal strings win_enemy (0x0027CBE8) and win_enemy_00 (0x0027CBF4); allocates with 0x00109DC8, calls 0x001D85EC/0x0038BE4C."
+ },
+ {
+  "address": "0x0027CC04",
+  "name": "Ui_SetupEquipWindow",
+  "signature": "void Ui_SetupEquipWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the equipment window: binds win_equip1, win_equip2 and win_equip_name and initializes the item-name layers.",
+  "confidence": 0.75,
+  "evidence": "0x19C bytes; literal strings win_equip1 (0x0027CD60), win_equip2 (0x0027CD80), win_equip_name (0x0027CD8C); calls 0x001064D4/0x00116AE0/0x0011CFAC/0x0011FExx and 0x0017AF2C/0x0017B9xx; handles g_0027cd6c..g_0027cd9c."
+ },
+ {
+  "address": "0x0027CDA0",
+  "name": "Ui_SetupPartyWindow",
+  "signature": "void Ui_SetupPartyWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the party window from the named layer win_party.",
+  "confidence": 0.75,
+  "evidence": "0x70 bytes; literal win_party at 0x0027CE04; calls 0x00109DC8/0x001D85EC/0x00391070 (the party window builder)."
+ },
+ {
+  "address": "0x0027CE10",
+  "name": "Ui_SetupSkillWindow",
+  "signature": "void Ui_SetupSkillWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the skill window from the named layer win_skill.",
+  "confidence": 0.75,
+  "evidence": "0x70 bytes; literal win_skill at 0x0027CE74; calls 0x00109DC8/0x001D85EC/0x00392400 (the skill window builder)."
+ },
+ {
+  "address": "0x0027CE80",
+  "name": "Ui_SetupTokugiWindow",
+  "signature": "void Ui_SetupTokugiWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the special-ability (tokugi) window from win_tokugi and its win_text sub-layer.",
+  "confidence": 0.7,
+  "evidence": "0xD4 bytes; literal strings win_tokugi (0x0027CF3C) and win_text (0x0027CF48); calls 0x00109DC8/0x001D85EC/0x0039322C/0x004EE9FC."
+ },
+ {
+  "address": "0x0027D028",
+  "name": "Ui_SetupCommandWindow",
+  "signature": "void Ui_SetupCommandWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the battle command window from win_command and its win_mode sub-layer.",
+  "confidence": 0.75,
+  "evidence": "0xE0 bytes; literal strings win_command (0x0027D0E8) and win_mode (0x0027D0F8); calls 0x00109DC8/0x001D85EC/0x003259B8; handles g_0027d0f4/g_0027d104."
+ },
+ {
+  "address": "0x0027D108",
+  "name": "Ui_SetupMessageWindow",
+  "signature": "void Ui_SetupMessageWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the message window with its win_message, win_yesno and win_talk sub-layers.",
+  "confidence": 0.75,
+  "evidence": "0xF4 bytes; literal strings win_message (0x0027D1D4), win_yesno (0x0027D1E0), win_talk (0x0027D1F0); calls 0x00109DC8/0x001D85EC/0x002A47AC/0x002E13E8/0x00393318."
+ },
+ {
+  "address": "0x0027D1FC",
+  "name": "Ui_SetupTrainingWindow",
+  "signature": "void Ui_SetupTrainingWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the training window from the named layer win_training.",
+  "confidence": 0.75,
+  "evidence": "0x6C bytes; literal win_training at 0x0027D258; calls 0x00109DC8/0x001D85EC/0x0043FDC8."
+ },
+ {
+  "address": "0x0027D2BC",
+  "name": "Ui_SetupSakusenWindow",
+  "signature": "void Ui_SetupSakusenWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the tactics (sakusen) window from win_sakusen1..3 plus the win_settei and win_caption layers.",
+  "confidence": 0.75,
+  "evidence": "0x254 bytes; literal strings win_sakusen1/2/3 (0x0027D4B0/0x0027D4C4/0x0027D4DC), win_settei (0x0027D4F0), win_caption (0x0027D500); calls 0x00100050/0x001D85EC/0x003259B8/0x0041E6D8; handles g_0027d4c0..g_0027d50c."
+ },
+ {
+  "address": "0x0027D96C",
+  "name": "Ui_SetupSwapWindow",
+  "signature": "void Ui_SetupSwapWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the party swap window: binds the irekae/sougae sub-windows and the renkei layers used when exchanging party members.",
+  "confidence": 0.65,
+  "evidence": "0x112 bytes (recovered entry point); literal strings win_irekae3/4, win_sougae1/2 at 0x0027E134..0x0027E160 and win_renkei2/3 at 0x0027DB70/0x0027DB7C; calls 0x001D85EC/0x0027DAA4/0x003259B8/0x003CFCC8/0x00404Exx."
+ },
+ {
+  "address": "0x0027DAB0",
+  "name": "Ui_SetupRenkeiWindow",
+  "signature": "void Ui_SetupRenkeiWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the cooperative-attack (renkei) window from win_renkei1..3.",
+  "confidence": 0.75,
+  "evidence": "0xD8 bytes; literal strings win_renkei1 (0x0027DB64), win_renkei2 (0x0027DB70), win_renkei3 (0x0027DB7C); calls 0x00109DC8/0x001D85EC/0x004AA9A4/0x004EE880/0x004F8E9C."
+ },
+ {
+  "address": "0x0027DF28",
+  "name": "Ui_SetupIrekaeWindow",
+  "signature": "void Ui_SetupIrekaeWindow(Window* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Constructs the party exchange (irekae) window: creates win_irekae1..4 and win_sougae1/2 with their captions.",
+  "confidence": 0.75,
+  "evidence": "0x248 bytes; literal strings win_irekae1..4 and win_sougae1/2 at 0x0027E114..0x0027E160; calls 0x00109DC8/0x001D85EC/0x003259B8/0x003CFCC8/0x00404ECC/0x00405080; handles g_0027e120..g_0027e16c."
+ },
+ {
+  "address": "0x002826B0",
+  "name": "maybe_Ui_UpdateScrollOffset",
+  "signature": "void maybe_Ui_UpdateScrollOffset(UiPane* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Updates a UI pane's scrolling state: finds the child of the pane's type, advances the float offset by the child's speed and switches the pane between the two scroll callbacks.",
+  "confidence": 0.32,
+  "evidence": "0x20C bytes; looks up a child by handle in the map at g_0028285c, allocates a 0x1d4-byte object with 0x0011FE8C/0x0011CFAC, adds child[7] * g_00282874 to self->f_120, calls 0x005F6C4C with a 2-word value and chooses 0x003820A0/0x0038234C; no strings, so the scroll interpretation is unproven."
+ },
+ {
+  "address": "0x00289A00",
+  "name": "maybe_Ui_CreatePaneWidget",
+  "signature": "void* maybe_Ui_CreatePaneWidget(void)",
+  "params": {},
+  "summary": "Constructs a UI pane widget by calling the base widget constructor and installing the derived vtable at g_00289a1c.",
+  "confidence": 0.35,
+  "evidence": "Wrapper around 0x002B09BC then *obj = g_00289a1c. Vtable 0x75d210 slots 0x002898E0/0x002898F8/0x002899F0 live in FUN_0028981C; it shares the base-class slots 0x00193C6C/0x00193CD4/0x00193CD8 with the text widget 0x00213108."
+ }
+]

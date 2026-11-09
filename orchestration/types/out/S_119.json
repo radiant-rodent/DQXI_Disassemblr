@@ -1,0 +1,3052 @@
+[
+ {
+  "class": "Ui_TextBuffer",
+  "type": "UiTextBuffer",
+  "summary": "Text-box character buffer holder: a heap descriptor at +0x34 and a UTF-16 string with capacity, length and a dirty-flag byte; AppendChars/WriteCharsAt copy characters into it for Ui_TextWidget-style owners.",
+  "size": 212,
+  "base": null,
+  "confidence": 0.55,
+  "evidence": "Ui_TextBuffer_AppendChars 0x0053F940 and Ui_TextBuffer_WriteCharsAt 0x0053F9EC both guard on f_b4 (buffer present) and f_a4 (u16* data), clamp with the u16 capacity f_cc, update the u16 length f_ce, write a NUL terminator and OR 4 into the byte f_d0. Ui_TextBuffer_Release 0x00548438 frees the tagged pointer at [f_34+4] through virtual slot 0x30 (0x00505040) when both bytes f_51 and f_50 are set. Note: the batch's 'ctor' 0x005487EC is a 0x10-byte unrelated initialiser (writes +0..+0xE only), not this class's constructor.",
+  "fields": [
+   {
+    "offset": 52,
+    "name": "maybe_ownerBlock",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Ui_TextBuffer_Release reads f_34 and treats the word at +4 of the pointed object as a tagged pointer: bit 0 means 'destroy first' (0x0011C814), then 0x00505040 deletes it through vtable slot +0x30 and clears the word; this is a refcounted buffer-owner block, exact type unproven."
+   },
+   {
+    "offset": 80,
+    "name": "maybe_hasAllocation",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Release requires f_50 != 0 (together with f_51) before it frees the block and then stores 0 to f_50; name describes 'the buffer currently owns an allocation'."
+   },
+   {
+    "offset": 81,
+    "name": "maybe_ownsAllocation",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Release tests f_51 first ('ldrb r0,[r0,#0x51]; ldrbne r0,[r4,#0x50]'); f_51 is never cleared, so it gates whether this object is allowed to free the block at all."
+   },
+   {
+    "offset": 164,
+    "name": "textBuffer",
+    "type": "u16*",
+    "size": 4,
+    "confidence": 0.85,
+    "evidence": "Read as u16* in both writers: 'self->f_a4 + index*2', '*self->f_a4 == 0' and the NUL store '*(u16*)(f_a4 + f_ce*2) = 0'."
+   },
+   {
+    "offset": 180,
+    "name": "hasBuffer",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Loaded as a full word before every buffer access ('ldr r0,[r4,#0xb4]; cmp r0,#0'); both writers refuse to touch f_a4 when it is zero, so it is the enable/present flag."
+   },
+   {
+    "offset": 204,
+    "name": "bufferCapacity",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.75,
+    "evidence": "AppendChars: 'if (f_cc != 0) limit = f_cc - 1' then clamps the copy to that u16; WriteCharsAt does the same, so f_cc is the capacity in UTF-16 units including the terminator."
+   },
+   {
+    "offset": 206,
+    "name": "textLength",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.8,
+    "evidence": "Written as 'index + copied count' after a copy and cleared to 0 when the buffer is empty; the terminator is stored at f_a4 + f_ce*2, i.e. f_ce is the current UTF-16 length."
+   },
+   {
+    "offset": 208,
+    "name": "bufferFlags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "Both writers do 'f_d0 |= 4' after changing the string, so bit 2 is a dirty/changed flag; the other bits are never touched in the recovered code."
+   }
+  ]
+ },
+ {
+  "class": "Ui_MessageDualBuffer",
+  "type": "UiMessageDualBuffer",
+  "summary": "Vtable-bearing block constructed inside every Ui_Window at +0x4C (Ui_Window_CtorBase passes 'window + 0x13'); it holds the window's pair of 0x414-byte per-line message/animation sets. The generator's 48-byte size only reflects the two words it could attribute.",
+  "size": 48,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "Ui_Window_CtorBase 0x002A4774 calls this constructor with (window + 0x4C) and then places the next block (+0xCCC further on); the ctor stores vtable 0x0077FCCC and calls std_ConstructArray(this+0x2C, 0x001F0670 (maybe_Ui_AnimSlotSet_Ctor), 0x414, 2). The vtable slots are Ui_MessageWindow_* methods (0x00615A90 UpdateOpen, 0x00615BD0 ChangeText, 0x00615F90 ClearText, 0x006159C0 InitPanes), so this is the message-window text/line block, not a standalone object.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "The constructor stores 0x0077FCCC as the first word ('*puVar3 = DAT_...'); the 7 slots dispatch the message-window family."
+   },
+   {
+    "offset": 44,
+    "name": "maybe_lineBufferArray",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "std_ConstructArray(puVar3 + 0xb (byte +0x2C), 0x001F0670, 0x414, 2) constructs two 0x414-byte per-line animation/text sets; the ctor then initialises a third 0x424-byte buffer at +0x858 with Ui_MessageBuffer_Init 0x0061555C, so the pair extends far past the recorded 48-byte size."
+   }
+  ]
+ },
+ {
+  "class": "Ui_MessageExtendedBuffer",
+  "type": "UiMessageExtendedBuffer",
+  "summary": "Vtable-bearing block constructed inside every Ui_Window at +0x4C (Ui_Window_CtorBase passes 'window + 0x13'); it holds the window's pair of 0x414-byte per-line message/animation sets. The generator's 48-byte size only reflects the two words it could attribute.",
+  "size": 48,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "Ui_Window_CtorBase 0x002A4774 calls this constructor with (window + 0x4C) and then places the next block (+0xCCC further on); the ctor stores vtable 0x0077FCFC and calls std_ConstructArray(this+0x2C, 0x001F0670 (maybe_Ui_AnimSlotSet_Ctor), 0x414, 2). The vtable slots are Ui_MessageWindow_* methods (0x00615A90 UpdateOpen, 0x00615BD0 ChangeText, 0x00615F90 ClearText, 0x006159C0 InitPanes), so this is the message-window text/line block, not a standalone object.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "The constructor stores 0x0077FCFC as the first word ('*puVar3 = DAT_...'); the 7 slots dispatch the message-window family."
+   },
+   {
+    "offset": 44,
+    "name": "maybe_lineBufferArray",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "std_ConstructArray(puVar3 + 0xb (byte +0x2C), 0x001F0670, 0x414, 2) constructs two 0x414-byte per-line animation/text sets; the ctor then initialises a third 0x424-byte buffer at +0x858 with Ui_MessageBuffer_Init 0x0061555C, so the pair extends far past the recorded 48-byte size."
+   }
+  ]
+ },
+ {
+  "class": "Ui_MessageVoice",
+  "type": "UiMessageVoice",
+  "summary": "Per-line voice/typing-blip state of a message window: one remaining-duration float, a completion-SE flag, the active blip-pattern state and the selected pattern descriptor (five UpdateLineN/FinishLineN variants, lines 0..4).",
+  "size": 32,
+  "base": null,
+  "confidence": 0.55,
+  "evidence": "Ui_MessageVoice_UpdateLine0 0x006D4EDC: when f_18 is 0 it asks func_0064DE78 for the line's voice length (float in s0), stores it in f_10 (extending by one unit when shorter than half a step), calls Ui_MessageVoice_SelectBlipPattern(0,0,&f_1c) and keeps the returned &f_1c in f_18; then func_0041AD28(f_18,&delta) advances the stream and f_10 -= delta. When it completes, Sound_PlaySeCached(message,0xE65) runs once and sets f_14 = 1. FinishLine0 0x006D4FE8 is the same plus Sound_SetVoiceGainByHandle / 0xFFFF cleanup on message->f_608.",
+  "fields": [
+   {
+    "offset": 16,
+    "name": "remainingDuration",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Set from the float returned by func_0064DE78 (line voice length), optionally '+ one step' when shorter than half a step, then decremented by the consumed delta in every Update/Finish line ('f_10 = f_10 - delta'); it is a countdown in the stream's time unit."
+   },
+   {
+    "offset": 20,
+    "name": "hasPlayedFinishSe",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "All four UpdateLineN check 'result != 0 && f_14 == 0' before playing SE 0xE65 and then store 1 to f_14, so it is a once-only 'completion sound already played' flag."
+   },
+   {
+    "offset": 24,
+    "name": "maybe_blipPatternState",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ui_MessageVoice_SelectBlipPattern is called with outDesc = &voice->f_1c and returns that same address; the code keeps the return value in f_18 and later passes f_18 to func_0041AD28 as the stream handle, so f_18 holds the address of the per-line pattern slot."
+   },
+   {
+    "offset": 28,
+    "name": "maybe_blipPatternDescriptor",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "The out-parameter of Ui_MessageVoice_SelectBlipPattern: it receives one of the static descriptors 0x00773DE0/DF0/E00/E10 or 0x0076E29C (weighted choice on line index and long-run flag)."
+   }
+  ]
+ },
+ {
+  "class": "Ui_FrameScript",
+  "type": "UiFrameScript",
+  "summary": "Small frame-script/step driver: calls a per-frame updater through +0x98, advances a 1/30 s clock and step index, dispatches 0x18-byte step records through the table at +0x150, and clears the UI input-mode word through a latch at +0x264.",
+  "size": 616,
+  "base": null,
+  "confidence": 0.45,
+  "evidence": "maybe_Ui_DiveWindow_UpdateAnimation (0x0029A920, the function the batch calls Ui_FrameScript_UpdateB) is a compact driver: (*self->f_98->vt[0x2C])(); if vt[0x10] of the object embedded at +0x130 returns 0 it does f_140 = 1/30f, f_138 += 1/30f, f_13c += 1; while f_134 < 0x0B it calls the code pointer at record+0x34 / record+0x38 (record base +0x130 + f_134*0x18) through the offset table at f_150; when f_264 is set it clears Ui_GetCore()->+0x94 (input mode) and clears the latch. The old name maybe_Ui_FrameScript_Update (0x00261F40) is the same body with all offsets 0x14 lower, i.e. a variant with a different sub-object base.",
+  "fields": [
+   {
+    "offset": 152,
+    "name": "maybe_frameUpdater",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "First statement of the update is '(*self->f_98->vt[0x2C])()' (asm: ldr r1,[r0,#0x98]! ; ldr r1,[r1,#0x2c] ; blx r1), so +0x98 points at the object that performs the base per-frame update."
+   },
+   {
+    "offset": 304,
+    "name": "maybe_scriptState",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Asm: 'ldr r0,[r4,#0x130]; ldr r1,[r0,#0x10]; mov r0,r5(=self+0x130); blx r1' - the word at +0x130 is the vtable of an embedded state object whose slot 0x10 is called every frame; the same address is the base of the 0x18-byte step records."
+   },
+   {
+    "offset": 308,
+    "name": "stepIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Compared with 0x0B and multiplied by 0x18 to select the current step record: 'if (*(u32*)(self+0x134) < 0xb)' / 'self + 0x130 + f_134*0x18' (asm: ldr r0,[r4,#0x134]; cmp r0,#0xb; add r0,r0,r0,lsl#1; add r0,r3,r0,lsl#3)."
+   },
+   {
+    "offset": 312,
+    "name": "elapsedSeconds",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "'self->f_138 = self->f_138 + fVar4' where fVar4 = 0x3D088889 (1/30f), i.e. an accumulated wall-clock time in seconds."
+   },
+   {
+    "offset": 316,
+    "name": "frameCounter",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "'self->f_13c = self->f_13c + 1' after the same gate; an integer frame counter."
+   },
+   {
+    "offset": 320,
+    "name": "frameDelta",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Stored from the 1/30f constant every frame (asm: vstr s16,[r5,#0x10] with s16 = 0x3D088889), i.e. the fixed timestep used for the two accumulators."
+   },
+   {
+    "offset": 336,
+    "name": "stepTargetTable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The step record's tagged offset field (+0x38) is used as 'self->f_150 + (offset >> 1)' and the low bit selects an extra dereference ('ldr r3,[r0]; ldr r2,[r2,r3]'); so +0x150 is the table base the records resolve against (asm: ldr r3,[r3,#0x20] where r3 = self+0x130)."
+   },
+   {
+    "offset": 612,
+    "name": "isInputModeClearPending",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "When f_264 is non-zero the update calls Ui_GetCore, writes 0 to core+0x94 (the UI input-mode word) and clears f_264; a one-shot 'clear input mode' latch."
+   }
+  ]
+ },
+ {
+  "class": "Ui_PanelState",
+  "type": "UiPanelState",
+  "summary": "Panel row/step sequence state: a row table pointer, a tagged step-handler pair, a slot/widget binding, row id/index and an owned state object; it is the per-panel state record used by the Ui_Panel_UpdateRowState* family, while the two 0x398xxx ctors are a different 'layout properties' record merged into the same class.",
+  "size": 592,
+  "base": "Ui_Panel",
+  "confidence": 0.35,
+  "evidence": "The update family (Ui_PanelState_Update 0x001E3D24, Enter09ForRow 0x001E25B0) is a real row/step sequencer: row table at +0x10, handler at +0x30/+0x34, slot at +0x198, row id at +0x234, active state at +0x248, cue at +0x24C. The 0x00398684/0x0039890C 'ctors' only clear a 0x38-byte block at +0x22 and two 0x60-byte groups at +0x5A.., with no relation to those pointers, so the batch merges two layouts; field names follow the strongest per-offset evidence.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "unknown_prop0C",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Ui_PanelState_ResetProperties 0x00398684 zeroes it together with the ten following u16 values (+0xC..+0x20); no reader recovered."
+   },
+   {
+    "offset": 14,
+    "name": "unknown_prop0E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 16,
+    "name": "maybe_rowTable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_PanelState_Enter09ForRow 0x001E25B0 reads f_10 as a pointer, uses its +0x60 (row count) and +0x58 (row array offset) and indexes 0x20-byte row records; note Ui_PanelState_ResetProperties also zeroes a u16 at +0x10, so the two grouped callers disagree about the width."
+   },
+   {
+    "offset": 18,
+    "name": "unknown_prop12",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 20,
+    "name": "unknown_prop14",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 22,
+    "name": "unknown_prop16",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 24,
+    "name": "unknown_prop18",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 26,
+    "name": "unknown_prop1A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 28,
+    "name": "unknown_prop1C",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 30,
+    "name": "unknown_prop1E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 32,
+    "name": "unknown_prop20",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Zeroed by Ui_PanelState_ResetProperties; no reader recovered."
+   },
+   {
+    "offset": 34,
+    "name": "maybe_zeroedBlock22",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Ui_PanelState_ResetProperties does func_001113EC(&self->f_22, 0x38), i.e. a 0x38-byte zero fill covering +0x22..+0x59; the block has no recovered reader."
+   },
+   {
+    "offset": 48,
+    "name": "stepHandler",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PanelState_Update 0x001E3D24 dispatches through f_30 with the tagged-offset pattern ('UNRECOVERED_JUMPTABLE = self->f_30; if low bit of f_34 set, table lookup'), and all EnterXX functions store (self+0x48) / (DAT_x+0xA0) into it."
+   },
+   {
+    "offset": 52,
+    "name": "stepHandlerOffset",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Paired with f_30: 'if ((f_34 & 1) != 0) fn = *(code**)(f_30 + *(int*)(self + (f_34 >> 1)))' - a self-relative offset/tag used to resolve the next step handler."
+   },
+   {
+    "offset": 76,
+    "name": "maybe_panelPart",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_00379400(param_1 + 0x4c, &local_10) is called with &self->0x4C as the receiver; struct_db's callee type is Ui_Panel*, so this is the embedded panel sub-object start."
+   },
+   {
+    "offset": 90,
+    "name": "unknown_flag5A",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Ui_PanelState_ResetProperties clears it; no other access recovered."
+   },
+   {
+    "offset": 91,
+    "name": "unknown_flag5B",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Ui_PanelState_ResetProperties clears it; no other access recovered."
+   },
+   {
+    "offset": 92,
+    "name": "unknown_flag5C",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Ui_PanelState_ResetProperties clears it; no other access recovered."
+   },
+   {
+    "offset": 93,
+    "name": "unknown_flag5D",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by Ui_PanelState_ResetProperties (part of the same byte group)."
+   },
+   {
+    "offset": 94,
+    "name": "unknown_flag5E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by Ui_PanelState_ResetProperties (part of the same byte group)."
+   },
+   {
+    "offset": 95,
+    "name": "unknown_flag5F",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by Ui_PanelState_ResetProperties (part of the same byte group)."
+   },
+   {
+    "offset": 96,
+    "name": "unknown_flag60",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by Ui_PanelState_ResetProperties (part of the same byte group)."
+   },
+   {
+    "offset": 262,
+    "name": "rowIndex",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.65,
+    "evidence": "Ui_PanelState_Enter09ForRow reads f_106, copies it to f_230 and only uses the row when 'f_106 < 3'; the value also indexes the 0x20-byte row record and is passed to the model-change animation, so it is the active row index."
+   },
+   {
+    "offset": 372,
+    "name": "maybe_widgetState",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ui_PanelState_Update calls Ui_Widget_Update(&slot->f_1e18, &self->f_174); it is the widget-state argument (struct_db guessed Ui_Widget*), width/ownership unproven."
+   },
+   {
+    "offset": 404,
+    "name": "maybe_partyPanelHost",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Used as the object owning a Ui_PartyPanel at +0x11C: 'Ui_Anim_PlayChange1(&f_194->f_11c, ...)' and 'Ui_PartyPanel_ShowSlots(&f_194->f_11c, ...)'; only non-null is tested, so the exact class is unproven."
+   },
+   {
+    "offset": 408,
+    "name": "slot",
+    "type": "Ui_Slot*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Dereferenced as 'f_198->f_94' (a byte set to 1) and 'Ui_Slot_BindControl(&f_198->f_1e18, &self->f_1cc)' / 'Ui_Widget_Update(&f_198->f_1e18, ...)'; struct_db's own callee types are Ui_Slot* and Ui_Widget*."
+   },
+   {
+    "offset": 412,
+    "name": "maybe_cue19C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_00445bf0(param_1 + 0x19c) is called with &self->0x19C as the only argument (an embedded helper object or cue); meaning not recovered."
+   },
+   {
+    "offset": 416,
+    "name": "maybe_handle1A0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Only used in a compound guard 'if (*(int*)(self+0x1a0) == 0 && ...)'; no store recovered."
+   },
+   {
+    "offset": 420,
+    "name": "maybe_flags1A4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tested as '(*(uint*)(self+0x1a4) & 1) == 0 || *(uint*)(self+0x1a4) == 0', i.e. a bit-0 flag with a null special case."
+   },
+   {
+    "offset": 436,
+    "name": "maybe_overlay",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_004c2a9c(param_1 + 0x1b4) and FUN_004C2924(param_1 + 0x1b4) both take &self->0x1B4 (struct_db guessed Ui_Overlay); likely an embedded overlay/tween object."
+   },
+   {
+    "offset": 440,
+    "name": "maybe_handle1B8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Only a null test '*(int*)(self+0x1b8) == 0'; no store recovered."
+   },
+   {
+    "offset": 444,
+    "name": "maybe_flags1BC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Bit-0 test with a null special case, same pattern as flags1A4."
+   },
+   {
+    "offset": 460,
+    "name": "maybe_partBinding",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Passed as the second argument of Ui_Slot_BindControl(&slot->f_1e18, &self->f_1cc); a widget/pane binding descriptor consumed by Ui_Slot_BindControl."
+   },
+   {
+    "offset": 544,
+    "name": "maybe_autoReleaseSlot",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Ui_PanelState_Update: 'if (self->f_220 == 0) { if (gate()) { self->f_198->f_94 = 0; return; } } else { if (gate()) return; }' - selects whether the slot is released after finishing, purpose beyond that unproven."
+   },
+   {
+    "offset": 548,
+    "name": "maybe_defaultDuration",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "One recovered store writes the constant 5 ('*(u32*)(self+0x224) = 5'); no reader in this batch, so 'duration' is a guess."
+   },
+   {
+    "offset": 560,
+    "name": "maybe_activeRowIndex",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Ui_PanelState_Enter09ForRow does 'self->f_230 = self->f_106' (the row index) and later feeds f_230 to Ui_Anim_PlayChange1."
+   },
+   {
+    "offset": 564,
+    "name": "rowId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Set to 0xFFFFFFFF as the empty value and otherwise to the byte at rowRecord+8: 'self->f_234 = (u32)*(u8*)(row+8)', then used as the animation/party-slot id."
+   },
+   {
+    "offset": 576,
+    "name": "maybe_cardKind",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Only compared with 0x2E; the name only says it is a small kind/type code."
+   },
+   {
+    "offset": 584,
+    "name": "activeStateObject",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Ui_PanelState_Update drives it to completion: 'if (f_248) { if (vt[0xC]()==0) { vt[8](); return; } vt[4](); f_248 = 0; }' - a state-machine object owned by the panel."
+   },
+   {
+    "offset": 588,
+    "name": "maybe_cue",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_PanelState_Update calls func_00284D4C(&self->f_24c) first every frame; the callee is Ui_Cue_Start in the current naming, so this is an embedded cue/tween object."
+   }
+  ]
+ },
+ {
+  "class": "Ui_ListState",
+  "type": "UiListState",
+  "summary": "Duplicate view of the save-data display panel (Ui_DataPanel): the 'Reset' at 0x002CE318 clears the 0x181A-byte message-text tail, a 0x1820-byte pane table, a 0x5E default and the ui mutex, while RemoveEntry is a separate intrusive-list helper; offsets above +0xE000 belong to the 0xE3C8-byte DataPanel object.",
+  "size": 6192,
+  "base": null,
+  "confidence": 0.3,
+  "evidence": "Same offsets and the same 0x5E / 0xFF / 6 constants as Ui_DataPanel_Reset 0x002CD85C (see S_104); 0x002CE318 is called by maybe_Ui_Menu_SetModeState with the UI-manager/DataPanel pointer, so this class is a mis-grouped DataPanel view, not an independent list. Ui_ListState_RemoveEntry 0x003DB2C4 operates on a different base (state->f_10/f_14 list, f_20/f_24 rb-tree), so only the shared offsets are named. The 6192 size is struct_db's max strong field; the real object is 0xE3C8 as in S_104.",
+  "fields": [
+   {
+    "offset": 6128,
+    "name": "unknown_textTail17F0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Inside the 0x181A-byte message-text block at +8 (copied from GameWork+0x2E2F8 in the DataPanel views); the Reset clear loop zeroes it, no reader recovered."
+   },
+   {
+    "offset": 6132,
+    "name": "unknown_textTail17F4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same 0x181A-byte message-text block; zeroed by the Reset, no reader recovered (name kept identical to S_104 for merge consistency)."
+   },
+   {
+    "offset": 6136,
+    "name": "unknown_textTail17F8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6140,
+    "name": "unknown_textTail17FC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6144,
+    "name": "unknown_textTail1800",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6148,
+    "name": "unknown_textTail1804",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6152,
+    "name": "unknown_textTail1808",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6156,
+    "name": "unknown_textTail180C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Same message-text block; zeroed by the Reset."
+   },
+   {
+    "offset": 6160,
+    "name": "unknown_textTail1810",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Last byte group of the message-text block; cleared by the Reset."
+   },
+   {
+    "offset": 6161,
+    "name": "unknown_textTail1811",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Last byte group of the message-text block; cleared by the Reset."
+   },
+   {
+    "offset": 6162,
+    "name": "unknown_textTail1812",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Last byte group of the message-text block; cleared by the Reset."
+   },
+   {
+    "offset": 6164,
+    "name": "unknown_textTail1814",
+    "type": "u8 [0xE]",
+    "size": 14,
+    "confidence": 0.0,
+    "evidence": "func_00116AE0(&self->f_1814, 0xE) zero-fills a 14-byte tail of the same message-text block."
+   },
+   {
+    "offset": 6184,
+    "name": "textPaneKind",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Set to 0x5E right after the 0x1820-byte pane-table allocation and next to textPaneBinding (same name as S_104)."
+   },
+   {
+    "offset": 6188,
+    "name": "textPaneBinding",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Return value of func_0051BB08(self+8, 0x1820, -1) (allocate 0x1820 bytes from the allocator at +8); the DataPanel names this the pane binding (S_104)."
+   },
+   {
+    "offset": 57588,
+    "name": "mode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "Set to 0xFF by the Reset; S_104 identifies this DataPanel byte as the display mode (0xFF = none)."
+   },
+   {
+    "offset": 57616,
+    "name": "state",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Set to 6 by the Reset; S_104 names the same DataPanel word 'state'."
+   },
+   {
+    "offset": 57624,
+    "name": "lockMutex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Os_MutexLock(&self->f_e118) at the end of the Reset; the 4-byte lock word follows the Os_MutexLock API (same name as S_104)."
+   },
+   {
+    "offset": 58308,
+    "name": "maybe_rewindIndex",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Cleared by the Reset; S_104 could only describe the same DataPanel byte as a rewind index."
+   },
+   {
+    "offset": 58309,
+    "name": "maybe_flagE3C5",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Also cleared by the Reset next to +0xE3C4; S_104 left it as an unnamed flag."
+   }
+  ]
+ },
+ {
+  "class": "Ui_RecipeBookState",
+  "type": "UiRecipeBookState",
+  "summary": "Layout/state block (current naming: Ui_LayoutState_InitDefaults) holding four {callback, argument} defaults copied from the template at 0x00726A10, two 0x100-byte candidate pools and three flags; the 'RecipeBook' label is outdated.",
+  "size": 552,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "Ui_LayoutState_InitDefaults 0x00267B60 (batch name maybe_Ui_RecipeBookState_InitDefaults) copies 8 words from 0x00726A10 into +0..+0x1F, stores 0 at +0x20, zero-fills 0x100 bytes at +0x24 and 0x100 at +0x124 and clears the bytes at +0x224/+0x225/+0x226. The template at 0x00726A10 is four {function pointer, 0} pairs (0x006374F4, 0x00637568, 0x0063791C, 0x00637A14 - battle predicate callbacks) followed by a u16 id list; the two pools and the 0x228 total size match the 0x4A0-frame text-layout users of the sibling Ui_LayoutParams_Init.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "maybe_callback0",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "First word of the template 0x00726A10, a code pointer (0x006374F4 maybe_Party_LevelGapExceedsTwo); copied verbatim, exact role unknown."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_callback0Arg",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Second word of the same template pair, always 0 in the template."
+   },
+   {
+    "offset": 8,
+    "name": "maybe_callback1",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Template pair 2: code pointer 0x00637568 (Battle_HasTwoUnitsOfBody178_179)."
+   },
+   {
+    "offset": 12,
+    "name": "maybe_callback1Arg",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Template pair 2 argument word, 0."
+   },
+   {
+    "offset": 16,
+    "name": "maybe_callback2",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Template pair 3: code pointer 0x0063791C (Battle_FindUnitWithSpecialBody)."
+   },
+   {
+    "offset": 20,
+    "name": "maybe_callback2Arg",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Template pair 3 argument word, 0."
+   },
+   {
+    "offset": 24,
+    "name": "maybe_callback3",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Template pair 4: code pointer 0x00637A14."
+   },
+   {
+    "offset": 28,
+    "name": "maybe_callback3Arg",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Template pair 4 argument word, 0."
+   },
+   {
+    "offset": 32,
+    "name": "unknown_word20",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Explicitly zeroed after the template copy ('self[8] = 0'); no reader recovered."
+   },
+   {
+    "offset": 292,
+    "name": "maybe_pool124",
+    "type": "u8 [4]",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "func_00116AE0(&self->f_124, 0x100) clears the second 0x100-byte candidate pool; the first starts at +0x24."
+   },
+   {
+    "offset": 548,
+    "name": "unknown_flag224",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by the init (raw line '*(u8*)(self+0x89) = 0' where self is a u32* => byte +0x224); no semantic use recovered."
+   },
+   {
+    "offset": 549,
+    "name": "unknown_flag225",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by the init ('(int)self + 0x225'); no semantic use recovered."
+   },
+   {
+    "offset": 550,
+    "name": "unknown_flag226",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Cleared by the init ('(int)self + 0x226'); no semantic use recovered."
+   }
+  ]
+ },
+ {
+  "class": "Ui_WindowState",
+  "type": "UiWindowState",
+  "summary": "Window open/close transition record: kind/variant/sub-state bytes followed by an embedded frame-script object at +0x11C and fade/scroll state at +0x518..; the many Goto* methods are transition requests (Goto2..Goto17) that set fade steps.",
+  "size": 1348,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "Ui_WindowState_Init 0x00471274 writes four bytes: kind, variant, sub-state (1, or the field-state byte from func_00640C64 when work->f_50 is live) and forced variant (same, but 3 when kind == 4). The transition methods call the embedded object at +0x11C through vtable slot 0x14 with state ids 6/0x10/0xD, read the widget at +0x4A4, and write the fade step bytes +0x540/+0x541 (7/8). The batch offsets +0x4/+0x8/+0xC are dword-scaled raw lines (param_1[1..3]) and are really bytes +1/+2/+3.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "kind",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Asm 0x00471280: 'strb r1,[r4]' stores the first argument (kind); compared with 4 to force the variant to 3."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_variant",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Raw line 'param_1[1] = param_3' with param_1 a u32* => true byte +0x1 (asm 0x00471284 'strb r2,[r4,#1]'); the requested transition variant."
+   },
+   {
+    "offset": 8,
+    "name": "subState",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Raw line 'param_1[2] = 1' => true byte +0x2 (asm 0x00471288 'mov r0,#1; strb r0,[r4,#2]'); replaced by func_00640C64(fieldState+0x5C) when the game work is loaded."
+   },
+   {
+    "offset": 12,
+    "name": "forcedVariant",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Raw line 'param_1[3] = param_1[2]' => true byte +0x3 (asm 0x004712C0 'strb r0,[r4,#3]'); forced to 3 when kind == 4."
+   },
+   {
+    "offset": 284,
+    "name": "frameScript",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The transition methods do '(**(code**)(*(int*)(self+0x11c) + 0x14))((int*)(self+0x11c), stateId)', i.e. +0x11C is the vtable word of an embedded frame-script object (same layout as Ui_FrameScript), called with ids 6/0x10/0xD."
+   },
+   {
+    "offset": 292,
+    "name": "maybe_scriptStep",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Read as a word at +0x124 inside the same transition code ('iVar5 = *(int*)(param_1 + 0x124)'); a script step/field of the +0x11C object, exact meaning unproven."
+   },
+   {
+    "offset": 1188,
+    "name": "maybe_widget4A4",
+    "type": "Ui_Widget",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "FUN_001DAD58(param_1 + 0x4a4, param_2 + 0x104) binds it and FUN_0062f680(param_1 + 0x4a4) queries it; struct_db typed the callee as Ui_Widget*, so +0x4A4 is an embedded Ui_Widget."
+   },
+   {
+    "offset": 1304,
+    "name": "flags518",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Read as a byte and tested with bit 0x10 ('*(byte*)(self+0x518) & 0x10'); a flag byte (bit 4 set means one transition branch)."
+   },
+   {
+    "offset": 1316,
+    "name": "mode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Stored from a bool and immediately used as a switch selector ('switch (*(u32*)(self+0x524))'); the transition mode."
+   },
+   {
+    "offset": 1340,
+    "name": "maybe_target53C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Read in the fade branch ('uVar3 = *(u32*)(self+0x53c)'); no store recovered, object/meaning unproven."
+   },
+   {
+    "offset": 1344,
+    "name": "maybe_isActive",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Written with a bool and with 1 in the Goto* helpers; gates the fade update."
+   },
+   {
+    "offset": 1345,
+    "name": "maybe_fadeStep",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Set to 8 or 7 (and 5 in the DiveForm view) right after isActive in the same helpers; a fade/phase step index."
+   }
+  ]
+ },
+ {
+  "class": "Ui_State",
+  "type": "UiState",
+  "summary": "Small shared state-machine record used by the window state machine, message end, cutscene layout mode and dive-form selection: a pending-request byte, current state id, a saved 0x20-byte state snapshot, a release target, two sub-state blocks and a result byte.",
+  "size": 340,
+  "base": null,
+  "confidence": 0.35,
+  "evidence": "maybe_Ui_State_Reset 0x001C1028 returns the word at +4, releases f_2c, then memcpy's 0x20 bytes from +0xC to +4 and clears +0x24. maybe_Ui_State_HandleEvent 0x001C10CC reads flags at +0x20 (bit 4), writes the next handler pair to +4/+8, and runs the two sub-state blocks at +0x34 and +0x50. maybe_Ui_State_Apply 0x00293C0C tests the byte at +0 and stores a result at byte +0x54. The functions come from four different subsystems, so only the record shape is proven.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "requestFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_State_Apply tests '*state == 1', clears it after the request is consumed and returns 1 when it is 0; only the low byte is ever used."
+   },
+   {
+    "offset": 4,
+    "name": "currentStateId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "maybe_Ui_State_Reset returns the word at +4 as the previous state, and HandleEvent stores the next handler word there ('*(u32*)(state+4) = table->f_10/f_18/f_20')."
+   },
+   {
+    "offset": 12,
+    "name": "maybe_savedSnapshot",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Reset does func_0011CD00(state+4, &state->f_c, 0x20): a 0x20-byte snapshot is copied from +0xC back to +4; this is the snapshot start."
+   },
+   {
+    "offset": 20,
+    "name": "maybe_param14",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Written with -1 and with 1 by the state setters ('param_1[5] = 0xffffffff' / '= 1'); a small parameter/enum, meaning unproven."
+   },
+   {
+    "offset": 32,
+    "name": "flags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "HandleEvent tests '(state->f_20 & 4) != 0' to take the early 'go to step 0x18' branch; a flags byte at +0x20."
+   },
+   {
+    "offset": 36,
+    "name": "maybe_counter24",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "maybe_Ui_State_Reset explicitly zeroes it; no reader recovered."
+   },
+   {
+    "offset": 44,
+    "name": "releaseTarget",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Reset reads f_2c and, when non-null, calls Ui_MessageWindow_SetStatusTextByType (the release/flush call); so +0x2C is an object released on reset."
+   },
+   {
+    "offset": 52,
+    "name": "maybe_subState2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "HandleEvent passes &state->f_34 to maybe_Ui_State_SetState2 (0x001C0DE4) as the target of the 'step 1' transition; the start of an embedded sub-state block."
+   },
+   {
+    "offset": 80,
+    "name": "maybe_subState24",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "HandleEvent passes &state->f_50 to maybe_Ui_State_SetState24 (0x001EA2D0) for the 'step 2' transition."
+   },
+   {
+    "offset": 336,
+    "name": "maybe_resultFlag54",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "maybe_Ui_State_Apply stores the third sink's return at byte +0x54 (raw line 'state[0x54] = cVar4' on a byte pointer) and clears it on the other branch; the batch offset 336 is that raw dword index *4 - true byte is +0x54."
+   }
+  ]
+ },
+ {
+  "class": "Ui_BalloonPool",
+  "type": "UiBalloonPool",
+  "summary": "Pool of 32 battle dialog balloons at +0x11C plus the intrusive ring of balloons that are currently linked in (head at +0x244, end at +0x248); Reset/SetFlag walk the 32 slots.",
+  "size": 588,
+  "base": null,
+  "confidence": 0.5,
+  "evidence": "Ui_BalloonPool_Spawn 0x003246F0 scans 'self + i*4 + 0x11c' for a free slot (i < 0x20), activates it through vtable+0x18, then links the slot's node at slot+6*4 into the list at &self->f_244 using self->f_248 as the end position: func_001235A4(&self->f_244, self->f_248, piVar2 + 6). Ui_BalloonPool_Reset 0x003247B0 and SetFlag 0x003247DC confirm the 32-slot scan.",
+  "fields": [
+   {
+    "offset": 580,
+    "name": "maybe_activeListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Address &self->f_244 is passed as the list head to func_001235A4 (0x001235A4 is an intrusive doubly-linked list link: it rewrites node+4/+8 and the neighbours' links); an embedded std::list-style sentinel."
+   },
+   {
+    "offset": 584,
+    "name": "maybe_activeListEnd",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Passed as the second (position/end) argument of the same link call; the ring's end node pointer."
+   }
+  ]
+ },
+ {
+  "class": "Ui_TextLinePool",
+  "type": "UiTextLinePool",
+  "summary": "Damaged fragment of a text-log window initialiser (mid-function entry at 0x00304C14); no field meaning can be recovered.",
+  "size": 72,
+  "base": null,
+  "confidence": 0.15,
+  "evidence": "maybe_Ui_TextLinePool_InitBody2 0x00304C14 is an interior entry point of 0x00304900 (Ghidra reports 'damaged decompilation due to a mid-function entry point'); its only field touch is the unrecognisable line '*(byte *)(in_pc + self + 0x44) = arg2 | unaff_r4', which uses an unavailable PC register. The three Init* functions therefore describe no verifiable class.",
+  "fields": [
+   {
+    "offset": 68,
+    "name": "unknown_flags44",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Only evidence is the damaged line '*(byte*)(in_pc + param_1 + 0x44) = param_2 | unaff_r4'; the read of in_pc means the offset cannot be trusted either."
+   }
+  ]
+ },
+ {
+  "class": "Ui_LayoutParams",
+  "type": "UiLayoutParams",
+  "summary": "Text/message row layout parameter block loaded from the data record selected by layout id (Ui_LayoutParams_LoadFromId): header words, a 0x13D-byte config block, a 0x1E block, a 4-pair relative-pointer table, two 0x68-byte style sub-records and a long tail of layout scalars; used by Text_CalcRowGeometry / Text_MeasureRowByType / Battle_Message_BuildRowForMonsterEx, which build it on 0x4A0-byte stack frames.",
+  "size": 4532,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "Ui_LayoutParams_Init 0x002E8538 (asm: strb #0xFF at +0; ConstructArray(this+0x188,0x5906C0,8,4); ConstructArray(this+0x1C4,0x590678,0x68,2); zero stores at +0x35C,+0x420,+0x424,+0x428,+0x454,+0x46C) and Ui_LayoutParams_LoadFromId 0x002E7FBC (memcpy sizes 0x13D at +0x24 and 0x1E at +0x164, pointer rebasing for +0x182 and the 4 pairs at +0x188, then scalar copies up to +0x46C). IMPORTANT: struct_db recorded these offsets in dword units; every batch offset here is exactly 4x the real byte offset (batch 48 = real +0xC, batch 1424 = real +0x164, batch 4528 = real +0x46C). The emitted offsets follow the batch contract, and each evidence line states the real byte offset. The real object is ~0x470 bytes (0x4A0 stack frame), not 4532.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "layoutId",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.65,
+    "evidence": "Ui_LayoutParams_Init 0x002E8538 stores 0xFF ('no layout'); LoadFromId 0x002E7FBC stores the requested row id as a byte at +0."
+   },
+   {
+    "offset": 48,
+    "name": "unknown_header0C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 2 of the layout data record (0x0063FA18); no reader recovered. True byte offset +0xC (batch offset = 4x)."
+   },
+   {
+    "offset": 64,
+    "name": "unknown_header10",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 3 of the layout data record; no reader recovered. True byte offset +0x10."
+   },
+   {
+    "offset": 80,
+    "name": "unknown_header14",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 4 of the layout data record; no reader recovered. True byte offset +0x14."
+   },
+   {
+    "offset": 96,
+    "name": "unknown_header18",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 5 of the layout data record; no reader recovered. True byte offset +0x18."
+   },
+   {
+    "offset": 112,
+    "name": "unknown_header1C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 6 of the layout data record; no reader recovered. True byte offset +0x1C."
+   },
+   {
+    "offset": 128,
+    "name": "unknown_header20",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from word 7 of the layout data record; no reader recovered. True byte offset +0x20."
+   },
+   {
+    "offset": 144,
+    "name": "unknown_configBlock24",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.15,
+    "evidence": "std_memcpy(&self->f_24, record+0x20, 0x13D) fills a 0x13D-byte configuration block (+0x24..+0x160); its internal layout is not described by this batch. True byte offset +0x24."
+   },
+   {
+    "offset": 1424,
+    "name": "unknown_configBlock164",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.15,
+    "evidence": "std_memcpy(&self->f_164, record+0x160, 0x1E) fills a 0x1E-byte block; internal layout unknown. True byte offset +0x164."
+   },
+   {
+    "offset": 1544,
+    "name": "maybe_record182",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "func_0011FFC4(&self->f_182, record+0x17E) copies a fixed 5-byte record (one u32 + one u8, see 0x0011FFC4: ldr/str word then ldrb/strb). True byte offset +0x182."
+   },
+   {
+    "offset": 1568,
+    "name": "pointerTable188",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "LoadFromId rebases 4 pairs of record-relative pointers at +0x188..+0x1A7 (loop i<4, '*piVar4 = (int)piVar2 + (*piVar2 - (int)piVar4)'), and Init constructs the same 4x8-byte table with ctor 0x005906C0. True byte offset +0x188."
+   },
+   {
+    "offset": 1696,
+    "name": "unknown_word1A8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x69; no reader recovered. True byte offset +0x1A8."
+   },
+   {
+    "offset": 1712,
+    "name": "unknown_word1AC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6A; no reader recovered."
+   },
+   {
+    "offset": 1728,
+    "name": "unknown_word1B0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6B; no reader recovered."
+   },
+   {
+    "offset": 1744,
+    "name": "unknown_word1B4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6C; no reader recovered."
+   },
+   {
+    "offset": 1760,
+    "name": "unknown_word1B8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6D; no reader recovered."
+   },
+   {
+    "offset": 1776,
+    "name": "unknown_word1BC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6E; no reader recovered."
+   },
+   {
+    "offset": 1792,
+    "name": "unknown_word1C0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x6F; no reader recovered."
+   },
+   {
+    "offset": 2640,
+    "name": "unknown_u16_294",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0xA4; no reader recovered."
+   },
+   {
+    "offset": 2648,
+    "name": "unknown_u16_296",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x292 (byte view); no reader recovered."
+   },
+   {
+    "offset": 2656,
+    "name": "unknown_u16_298",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0xA5; no reader recovered."
+   },
+   {
+    "offset": 2664,
+    "name": "unknown_u16_29A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x296; no reader recovered."
+   },
+   {
+    "offset": 2672,
+    "name": "unknown_word29C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xA6; no reader recovered."
+   },
+   {
+    "offset": 2688,
+    "name": "unknown_word2A0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xA7; no reader recovered."
+   },
+   {
+    "offset": 2704,
+    "name": "unknown_word2A4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xA8; no reader recovered."
+   },
+   {
+    "offset": 2720,
+    "name": "unknown_word2A8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xA9; no reader recovered."
+   },
+   {
+    "offset": 2736,
+    "name": "unknown_word2AC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xAA; no reader recovered."
+   },
+   {
+    "offset": 2752,
+    "name": "unknown_word2B0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0xAB; no reader recovered."
+   },
+   {
+    "offset": 2768,
+    "name": "unknown_byte2B4",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0xAC; no reader recovered."
+   },
+   {
+    "offset": 2772,
+    "name": "unknown_byte2B5",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x2B1 (byte view); no reader recovered."
+   },
+   {
+    "offset": 2776,
+    "name": "unknown_byte2B6",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x2B2; no reader recovered."
+   },
+   {
+    "offset": 2780,
+    "name": "unknown_byte2B7",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x2B3; no reader recovered."
+   },
+   {
+    "offset": 2784,
+    "name": "unknown_byte2B8",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0xAD; no reader recovered."
+   },
+   {
+    "offset": 3440,
+    "name": "maybe_param35C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x35C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3456,
+    "name": "maybe_param360",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x360 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3472,
+    "name": "maybe_param364",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x364 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3488,
+    "name": "maybe_param368",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x368 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3504,
+    "name": "maybe_param36C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x36C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3520,
+    "name": "maybe_param370",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x370 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3536,
+    "name": "maybe_param374",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x374 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3552,
+    "name": "maybe_param378",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x378 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3568,
+    "name": "maybe_param37C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x37C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3584,
+    "name": "maybe_param380",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x380 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3616,
+    "name": "maybe_param388",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x388 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3632,
+    "name": "maybe_param38C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x38C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3648,
+    "name": "maybe_param390",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x390 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3664,
+    "name": "maybe_param394",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x394 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3680,
+    "name": "maybe_param398",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x398 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3696,
+    "name": "maybe_param39C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x39C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3712,
+    "name": "maybe_param3A0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3A0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3728,
+    "name": "maybe_param3A4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3A4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3744,
+    "name": "maybe_param3A8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3A8 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3760,
+    "name": "maybe_param3AC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3AC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3776,
+    "name": "maybe_param3B0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3B0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3792,
+    "name": "maybe_param3B4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3B4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3808,
+    "name": "maybe_param3B8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3B8 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3824,
+    "name": "maybe_param3BC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3BC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3840,
+    "name": "maybe_param3C0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3C0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3856,
+    "name": "maybe_param3C4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3C4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3872,
+    "name": "maybe_param3C8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3C8 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3888,
+    "name": "maybe_param3CC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3CC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3904,
+    "name": "maybe_param3D0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3D0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3920,
+    "name": "maybe_param3D4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3D4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3936,
+    "name": "maybe_param3D8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3D8 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3952,
+    "name": "maybe_param3DC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3DC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3968,
+    "name": "maybe_param3E0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3E0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 3984,
+    "name": "maybe_param3E4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3E4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4016,
+    "name": "maybe_param3EC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3EC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4032,
+    "name": "maybe_param3F0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3F0 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4048,
+    "name": "maybe_param3F4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3F4 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4064,
+    "name": "maybe_param3F8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3F8 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4080,
+    "name": "maybe_param3FC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x3FC (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4096,
+    "name": "maybe_param400",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x400 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4112,
+    "name": "maybe_param404",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x404 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4128,
+    "name": "maybe_param408",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x408 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4144,
+    "name": "maybe_param40C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x40C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4160,
+    "name": "maybe_param410",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x410 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4176,
+    "name": "maybe_param414",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x414 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4192,
+    "name": "maybe_param418",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x418 (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4208,
+    "name": "maybe_param41C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.15,
+    "evidence": "Copied one-to-one from the layout data record by LoadFromId 0x002E7FBC; role not proven. True byte offset +0x41C (batch offset is 4x the real byte offset)."
+   },
+   {
+    "offset": 4224,
+    "name": "maybe_relativePointer420",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Record-relative pointer rebased to absolute by LoadFromId ('if (v) v = &record->f_107 + (v - &self->f_420)'); used by the text/row layout callers."
+   },
+   {
+    "offset": 4240,
+    "name": "maybe_relativePointer424",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Second record-relative pointer rebased the same way at +0x424."
+   },
+   {
+    "offset": 4256,
+    "name": "maybe_relativePointer428",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Third record-relative pointer rebased the same way at +0x428."
+   },
+   {
+    "offset": 4272,
+    "name": "unknown_u16_42C",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x10A; no reader recovered."
+   },
+   {
+    "offset": 4280,
+    "name": "unknown_u16_42E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x42A (byte view); no reader recovered."
+   },
+   {
+    "offset": 4288,
+    "name": "unknown_byte430",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x10B; no reader recovered."
+   },
+   {
+    "offset": 4292,
+    "name": "unknown_byte431",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x42D; no reader recovered."
+   },
+   {
+    "offset": 4296,
+    "name": "unknown_byte432",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x42E; no reader recovered."
+   },
+   {
+    "offset": 4300,
+    "name": "unknown_byte433",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x42F; no reader recovered."
+   },
+   {
+    "offset": 4304,
+    "name": "unknown_byte434",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x10C; no reader recovered."
+   },
+   {
+    "offset": 4308,
+    "name": "unknown_byte435",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x431; no reader recovered."
+   },
+   {
+    "offset": 4312,
+    "name": "unknown_byte436",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x432; no reader recovered."
+   },
+   {
+    "offset": 4316,
+    "name": "unknown_byte437",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x433; no reader recovered."
+   },
+   {
+    "offset": 4320,
+    "name": "unknown_u16_438",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x10D; no reader recovered."
+   },
+   {
+    "offset": 4328,
+    "name": "unknown_u16_43A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x436; no reader recovered."
+   },
+   {
+    "offset": 4336,
+    "name": "unknown_u16_43C",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x10E; no reader recovered."
+   },
+   {
+    "offset": 4344,
+    "name": "unknown_u16_43E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x43A; no reader recovered."
+   },
+   {
+    "offset": 4352,
+    "name": "unknown_u16_440",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x10F; no reader recovered."
+   },
+   {
+    "offset": 4360,
+    "name": "unknown_u16_442",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x43E; no reader recovered."
+   },
+   {
+    "offset": 4368,
+    "name": "unknown_u16_444",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x110; no reader recovered."
+   },
+   {
+    "offset": 4376,
+    "name": "unknown_u16_446",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x442; no reader recovered."
+   },
+   {
+    "offset": 4384,
+    "name": "unknown_word448",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x111; no reader recovered."
+   },
+   {
+    "offset": 4400,
+    "name": "unknown_word44C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x112; no reader recovered."
+   },
+   {
+    "offset": 4416,
+    "name": "unknown_word450",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x113; no reader recovered."
+   },
+   {
+    "offset": 4432,
+    "name": "unknown_word454",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Copied from record word 0x114; no reader recovered."
+   },
+   {
+    "offset": 4448,
+    "name": "unknown_u16_458",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x115; no reader recovered."
+   },
+   {
+    "offset": 4456,
+    "name": "unknown_u16_45A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x456; no reader recovered."
+   },
+   {
+    "offset": 4464,
+    "name": "unknown_u16_45C",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x116; no reader recovered."
+   },
+   {
+    "offset": 4472,
+    "name": "unknown_u16_45E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x45A; no reader recovered."
+   },
+   {
+    "offset": 4480,
+    "name": "unknown_byte460",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x117; no reader recovered."
+   },
+   {
+    "offset": 4484,
+    "name": "unknown_byte461",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x45D; no reader recovered."
+   },
+   {
+    "offset": 4488,
+    "name": "unknown_byte462",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x45E; no reader recovered."
+   },
+   {
+    "offset": 4492,
+    "name": "unknown_byte463",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x45F; no reader recovered."
+   },
+   {
+    "offset": 4496,
+    "name": "unknown_byte464",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x118; no reader recovered."
+   },
+   {
+    "offset": 4500,
+    "name": "unknown_byte465",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x461; no reader recovered."
+   },
+   {
+    "offset": 4504,
+    "name": "unknown_byte466",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x462; no reader recovered."
+   },
+   {
+    "offset": 4508,
+    "name": "unknown_byte467",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x463; no reader recovered."
+   },
+   {
+    "offset": 4512,
+    "name": "unknown_byte468",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x119; no reader recovered."
+   },
+   {
+    "offset": 4516,
+    "name": "unknown_byte469",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x465; no reader recovered."
+   },
+   {
+    "offset": 4520,
+    "name": "unknown_u16_46A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.0,
+    "evidence": "Copied from record halfword 0x466; no reader recovered."
+   },
+   {
+    "offset": 4528,
+    "name": "unknown_byte46C",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.0,
+    "evidence": "Copied from record byte 0x11A; the init also clears it explicitly. True byte offset +0x46C."
+   }
+  ]
+ },
+ {
+  "class": "Ui_DiveForm",
+  "type": "UiDiveForm",
+  "summary": "The 'Dive' (past-world) profile/name-entry form: a large Ui_Object-derived window hosting the title, five list panes, the people/list2/album/call lists, the keyboard/name/talk/yes-no/gold/accessory/operation sub-windows, their intrusive list rings and an embedded Ui_State request record.",
+  "size": 14296,
+  "base": "Ui_Object",
+  "confidence": 0.55,
+  "evidence": "Ui_DiveForm_InitPanes 0x003BD260 binds every pane by literal name: bg_normal, bg_vip, title, list_4, bg_list_normal2, list2, list1, list_5, list_6, bg_list_normal, bg_list_vip, btn_set1, menu_dive_peaple (7), menu_dive_list (8), menu_dive_list2 (9), menu_dive_album (10), win_load_keyboard (0xB), win_load_name (0xC), win_talk (0xD), win_yesno (0xE), menu_dive_calllist (0xF), win_gold (0x10), menu_dive_gold (0x11), menu_dive_accessory (0x12), menu_dive_operation (0x13). Backgrounds are resolved through func_0053649C(self->f_ac, name); panes through Ui_PaneBinding_BindToLayout(&self->f_xxx, self+0x98, name, self+0xd4, index) and Ui_Widget_FindPaneAndNotify(self, &self->f_xxx, name, id); list membership through the intrusive list helper func_001235A4(&ringSentinel, ringSentinel, &node). The ctor 0x003BE214 chains Ui_Object_CtorBase sub-objects at +0x138 and then at the pane offsets. Offsets 4..0x48 are inherited Ui_Object fields (names kept from S_078).",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "The multi-purpose ctor at 0x003BE214 stores the class vtable as the first word and every embedded pane sub-object repeats the pattern at +0x148/+0x160/... ."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_ownerResource",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Inherited Ui_Object field (S_078): owner resource whose +0x10 is the layout resource set; only generic base use recovered."
+   },
+   {
+    "offset": 8,
+    "name": "unknown_word_08",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Inherited Ui_Object field (S_078 unknown_word_08); the only use here is a bit-0 guard '((param_1[2] & 1U) != 0 && param_1[2] != 0)'."
+   },
+   {
+    "offset": 16,
+    "name": "maybe_layoutRef",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Inherited Ui_Object field (S_078); used as a pane-name lookup source with FUN_003828B8 and (u16)f_10 << 16 in an id compose."
+   },
+   {
+    "offset": 24,
+    "name": "maybe_listNodeOwner",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Inherited Ui_Object ring word (S_078); the raw ctor lines puVar2[6]=... build the intrusive child ring at +0x18/+0x1C/+0x20."
+   },
+   {
+    "offset": 28,
+    "name": "maybe_listNodeNext",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Inherited Ui_Object ring word (S_078) at +0x1C."
+   },
+   {
+    "offset": 32,
+    "name": "maybe_listNodePrev",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Inherited Ui_Object ring word (S_078) at +0x20."
+   },
+   {
+    "offset": 36,
+    "name": "unknown_word_24",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Inherited Ui_Object field cleared with +0x24..+0x44 by Ui_Object_CtorBase; no semantic use."
+   },
+   {
+    "offset": 40,
+    "name": "maybe_scaleValue",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Inherited Ui_Object field (S_078 maybe_scaleValue); no float use recovered for this class."
+   },
+   {
+    "offset": 44,
+    "name": "drawPriority",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Inherited Ui_Object field (S_078 drawPriority, +0x2C); the base ctor writes 0 and pushes it into the +0x38 draw object."
+   },
+   {
+    "offset": 48,
+    "name": "maybe_layoutObject",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Inherited Ui_Object field (S_078 +0x30 layout object); the base dtor clears it."
+   },
+   {
+    "offset": 52,
+    "name": "maybe_layoutObject2",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Inherited Ui_Object field (S_078 +0x34); only base-class guard use."
+   },
+   {
+    "offset": 56,
+    "name": "drawObject",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Inherited Ui_Object field (S_078 +0x38 drawObject); the base dtor releases it through vtable+4."
+   },
+   {
+    "offset": 72,
+    "name": "state",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Inherited Ui_Object field (S_078 state, +0x48); Ui_Object_CtorBase sets it to 1."
+   },
+   {
+    "offset": 74,
+    "name": "maybe_nodeFlags4A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.3,
+    "evidence": "Written as part of a list-node header ('puVar5 = (u16*)((int)puVar2 + 0x4a)'); meaning unproven."
+   },
+   {
+    "offset": 76,
+    "name": "maybe_curve4C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_006564c0(param_1 + 0x13, *puVar2, 0) is called with &self->0x4C as the receiver; a sub-object start, meaning unproven."
+   },
+   {
+    "offset": 80,
+    "name": "maybe_ownerParam50",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Raw store 'puVar2[0x14] = param_2' at +0x50; an owner-supplied parameter, meaning unproven."
+   },
+   {
+    "offset": 84,
+    "name": "unknown_word54",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Raw store 'param_1[0x15] = 0'; no reader recovered."
+   },
+   {
+    "offset": 88,
+    "name": "maybe_objectArray58",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "std_ConstructArray(self+0x58, ctor, 0xA0, 6) constructs six 0xA0-byte objects at +0x58 (asm: FUN_00100050(piVar4 + 0x16, uVar5, 0xa0, 6))."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_paneHost",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_DiveForm_InitPanes uses 'iVar2 = self + 0x98' as the layout host passed to every Ui_PaneBinding_BindToLayout call; an embedded pane-layout object."
+   },
+   {
+    "offset": 172,
+    "name": "layoutRes",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "func_0053649C(self->f_ac, \"bg_normal\"/\"bg_vip\"/\"bg_list_*\", ...) resolves every background handle from f_ac, so +0xAC is the loaded layout resource (Ui_Layout handle)."
+   },
+   {
+    "offset": 212,
+    "name": "maybe_paneAnimHost",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Ui_DiveForm_InitPanes uses 'iVar3 = self + 0xd4' as the animation/context argument of every Ui_PaneBinding_BindToLayout call."
+   },
+   {
+    "offset": 284,
+    "name": "maybe_list11C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Raw 'piVar3 = (int*)(param_1 + 0x11c)' in a list-building helper; an embedded list head/node, meaning unproven."
+   },
+   {
+    "offset": 288,
+    "name": "unknown_word120",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Parser artifact: the evidence line '(**(code**)(*param_1 + 0x48))(param_1,...)' is a vtable call through slot 0x48, not a field access."
+   },
+   {
+    "offset": 292,
+    "name": "maybe_listHead120",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "The raw init lines 'puVar2[0x49] = puVar2 + 0x48' / 'puVar2[0x4a] = puVar2 + 0x48' build an intrusive list whose sentinel is at +0x120 and whose two link words are at +0x124/+0x128."
+   },
+   {
+    "offset": 296,
+    "name": "maybe_listNode128",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Second link word of the same intrusive list ('puVar2[0x4a] = puVar2 + 0x48')."
+   },
+   {
+    "offset": 300,
+    "name": "maybe_listNode12C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Raw 'puVar3 = puVar2 + 0x4b' (byte +0x12C) followed by a store into the next link word; a list node start."
+   },
+   {
+    "offset": 304,
+    "name": "maybe_listNode130",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Raw 'puVar2[0x4c] = puVar3' links the node at +0x12C into the list; this is the last link word of the block."
+   },
+   {
+    "offset": 308,
+    "name": "maybe_isOpen134",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Ctor and InitPanes store 1 to +0x134 (five writes); a boolean open/active flag, exact meaning unproven."
+   },
+   {
+    "offset": 309,
+    "name": "maybe_isFocus135",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Stored 1 next to +0x134 (four writes); a second boolean flag."
+   },
+   {
+    "offset": 312,
+    "name": "maybe_subObject138",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_001A66A0(puVar2 + 0x4e) (Ui_Object_CtorBase) is called on &self->0x138, so an embedded Ui_Object sub-object starts here; the ctor also stores a constant word in it."
+   },
+   {
+    "offset": 316,
+    "name": "bgNormal",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes: self->f_13c = func_0053649C(self->f_ac, \"bg_normal\"); the normal background handle."
+   },
+   {
+    "offset": 320,
+    "name": "maybe_value140",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Ctor stores a constant word and InitPanes writes uVar5 here; role unproven (adjacent to the background handles)."
+   },
+   {
+    "offset": 324,
+    "name": "bgVip",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes: self->f_144 = func_0053649C(self->f_ac, \"bg_vip\")."
+   },
+   {
+    "offset": 328,
+    "name": "titlePane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_148, host, \"title\", anim, 0) binds the title pane into this embedded object."
+   },
+   {
+    "offset": 336,
+    "name": "unknown_word150",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Parser artifact: the evidence is a vtable call '(**(code**)(*param_1 + 0x54))(param_1,0xb,0xffffffff)' through slot 0x54, not a field."
+   },
+   {
+    "offset": 352,
+    "name": "list4Pane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_160, host, \"list_4\", anim, 1)."
+   },
+   {
+    "offset": 380,
+    "name": "maybe_handle17C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read as a word ('iVar3 = *(int*)(param_1 + 0x17c)') and forwarded to a pane-window setup; exact meaning unproven."
+   },
+   {
+    "offset": 384,
+    "name": "bgListNormal2",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes: self->f_180 = func_0053649C(self->f_ac, \"bg_list_normal2\")."
+   },
+   {
+    "offset": 388,
+    "name": "list2Pane",
+    "type": "Ui_Layout",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_184, host, \"list2\", anim, 2)."
+   },
+   {
+    "offset": 392,
+    "name": "maybe_subObject188",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_003829A0(&self->f_188, param_2, param_3, param_4) constructs a pane/layout sub-object in place."
+   },
+   {
+    "offset": 420,
+    "name": "list1Pane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_1a4, host, \"list1\", anim, 3)."
+   },
+   {
+    "offset": 448,
+    "name": "list5Pane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_1c0, host, \"list_5\", anim, 4)."
+   },
+   {
+    "offset": 472,
+    "name": "maybe_paneStack1D8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_006D8A90(&self->f_134, &self->f_1d8, ...) - the same push helper used by Ui_DiveForm_PushPane; a pane stack/record at +0x1D8."
+   },
+   {
+    "offset": 476,
+    "name": "list6Pane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_1dc, host, \"list_6\", anim, 5)."
+   },
+   {
+    "offset": 504,
+    "name": "bgListNormal",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes: self->f_1f8 = func_0053649C(self->f_ac, \"bg_list_normal\")."
+   },
+   {
+    "offset": 512,
+    "name": "bgListVip",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes: self->f_200 = func_0053649C(self->f_ac, \"bg_list_vip\")."
+   },
+   {
+    "offset": 516,
+    "name": "buttonSetPane",
+    "type": "Ui_Window",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_PaneBinding_BindToLayout(&self->f_204, host, \"btn_set1\", anim, 6)."
+   },
+   {
+    "offset": 528,
+    "name": "maybe_widget210",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_001dab30(&self->f_210, uVar6) constructs/binds an embedded widget; exact type unproven."
+   },
+   {
+    "offset": 572,
+    "name": "peoplePane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_23c, \"menu_dive_peaple\", 7); the pane found by name is stored here."
+   },
+   {
+    "offset": 596,
+    "name": "maybe_peopleListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(&self->f_3440, &self->f_3440, &self->f_254) links this node into the people list head at +0x3440."
+   },
+   {
+    "offset": 648,
+    "name": "peopleList",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_288, \"menu_dive_list\", 8); the people list pane."
+   },
+   {
+    "offset": 672,
+    "name": "maybe_list2FirstListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(list2Head, list2Head, &self->f_2a0) links this node into the list2 list."
+   },
+   {
+    "offset": 676,
+    "name": "maybe_toggle2A4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_0029126c(&self->f_2a4, param_2 == 0) - a setter-style helper, exact meaning unproven."
+   },
+   {
+    "offset": 752,
+    "name": "maybe_sub2F0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_00649874(&self->f_2f0) constructs/queries an embedded sub-object; type unknown."
+   },
+   {
+    "offset": 828,
+    "name": "maybe_sub33C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_006497ec(&self->f_33c) constructs/queries an embedded sub-object; type unknown."
+   },
+   {
+    "offset": 908,
+    "name": "maybe_toggle38C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_0029126c(&self->f_38c, 0), same setter family as +0x2A4."
+   },
+   {
+    "offset": 980,
+    "name": "maybe_sub3D4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "FUN_00654b24(&self->f_3d4) constructs/queries an embedded sub-object; type unknown."
+   },
+   {
+    "offset": 1056,
+    "name": "maybe_list420",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Raw 'piVar9 = (int*)(param_1 + 0x420)' in a list walk; an embedded list/array, meaning unproven."
+   },
+   {
+    "offset": 1096,
+    "name": "maybe_pageIndex448",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "FUN_001D809C(iVar8, uVar12 | ((u32)*(u16*)(self+0x448) << 16)) packs it into the high half of an id, so a page/section index."
+   },
+   {
+    "offset": 1112,
+    "name": "maybe_handle458",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Only a null test '*(int*)(param_1 + 0x458) == 0'; an optional handle/object."
+   },
+   {
+    "offset": 1136,
+    "name": "maybe_flags470",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read as a word ('uVar12 = *(uint*)(param_1 + 0x470)') and used to build ids; a flags/index word."
+   },
+   {
+    "offset": 1304,
+    "name": "maybe_slotIndex518",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Read as a u16 and passed as an index with the 0x38C/0x33C toggles; a slot/page index."
+   },
+   {
+    "offset": 1306,
+    "name": "maybe_animId51A",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "First of three bytes passed as integers to FUN_001a60a0(&self->f_38c, f_51a, f_51b, f_51c), an animation/slot setter."
+   },
+   {
+    "offset": 1307,
+    "name": "maybe_frame51B",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Second byte of the same FUN_001a60a0 call."
+   },
+   {
+    "offset": 1308,
+    "name": "maybe_variant51C",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Third byte of the same FUN_001a60a0 call."
+   },
+   {
+    "offset": 1312,
+    "name": "maybe_isActive520",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Tested as a boolean ('if (*(char*)(param_1 + 0x520) != 0)') before a transition; an active flag."
+   },
+   {
+    "offset": 1320,
+    "name": "maybe_isActive528",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Tested as a boolean ('if (*(char*)(param_1 + 0x528) == 0)') in the same transition code."
+   },
+   {
+    "offset": 1340,
+    "name": "maybe_target53C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Null-tested before a transition ('if (*(int*)(param_1 + 0x53c) == 0)'); an optional object/state pointer."
+   },
+   {
+    "offset": 1344,
+    "name": "maybe_isInitialized540",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Stored 1 when the form is set up."
+   },
+   {
+    "offset": 1345,
+    "name": "maybe_mode541",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Set to 5 by the form setup (and to 7/8 by the window-state transition helpers); a mode/fade step."
+   },
+   {
+    "offset": 2436,
+    "name": "maybe_subObject984",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Raw 'iVar3 = param_1 + 0x984' only starts a sub-object walk; meaning unproven."
+   },
+   {
+    "offset": 2744,
+    "name": "list2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_ab8, \"menu_dive_list2\", 9)."
+   },
+   {
+    "offset": 2768,
+    "name": "maybe_list2ListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(list2Head, list2Head, &self->f_ad0) links this node into the list2 ring."
+   },
+   {
+    "offset": 3016,
+    "name": "callList",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_bc8, \"menu_dive_calllist\", 0xf)."
+   },
+   {
+    "offset": 3040,
+    "name": "maybe_callListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(&self->f_34cc, &self->f_34cc, &self->f_be0) links this node into the call-list ring."
+   },
+   {
+    "offset": 3328,
+    "name": "albumPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_d00, \"menu_dive_album\", 10)."
+   },
+   {
+    "offset": 3352,
+    "name": "maybe_albumListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(&self->f_3478, &self->f_3478, &self->f_d18) links this node into the album ring."
+   },
+   {
+    "offset": 3512,
+    "name": "cursorIcon",
+    "type": "Ui_CursorIcon",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "FUN_001D7B1C(&self->f_db8, 1) initialises the embedded cursor icon (struct_db's callee type is Ui_CursorIcon*)."
+   },
+   {
+    "offset": 3576,
+    "name": "loadKeyboardPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_df8, \"win_load_keyboard\", 0xb)."
+   },
+   {
+    "offset": 3600,
+    "name": "maybe_loadKeyboardListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(name-list head, head, &self->f_e10) links this node into the load-name list."
+   },
+   {
+    "offset": 3900,
+    "name": "nameTextTarget",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes: 'self->f_f3c = self + 0x1030' - +0xF3C holds the pointer (self+0x1030) where the entered name is assembled."
+   },
+   {
+    "offset": 4068,
+    "name": "loadNamePane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_fe4, \"win_load_name\", 0xc)."
+   },
+   {
+    "offset": 4092,
+    "name": "maybe_loadNameListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(name-list head, head, &self->f_ffc) links this node into the load-name list."
+   },
+   {
+    "offset": 4144,
+    "name": "nameTextBuffer",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The address self+0x1030 is stored into nameTextTarget +0xF3C and is used by the name-entry panes; an embedded text buffer."
+   },
+   {
+    "offset": 5156,
+    "name": "talkWindow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_1424, \"win_talk\", 0xd)."
+   },
+   {
+    "offset": 12288,
+    "name": "maybe_sub3000",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_003D6C18(param_1, param_1 + 0x3000, puVar3, param_4) treats this as a sub-object base (the Ui_State_Apply family is called on +0x377C nearby)."
+   },
+   {
+    "offset": 12496,
+    "name": "yesNoWindow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_30d0, \"win_yesno\", 0xe); Ui_MessagePair_Bind then pairs it with talkWindow."
+   },
+   {
+    "offset": 12576,
+    "name": "goldWindow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_3120, \"win_gold\", 0x10)."
+   },
+   {
+    "offset": 12600,
+    "name": "maybe_goldListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(callList head, head, &self->f_3138) links this node into the gold list."
+   },
+   {
+    "offset": 12652,
+    "name": "goldMenuPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_316c, \"menu_dive_gold\", 0x11)."
+   },
+   {
+    "offset": 12676,
+    "name": "maybe_goldMenuListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(callList head, head, &self->f_3184) links this node into the gold menu list."
+   },
+   {
+    "offset": 12728,
+    "name": "accessoryMenuPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_31b8, \"menu_dive_accessory\", 0x12)."
+   },
+   {
+    "offset": 12752,
+    "name": "maybe_accessoryListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(&self->f_34b0, &self->f_34b0, &self->f_31d0) links this node into the accessory ring."
+   },
+   {
+    "offset": 13284,
+    "name": "operationMenuPane",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ui_Widget_FindPaneAndNotify(self, &self->f_33e4, \"menu_dive_operation\", 0x13)."
+   },
+   {
+    "offset": 13308,
+    "name": "maybe_operationListNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_001235A4(&self->f_34e8, &self->f_34e8, &self->f_33fc, uVar1) links this node into the operation ring."
+   },
+   {
+    "offset": 13376,
+    "name": "maybe_peopleListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x3440 (func_001235A4(&self->f_3440, &self->f_3440, ...) self-links it)."
+   },
+   {
+    "offset": 13404,
+    "name": "maybe_list2ListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x345c used by the list2 nodes."
+   },
+   {
+    "offset": 13432,
+    "name": "maybe_albumListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x3478 used by the album nodes."
+   },
+   {
+    "offset": 13460,
+    "name": "maybe_loadNameListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x3494 used by the load-name nodes."
+   },
+   {
+    "offset": 13488,
+    "name": "maybe_accessoryListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x34b0 used by the accessory nodes."
+   },
+   {
+    "offset": 13500,
+    "name": "maybe_listHead34BC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "FUN_00123594(self, &self->f_34bc) - the list-unlink/release helper is called on +0x34BC, so another embedded ring node."
+   },
+   {
+    "offset": 13516,
+    "name": "maybe_callListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x34cc used by the call-list/gold nodes."
+   },
+   {
+    "offset": 13528,
+    "name": "maybe_listNodeD36",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.2,
+    "evidence": "FUN_00123594(self, &self->f_d36) - the offset +0xD36 is unaligned and probably a mistyped self in the grouped function, so the field is doubtful."
+   },
+   {
+    "offset": 13544,
+    "name": "maybe_operationListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Embedded intrusive list sentinel at +0x34e8 used by the operation nodes."
+   },
+   {
+    "offset": 13628,
+    "name": "textList",
+    "type": "Ui_TextList",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "FUN_001B827C(&self->f_353c) initialises a text-list object (struct_db callee type Ui_TextList*)."
+   },
+   {
+    "offset": 13684,
+    "name": "maybe_animTimer3574",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Raw 'piVar2 = (int*)(param_1 + 0x3574)' starts the animation record that is advanced at +0x357C/+0x3580; first word (unknown type)."
+   },
+   {
+    "offset": 13688,
+    "name": "stepIndex3578",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Read as an index into a 0x18-byte step-record table: 'piVar4[uVar2 * 6 + 0xe]' (6 dwords per record)."
+   },
+   {
+    "offset": 13692,
+    "name": "elapsed357C",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "'*(float*)(self+0x357c) = *(float*)(self+0x357c) + fVar5' - accumulated animation time."
+   },
+   {
+    "offset": 13696,
+    "name": "frameCounter3580",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "'*(int*)(self+0x3580) = *(int*)(self+0x3580) + 1' - integer frame counter."
+   },
+   {
+    "offset": 13700,
+    "name": "frameDelta3584",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Stored from fVar5 each frame (the fixed step); same pattern as Ui_FrameScript +0x140."
+   },
+   {
+    "offset": 13716,
+    "name": "stepTable3594",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The step record's tagged offset is added to '*(int*)(self+0x3594)' then dereferenced ('piVar3 = *(int*)(param_1 + 0x3594) + (piVar4[...] >> 1)'); the dispatch table base."
+   },
+   {
+    "offset": 14192,
+    "name": "maybe_poseIndex3770",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.35,
+    "evidence": "Read as a u16 and passed to the animation setter FUN_001a60a0(&self->f_33c, ...); an animation/pose index."
+   },
+   {
+    "offset": 14194,
+    "name": "maybe_animId3772",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "First of the three bytes passed to FUN_001a60a0(&self->f_33c, f_3772, f_3773, f_3774)."
+   },
+   {
+    "offset": 14195,
+    "name": "maybe_frame3773",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Second byte of the same FUN_001a60a0 call."
+   },
+   {
+    "offset": 14196,
+    "name": "maybe_variant3774",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Third byte of the same FUN_001a60a0 call."
+   },
+   {
+    "offset": 14200,
+    "name": "maybe_isReady3778",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Stored 1 when the form becomes ready."
+   },
+   {
+    "offset": 14204,
+    "name": "stateRecord",
+    "type": "Ui_State",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "maybe_Ui_State_Apply (0x00293C0C) is called with &self->f_377c; Ui_DiveForm_CommitSelection is one of its three callers, so this is the embedded Ui_State request record."
+   },
+   {
+    "offset": 14252,
+    "name": "maybe_nameText",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "FUN_00100B74(&self->f_37ac) (wcslen) measures a UTF-16 string here; the entered name buffer."
+   },
+   {
+    "offset": 14292,
+    "name": "maybe_activeEntry37D4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Read as a word at +0x37D4 (last word of the 0x37D8 allocation); an active entry/index, meaning unproven."
+   }
+  ]
+ }
+]

@@ -407,6 +407,7 @@ def main():
     print(f"Total function entry points discovered: {len(funcs)}")
 
     catalog = []
+    taken: set[str] = set()  # lower-case file stems: Windows file names ignore case
     print("Generating enhanced human-readable C decompilation for all functions...")
     
     for i in range(len(funcs)):
@@ -414,18 +415,20 @@ def main():
         next_addr = funcs[i+1][0] if i + 1 < len(funcs) else TEXT_END
         sym_name = symbols.get(addr, f"func_{addr:08X}")
         subsys = categorize_function(sym_name, addr)
+        stem = sym_name if sym_name.lower() not in taken else f"{sym_name}_{addr:08X}"
+        taken.add(stem.lower())
 
         # Decompile readable C
         c_code = decompile_readable(text_bytes, addr, next_addr, mode, sym_name, md_arm, md_thumb, symbols)
         
         # Write to decomp/functions/
-        out_func = DECOMP_FUNCS / f"{sym_name}.c"
+        out_func = DECOMP_FUNCS / f"{stem}.c"
         out_func.write_text(c_code, encoding="utf-8")
 
         # Also write into decomp/by_subsystem/<subsystem>/
         subsys_dir = DECOMP_SUBSYS / subsys
         subsys_dir.mkdir(parents=True, exist_ok=True)
-        out_subsys = subsys_dir / f"{sym_name}.c"
+        out_subsys = subsys_dir / f"{stem}.c"
         out_subsys.write_text(c_code, encoding="utf-8")
 
         catalog.append({
@@ -434,7 +437,7 @@ def main():
             "subsystem": subsys,
             "mode": mode,
             "size": next_addr - addr,
-            "path": f"decomp/by_subsystem/{subsys}/{sym_name}.c"
+            "path": f"decomp/by_subsystem/{subsys}/{stem}.c"
         })
 
     # Write DECOMPILATION_CATALOG.md

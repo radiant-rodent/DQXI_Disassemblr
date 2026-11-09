@@ -27,7 +27,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 AUDIT_DIR = PROJECT_ROOT / "audit"
-REFERENCE_ROM = Path(r"..\reference project\DQXI.3ds")
+REFERENCE_ROM = Path(r"..\3DS_Translate\DQXI.3ds")
 LOCAL_ROM = PROJECT_ROOT / "original" / "DQXI.3ds"
 
 TEXT_START = 0x00100000
@@ -44,7 +44,7 @@ def rom_path() -> Path:
 
 def open_romfs():
     """Open the retail image through the read-only reference reader."""
-    sys.path.insert(0, r"..\reference project")
+    sys.path.insert(0, r"..\3DS_Translate")
     from dq11tool.ctr.formats import open_image
 
     f, _ncsd, ncch = open_image(str(rom_path()))
@@ -191,16 +191,24 @@ def walk_packs(romfs, files, jobs: int) -> tuple[list[dict], list[dict]]:
 
 def inventory_current_outputs() -> dict:
     """Count generated artifacts without trusting their labels."""
+    # The readable tree and the standard-format library are the real outputs;
+    # the old game_models/game_textures/... folders are legacy curated views and
+    # stay empty after a clean regeneration.  Counting those made the gap report
+    # claim nothing had been converted.
     groups = {
-        "decomp/functions": PROJECT_ROOT / "decomp" / "functions",
-        "decomp/by_subsystem": PROJECT_ROOT / "decomp" / "by_subsystem",
+        "decomp/ghidra/functions": PROJECT_ROOT / "decomp" / "ghidra" / "functions",
+        "decomp/ghidra/recovered": PROJECT_ROOT / "decomp" / "ghidra" / "recovered",
+        "decomp/ghidra/by_subsystem": PROJECT_ROOT / "decomp" / "ghidra" / "by_subsystem",
+        "decomp/readable": PROJECT_ROOT / "decomp" / "readable",
+        "decomp/functions (legacy)": PROJECT_ROOT / "decomp" / "functions",
         "src": PROJECT_ROOT / "src",
-        "game_models": PROJECT_ROOT / "game_models",
-        "game_textures": PROJECT_ROOT / "game_textures",
-        "game_layouts": PROJECT_ROOT / "game_layouts",
-        "game_scripts": PROJECT_ROOT / "game_scripts",
-        "game_tables": PROJECT_ROOT / "game_tables",
-        "game_audio": PROJECT_ROOT / "game_audio",
+        "game_assets/models": PROJECT_ROOT / "game_assets" / "models",
+        "game_assets/textures": PROJECT_ROOT / "game_assets" / "textures",
+        "game_assets/layouts": PROJECT_ROOT / "game_assets" / "layouts",
+        "game_assets/scripts": PROJECT_ROOT / "game_assets" / "scripts",
+        "game_assets/tables": PROJECT_ROOT / "game_assets" / "tables",
+        "game_assets/audio": PROJECT_ROOT / "game_assets" / "audio",
+        "game_assets/maps": PROJECT_ROOT / "game_assets" / "maps",
     }
     out = {}
     for label, root in groups.items():
@@ -333,18 +341,34 @@ def main() -> int:
                 "| Extension | Members |",
                 "|---|---:|",
             ]
-            for ext, count in list(ps.get("member_extensions", {}).items())[:30]:
+            # pack_summary.json calls this field by_extension; accept the older
+            # member_extensions spelling too so the counts never silently read 0.
+            ext_counts = ps.get("member_extensions") or ps.get("by_extension", {})
+            for ext, count in list(ext_counts.items())[:30]:
                 lines.append(f"| `.${ext}` | {count:,} |")
+            bch_src = ext_counts.get("bch", 0) + magic_counts.get("bch_model", 0)
+            bxon_src = ext_counts.get("bxon", 0)
+            cnut_src = ext_counts.get("cnut", 0)
+            bcstm_src = magic_counts.get("audio_stream", 0)
+            bch_out = outputs.get("game_assets/models", {}).get("by_ext", {}).get(".gltf", 0)
+            bxon_out = outputs.get("game_assets/tables", {}).get("by_ext", {}).get(".json", 0)
+            # game_assets/scripts holds the assembly listing (script.nut) and the
+            # readable decompile (script.decompiled.nut); only the first is the
+            # one-to-one conversion of a CNUT source file.
+            cnut_all = outputs.get("game_assets/scripts", {}).get("by_ext", {}).get(".nut", 0)
+            cnut_readable = sum(1 for _ in (PROJECT_ROOT / "game_assets" / "scripts").rglob("*.decompiled.nut"))
+            cnut_out = max(0, cnut_all - cnut_readable)
+            wav_out = outputs.get("game_assets/audio", {}).get("by_ext", {}).get(".wav", 0)
             lines += [
                 "",
                 "### Coverage Examples",
                 "",
                 "| Asset family | Source count | Current converted count | Coverage |",
                 "|---|---:|---:|---:|",
-                f"| BCH models | {ps.get('member_extensions', {}).get('bch', 0) + magic_counts.get('bch_model', 0):,} | {outputs.get('game_models', {}).get('by_ext', {}).get('.gltf', 0):,} glTF | {100 * outputs.get('game_models', {}).get('by_ext', {}).get('.gltf', 0) / max(1, ps.get('member_extensions', {}).get('bch', 0) + magic_counts.get('bch_model', 0)):.1f}% |",
-                f"| BXON tables | {ps.get('member_extensions', {}).get('bxon', 0):,} | {outputs.get('game_tables', {}).get('by_ext', {}).get('.json', 0):,} JSON | {100 * outputs.get('game_tables', {}).get('by_ext', {}).get('.json', 0) / max(1, ps.get('member_extensions', {}).get('bxon', 0)):.1f}% |",
-                f"| CNUT scripts | {ps.get('member_extensions', {}).get('cnut', 0):,} | {outputs.get('game_scripts', {}).get('by_ext', {}).get('.nut', 0):,} `.nut` | {100 * outputs.get('game_scripts', {}).get('by_ext', {}).get('.nut', 0) / max(1, ps.get('member_extensions', {}).get('cnut', 0)):.1f}% |",
-                f"| BCSTM streams | {magic_counts.get('audio_stream', 0):,} | {outputs.get('game_audio', {}).get('by_ext', {}).get('.wav', 0):,} WAV | {100 * outputs.get('game_audio', {}).get('by_ext', {}).get('.wav', 0) / max(1, magic_counts.get('audio_stream', 0)):.1f}% |",
+                f"| BCH models | {bch_src:,} | {bch_out:,} glTF | {100 * bch_out / max(1, bch_src):.1f}% |",
+                f"| BXON tables | {bxon_src:,} | {bxon_out:,} JSON | {100 * bxon_out / max(1, bxon_src):.1f}% |",
+                f"| CNUT scripts | {cnut_src:,} | {cnut_out:,} `.nut` | {100 * cnut_out / max(1, cnut_src):.1f}% |",
+                f"| BCSTM streams | {bcstm_src:,} | {wav_out:,} WAV | {100 * wav_out / max(1, bcstm_src):.1f}% |",
             ]
 
         lines += [

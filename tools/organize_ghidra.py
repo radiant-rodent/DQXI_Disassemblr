@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -100,7 +101,17 @@ def main() -> int:
 
     out = root / "by_subsystem"
     if out.exists():
-        shutil.rmtree(out)
+        # Windows can transiently fail with WinError 145 while a scanner still
+        # holds a handle on the old tree; a short retry is enough.
+        for attempt in range(4):
+            try:
+                shutil.rmtree(out)
+                break
+            except OSError:
+                if attempt == 3:
+                    shutil.rmtree(out, ignore_errors=True)
+                else:
+                    time.sleep(0.5)
     out.mkdir(parents=True)
 
     counts = Counter()

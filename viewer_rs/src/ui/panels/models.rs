@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use eframe::egui;
 
-use crate::app::{paint_mesh_viewport, ViewerApp};
+use crate::app::{paint_mesh_viewport_posed, ViewerApp};
 use crate::render::camera::Camera;
 use crate::render::gpu::RenderOptions;
 use crate::render::mesh::Mesh;
@@ -24,6 +24,27 @@ enum SortKey {
     Name,
     Category,
     Size,
+}
+
+/// What an edited file is meant to change in a BCH.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ModelEditMode {
+    /// Edited OBJ vertex positions (same vertex count/order).
+    Positions,
+    /// Edited OBJ faces (same index count, same order).
+    Indices,
+    /// Edited PNG for one embedded texture (same dimensions, same PICA format).
+    Texture,
+}
+
+impl ModelEditMode {
+    fn label(self) -> &'static str {
+        match self {
+            ModelEditMode::Positions => "Vertex positions (OBJ)",
+            ModelEditMode::Indices => "Triangle indices (OBJ)",
+            ModelEditMode::Texture => "Embedded texture (PNG)",
+        }
+    }
 }
 
 pub struct ModelsPanel {
@@ -57,6 +78,16 @@ pub struct ModelsPanel {
     poses: Option<Vec<Pose>>,
     pose: Option<usize>,
     pose_rx: Receiver<(u64, Result<std::path::PathBuf, String>)>,
+    /// Export/Replace workflow state (OBJ/PNG -> BCH -> PACK).
+    tools: crate::ui::asset_jobs::AssetTools,
+    edit_mode: ModelEditMode,
+    texture_name: String,
+    /// OBJ re-exported from the patched BCH, loaded on the next frame.
+    pending_preview: Option<PathBuf>,
+    /// skeletal animation player (see model_anim.rs)
+    pub(crate) anim: super::model_anim::AnimPlayer,
+    /// a new mesh arrived; the animation player must be told on the next frame
+    model_loaded: bool,
 }
 
 /// One facial expression: eye and mouth atlas translations, and how often the
@@ -85,6 +116,31 @@ impl Pose {
 pub(crate) fn source_bch(root: &Path, rel_dir: &str, name: &str) -> Option<PathBuf> {
     let parent = Path::new(rel_dir).parent()?;
     Some(root.join("game_data").join(parent).join(format!("{name}.bch")))
+}
+
+/// The BCH path as `tools/asset_replace.py` expects it: relative to
+/// `game_data/packs/` (e.g. `3d/model/ani00000a_h/ani00000a_h.bch`).
+pub(crate) fn bch_asset(model: &crate::data::models::Model) -> Option<String> {
+    let rel = model.rel_dir.replace('\\', "/");
+    let rel = rel.strip_prefix("packs/")?;
+    let dir = rel.rsplit_once('/').map(|(parent, _)| parent)?;
+    Some(format!("{dir}/{}.bch", model.name))
+}
+
+/// Named embedded textures that the viewport already resolved for this model.
+fn texture_names(mesh: &Mesh) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for group in &mesh.groups {
+        if let Some(path) = &group.texture_path {
+            if let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().into_owned()) {
+                if !names.iter().any(|n| n.eq_ignore_ascii_case(&stem)) {
+                    names.push(stem);
+                }
+            }
+        }
+    }
+    names.sort();
+    names
 }
 
 /// Top poses from the expression catalogue, with the export default first.
@@ -146,6 +202,12 @@ impl Default for ModelsPanel {
             poses: None,
             pose: None,
             pose_rx: channel().1,
+            tools: Default::default(),
+            edit_mode: ModelEditMode::Positions,
+            texture_name: String::new(),
+            pending_preview: None,
+            anim: Default::default(),
+            model_loaded: false,
         }
     }
 }
@@ -252,6 +314,7 @@ impl ModelsPanel {
                 self.mesh = Some(Arc::new(mesh));
                 self.mesh_id = self.mesh_id.wrapping_add(1);
                 self.pose = None;
+                self.model_loaded = true;
             }
             Err(e) => self.stats = format!("failed to load: {e}"),
         }
@@ -348,6 +411,16 @@ bpy.app.timers.register(frame, first_interval=0.5)
 }
 
 pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
+    // A replacement wrote a fresh OBJ next to the patched BCH; load it as the
+    // viewport mesh so the edit is visible without leaving the panel.
+    if let Some(path) = app.panels.models.pending_preview.take() {
+        if let Some(index) = app.panels.models.selected {
+            let pool = &app.pool;
+            let panel = &mut app.panels.models;
+            panel.mesh = None;
+            panel.start_load(pool, index, &path);
+        }
+    }
     {
         let panel = &mut app.panels.models;
         let data = app.data.as_deref();
@@ -472,9 +545,16 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let selected = app.panels.models.selected;
             let list = app.panels.models.list.clone();
             let mut clicked = None;
+            let nav = crate::ui::list_nav(ui.ctx(), &list, selected.as_ref());
+            if let Some((item, _)) = &nav {
+                clicked = Some(item.clone());
+            }
+            let nav_row = nav.map(|(_, r)| r);
             use egui_extras::{Column, TableBuilder};
+            use crate::ui::TableNav;
             TableBuilder::new(ui)
                 .id_salt("models_list_scroll")
+                .nav_scroll(nav_row)
                 .striped(true)
                 .resizable(true)
                 .sense(egui::Sense::click())
@@ -534,6 +614,10 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             }
         });
 
+    egui::Panel::right("models_inspector")
+        .exact_size(300.0)
+        .frame(egui::Frame::new().fill(theme::BG_PANEL).inner_margin(egui::Margin::same(8)))
+        .show(ui, |ui| inspector(app, ui));
     egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(theme::BG_PANEL).inner_margin(egui::Margin::same(8)))
         .show(ui, |ui| {
@@ -554,15 +638,27 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                     if ui.button("Viewport").clicked() {
                         app.panels.models.tab = Tab::Viewport;
                     }
-                    let obj = app
+                    let model = app
                         .panels
                         .models
                         .selected
                         .and_then(|i| app.data().and_then(|d| d.models.items.get(i)))
-                        .map(|m| m.obj.clone());
-                    if let Some(obj) = obj {
+                        .cloned();
+                    if let Some(model) = model {
+                        if ui
+                            .button("Export glTF/OBJ…")
+                            .on_hover_text("Re-export this BCH to build/exports/models")
+                            .clicked()
+                        {
+                            if let Some(asset) = bch_asset(&model) {
+                                let root = app.dirs.root.clone();
+                                app.panels.models.tools.start_export(&root, "model", &asset);
+                            } else {
+                                app.status = "this model is not in the game_assets/packs tree".into();
+                            }
+                        }
                         if ui.button("Open in Blender").clicked() {
-                            match open_in_blender(&obj) {
+                            match open_in_blender(&model.obj) {
                                 Ok(()) => app.status = "opened model in Blender".into(),
                                 Err(e) => app.status = e,
                             }
@@ -674,6 +770,8 @@ fn viewport(app: &mut ViewerApp, ui: &mut egui::Ui) {
             error,
         )));
     }
+    // above the viewport, which takes all the space left below it
+    app.panels.models.anim.ui(ui, &app.pool, &app.dirs.root);
     let mut camera = app.panels.models.camera;
     let opts = RenderOptions {
         wireframe: app.panels.models.wireframe,
@@ -685,13 +783,29 @@ fn viewport(app: &mut ViewerApp, ui: &mut egui::Ui) {
         ..Default::default()
     };
     let mut refresh = false;
+    if std::mem::take(&mut app.panels.models.model_loaded) {
+        let selected = app.panels.models.selected.and_then(|i| app.data.as_deref().and_then(|d| d.models.items.get(i)));
+        let (name, bch) = selected
+            .map(|m| (m.name.clone(), source_bch(&app.dirs.root, &m.rel_dir, &m.name)))
+            .unwrap_or_default();
+        let now = ui.ctx().input(|i| i.time);
+        app.panels.models.anim.model_changed(&app.dirs.root, &name, bch, now);
+    }
+    {
+        let panel = &mut app.panels.models;
+        if panel.anim.tick(ui.ctx(), panel.mesh.as_ref(), panel.mesh_id, &app.pool, &app.dirs.root) {
+            // back to the bind pose: re-upload the untouched mesh
+            panel.mesh_id = panel.mesh_id.wrapping_add(1);
+        }
+    }
+    let posed = app.panels.models.anim.posed();
     let mesh = app
         .panels
         .models
         .mesh
         .as_ref()
         .map(|m| (app.panels.models.mesh_id, m.clone()));
-    let response = paint_mesh_viewport(ui, app.renderer.clone(), &camera, opts, mesh);
+    let response = paint_mesh_viewport_posed(ui, app.renderer.clone(), &camera, opts, mesh, posed);
     if response.dragged_by(egui::PointerButton::Primary) {
         let d = response.drag_delta();
         if d != egui::Vec2::ZERO {
@@ -798,6 +912,120 @@ fn viewport(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 crate::ui::kv_rows(ui, &detail.iter().map(|(k, v)| (k.as_str(), v.clone())).collect::<Vec<_>>());
             }
         });
+
+    // ---- Replace workflow -------------------------------------------------
+    ui.separator();
+    ui.label(theme::heading("Replace model"));
+    let root = app.dirs.root.clone();
+    let model = app
+        .panels
+        .models
+        .selected
+        .and_then(|i| app.data().and_then(|d| d.models.items.get(i)))
+        .cloned();
+    let Some(model) = model else {
+        ui.label(theme::faint_label("Select a model first."));
+        return;
+    };
+    let Some(asset) = bch_asset(&model) else {
+        ui.label(theme::faint_label("This model is outside game_assets/packs, so it has no retail BCH to patch."));
+        return;
+    };
+    let names = app
+        .panels
+        .models
+        .mesh
+        .as_ref()
+        .map(|m| texture_names(m))
+        .unwrap_or_default();
+    let mut done: Option<String> = None;
+    {
+        let panel = &mut app.panels.models;
+        if panel.texture_name.is_empty() {
+            if let Some(first) = names.first() {
+                panel.texture_name = first.clone();
+            }
+        }
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("model_edit_mode")
+                .selected_text(panel.edit_mode.label())
+                .width(230.0)
+                .show_ui(ui, |ui| {
+                    for mode in [ModelEditMode::Positions, ModelEditMode::Indices, ModelEditMode::Texture] {
+                        if ui.selectable_label(panel.edit_mode == mode, mode.label()).clicked() {
+                            panel.edit_mode = mode;
+                        }
+                    }
+                });
+            if panel.edit_mode == ModelEditMode::Texture {
+                egui::ComboBox::from_id_salt("model_edit_texture")
+                    .selected_text(if panel.texture_name.is_empty() {
+                        "choose texture".to_string()
+                    } else {
+                        panel.texture_name.clone()
+                    })
+                    .width(220.0)
+                    .show_ui(ui, |ui| {
+                        for name in &names {
+                            if ui.selectable_label(&panel.texture_name == name, name).clicked() {
+                                panel.texture_name = name.clone();
+                            }
+                        }
+                    });
+            }
+        });
+        let hint = match panel.edit_mode {
+            ModelEditMode::Positions => "edited .obj path (vertex order/count must not change)",
+            ModelEditMode::Indices => "edited .obj path (face count must not change)",
+            ModelEditMode::Texture => "edited .png path (keep the texture's dimensions)",
+        };
+        ui.add(
+            egui::TextEdit::singleline(&mut panel.tools.import_path)
+                .hint_text(hint)
+                .desired_width(f32::INFINITY),
+        );
+        ui.label(theme::faint_label(match panel.edit_mode {
+            ModelEditMode::Positions => "Export the model (glTF/OBJ…), move vertices in Blender/any editor, keep every vertex; bone-placed parts (faces, lamps) are converted back automatically.",
+            ModelEditMode::Indices => "Only triangle indices change; vertex buffers, materials and UVs stay untouched. Use this to retopologise within the existing index budget.",
+            ModelEditMode::Texture => "The PNG is re-encoded to the embedded texture's original PICA format (ETC1/ETC1A4/RGB565/…); ETC1 is lossy and mip levels above the base stay retail.",
+        }));
+        ui.horizontal(|ui| {
+            if ui.button("Export…").on_hover_text("Re-export the BCH to glTF + OBJ + textures").clicked() {
+                panel.tools.start_export(&root, "model", &asset);
+            }
+            let family = if panel.edit_mode == ModelEditMode::Texture { "model-texture" } else { "model" };
+            let mut extra: Vec<String> = Vec::new();
+            match panel.edit_mode {
+                ModelEditMode::Indices => extra.push("--indices".into()),
+                ModelEditMode::Texture => {
+                    extra.push("--texture".into());
+                    extra.push(panel.texture_name.clone());
+                }
+                ModelEditMode::Positions => {}
+            }
+            if ui.button("Replace + preview").clicked() {
+                panel.tools.start_replace(&root, family, &asset, extra.clone(), false);
+            }
+            if ui.button("Replace + save to mod").clicked() {
+                panel.tools.start_replace(&root, family, &asset, extra, true);
+            }
+        });
+        let fresh = panel.tools.show_status(ui, &root);
+        if fresh {
+            if let Some(path) = panel.tools.preview_path(&root) {
+                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("obj")) {
+                    panel.pending_preview = Some(path);
+                }
+            }
+            done = Some(match panel.tools.error.clone() {
+                Some(error) => format!("replace failed: {error}"),
+                None => panel.tools.message.clone(),
+            });
+        }
+    }
+    if let Some(message) = done {
+        app.status = message;
+    }
 }
 
 fn catalog(app: &mut ViewerApp, ui: &mut egui::Ui) {
@@ -818,3 +1046,138 @@ fn catalog(app: &mut ViewerApp, ui: &mut egui::Ui) {
 
 
 
+
+/// Right-hand Inspector: what the selected model is made of, grouped like the Level Editor's.
+fn inspector(app: &mut ViewerApp, ui: &mut egui::Ui) {
+    ui.label(theme::heading("Inspector"));
+    ui.separator();
+    let Some(model) = app
+        .panels
+        .models
+        .selected
+        .and_then(|i| app.data().and_then(|d| d.models.items.get(i)))
+        .cloned()
+    else {
+        ui.label(theme::faint_label("Select a model in the list."));
+        return;
+    };
+    let rows = |ui: &mut egui::Ui, rows: &[(&str, String)]| {
+        egui::Grid::new(ui.next_auto_id()).num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+            for (k, v) in rows {
+                ui.label(theme::faint_label(*k));
+                ui.label(v.as_str());
+                ui.end_row();
+            }
+        });
+    };
+    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        egui::CollapsingHeader::new(egui::RichText::new("Model").strong()).default_open(true).show(ui, |ui| {
+            rows(
+                ui,
+                &[
+                    ("name", model.name.clone()),
+                    ("title", model.display_name.clone().unwrap_or_else(|| "-".into())),
+                    ("category", model.category.clone()),
+                    ("size", human_size(model.size)),
+                    ("sidecars", model.sidecars()),
+                ],
+            );
+        });
+        if let Some(mesh) = app.panels.models.mesh.clone() {
+            egui::CollapsingHeader::new(egui::RichText::new("Geometry").strong()).default_open(true).show(ui, |ui| {
+                rows(
+                    ui,
+                    &[
+                        ("triangles", human_count(mesh.triangle_count)),
+                        ("vertices", human_count(mesh.vertex_count)),
+                        ("parts", mesh.parts.to_string()),
+                        ("materials", mesh.groups.len().to_string()),
+                    ],
+                );
+            });
+            egui::CollapsingHeader::new(egui::RichText::new(format!("Materials ({})", mesh.groups.len())).strong())
+                .default_open(true)
+                .show(ui, |ui| {
+                    for (i, g) in mesh.groups.iter().enumerate() {
+                        let title = if g.material.is_empty() { format!("material {i}") } else { g.material.clone() };
+                        egui::CollapsingHeader::new(title).id_salt(("model_material", i)).show(ui, |ui| {
+                            let tex = g
+                                .texture_path
+                                .as_ref()
+                                .and_then(|p| p.file_name())
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "none".into());
+                            rows(
+                                ui,
+                                &[
+                                    ("texture", tex),
+                                    ("blend", format!("{:?}", g.blend)),
+                                    ("alpha cutoff", format!("{:.2}", g.alpha_cutoff)),
+                                    ("hidden", g.hidden.to_string()),
+                                    ("triangles", human_count(g.index_count / 3)),
+                                ],
+                            );
+                        });
+                    }
+                });
+        }
+        egui::CollapsingHeader::new(egui::RichText::new("Actions").strong()).default_open(true).show(ui, |ui| {
+            if ui.button("Open in Blender").clicked() {
+                match open_in_blender(&model.obj) {
+                    Ok(()) => app.status = "opened model in Blender".into(),
+                    Err(e) => app.status = e,
+                }
+            }
+            if ui.button("Export glTF/OBJ\u{2026}").clicked() {
+                if let Some(asset) = bch_asset(&model) {
+                    let root = app.dirs.root.clone();
+                    app.panels.models.tools.start_export(&root, "model", &asset);
+                } else {
+                    app.status = "this model is not in the game_assets/packs tree".into();
+                }
+            }
+            ui.separator();
+            ui.label(egui::RichText::new("Import OBJ").strong());
+            let path_id = ui.make_persistent_id("model_import_path");
+            let draw_id = ui.make_persistent_id("model_import_draw");
+            let mut obj_path: String = ui.data_mut(|d| d.get_temp(path_id).unwrap_or_default());
+            let mut draw: i64 = ui.data_mut(|d| d.get_temp(draw_id).unwrap_or(0));
+            ui.add(egui::TextEdit::singleline(&mut obj_path).hint_text("path to an .obj").desired_width(f32::INFINITY));
+            ui.horizontal(|ui| {
+                ui.label("replace draw");
+                ui.add(egui::DragValue::new(&mut draw).range(0..=200));
+                if ui
+                    .button("Import")
+                    .on_hover_text("Replaces that draw's geometry with the OBJ (tools/model_import.py, docs/MODEL_IMPORT.md); writes build/exports/models/<name>_import.bch")
+                    .clicked()
+                {
+                    if let Some(bch) = source_bch(&app.dirs.root, &model.rel_dir, &model.name) {
+                        let out_dir = app.dirs.root.join("build/exports/models");
+                        let _ = std::fs::create_dir_all(&out_dir);
+                        let out = out_dir.join(format!("{}_import.bch", model.name));
+                        let result = std::process::Command::new("python")
+                            .args(["tools/model_import.py"])
+                            .arg(&bch)
+                            .arg(&obj_path)
+                            .args(["--draw", &draw.to_string(), "--out"])
+                            .arg(&out)
+                            .current_dir(&app.dirs.root)
+                            .output();
+                        app.status = match result {
+                            Ok(o) if o.status.success() => format!("Imported into {} (stage it with tools/new_map.py / patch_asset)", out.display()),
+                            Ok(o) => format!("Import failed: {}", String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("")),
+                            Err(e) => format!("Import failed: {e}"),
+                        };
+                    } else {
+                        app.status = "this model has no source BCH in game_data/packs".into();
+                    }
+                }
+            });
+            ui.data_mut(|d| {
+                d.insert_temp(path_id, obj_path);
+                d.insert_temp(draw_id, draw);
+            });
+            ui.label(theme::faint_label("New shapes keep the draw's material; textures and materials cannot be changed yet (CL3)."));
+        });
+    });
+}

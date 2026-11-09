@@ -22,12 +22,12 @@ from pathlib import Path
 # Add project root and reference directory to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, "../reference project")
+sys.path.insert(0, "../3DS_Translate")
 
 from dq11tool.ctr.formats import open_image
 from tools import audio_tool, bxon, layout_tool, model_tool, pack, sqbin, texture_tool
 
-ROM_PATH = r"..\reference project\DQXI.3ds"
+ROM_PATH = r"..\3DS_Translate\DQXI.3ds"
 
 
 class TestTextureTool(unittest.TestCase):

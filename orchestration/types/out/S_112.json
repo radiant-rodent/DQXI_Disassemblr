@@ -1,0 +1,655 @@
+[
+  {
+    "class": "Ui_PageList",
+    "type": "UiPageList",
+    "summary": "Five-row paged text list: fills the five row panes of one page from the total row count at +0x4C and the rows-on-this-page count at +0x50, moves the selection through the embedded row table at +0x54 and notifies its owner through vtable +0x6C. Same 436-byte layout as Ui_TextListWindow.",
+    "size": 436,
+    "base": null,
+    "confidence": 0.55,
+    "evidence": "vtable 0x00771BE4 (slot 14 = Ui_PageList_ShowPage 0x0045F09C, slots 12/13 = StepSelectionUp/Down 0x002CF878/0x002CF838). ShowPage loops i<5 over rows at 0x70 (stride 0xC: paneA +0, paneB +4, row id +8), reads rowCount at +0x4C, computes the page row count into +0x50 (reciprocal multiply by 5) and calls Ui_List_SelectEntryById(self->f_38, (rows-1) | u16(+0x28)<<16). StepSelectionUp/Down call Ui_TextListWindow_StepItemRects(self+0x54) (asm: add r0,r0,#0x54) and then the owner slot +0x6C with self->f_64.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Vtable 0x00771BE4 installed by the class constructor; 15 slots, slot 12/13 step the selection and slot 14 is Ui_PageList_ShowPage."
+      },
+      {
+        "offset": 40,
+        "name": "maybe_paneGroupId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.45,
+        "evidence": "u16 shifted into the high 16 bits of every pane/entry id: Ui_List_SelectEntryById(list, (pageRows-1) | *(u16*)(self+0x28)<<16) in ShowPage. Same field is set from the widget init argument drN (0x001A6520) 5th parameter and is used the same way by Ui_TextListWindow/Ui_TwoColumnList; the exact meaning (text layer/group id) is not proven."
+      },
+      {
+        "offset": 56,
+        "name": "entryList",
+        "type": "Ui_List*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "ShowPage reads *(int*)(self+0x38) as the Ui_List to select into: its +0xC is the current entry id, compared with the page row count, and it is passed as self to Ui_List_SelectEntryById. Ui_Object_DtorBase also releases a sub-object at +0x38 through vtable+4."
+      },
+      {
+        "offset": 76,
+        "name": "rowCount",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "ShowPage: idx = page*5+i; if ((int)idx < *(int*)(self+0x4C)) the row is filled from that entry, else the row is blanked and its id set to 0xFF. This is the total number of rows across all pages."
+      },
+      {
+        "offset": 80,
+        "name": "pageRowCount",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "ShowPage sets self->f_50 = 5 first, then recomputes it as (rowCount - page*5) modulo 5 (magic divide by 5) and compares it with the list's current entry id; it is the number of rows shown on the current page."
+      },
+      {
+        "offset": 84,
+        "name": "rowTable",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "First word (vtable) of the embedded row table built by the tiny ctor 0x00622248 (vtable 0x00780224): two text panes at +4/+8, current index at +0x10, row-descriptor array at +0x1C (= self+0x70, {paneA, paneB, rowId} stride 0xC, written by ShowPage). Ui_TextListWindow_StepItemRects(self+0x54, dir) steps its index (asm add r0,r0,#0x54)."
+      },
+      {
+        "offset": 100,
+        "name": "currentRowIndex",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "StepSelectionUp/Down load [self+0x64] (asm ldr r1,[r4,#0x64]) and forward it to the owner's vtable slot +0x6C right after Ui_TextListWindow_StepItemRects(self+0x54) changed it; it is the rowTable's +0x10 index field."
+      },
+      {
+        "offset": 432,
+        "name": "unknown_0x1b0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: struct_db derived 0x1B0 = 4 * vtable slot 0x6C from the line '(**(code **)(*param_1 + 0x6c))(param_1,param_1[0x19])'. The only real fields touched there are the vtable and +0x64."
+      }
+    ]
+  },
+  {
+    "class": "Ui_SelectList",
+    "type": "UiSelectList",
+    "summary": "Five-row selection list ('select1'..'select5'): builds one row per set game-work flag (five flags read through 0x00629FB8 from the bag work), stores the chosen source row ids in a six-byte array at +0x1DC, labels the rows through 'select%d' pane names and keeps the selectable entry table at +0x1E4.",
+    "size": 488,
+    "base": "Ui_AnimRef",
+    "confidence": 0.5,
+    "evidence": "InitPanes 0x002B7440 formats 'select%d' names, binds five 0x50-byte Ui_AnimRef rows starting at +0x4C with Ui_AnimRef_Bind(row, self->f_4, name, 0) and hides panes 5..9; BuildRows 0x002B7000 clears six row ids at +0x1DC to 0xFF, tests five flags with FUN_00629FB8(work+0x24A98, i), checks the entry table at self->f_1E4 (count at +0x60, array at +0x58), re-binds the rows and resizes the list through vtable +0x2C/+0x3C.",
+    "fields": [
+      {
+        "offset": 4,
+        "name": "layout",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "InitPanes loads self->f_4 into iVar4 and passes it as the second (layout) argument of Ui_AnimRef_Bind for every row: FUN_003E00CC(self+0x4C+i*0x50, iVar4, 'select%d', 0); Ui_AnimRef_Bind uses that argument to look up the pane and stores it back into the anim object."
+      },
+      {
+        "offset": 176,
+        "name": "unknown_0xb0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xB0 = 4 * vtable slot 0x2C from '(**(code **)(*param_1 + 0x2c))(param_1)' in BuildRows. The class layout has five 0x50-byte rows at 0x4C, so 0xB0 falls inside row 1 and is not a distinct field."
+      },
+      {
+        "offset": 208,
+        "name": "unknown_0xd0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xD0 = 4 * vtable slot 0x34 from '(**(code **)(*param_1 + 0x34))' (the list set-text slot) in BuildRows."
+      },
+      {
+        "offset": 224,
+        "name": "unknown_0xe0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xE0 = 4 * vtable slot 0x38 from '(**(code **)(*param_1 + 0x38))' (the list set-row slot) in BuildRows."
+      },
+      {
+        "offset": 240,
+        "name": "unknown_0xf0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xF0 = 4 * vtable slot 0x3C from '(**(code **)(*param_1 + 0x3c))(param_1,0,0,1)' (enable/select-row slot) in BuildRows."
+      },
+      {
+        "offset": 288,
+        "name": "unknown_0x120",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0x120 = 4 * vtable slot 0x48 from '(**(code **)(*param_1 + 0x48))' (refresh slot) in BuildRows."
+      },
+      {
+        "offset": 484,
+        "name": "entryList",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "BuildRows: iVar3 = param_1[0x79] (0x1E4); if non-null and flagIndex < *(int*)(iVar3+0x60), it reads the entry offset array at *(int*)(iVar3+0x58)+0x24 and keeps the row only when the indexed entry pointer is non-null. Object with count at +0x60 and entry array at +0x58 - the selectable-entry table."
+      }
+    ]
+  },
+  {
+    "class": "Ui_TwoColumnList",
+    "type": "UiTwoColumnList",
+    "summary": "Two-column paged list window (left and right columns of label/value cells): binds 14 rows (2 columns x 7) plus the 'pager_num_l'/'pager_num_r' panes and keeps the embedded row table at +0x54 with its 14-element, 12-byte cell array at +0x70.",
+    "size": 280,
+    "base": "Ui_Object",
+    "confidence": 0.45,
+    "evidence": "Ctor 0x002E3F40 calls Ui_Object_CtorSmall 0x002B1E0C, stores vtable uRam002e3fc4 at self[0], builds the row table at self+0x54 via 0x00622248 (vtable uRam002e3fc8, default 0xE at table+0x18) and constructs the 14-cell x 12-byte cell array at table+0x1C (= self+0x70) with std_ConstructArray(0x00100050). InitPanes 0x002E3CA4 fills 0xE cells through vtable +0x34/+0x38 with (column = i%2, row = i/2) and binds 'pager_num_l'/'pager_num_r' through 0x0062202C. Size 0x118 is the end of the 0xA8-byte cell array (struct_db only saw the 0xE4 highest phantom field).",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Ctor 0x002E3F40: puVar2 = Ui_Object_CtorSmall(); *puVar2 = uRam002e3fc4 (the class vtable); *puVar2 later overwritten at base+0 by uRam002e3fcc after building the row table."
+      },
+      {
+        "offset": 24,
+        "name": "unknown_0x18",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real base field: 'puVar2[6] = 0xe' is written through the row-table pointer returned by 0x00622248(self+0x54), i.e. at self+0x6C (table+0x18), not at self+0x18. struct_db lost the pointer reassignment."
+      },
+      {
+        "offset": 84,
+        "name": "rowTable",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "First word (vtable) of the embedded row table built by 0x00622248(self+0x54): two text panes at +4/+8 (pager_num_l/r), index at +0x10, cell array at +0x1C (= self+0x70, 14 x 12-byte cells); InitPanes passes self+0x54 to 0x0062202C to bind the two pager panes."
+      },
+      {
+        "offset": 208,
+        "name": "unknown_0xd0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xD0 = 4 * vtable slot 0x34 from '(**(code **)(*param_1 + 0x34))(param_1,puVar3,uVar6 | ...,0)' (set-cell slot) in InitPanes."
+      },
+      {
+        "offset": 224,
+        "name": "unknown_0xe0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xE0 = 4 * vtable slot 0x38 from '(**(code **)(*param_1 + 0x38))' (set-cell-row slot) in InitPanes."
+      }
+    ]
+  },
+  {
+    "class": "Ui_GridList",
+    "type": "UiGridList",
+    "summary": "Row/column grid table: clamps the requested row and column counts to at least 1, stores them as u8 at +0xD/+0xE and allocates the 0x34-byte row-record and 0x2C-byte column-record arrays whose pointers live at +0x94/+0x98.",
+    "size": 156,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "AllocRows 0x003BEEB8 takes the counts from a parameter block (+0x12 rows, +0x14 columns, both u16), clamps each to >=1, writes them at self+0xD/self+0xE, allocates rows*0x34+8 and columns*0x2C+8 bytes with Mem_AllocAligned 0x0010F6EC (each block headed by [elementSize, count]) and default-constructs them with std_ConstructArray 0x00100050, then clears the two array pointers at self+0x94/self+0x98.",
+    "fields": [
+      {
+        "offset": 13,
+        "name": "rowCount",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.75,
+        "evidence": "uVar3 = MAX(*(u16*)(params+0x12), 1); *(u8*)(self+0xD) = uVar3; the same count sizes the 0x34-byte row-record array."
+      },
+      {
+        "offset": 14,
+        "name": "columnCount",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.75,
+        "evidence": "*(u8*)(self+0xE) = MAX(*(u16*)(params+0x14), 1); read back (uVar3 = *(u8*)(self+0xE)) to size the 0x2C-byte column-record array."
+      },
+      {
+        "offset": 148,
+        "name": "rows",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "After allocating the rowCount*0x34 record block, AllocRows clears *(u32*)(self+0x94); Ghidra dropped the real pointer store after the noreturn-marked std_ConstructArray, but the allocation shape (0x34-byte records, count at +0xD) makes this the row array pointer."
+      },
+      {
+        "offset": 152,
+        "name": "columns",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.6,
+        "evidence": "Second allocation of columnCount*0x2C records; *(u32*)(self+0x98) is cleared right after it (same dropped-store pattern), so this is the column-record array pointer."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ScrollList",
+    "type": "UiScrollList",
+    "summary": "Scrolling page list: keeps the page/scroll index at +0x4C and the cursor list at +0x38; ScrollToIndex/ScrollToTop/ScrollBy move the index, re-select the visible entry through Ui_List_SelectEntryById and refresh the window through vtable +0x60.",
+    "size": 420,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "ScrollToIndex 0x006E57E4: vtable+0x64 is the entry count, page = index/12 (reciprocal multiply, magic DAT_006e58fc), FUN_001D809C(list at self[0xE], rowInPage + index - 12*page | u16(self+0x28)<<16), self[0x13] = page, then vtable+0x60. ScrollToTop 0x006E5900 sets self[0x13]=0 and reselects. ScrollBy 0x006E59C4 adds the delta to self[0x13] and wraps it into [0, pages-1] using vtable+0x64. Callers are equipment/shop/smith list windows.",
+    "fields": [
+      {
+        "offset": 56,
+        "name": "entryList",
+        "type": "Ui_List*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "param_1[0xe] (self+0x38) is checked for null and passed as the list to Ui_List_SelectEntryById together with the new entry id; its +0xC is the currently selected entry id, exactly like Ui_PageList's list at +0x38."
+      },
+      {
+        "offset": 76,
+        "name": "pageIndex",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "param_1[0x13]. ScrollToTop sets it to 0; ScrollToIndex sets it to the page computed from the target index (index/12, 12 rows per page); ScrollBy adds the delta and wraps it into [0, (entryCount-1)/N-1] using vtable+0x64; MoveCursorWithPage does the same."
+      },
+      {
+        "offset": 384,
+        "name": "unknown_0x180",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0x180 = 4 * vtable slot 0x60 from '(**(code **)(*param_1 + 0x60))(param_1)' (refresh slot) in ScrollToIndex/ScrollToTop/ScrollByAnimated."
+      },
+      {
+        "offset": 416,
+        "name": "unknown_0x1a0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0x1A0 = 4 * vtable slot 0x68 from 'iVar5 = (**(code **)(*param_1 + 0x68))(param_1)' (row-in-page getter) in ScrollToIndex/ScrollToTop."
+      }
+    ]
+  },
+  {
+    "class": "Ui_SevenRowList",
+    "type": "UiSevenRowList",
+    "summary": "Battle damage-popup group (the same object the project already calls Ui_DamagePopupGroup, vtable 0x00778A90): owns six 0x50-byte 'pop_damage1'..'pop_damage6' sub-windows starting at +0x4C; each popup keeps its layout pane at +4 and its number-part handle at +0x4C. The 'seven' in the generated name counts the base object plus six popups.",
+    "size": 556,
+    "base": "Ui_Object",
+    "confidence": 0.55,
+    "evidence": "Ctor 0x004CF348 chains Ui_Object_CtorBase 0x001A66A0 and builds six 0x50-byte sub-objects at 0x4C, 0x9C, 0xEC, 0x13C, 0x18C, 0x1DC (vtable DAT_004cf3b4, record pointer cleared); dtor 0x004CF3BC/0x004CF408 destroys them in reverse with Ui_Object_DtorBase 0x001A6768. Ui_DamagePopupGroup_Init 0x004CEFC0 (vtable slot 8) proves the purpose: 'add fp,sl,#0x4c' then for 'pop_damage1'..'pop_damage6' drN(group+0x4C+i*0x50, pane, ..) and Ui_PlayAnimByName(*(u32*)(group+0x4C+i*0x50+4), ...) stores the number part at group+0x4C+i*0x50+0x4C (0x98, 0xE8, 0x138, 0x188, 0x1D8, 0x228). Size 0x22C = 0x4C + 6*0x50 (structs.json's own Ui_DamagePopupGroup is 556 bytes); the batch's 480 only reached the last popup start.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x004CF348 stores DAT_004cf3b0 (vtable 0x00778A90, slot 8 = Ui_DamagePopupGroup_Init 0x004CEFC0) at self[0]; the two dtors install DAT_004cf3b4/0x004cf3b0 variants."
+      },
+      {
+        "offset": 76,
+        "name": "damagePopup1",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "First of six embedded 0x50-byte popup sub-windows: Ui_DamagePopupGroup_Init does 'add fp,sl,#0x4c' and calls drN(group+0x4C, 'pop_damage1' pane, ..); its number-part handle is stored at group+0x98 (= popup+0x4C)."
+      },
+      {
+        "offset": 80,
+        "name": "damagePopup1Pane",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "*(u32*)(group+0x50) = popup1+0x4 = the 'pop_damage1' layout pane found by the layout virtual +0x2C; Ui_DamagePopupGroup_Init passes it to Ui_PlayAnimByName(...,DAT_004cf308,0,1) and stores the returned number-part object at +0x98."
+      },
+      {
+        "offset": 476,
+        "name": "damagePopup6",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "Sixth (last) 0x50-byte popup at 0x4C + 5*0x50 = 0x1DC: Ui_DamagePopupGroup_Init calls drN(group+0x1DC, 'pop_damage6' pane, ..) and stores its number part at group+0x228 (= popup6+0x4C); dtor 0x004CF3BC destroys it first (FUN_001A6768(param_1 + 0x77) = +0x1DC)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_TextList",
+    "type": "UiTextList",
+    "summary": "Small text-measure record: a pending-measure flag at +0 and a wide string at +0x1C that the update method re-measures with wcslen; the class name was recovered from function names, but struct_db mixed the 0x10-byte ctor of this small record with the measure-update code of a larger text object, so the high offsets in the batch are not distinct fields.",
+    "size": 228,
+    "base": null,
+    "confidence": 0.3,
+    "evidence": "CtorSmall 0x004A5D60 zeroes a 0x10-byte record (u32 at +0, four bytes at +4..+7, std_ConstructArray(self+8, 2, 3)); ClearRows 0x004A5E38 uses the widget base ctor drN and writes 7 rows through vtable +0x38; UpdateMeasureState 0x001B827C is declared 'char* self' and uses the byte at +0 as a pending flag, the byte at +0x2C as its result flag and wcslen(0x00100B74) on self+0x1C. Only the +0 flag is a real field of the batch's offsets.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "maybe_measurePending",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.45,
+        "evidence": "UpdateMeasureState: 'if (*param_1 == 1)' starts the async measure; the flag is cleared ('*param_1 = 0') before re-measuring, and CtorSmall zeroes it. A pending/queued state flag rather than a vtable (no vtable store and no virtual call in the ctor)."
+      },
+      {
+        "offset": 112,
+        "name": "unknown_0x70",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real field: 0x70 = 4 * the real byte offset 0x1C from 'FUN_00100b74(param_1 + 0x1c)' (wcslen on the wide string) because UpdateMeasureState's param_1 is char*, not int*."
+      },
+      {
+        "offset": 176,
+        "name": "unknown_0xb0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real field: 0xB0 = 4 * the real byte offset 0x2C from 'param_1[0x2c] = cVar1' (the measure-result flag) in UpdateMeasureState, again a char* element access."
+      },
+      {
+        "offset": 224,
+        "name": "unknown_0xe0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xE0 = 4 * vtable slot 0x38 from '(**(code **)(*param_1 + 0x38))' (set-row slot) in ClearRows."
+      }
+    ]
+  },
+  {
+    "class": "Ui_BagList",
+    "type": "UiBagList",
+    "summary": "Bag/equipment list: maps the selected row to the equipped item of the party member recorded at +0x49 through the six-slot list at +0x38, and computes each row's state from a flag byte table in the save work (bag work +0x5A4E) indexed by the base at +0x298.",
+    "size": 668,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "GetRowState 0x0064C7E0 returns 0 for state bytes 0x01/0x04 and 3 otherwise, reading *(char*)(work+0x2A4E6 + *(u16*)(self+0x298) + rowId) where work comes from Game_GetWork and +0x2A4E6 = bag work (+0x24A98) + 0x5A4E. GetSelectedItemId 0x0064C408: member = Party_Member record 0x0035EB98(work, *(u8*)(self+0x49)) for memberIndex < 0x1F, then slot = *(u16*)(*(int*)(self+0x38)+0xC) for slot < 6 and returns Ui_Member_GetEquippedItemId 0x006292F0(member, slot). SetLabel 0x0064DF88 uses Party_GetActiveMemberCount 0x0063A8A0.",
+    "fields": [
+      {
+        "offset": 56,
+        "name": "entryList",
+        "type": "Ui_List*",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "GetSelectedItemId: uVar3 = *(u16*)(*(int*)(self+0x38)+0xC) (current entry id of the list at +0x38); only slots 0..5 are valid, matching the six equipment slots of a PartyMember, and the result is passed to Ui_Member_GetEquippedItemId."
+      },
+      {
+        "offset": 73,
+        "name": "memberIndex",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.85,
+        "evidence": "GetSelectedItemId: if (*(u8*)(self+0x49) < 0x1F) FUN_0035EB98(work, *(u8*)(self+0x49)) - party member records are 31 entries of 0x12EC bytes, so this is the list's current party-member row (0..30)."
+      },
+      {
+        "offset": 664,
+        "name": "maybe_rowTableBase",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.35,
+        "evidence": "GetRowState indexes the save-work byte table at bag+0x5A4E with (u16)(self+0x298) + rowId and uses the byte (1/4 => state 0, else 3) as the row state. A page/tab base offset into that table; the exact table meaning is not proven, hence maybe_."
+      }
+    ]
+  },
+  {
+    "class": "Ui_CommandList",
+    "type": "UiCommandList",
+    "summary": "Six-row command list window with a 'txt_title' heading: fills six rows from the 9-entry command-id table at 0x00479B38. Only the row builder was recovered and it touches the widget purely through its vtable, so none of the batch's offsets is a real field of its own.",
+    "size": 292,
+    "base": null,
+    "confidence": 0.3,
+    "evidence": "BuildRows 0x004799CC starts with the widget base ctor drN 0x001A6520, sets the 'txt_title' pane through vtable +0x34, then for i<6 reads a command id from the byte table at 0x00479B38 (only when i<9), resolves it with 0x00633560 and writes the row through vtable +0x34 with id ((u16)(self+0x28)<<16 | 1) + i, and finally refreshes through vtable +0x48.",
+    "fields": [
+      {
+        "offset": 208,
+        "name": "unknown_0xd0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xD0 = 4 * vtable slot 0x34 from '(**(code **)(*param_1 + 0x34))' (set-text slot) in BuildRows."
+      },
+      {
+        "offset": 224,
+        "name": "unknown_0xe0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xE0 = 4 * vtable slot 0x38 from '(**(code **)(*param_1 + 0x38))' (set-row slot) in BuildRows."
+      },
+      {
+        "offset": 288,
+        "name": "unknown_0x120",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0x120 = 4 * vtable slot 0x48 from '(**(code **)(*param_1 + 0x48))(param_1, ...)' (refresh slot) in BuildRows."
+      }
+    ]
+  },
+  {
+    "class": "Ui_PartyList",
+    "type": "UiPartyList",
+    "summary": "Party roster window: an eight-slot table of 0x60-byte member rows (0x5D-byte records) starting at +0x944C, scrolled up by one row with a 0x2A0-byte memmove from +0x94AC when the roster exceeds seven members, and staging the inserted record in the last slot at +0x96EC.",
+    "size": 38732,
+    "base": null,
+    "confidence": 0.5,
+    "evidence": "Insert 0x00193018 and InsertMember 0x0019317C build a 0x60-byte record (0x00192780) and copy its 0x5D bytes with std_memcpy 0x00116C10 to self + memberIndex*0x60 + 0x944C; when the party count is >7 they first memmove 0x0011CD00(self+0x944C, self+0x94AC, 0x2A0) - a one-row (0x60-byte) upward shift of the whole 7-row block - and then write the record to self+0x96EC (= 0x944C + 0x2A0, the eighth slot). BuildEntries 0x00387258 fills the same window from the save work. Size 0x974C = 0x944C + 8*0x60.",
+    "fields": [
+      {
+        "offset": 37964,
+        "name": "memberRows",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "Row table base: std_memcpy(self + i*0x60 + 0x944C, record, 0x5D) writes member row i (stride 0x60, 0x5D-byte record built by 0x00192780 with a 7-char name at +0x4E); 0x944C..0x96EB holds rows 0..6."
+      },
+      {
+        "offset": 38060,
+        "name": "memberRowScrollSource",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "0x94AC = memberRows + 0x60 (row 1): std_memmove 0x0011CD00(self+0x944C, self+0x94AC, 0x2A0) copies rows 1..7 down into rows 0..6, i.e. scrolls the roster up by one row."
+      },
+      {
+        "offset": 38636,
+        "name": "memberRowLast",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "0x96EC = memberRows + 0x2A0 (row 7, the last of the eight 0x60-byte slots): after the scroll, std_memcpy(self+0x96EC, record, 0x5D) stores the newly inserted member record there (both Insert paths)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_ResourceList",
+    "type": "UiResourceList",
+    "summary": "Resource-backed layout element list: resolves a resource id at +0xC into a handle and stores a count of 8-byte entries - inline at +0x34 when the count is 1, otherwise in a heap array allocated from the UI heap.",
+    "size": 60,
+    "base": null,
+    "confidence": 0.6,
+    "evidence": "Init 0x003D4718 stores id at +0xC, resolves it with Container_BuildPointerCache 0x00633AB0 (through Ui_GetCore 0x006F229C), then for count==1 uses self+0x34 as the entry storage, else Mem_Alloc 0x0053CF14(count*8) zeroing {u32,u32} pairs; the pointer/count go through the class offset table at 0x007A7714. Dtor 0x003D47D0 releases the handle and runs Ui_LayoutElement_Dtor. Size 0x3C = inline 8-byte entry at 0x34..0x3B.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Dtor 0x003D47D0 installs DAT_003d482c (vtable 0x00769ED8, 2 slots: 0x0065D3C4 and the dtor itself) at self[0]."
+      },
+      {
+        "offset": 12,
+        "name": "resourceId",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.8,
+        "evidence": "Init 0x003D4718: *(u32*)(self+0xC) = param_2, then Container_BuildPointerCache(core, param_2, param_3) resolves that id into the layout-element handle stored through the offset table."
+      },
+      {
+        "offset": 52,
+        "name": "inlineEntries",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "When count == 1 Init uses 'iVar3 = param_1 + 0x34' as the entry array instead of a heap allocation, so the single 8-byte {u32,u32} entry lives inline at 0x34."
+      }
+    ]
+  },
+  {
+    "class": "Ui_TextElementList",
+    "type": "UiTextElementList",
+    "summary": "Intrusive text-element list: Release walks the element ring at +0x84/+0x88 (elements are embedded 0x14 bytes before their list node), destroys each element and recycles it through the second container at +0x90.",
+    "size": 148,
+    "base": null,
+    "confidence": 0.45,
+    "evidence": "Release 0x00551AEC: piVar2 = *(int**)(self+0x88); while (piVar2 != self+0x88) { piVar1 = piVar2 - 0x14; if ((char)piVar2[-0xf] != 3) return; FUN_0011FCBC(self+0x84, piVar2); if (piVar1) { (*(*piVar1))(piVar1); FUN_00556C38(self+0x90, piVar1); } piVar2 = *piVar2; } - a remove-from-list, destroy, return-to-list pattern.",
+    "fields": [
+      {
+        "offset": 132,
+        "name": "elementListBegin",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.55,
+        "evidence": "FUN_0011FCBC(self+0x84, node) is called with the node being unlinked while the ring head is at self+0x88, so +0x84 is the begin pointer of the intrusive element list (the list object spans 0x84..0x8B)."
+      },
+      {
+        "offset": 136,
+        "name": "elementListEnd",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.65,
+        "evidence": "Iteration is 'piVar2 = *(int**)(self+0x88)' and stops when piVar2 == (int*)(self+0x88): self+0x88 is the embedded sentinel/end node of the same list. Each element sits 0x14 bytes before its node (piVar2 - 0x14)."
+      },
+      {
+        "offset": 144,
+        "name": "maybe_freeElementList",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.4,
+        "evidence": "FUN_00556C38(self+0x90, element) is called after the element's virtual destructor, i.e. the destroyed element is linked into a second container. A free/recycle list is the plausible reading, but no allocator side was found, hence maybe_."
+      }
+    ]
+  },
+  {
+    "class": "Ui_TwoColumnValueList",
+    "type": "UiTwoColumnValueList",
+    "summary": "Four-row two-column label/value list (e.g. status window rows): writes party-member names into the left/right cell panes (pane ids from +0x28) and applies one of two palette colours or a dim tint to each row depending on the fill state and the flag at +0x48.",
+    "size": 212,
+    "base": null,
+    "confidence": 0.4,
+    "evidence": "Init 0x004B77AC is a base-ctor + 'null_txt' initialiser that formats four left and four right cells via vtable +0x34. AddMemberRow 0x004B76F8 stores a member index into the first free byte of the four-byte array at +0x49, resolves the member with Party_Member 0x0035EB98 and writes member+0xCA (the 7-wchar name) into pane i + u16(self+0x28)<<16, then calls ApplyRowColours. ApplyRowColours 0x004B7500 reads the flag at +0x48: empty cells get palette colour 2 or 0, filled cells get the fetched colour optionally scaled by DAT_004b7688, then Ui_TextLayer_SetText 0x001A629C is called for the left and (pane|4) right cell.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "vtable 0x00776ED4 (10 slots; slot 1 Ui_Object_DtorTrivialK, slot 7 Ui_TwoColumnValueList_SetVisible, slot 8 Ui_TwoColumnValueList_Init) is the class vtable; the ctor only reaches it through the base ctor drN, so struct_db had no self[0] store."
+      },
+      {
+        "offset": 40,
+        "name": "maybe_paneGroupId",
+        "type": "u16",
+        "size": 2,
+        "confidence": 0.45,
+        "evidence": "Every pane id in AddMemberRow/ApplyRowColours is 'i + (u32)*(u16*)(self+0x28)<<16' for the left cell and '(*(u16*)(self+0x28)<<16 | 4) + i' for the right cell; the exact meaning (text layer / pane group id) is not proven."
+      },
+      {
+        "offset": 72,
+        "name": "maybe_isDimmed",
+        "type": "u8",
+        "size": 1,
+        "confidence": 0.4,
+        "evidence": "ApplyRowColours: cVar1 = *(char*)(self+0x48). Empty rows use palette entry 2 when cVar1==0 and entry 0 otherwise; filled rows have their colour channels scaled by DAT_004b7688 only when cVar1==0. It selects a dim/tint palette mode for the whole list; the exact meaning is not proven."
+      },
+      {
+        "offset": 208,
+        "name": "unknown_0xd0",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real access: 0xD0 = 4 * vtable slot 0x34 from '(**(code **)(*param_1 + 0x34))' (set-text slot) in Init/AddMemberRow."
+      }
+    ]
+  },
+  {
+    "class": "Ui_WindowWithList",
+    "type": "UiWindowWithList",
+    "summary": "Generic window that owns an embedded row table at +0x54 with a 0x3C-entry, 8-byte row array at +0x70 (0x250-byte object); only the constructor was recovered.",
+    "size": 592,
+    "base": "Ui_Object",
+    "confidence": 0.45,
+    "evidence": "Ctor 0x0041D760 chains Ui_Object_CtorSmallB 0x002CFACC, installs DAT_0041d7e4 at self[0], builds the embedded row table via 0x00622248(self+0x54) (vtable LAB_0041d7e8, default 8 at table+0x18) and constructs the 0x3C x 8-byte row array at table+0x1C (= self+0x70) with std_ConstructArray 0x00100050. Size 0x250 = 0x70 + 0x3C*8; the batch's 88 only reached the row-table start.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.9,
+        "evidence": "Ctor 0x0041D760: puVar2 = Ui_Object_CtorSmallB(); *puVar2 = DAT_0041d7e4 (vtable 0x0041D7E4, generic Ui_Widget family), later base vtable overwritten with LAB_0041d7ec at base+0."
+      },
+      {
+        "offset": 24,
+        "name": "unknown_0x18",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.0,
+        "evidence": "No real base field: 'puVar2[6] = 8' is written through the row-table pointer returned by 0x00622248(self+0x54), i.e. at self+0x6C (table+0x18), not at self+0x18."
+      },
+      {
+        "offset": 84,
+        "name": "rowTable",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.5,
+        "evidence": "First word (vtable) of the embedded row table built by 0x00622248(self+0x54): two text panes at +4/+8, index at +0x10, 0x3C-entry 8-byte row array at +0x1C (= self+0x70) constructed by std_ConstructArray. Same table class as in Ui_TwoColumnList/Ui_TextListWindow (vtable installed from LAB_0041d7e8)."
+      }
+    ]
+  },
+  {
+    "class": "Ui_WorldMapMarkerList",
+    "type": "UiWorldMapMarkerList",
+    "summary": "Singleton world-map marker (pin) collection: marker count at +0x11C and 25 0x50-byte marker records starting at +0x120, built lazily by the ctor and consumed by the world-map loader and the marker update slots.",
+    "size": 2288,
+    "base": null,
+    "confidence": 0.65,
+    "evidence": "Ctor 0x003A816C: *self = DAT_003a81bc (vtable 0x0076828C, slot 4 maybe_Ui_WorldMapMarker_RebuildIcons, slot 5 UpdateVisited), self[0x47] (0x11C) = 0, then std_ConstructArray(0x00100050)(self+0x120, DAT_003a81c0, 0x50, 0x19) constructs 25 records of 0x50 bytes. Size 0x8F0 = 0x120 + 25*0x50; the batch's 292 only reached the count.",
+    "fields": [
+      {
+        "offset": 0,
+        "name": "vtable",
+        "type": "void*",
+        "size": 4,
+        "confidence": 0.95,
+        "evidence": "Ctor 0x003A816C stores DAT_003a81bc (vtable 0x0076828C) at self[0]; slots 0/1 are the marker dtor/delete, slot 4 RebuildIcons, slot 5 UpdateVisited."
+      },
+      {
+        "offset": 284,
+        "name": "markerCount",
+        "type": "s32",
+        "size": 4,
+        "confidence": 0.75,
+        "evidence": "Ctor clears puVar2[0x47] = *(u32*)(self+0x11C) to 0 immediately before constructing the 25 marker records; the RebuildIcons/UpdateVisited slots iterate the records before this count."
+      },
+      {
+        "offset": 288,
+        "name": "markers",
+        "type": "u32",
+        "size": 4,
+        "confidence": 0.7,
+        "evidence": "std_ConstructArray(self+0x120, DAT_003a81c0, 0x50, 0x19) constructs 25 marker records of 0x50 bytes at 0x120 (0x19 = 25); the world-map code places/highlights pins through these records."
+      }
+    ]
+  }
+]

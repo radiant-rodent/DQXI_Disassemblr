@@ -208,7 +208,13 @@ pub struct GlRenderer {
     lines: Option<Buffers>,
     axes: Option<Buffers>,
     mesh_color_value: [f32; 3],
+    /// extra models drawn at positions (level actors): key -> buffers + groups
+    models: std::collections::HashMap<String, (Buffers, Vec<GpuGroup>)>,
+    /// this frame's draws: (model key, model matrix)
+    instances: Vec<(String, [f32; 16])>,
     pub uploaded_id: u64,
+    /// serial of the last animated vertex set written over the uploaded mesh
+    pub pose_serial: u64,
     pub mesh_label: String,
     pub error: Option<String>,
     pub last_drawn: usize,
@@ -260,7 +266,10 @@ impl GlRenderer {
                 lines: None,
                 axes: None,
                 mesh_color_value: [0.8, 0.79, 0.76],
+                models: Default::default(),
+                instances: Vec::new(),
                 uploaded_id: 0,
+                pose_serial: 0,
                 mesh_label: String::new(),
                 error: None,
                 last_drawn: 0,
@@ -273,6 +282,51 @@ impl GlRenderer {
 
     pub fn has_mesh(&self) -> bool {
         self.mesh.is_some()
+    }
+
+    pub fn has_model(&self, key: &str) -> bool {
+        self.models.contains_key(key)
+    }
+
+    /// Uploads a model that is drawn at several positions (see `set_instances`).
+    pub fn upload_model(&mut self, key: &str, mesh: &Mesh) -> Result<(), String> {
+        let buffers = self.upload_mesh(&mesh.vertices, &mesh.indices)?;
+        let mut groups = Vec::new();
+        for group in &mesh.groups {
+            let texture = group.texture_path.as_deref().and_then(|path| self.load_texture(path).ok());
+            groups.push(GpuGroup {
+                texture,
+                color: group.color,
+                blend: group.blend,
+                alpha_cutoff: group.alpha_cutoff,
+                hidden: group.hidden,
+                mask: group.mask_path.as_deref().and_then(|path| self.load_texture(path).ok()),
+                mask_channel: group.mask_channel.code(),
+                color_scale: group.color_scale,
+                index_start: group.index_start as i32,
+                index_count: group.index_count as i32,
+            });
+        }
+        if groups.is_empty() {
+            groups.push(GpuGroup {
+                texture: None,
+                color: mesh.color,
+                blend: Blend::Opaque,
+                alpha_cutoff: 0.0,
+                hidden: false,
+                mask: None,
+                mask_channel: 0.0,
+                color_scale: 0.0,
+                index_start: 0,
+                index_count: mesh.indices.len() as i32,
+            });
+        }
+        self.models.insert(key.to_string(), (buffers, groups));
+        Ok(())
+    }
+
+    pub fn set_instances(&mut self, instances: Vec<(String, [f32; 16])>) {
+        self.instances = instances;
     }
 
     /// Upload a mesh and rebuild the matching ground grid / axes.
@@ -332,7 +386,23 @@ impl GlRenderer {
         self.mesh_label = mesh.name.clone();
         self.mesh_color_value = mesh.color;
         self.uploaded_id = id;
+        self.pose_serial = 0;
         Ok(())
+    }
+
+    /// Overwrites the uploaded mesh's vertices (same layout and count) with an
+    /// animated pose, without touching textures or indices.
+    pub fn update_vertices(&mut self, serial: u64, data: &[f32]) {
+        let Some(buffers) = self.mesh.as_ref() else { return };
+        if data.len() / STRIDE != buffers.vertex_count as usize {
+            return;
+        }
+        unsafe {
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buffers.vbo));
+            self.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER, 0, as_bytes(data));
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, None);
+        }
+        self.pose_serial = serial;
     }
 
     fn upload_mesh(&self, data: &[f32], indices: &[u32]) -> Result<Buffers, String> {
@@ -471,6 +541,89 @@ impl GlRenderer {
         (grid, axes)
     }
 
+    /// Draw every group of one model (opaque first, then see-through) with the uniforms already set.
+    /// Returns the index count drawn.
+    fn draw_groups(&self, gl: &glow::Context, buffers: &Buffers, groups: &[GpuGroup], opts: &RenderOptions) -> i32 {
+        unsafe {
+                    gl.bind_vertex_array(Some(buffers.vao));
+                    gl.uniform_1_i32(Some(&self.mesh_texture), 0);
+                    let mut drawn = 0i32;
+                    // the game's order: opaque first, then see-through draws without depth writes
+                    let passes = [Blend::Opaque, Blend::Alpha, Blend::Multiply, Blend::Additive];
+                    for (pass, group) in passes
+                        .iter()
+                        .flat_map(|pass| groups.iter().filter(move |g| g.blend == *pass).map(move |g| (*pass, g)))
+                    {
+                        if group.index_count <= 0 || (group.hidden && !opts.show_hidden) {
+                            continue;
+                        }
+                        match pass {
+                            Blend::Opaque => {
+                                gl.disable(glow::BLEND);
+                                gl.depth_mask(true);
+                            }
+                            Blend::Alpha => {
+                                gl.enable(glow::BLEND);
+                                gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+                                gl.depth_mask(false);
+                            }
+                            Blend::Additive => {
+                                gl.enable(glow::BLEND);
+                                gl.blend_func(glow::SRC_ALPHA, glow::ONE);
+                                gl.depth_mask(false);
+                            }
+                            Blend::Multiply => {
+                                gl.enable(glow::BLEND);
+                                gl.blend_func(glow::DST_COLOR, glow::ZERO);
+                                gl.depth_mask(false);
+                            }
+                        }
+                        let unlit = matches!(pass, Blend::Additive | Blend::Multiply) && !opts.wireframe;
+                        gl.uniform_1_f32(Some(&self.mesh_unlit), if unlit { 1.0 } else { 0.0 });
+                        gl.uniform_1_f32(Some(&self.mesh_alpha_cutoff), group.alpha_cutoff);
+                        gl.uniform_1_i32(Some(&self.mesh_mask), 1);
+                        // flat shading / wireframe inspect geometry, so they keep the viewer's own light
+                        let baked = if opts.flat || opts.wireframe { 0.0 } else { group.color_scale };
+                        gl.uniform_1_f32(Some(&self.mesh_color_scale), baked);
+                        match group.mask {
+                            Some(mask) => {
+                                gl.active_texture(glow::TEXTURE1);
+                                gl.bind_texture(glow::TEXTURE_2D, Some(mask));
+                                gl.active_texture(glow::TEXTURE0);
+                                gl.uniform_1_f32(Some(&self.mesh_mask_channel), group.mask_channel);
+                            }
+                            None => gl.uniform_1_f32(Some(&self.mesh_mask_channel), 0.0),
+                        }
+                        gl.uniform_3_f32(
+                            Some(&self.mesh_color),
+                            group.color[0],
+                            group.color[1],
+                            group.color[2],
+                        );
+                        match group.texture {
+                            Some(tex) => {
+                                gl.uniform_1_f32(Some(&self.mesh_use_texture), 1.0);
+                                gl.active_texture(glow::TEXTURE0);
+                                gl.bind_texture(glow::TEXTURE_2D, Some(tex));
+                            }
+                            None => {
+                                gl.uniform_1_f32(Some(&self.mesh_use_texture), 0.0);
+                                gl.bind_texture(glow::TEXTURE_2D, None);
+                            }
+                        }
+                        gl.draw_elements(
+                            glow::TRIANGLES,
+                            group.index_count,
+                            glow::UNSIGNED_INT,
+                            group.index_start * 4,
+                        );
+                        drawn += group.index_count;
+                    }
+
+            drawn
+        }
+    }
+
     /// Draw one frame into the current framebuffer viewport.
     ///
     /// `viewport` is `[x, y_from_bottom, width, height]` in physical pixels.
@@ -543,82 +696,20 @@ impl GlRenderer {
                     glow::FRONT_AND_BACK,
                     if opts.wireframe { glow::LINE } else { glow::FILL },
                 );
-                gl.bind_vertex_array(Some(b.vao));
-                gl.uniform_1_i32(Some(&self.mesh_texture), 0);
-                let mut drawn = 0i32;
-                // the game's order: opaque first, then see-through draws without depth writes
-                let passes = [Blend::Opaque, Blend::Alpha, Blend::Multiply, Blend::Additive];
-                for (pass, group) in passes
-                    .iter()
-                    .flat_map(|pass| self.groups.iter().filter(move |g| g.blend == *pass).map(move |g| (*pass, g)))
-                {
-                    if group.index_count <= 0 || (group.hidden && !opts.show_hidden) {
-                        continue;
-                    }
-                    match pass {
-                        Blend::Opaque => {
-                            gl.disable(glow::BLEND);
-                            gl.depth_mask(true);
-                        }
-                        Blend::Alpha => {
-                            gl.enable(glow::BLEND);
-                            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-                            gl.depth_mask(false);
-                        }
-                        Blend::Additive => {
-                            gl.enable(glow::BLEND);
-                            gl.blend_func(glow::SRC_ALPHA, glow::ONE);
-                            gl.depth_mask(false);
-                        }
-                        Blend::Multiply => {
-                            gl.enable(glow::BLEND);
-                            gl.blend_func(glow::DST_COLOR, glow::ZERO);
-                            gl.depth_mask(false);
-                        }
-                    }
-                    let unlit = matches!(pass, Blend::Additive | Blend::Multiply) && !opts.wireframe;
-                    gl.uniform_1_f32(Some(&self.mesh_unlit), if unlit { 1.0 } else { 0.0 });
-                    gl.uniform_1_f32(Some(&self.mesh_alpha_cutoff), group.alpha_cutoff);
-                    gl.uniform_1_i32(Some(&self.mesh_mask), 1);
-                    // flat shading / wireframe inspect geometry, so they keep the viewer's own light
-                    let baked = if opts.flat || opts.wireframe { 0.0 } else { group.color_scale };
-                    gl.uniform_1_f32(Some(&self.mesh_color_scale), baked);
-                    match group.mask {
-                        Some(mask) => {
-                            gl.active_texture(glow::TEXTURE1);
-                            gl.bind_texture(glow::TEXTURE_2D, Some(mask));
-                            gl.active_texture(glow::TEXTURE0);
-                            gl.uniform_1_f32(Some(&self.mesh_mask_channel), group.mask_channel);
-                        }
-                        None => gl.uniform_1_f32(Some(&self.mesh_mask_channel), 0.0),
-                    }
-                    gl.uniform_3_f32(
-                        Some(&self.mesh_color),
-                        group.color[0],
-                        group.color[1],
-                        group.color[2],
-                    );
-                    match group.texture {
-                        Some(tex) => {
-                            gl.uniform_1_f32(Some(&self.mesh_use_texture), 1.0);
-                            gl.active_texture(glow::TEXTURE0);
-                            gl.bind_texture(glow::TEXTURE_2D, Some(tex));
-                        }
-                        None => {
-                            gl.uniform_1_f32(Some(&self.mesh_use_texture), 0.0);
-                            gl.bind_texture(glow::TEXTURE_2D, None);
-                        }
-                    }
-                    gl.draw_elements(
-                        glow::TRIANGLES,
-                        group.index_count,
-                        glow::UNSIGNED_INT,
-                        group.index_start * 4,
-                    );
-                    drawn += group.index_count;
-                }
+                let drawn = self.draw_groups(&gl, b, &self.groups, opts);
                 self.last_drawn = (drawn / 3).max(0) as usize;
                 gl.depth_mask(true);
+                // actors and other placed models: same program, a model matrix per instance
+                for (key, matrix) in &self.instances {
+                    let Some((buffers, groups)) = self.models.get(key) else { continue };
+                    let model = crate::math::Mat4(*matrix);
+                    let placed = mvp.mul(model);
+                    gl.uniform_matrix_4_f32_slice(Some(&self.mesh_mvp), false, &placed.0);
+                    gl.uniform_matrix_4_f32_slice(Some(&self.mesh_model), false, &model.0);
+                    self.draw_groups(&gl, buffers, groups, opts);
+                    gl.depth_mask(true);
+                }
+                gl.uniform_matrix_4_f32_slice(Some(&self.mesh_mvp), false, &mvp.0);
                 gl.disable(glow::BLEND);
                 gl.bind_texture(glow::TEXTURE_2D, None);
                 gl.polygon_mode(glow::FRONT_AND_BACK, glow::FILL);

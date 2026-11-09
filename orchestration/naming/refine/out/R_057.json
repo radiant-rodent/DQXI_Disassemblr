@@ -1,0 +1,2138 @@
+[
+ {
+  "address": "0x001144C0",
+  "name": "Svc_SendRequest3",
+  "signature": "int Svc_SendRequest3(u32 handle, int cmd, u32 arg3)",
+  "params": {
+   "param_1": "sessionHandle",
+   "param_2": "commandWord",
+   "param_3": "payload"
+  },
+  "summary": "Sends one raw IPC request on the given session handle: writes the fixed header 0x002C0044 and three payload words into the calling thread's IPC buffer (TLS+0x80), the descriptor commandWord<<14|2, then issues svc 0x32 (SendSyncRequest) and returns the reply word. It is the terminal 'send it' step of the session layer; the caller decides the command word.",
+  "confidence": 0.5,
+  "evidence": "NEW: its only caller is the now-confident Svc_WaitReadyAndSendRequest (0x10CDE0), which calls it as the very last step after its poll loop and error check, and the sibling Svc_RequestWithRetry (0x10D430) brackets it with its retry counters. The header literal 0x002C0044 decodes as command 0x2C with one normal and four translated words, so the '3' in the old name is the number of payload words written (f_84/f_88/f_8c), not a command id.",
+  "previous_name": "maybe_Svc_SendRequest3",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001145C4",
+  "name": "Svc_SendRequest4",
+  "signature": "u32 Svc_SendRequest4(u32 arg1, u32 arg2, int arg3, u32 arg4)",
+  "params": {
+   "param_3": "descriptorWord",
+   "param_4": "payload"
+  },
+  "summary": "Sends one raw IPC request with four payload words (header 0x001F0084 = command 0x1F, two normal + four translated words), descriptor arg3<<14|2, then svc 0x32 and returns the reply. The four-word sibling of Svc_SendRequest3.",
+  "confidence": 0.5,
+  "evidence": "NEW: named caller Svc_RequestWithRetry (0x10D430) calls it inside its retry loop with the request block built by the game's service wrapper, exactly as 0x10CDE0 calls Svc_SendRequest3 - so the pair is the session layer's generic request sender with 3 and 4 payload words. Header 0x001F0084 confirms command 0x1F.",
+  "previous_name": "maybe_Svc_SendRequest4",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001149AA",
+  "name": "maybe_Svc_IpcStubFragment",
+  "signature": "u32 maybe_Svc_IpcStubFragment(u32 arg1, int b)",
+  "params": {},
+  "summary": "Not a function start: the bytes here are the continuation of the IPC stub in front of it (store a byte at (arg2>>1)+0x10, svc 0x32, read the reply at (arg2>>1)+4). Kept only so the coverage table has an entry for this address.",
+  "confidence": 0.25,
+  "evidence": "The old name guessed 'Gfx_ThumbDecodeBroken', but the body is a textbook SendSyncRequest stub tail - the same store/svc/read shape as 0x1144C0 - and functions_index already marks the seed as a Thumb mis-seed inside the previous routine. Only the owner was renamed (Svc_, not Gfx_); the address itself is still not a real entry point.",
+  "previous_name": "maybe_Gfx_ThumbDecodeBroken",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118108",
+  "name": "maybe_Os_CheckSemaphoreResult",
+  "signature": "void maybe_Os_CheckSemaphoreResult(u32 result, u32 arg2, OsSemaphore* sem, char* flag)",
+  "params": {
+   "param_1": "result",
+   "param_3": "syncObject",
+   "param_4": "pendingFlag"
+  },
+  "summary": "Result filter for a synchronisation primitive: when the object's +0x14 bit 0 is clear and the caller's pending flag is unset it maps result class -1 to the assert handler 0x1188EC and then runs the completion helper 0x11C814; otherwise only the classes -7 (invalid) and 1 (success) are accepted, everything else goes to the assert path.",
+  "confidence": 0.42,
+  "evidence": "Kept, with the owner narrowed: it is a hand-written result filter, not a getter, and the classes it compares are the nn::Result module nibble (result>>27) - the same idiom as 0x1123B0/0x123750 in this region. Nothing in the new context proves the object is a semaphore rather than an event or mutex, so the name stays maybe_.",
+  "previous_name": "maybe_Os_CheckSemaphoreResult",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011874C",
+  "name": "maybe_Snd_IpcCmd15",
+  "signature": "unsigned int maybe_Snd_IpcCmd15(unsigned int* session, unsigned int a, unsigned int b, unsigned int c)",
+  "params": {
+   "param_1": "session",
+   "param_2": "unitFlag",
+   "param_3": "unitIndex"
+  },
+  "summary": "IPC stub for driver command 0x15 (header 0x00150082 = two normal + two translated words): stores a/b/c in the thread IPC buffer and returns the reply. Its only caller (0x1123B0) uses it as the write half of a read-modify-write over a per-unit flag mask, so the three words are the new flag value, the unit index and the bit offset - but the stub itself only forwards them.",
+  "confidence": 0.42,
+  "evidence": "Replaced the meaningless ordinal 'SendIpc4' with the command id that is literally in the code (0x00150082). NEW: the sole caller 0x1123B0 (Gfx_SetUnitFlagBit) calls it only when the target bit's cached state differs, with (0 or handle, enable, unit), which is what makes it a unit-flag programming call rather than a generic send.",
+  "previous_name": "maybe_Snd_SendIpc4",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00118C38",
+  "name": "Snd_SetChannelRate",
+  "signature": "unsigned int Snd_SetChannelRate(ChannelBuffer* buf, unsigned int rate)",
+  "params": {
+   "param_1": "context",
+   "param_2": "rate"
+  },
+  "summary": "Writes a channel's 16-bit rate field (+0x22), clamped to 0x8000, and marks that field dirty (bit 0x80000000) in the channel block's flag word. The 0x8000 ceiling is the DSP's 32 kHz sample clock, which is what identifies the field as a rate rather than a volume.",
+  "confidence": 0.52,
+  "evidence": "NEW: the save/restore pair 0x112A9C (init) and 0x112CAC (restore) feed it the saved state word f_2a, i.e. it is one of the fields replayed when a channel state is applied. The clamp to exactly 0x8000 (= 32768 Hz, the 3DS DSP sample rate) is the evidence that the field is a sample rate; the old 0.40 was only 'a rate-like setter'.",
+  "previous_name": "maybe_Snd_SetChannelRate",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001191F4",
+  "name": "maybe_Snd_SetChannelField1A",
+  "signature": "u32 maybe_Snd_SetChannelField1A(int ctx, u16 value)",
+  "params": {
+   "param_1": "context",
+   "param_2": "value"
+  },
+  "summary": "Writes the 16-bit field at +0x1a of the current channel block and marks it dirty (bit 0x10000000), returning 1 on success and 0 when the driver is not ready. Same shape and same channel lookup as the Snd_SetChannel* setters; which logical field +0x1a is, is not proven.",
+  "confidence": 0.4,
+  "evidence": "Corrected owner: the body selects the block with the exactly same expression as the Snd_SetChannel* family (double-buffer selector at ctx+0x1322 times 4 into the 24-entry pointer table at ctx+0x10a4) and the same 'write one field, OR one dirty bit, unlock' sequence. There is nothing display-specific in it, so the old Gfx_/display attribution was unsupported; only the offset is certain, hence the deliberately vague name.",
+  "previous_name": "maybe_Gfx_SetDisplayFlag",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00119254",
+  "name": "maybe_Snd_SetChannelOutput",
+  "signature": "unsigned int maybe_Snd_SetChannelOutput(ChannelBuffer* buf, unsigned int output)",
+  "params": {
+   "param_1": "context",
+   "param_2": "outputSelect"
+  },
+  "summary": "Writes the channel's output/bus selector (value must be < 2) at +0x1e and marks it dirty (bit 0x40000000).",
+  "confidence": 0.45,
+  "evidence": "NEW: 0x112CAC (restore channel state) replays the saved byte f_27 through it, so it is confirmed to be one of the channel-state fields; the '< 2' guard plus a single two-valued field is still the only argument for reading it as an output selector, so the name stays maybe_.",
+  "previous_name": "maybe_Snd_SetChannelOutput",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001196F8",
+  "name": "maybe_Snd_SendIpcSuspend",
+  "signature": "unsigned int maybe_Snd_SendIpcSuspend(unsigned int* session, unsigned int value, unsigned char mode)",
+  "params": {
+   "param_2": "value",
+   "param_3": "mode"
+  },
+  "summary": "IPC stub for driver command 0x16 (header 0x00160042): stores the mode byte, a value and a zero word, sends svc 0x32 and returns the reply. Callers are the driver init path (0x1135D0) and the suspend request (0x1193DC), which is where the 'suspend' reading comes from.",
+  "confidence": 0.45,
+  "evidence": "NEW: 0x1193DC (RequestSuspend) calls it with mode 0 and checks the returned Result against the two 'already suspended/resumed' codes, which supports the suspend/resume interpretation; 0x1135D0 calls the same stub from the init side, so the same command both arms and applies the state. Still maybe_ because the mode values themselves are not pinned down.",
+  "previous_name": "maybe_Snd_SendIpcSuspend",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011973C",
+  "name": "maybe_Svc_IpcCmd19",
+  "signature": "u32 maybe_Svc_IpcCmd19(u32 * out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Parameterless IPC request with header 0x190000 (command 0x19) on the session at 0x7AF0D8; returns the reply word. Its caller 0x113814 (signal-and-close) uses it as the final notification of that sequence.",
+  "confidence": 0.45,
+  "evidence": "Renamed from the raw-decimal 'SendRequest190000' to the command id it actually encodes (0x190000 -> command 0x19, no normal and no translated parameters). NEW: the caller is 0x113814, which signals an event and then closes the session, so this is the last message before the close.",
+  "previous_name": "maybe_Svc_SendRequest190000",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00119764",
+  "name": "maybe_Snd_IpcCmd0B",
+  "signature": "unsigned int maybe_Snd_IpcCmd0B(unsigned int* session, unsigned char value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "One-parameter IPC request with header 0x000B0040 (command 0x0B, one normal parameter), used when the sound driver session is opened.",
+  "confidence": 0.45,
+  "evidence": "The old ordinal 'SendIpc1' was replaced by the command id from the literal 0x000B0040. NEW: its only caller is 0x51BCE0 (Sound_OpenDriverSession), which resolves the service name and calls srvGetServiceHandle first, so this is the driver's init command.",
+  "previous_name": "maybe_Snd_SendIpc1",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00119E8C",
+  "name": "maybe_Gfx_WaitGpuEventLoop",
+  "signature": "u32 maybe_Gfx_WaitGpuEventLoop(u32 requested, u32* out)",
+  "params": {
+   "param_1": "requested",
+   "param_2": "out"
+  },
+  "summary": "Polls the transfer command in a loop: each pass calls Gfx_TransferGpuBuffer with the context at 0x119F7C, and when the returned event differs from the expected one it invokes the registered callback (callback table 0x119F84, slot +0x48) and remembers the event; the loop ends on error or when the third stage reports the requested event.",
+  "confidence": 0.45,
+  "evidence": "Kept: the callee Gfx_TransferGpuBuffer is now a confident name, which confirms the GPU-event framing, but the routine is damaged decompilation (unaff_r9, in_ZR) so the exact exit condition and parameter meaning cannot be trusted. Only the summary was tightened.",
+  "previous_name": "maybe_Gfx_WaitGpuEventLoop",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011EA7C",
+  "name": "Svc_IpcCmd70040",
+  "signature": "u32 Svc_IpcCmd70040(u32* session, u16 value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "Minimal IPC stub: header 0x00070040 (command 0x07, one normal parameter), session handle taken from *session, svc 0x32, reply word returned.",
+  "confidence": 0.5,
+  "evidence": "Confirmed as an IPC stub, not as anything semantic: the header literal 0x00070040 is in the code and the parameter count in the name matches (one normal parameter). NEW: the caller set is still empty, so which service owns the session is unknown - but that is exactly what the name claims, so it needs no maybe_.",
+  "previous_name": "maybe_Svc_IpcCmd70040",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011EB58",
+  "name": "Svc_IpcCmdD0082",
+  "signature": "u32 Svc_IpcCmdD0082(u32* session, u32 arg2, u32 b, int count)",
+  "params": {
+   "param_1": "session",
+   "param_2": "firstWord",
+   "param_3": "bufferAddress",
+   "param_4": "size"
+  },
+  "summary": "IPC stub for command 0x0D with two normal and two translated parameters (header 0x000D0082): packs count<<14|0x402 as the translated-buffer descriptor, stores the address and count, sends svc 0x32 and returns the reply word.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the header 0x000D0082 and the descriptor count<<14|0x402 are both in the body, matching the name. NEW context adds nothing because there are still no callers; the summary now says exactly which of the four words is the descriptor.",
+  "previous_name": "maybe_Svc_IpcCmdD0082",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011EBA0",
+  "name": "maybe_Snd_IpcCmd20",
+  "signature": "unsigned int maybe_Snd_IpcCmd20(unsigned int* session, unsigned char value)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value"
+  },
+  "summary": "One-parameter IPC request with header 0x00200040 (command 0x20), sent when the driver session is released.",
+  "confidence": 0.45,
+  "evidence": "Ordinal renamed to the command id 0x20. NEW: both callers use it at the end of a flush sequence - 0x118788 (Snd_FlushChannels) and 0x11ECC0 (interrupt relay) - only when the session word at ctx+8 is non-zero, and 0x11ECC0 passes the object's own byte as the parameter, so it is a per-session teardown/keepalive message.",
+  "previous_name": "maybe_Snd_SendIpc2",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011F634",
+  "name": "maybe_Snd_IpcCmd17",
+  "signature": "unsigned int maybe_Snd_IpcCmd17(unsigned int* session)",
+  "params": {
+   "param_1": "session"
+  },
+  "summary": "Parameterless IPC request with the command 0x17 header (Ghidra printed the literal as an address into 0x00170000, the actual word is 0x00170002).",
+  "confidence": 0.42,
+  "evidence": "Ordinal removed; the header literal identifies the command. NEW: its only caller is 0x119444 (RequestResume), the counterpart of the suspend path, so this is very likely the resume message of the same driver - but the exact header word had to be recovered from the disassembly and the service is still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SendIpcNoArg",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011F65C",
+  "name": "maybe_Os_IpcCmd08",
+  "signature": "uint32_t maybe_Os_IpcCmd08(uint32_t* session, uint32_t arg2, uint32_t b, uint32_t c)",
+  "params": {
+   "param_1": "session",
+   "param_2": "word1",
+   "param_3": "word2",
+   "param_4": "word3"
+  },
+  "summary": "Generic IPC request helper of the OS layer: fills TLS+0x80 with header 0x00080082 (command 0x08, two normal + two translated words), stores the three payload words, issues svc 0x32 and returns the TLS+0x84 reply.",
+  "confidence": 0.45,
+  "evidence": "The old name described the code shape ('set thread local and syscall'), which is what every stub in this region does; the command header 0x00080082 is the actual distinguishing fact. NEW: its only caller is 0x1193AC, the allocator's TLS store shim, which passes the per-thread block plus the global at 0x74D018.",
+  "previous_name": "maybe_Os_SetThreadLocalAndSyscall",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011FB18",
+  "name": "Os_IpcSendCommand3D",
+  "signature": "u32 Os_IpcSendCommand3D(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Sends driver command 0x3D with one normal parameter (header 0x003D0040) on the fixed session handle at 0x7B0054 and returns the reply word; a negative Result is returned unchanged.",
+  "confidence": 0.5,
+  "evidence": "Confirmed because the name is a direct description of the code: header 0x003D0040 and the handle global 0x7B0054 are both present, and both callers (0x114728 status polling, 0x11A7D0 HID calibration) simply push a byte and ignore or check the result. NEW: the two sibling stubs 0x11FB54/0x11FADC use the same fixed handle, so the handle really is a module-level session.",
+  "previous_name": "maybe_Os_IpcSendCommand3D",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011FB90",
+  "name": "Os_IpcSendCommand13",
+  "signature": "u32 Os_IpcSendCommand13(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Sends driver command 0x13 with one normal parameter (header 0x00130040) on the fixed session handle at 0x7B0054 and returns the reply word.",
+  "confidence": 0.5,
+  "evidence": "Confirmed as the command sender it claims to be: the literal 0x00130040 and the same handle global as 0x11FB18 are in the body. NEW: 0x114728 (status polling) calls it with 0 after reading the 0x3B/0x3C status bytes and compares the reply with 0xC9405001, which is why it is the 'acknowledge' half of that pair.",
+  "previous_name": "maybe_Os_IpcSendCommand13",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00123750",
+  "name": "maybe_Os_IpcCmd06AndClearPending",
+  "signature": "u32 maybe_Os_IpcCmd06AndClearPending(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Forwards the byte to the command-0x06 stub (0x124C64), converts a failed Result into the assert path (0x11ED40), then unconditionally clears the pending word at 0x7B2D08+4. Called once per sampling iteration by 0x122484.",
+  "confidence": 0.42,
+  "evidence": "Corrected because the old name promised a 'set byte' function while the body's own store is the clear of a pending word; the byte is only forwarded. NEW: the caller 0x122484 (performance sampling loop) passes *(u8*)(entry+1), i.e. a per-sample selector, and 0x124C64 is the plain command-0x06 stub, so the pair is 'send, then clear the pending flag'.",
+  "previous_name": "maybe_Os_IpcSetByteCommand06",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00123D10",
+  "name": "maybe_Snd_IpcCmd18ChannelBuffer",
+  "signature": "unsigned int maybe_Snd_IpcCmd18ChannelBuffer(unsigned int handle, unsigned int a, unsigned int b, unsigned int c, unsigned int d, unsigned int e, unsigned char flags)",
+  "params": {
+   "param_1": "handle",
+   "param_2": "firstWord",
+   "param_7": "flags"
+  },
+  "summary": "Seven-word IPC submission for driver command 0x18 (header 0x00180182 = one normal + six translated words): fills TLS+0x84..+0x98, puts the handle at +0xA0, sends svc 0x32 and returns the reply. Used to hand a channel buffer descriptor to the driver.",
+  "confidence": 0.42,
+  "evidence": "Renamed from the ordinal 'SendIpcChannel' to the command id from the literal 0x00180182. NEW: its only caller 0x122200 (Snd_SetupChannelBuffer) passes a position/size pair, which is what makes the seven words a buffer descriptor; the handle argument is the session.",
+  "previous_name": "maybe_Snd_SendIpcChannel",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00124C64",
+  "name": "Os_IpcSendCommand06",
+  "signature": "u32 Os_IpcSendCommand06(u8 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Sends driver command 0x06 with one normal parameter (header 0x00060040) on the fixed session handle at 0x7B2D2C and returns the reply word.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the literal 0x00060040 and the handle global 0x7B2D2C are both in the body, so the name is a direct description of the code. NEW: its only caller is 0x123750, which forwards a per-sample byte and then clears a pending word - consistent with a 'submit one byte' command.",
+  "previous_name": "maybe_Os_IpcSendCommand06",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0012677C",
+  "name": "maybe_std_ScalbnRoundTail",
+  "signature": "double maybe_std_ScalbnRoundTail(u32 sign, u32 hi, u32 mant, int exponent)",
+  "params": {
+   "param_1": "sign",
+   "param_2": "mantissaHigh",
+   "param_3": "mantissaLow",
+   "param_4": "exponent"
+  },
+  "summary": "Rounding/overflow tail of the double-precision scalbn helper: increments the mantissa high word, propagates a carry into the exponent and saturates to infinity, returning the packed double sign|exponent. It is a branch target inside 0x126728, not a stand-alone API.",
+  "confidence": 0.3,
+  "evidence": "Still damaged decompilation: the body consumes the caller's flags through unaff_r11 and in_CY, so the true entry state is not visible and the arithmetic cannot be re-derived. No caller and no callee gives new context; the old guess (a scalbn rounding tail) is consistent but unproven.",
+  "previous_name": "maybe_std_ScalbnRoundTail",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00135104",
+  "name": "maybe_Video_DecodeCoefficientGroupEven",
+  "signature": "void maybe_Video_DecodeCoefficientGroupEven(u32 arg1, u32 arg2, int bitcount, u32 bits)",
+  "params": {
+   "param_3": "bitCount",
+   "param_4": "bitReservoir"
+  },
+  "summary": "VLC case body of the MPEG-style block decoder: takes three bits from the bit reservoir, remaps the escape code, jumps through the 16-entry table at 0x135418 to decode up to four coefficients of one interleaved group, and uses the per-subblock flag byte at 0x1350C4 to decide whether another coefficient or a block end follows.",
+  "confidence": 0.45,
+  "evidence": "NEW: its callers are 0x134EE4 and the two copies 0x13B4E4/0x141AE4 (DecodeCoefficientBlock A/B/C), i.e. the block decoder's four case bodies - which confirms 'one group of coefficients' but not the luma/chroma split the old name implied. All entries of this family are still damaged (unaff_r6/unaff_r11), so maybe_ stays.",
+  "previous_name": "maybe_Video_DecodeCoefficientGroupEven",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001351C8",
+  "name": "maybe_Video_DecodeCoefficientGroupOdd",
+  "signature": "void maybe_Video_DecodeCoefficientGroupOdd(u32 arg1, u32 arg2, int bitcount, u32 bits)",
+  "params": {
+   "param_3": "bitCount",
+   "param_4": "bitReservoir"
+  },
+  "summary": "The other Case body of the same block decoder: takes a 4-bit prefix, clamps the code index against the subblock's remaining counts (f_51/f_58), rewrites the four current-code bytes and jumps through the shared 0x135418 table. Selected when the first bit of the subblock is set.",
+  "confidence": 0.45,
+  "evidence": "NEW: called from the three DecodeCoefficientBlock copies (0x134EE4, 0x13B4E4, 0x141AE4) exactly like 0x135104, so the pair is confirmed to be the two case bodies of one decoder; the odd/even wording is a naming convention for the case split, not a proven luma/chroma split. Ghidra removed 17 unreachable blocks, so maybe_ stays.",
+  "previous_name": "maybe_Video_DecodeCoefficientGroupOdd",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0013B704",
+  "name": "maybe_Video_DecodeCoefficientGroupEven_B",
+  "signature": "void maybe_Video_DecodeCoefficientGroupEven_B(u32 arg1, u32 arg2, int bitcount, u32 bits)",
+  "params": {
+   "param_3": "bitCount",
+   "param_4": "bitReservoir"
+  },
+  "summary": "Copy 2 of 0x135104: same VLC case body, with its tables relocated to 0x13B6C4/0x13B754 and its helper calls pointing at the second copy of the kernel (0x13BE38/0x13BE68/0x13BEBC).",
+  "confidence": 0.45,
+  "evidence": "Kept as a copy: only 2 of 0xC4 bytes differ from 0x135104 (relocated literal pool), and its caller is 0x13B4E4, the second copy of the block decoder - so the '_B' suffix is the correct information here. The decompiled body is much less complete than copy 1 (Ghidra recovered fewer blocks), so the role text is inherited.",
+  "previous_name": "maybe_Video_DecodeCoefficientGroupEven_B",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0013B7C8",
+  "name": "maybe_Video_DecodeCoefficientGroupOdd_B",
+  "signature": "void maybe_Video_DecodeCoefficientGroupOdd_B(u32 arg1, u32 arg2, int bitcount, u32 bits)",
+  "params": {
+   "param_3": "bitCount",
+   "param_4": "bitReservoir"
+  },
+  "summary": "Copy 2 of 0x1351C8: the 4-bit-prefix case body with the relocated 0x13BA18/0x13BBF4 tables and the second copy of the bit-reservoir helpers.",
+  "confidence": 0.45,
+  "evidence": "Kept as a copy: same size as 0x1351C8 with 2 differing bytes, called from 0x13B4E4 (the second block decoder). Nothing new distinguishes it beyond the copy index.",
+  "previous_name": "maybe_Video_DecodeCoefficientGroupOdd_B",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00100080",
+  "name": "std_RunTerminateHandler",
+  "signature": "void std_RunTerminateHandler(void)",
+  "params": {},
+  "summary": "C++ terminate path: fetches the lazily created terminate-state object, invokes the installed handler (or the built-in default at obj+8 when none is installed), then calls the no-return runtime abort routine 0x11C810.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callee is now the named maybe_std_GetTerminateState (still maybe_, but its body is the lazy terminate-state builder), and the shape (clear the handler slot, call it, then jump into the abort routine that never returns) is the standard terminate definition. It sits in the Thumb CRT block, so it is library code.",
+  "previous_name": "maybe_std_RunTerminateHandler",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00101AA0",
+  "name": "maybe_std_Abort",
+  "signature": "void maybe_std_Abort(void)",
+  "params": {},
+  "summary": "Single tail call into the fatal-exit routine at 0x100F04; most likely abort() or one of the terminate helpers that the C++ runtime registers in a table.",
+  "confidence": 0.35,
+  "evidence": "Kept: the only content is still the tail call to 0x100F04, which has no readable body, and the function is reached through a table rather than a call, so neither the libc name nor 'abort' can be verified. NEW context adds nothing - its neighbours in the newlib block are unchanged.",
+  "previous_name": "maybe_std_Abort",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00102828",
+  "name": "maybe_Os_InitTimeStrings",
+  "signature": "void maybe_Os_InitTimeStrings(void)",
+  "params": {},
+  "summary": "Seeds three fields of the record obtained from 0x300308(0, 0x04000027): field +4 gets the first constant-string getter's result plus one, field +0xC gets the second. Initialises a locale/time descriptor from two built-in strings.",
+  "confidence": 0.42,
+  "evidence": "NEW: both getters it uses are in this batch (0x105238, 0x105280) and their bodies show they return pointers to constant strings, which is what makes this an init-from-strings routine. The 'time' part of the name is still unproven - nothing in the body mentions a clock - so maybe_ stays.",
+  "previous_name": "maybe_Os_InitTimeStrings",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00102B90",
+  "name": "maybe_Os_IpcSendByteState",
+  "signature": "int maybe_Os_IpcSendByteState(void)",
+  "params": {},
+  "summary": "Calls the IPC byte-send helper 0x107E9C and maps its result to 1 (non-negative) or 2 (negative, i.e. the call failed). It returns a two-valued state, not an update mode.",
+  "confidence": 0.32,
+  "evidence": "Corrected: the old 'Engine_GetUpdateMode' claimed a getter for an engine mode, but the body calls the IPC byte-send helper 0x107E9C and returns (result>>31)+1 - the standard 'normalise a Result to 1/2' idiom used elsewhere in this region. NEW: there are still no callers, so neither the owner nor the meaning of 1/2 is proven, hence a deliberately descriptive name.",
+  "previous_name": "maybe_Engine_GetUpdateMode",
+  "previous_confidence": 0.32,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00102EC8",
+  "name": "maybe_Gfx_SetFramePeriod",
+  "signature": "void maybe_Gfx_SetFramePeriod(u32 period, FrameContext* ctx)",
+  "params": {
+   "param_1": "period",
+   "param_2": "context"
+  },
+  "summary": "Stores the value in two fields of the context (+8 and +0x14) and then resets both timing helpers 0x107894 and 0x107880, which the memory/allocator init path also uses.",
+  "confidence": 0.4,
+  "evidence": "NEW: the two callees are shared with Mem_InitAllocatorState (0x102AE8), so they are general timing/heap counters rather than a frame clock; that weakens the 'frame period' reading and the function still has no caller. Kept as maybe_ with the summary narrowed to what the body shows.",
+  "previous_name": "maybe_Gfx_SetFramePeriod",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00104430",
+  "name": "Mem_ResizePageBlock",
+  "signature": "int Mem_ResizePageBlock(u32 size)",
+  "params": {
+   "param_1": "newSize"
+  },
+  "summary": "Grows or shrinks the global page-granular memory block: when the size changes it maps the delta (0x1053D0 with flags 0x10003/3) or unmaps it (flags 1/0), then stores the new base/size pair at 0x7AEA7C. Rejects unaligned sizes and cross-64K resizes with 0xE0E01BF2.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the body compares the requested size with the stored one, then calls the same map/unmap helper with the two different flag sets and updates base+size - there is no other reading of that sequence. NEW: the 0xE0E01BF2 rejection code (page-error class) and the 64K-alignment condition are stated in the summary because they are what a modder needs to know.",
+  "previous_name": "maybe_Mem_ResizePageBlock",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001051AC",
+  "name": "Gfx_ReleaseRenderer",
+  "signature": "void Gfx_ReleaseRenderer(GfxRenderer* renderer)",
+  "params": {
+   "param_1": "renderer"
+  },
+  "summary": "Tears the renderer down: clears the 'initialised' byte, and if the session was owned it releases the session (Gfx_IsChannelReady / 0x10C534), shuts the global state down and frees the frame buffers at 0x7E7DE0.",
+  "confidence": 0.5,
+  "evidence": "NEW: the callees are now named - Gfx_IsChannelReady, maybe_Gfx_ShutdownGlobalState, maybe_Gfx_FreeFrameBuffers - and they form the exact mirror of the init path, which is what confirms this is the release/exit half. The flag pair (byte 0 = initialised, byte 1 = owns session) is visible in the body.",
+  "previous_name": "maybe_Gfx_ReleaseRenderer",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001051F4",
+  "name": "maybe_Gfx_InitRecordPair",
+  "signature": "int maybe_Gfx_InitRecordPair(void* self, u32 value)",
+  "params": {
+   "param_1": "self",
+   "param_2": "id"
+  },
+  "summary": "Constructor for an object made of two 0xE8-byte records: stores the id in the header word, initialises the record at +4 and the one at +0xEC with 0x108C00, and returns the object base (the +0xE8/-0xEC arithmetic cancels out because 0x108C00 returns its argument).",
+  "confidence": 0.35,
+  "evidence": "Corrected: the old 'GetCmdBufOffsets' assumed a getter, but 0x108C00 is a record initialiser that returns its argument, so the function builds two back-to-back records and returns the base pointer - there is no offset to get. NEW: 0x108C00 (now analysed as a record init) is the only callee, and its only other caller is this function.",
+  "previous_name": "maybe_Gfx_GetCmdBufOffsets",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00105238",
+  "name": "maybe_Os_GetDefaultLocaleString",
+  "signature": "int maybe_Os_GetDefaultLocaleString(char* name)",
+  "params": {
+   "param_1": "overrideName"
+  },
+  "summary": "Returns a pointer to a built-in constant string (a literal pair added together in .text), or 0 when an override name is supplied and resolves through 0x10540C. Its sibling 0x105280 does the same for a second string.",
+  "confidence": 0.42,
+  "evidence": "Kept: the body is proven to return '&literal + offset' and to test 0x10540C(0x694910+0x10525C) when a name is given, so 'get a built-in default string, with an override check' holds; which string (locale? region? font?) is not visible because the literals live in .text and are not printable. NEW: its only caller 0x102828 stores the result (+1) into a descriptor field.",
+  "previous_name": "maybe_Os_GetDefaultLocaleString",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00105280",
+  "name": "maybe_Os_GetRegionString",
+  "signature": "int maybe_Os_GetRegionString(char* name)",
+  "params": {
+   "param_1": "overrideName"
+  },
+  "summary": "Second constant-string getter, structurally identical to 0x105238 but reading the second literal pair and testing 0x6949D8+0x1052A4.",
+  "confidence": 0.42,
+  "evidence": "Kept for the same reason as 0x105238: shape proven, identity of the string not. NEW: 0x102828 calls the two getters one after the other and stores them in fields +4 and +0xC, so they are a related pair of built-in strings rather than two independent config values.",
+  "previous_name": "maybe_Os_GetRegionString",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00105570",
+  "name": "maybe_Os_ClearWaitFlag",
+  "signature": "u32 maybe_Os_ClearWaitFlag(u32 value)",
+  "params": {
+   "param_1": "value"
+  },
+  "summary": "Thin wrapper: calls the two-instruction helper 0x10B258 and returns its own argument unchanged. Nothing in the body or in the sole caller (0x103594, Fs_ChannelTable_Create) fixes the helper's purpose, so the 'clear wait flag' wording is a placeholder, not a finding.",
+  "confidence": 0.3,
+  "evidence": "Still ambiguous: 0x10B258 has no readable body and no other caller, so the call cannot be interpreted. Kept the name only because renaming to another guess would be no better; the summary now says explicitly that the old reading is unsupported.",
+  "previous_name": "maybe_Os_ClearWaitFlag",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00106440",
+  "name": "maybe_Os_SetRuntimeFlag",
+  "signature": "void maybe_Os_SetRuntimeFlag(void)",
+  "params": {},
+  "summary": "Takes the global runtime lock (0x111D50) and sets the one-byte runtime-ready flag at 0x7AE49D. A one-shot init/finalise hook, not reachable from the game's call graph.",
+  "confidence": 0.4,
+  "evidence": "NEW: the lock helper is now named Os_MutexLock, which confirms the 'lock + set flag' reading (the old evidence already said 0x111D50 was a lock-state helper). The flag's owner is still unknown, so maybe_ stays.",
+  "previous_name": "maybe_Os_SetRuntimeFlag",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00106460",
+  "name": "maybe_Os_GetThreadClass",
+  "signature": "u32 maybe_Os_GetThreadClass(void)",
+  "params": {},
+  "summary": "Returns 1 when 0x1146F0 reports zero and 2 otherwise; a two-valued classification, with no caller to show what the two classes mean.",
+  "confidence": 0.32,
+  "evidence": "Kept: the body is unchanged and still has no caller, and 0x1146F0 has no readable body, so 'thread class' remains a guess. NEW context adds nothing - the sibling two-valued helpers 0x102B90 and 0x107B1C are equally unproven.",
+  "previous_name": "maybe_Os_GetThreadClass",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00106A70",
+  "name": "Fs_OpenGlobalFile",
+  "signature": "int maybe_Fs_OpenGlobalFile(unsigned int* fileHandle)",
+  "params": {
+   "param_1": "fileHandle"
+  },
+  "summary": "Lazily opens the data file whose name and archive live at 0x7354B5 / 0x7AF904: waits for the runtime, takes the name length with 0x11CCA0 and calls the open-by-name routine 0x1192C0, returning the SDK error code.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: NEW named callees - Os_WaitRuntimeReady is now confident and 0x11CCA0 is the strlen used by every lazy open in this region - and the 'only if the cached handle is zero' guard is the lazy-open pattern of 0x106AD0/0x10BFB0/0x112050.",
+  "previous_name": "maybe_Fs_OpenGlobalFile",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00106BA8",
+  "name": "maybe_Os_InitTimeoutBase",
+  "signature": "void maybe_Os_InitTimeoutBase(void)",
+  "params": {},
+  "summary": "Seeds the global timeout record at 0x7AEA48: stores ten times the tick period reported by 0x10BE98 in fields +0x18/+0x1C, sets the 'have time source' byte when 0x10BE20 succeeds and the 'usable' byte when either holds.",
+  "confidence": 0.42,
+  "evidence": "NEW: its only caller is 0x104ED8 (Gfx_InitDefaultTexture's block), i.e. an init path, which supports 'one-time initialisation of the global timing record'. Whether that record is a timeout base is still inferred from the x10 scaling and the two readiness bytes, so maybe_ stays.",
+  "previous_name": "maybe_Os_InitTimeoutBase",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00106F04",
+  "name": "maybe_Os_GetLockDepth",
+  "signature": "int maybe_Os_GetLockDepth(void)",
+  "params": {},
+  "summary": "Asserts that bit 0 of the global lock object's +4 word is set (calling 0x10009C otherwise) and returns the object's first word.",
+  "confidence": 0.45,
+  "evidence": "NEW: its only caller is 0x104FDC, which uses the returned value as the runtime-flag byte, so 'read a counter out of the global lock object' is confirmed; 'depth' is still a guess about that counter's meaning. The initialised-bit assert is now stated in the summary.",
+  "previous_name": "maybe_Os_GetLockDepth",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001072C4",
+  "name": "maybe_Gfx_InitChannelQueue",
+  "signature": "void maybe_Gfx_InitChannelQueue(GfxChannel* self, u32 handle)",
+  "params": {
+   "param_1": "self",
+   "param_2": "handle"
+  },
+  "summary": "Initialises a channel record: stores the handle, initialises the two sub-objects (0x10C4B8 twice), sets the sentinel -1 in the queue slots, links the shared object from 0x1125BC and sets the state words (+0x40 = 1, +0x48/+0x4C = -1).",
+  "confidence": 0.45,
+  "evidence": "NEW: the sentinel/state-slot pattern matches 0x10C664 (also in this batch), which is now analysed as a channel-record init, so the pair is confirmed to be the two channel constructors. No caller exists, and the 0x10Cxxx helpers are still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Gfx_InitChannelQueue",
+  "previous_confidence": 0.38,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010783C",
+  "name": "maybe_Os_SetThreadPriorityMode",
+  "signature": "void maybe_Os_SetThreadPriorityMode(int mode)",
+  "params": {
+   "param_1": "mode"
+  },
+  "summary": "Maps a small mode onto the scheduler helpers: 0 -> 0x113A40(0) and the locked command 0x3E0080 with 0; 1 -> the same pair with the mode; 2 -> 0x113A40(1); any other value is ignored.",
+  "confidence": 0.42,
+  "evidence": "NEW: the caller is now the confident Engine_DispatchFrameCallbacks (0x102BA4), i.e. this is called from the frame dispatch with a per-frame mode, and the callee 0x1143C8 has since been renamed Gfx_LockedIpcCmd3E0080 - which shows the function programs a global mode word rather than a thread priority. Name kept (maybe_) because which mode it is remains unproven.",
+  "previous_name": "maybe_Os_SetThreadPriorityMode",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001078A8",
+  "name": "maybe_Snd_UpdateState",
+  "signature": "void maybe_Snd_UpdateState(void)",
+  "params": {},
+  "summary": "One frame step of the driver state machine: if the pending byte at 0x7AE954 is set it stops the current sequence, then advances the state (0x10CC20 / 0x113A00), notifies the registered callback (+0x38), completes the command and either waits for ready or sends the request, and finally restores the flag.",
+  "confidence": 0.45,
+  "evidence": "NEW: all its callees are now named (Svc_WaitReadyAndSendRequest, maybe_Gfx_NegotiateDisplayMode, maybe_Svc_WaitState3/E), which confirms this is the frame-level driver pump; the caller is Engine_DispatchFrameCallbacks (0x102BA4). 'Snd_' is retained from the module grouping but is not proven, so maybe_ stays.",
+  "previous_name": "maybe_Snd_UpdateState",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001079C0",
+  "name": "maybe_Snd_UpdateStateB",
+  "signature": "void maybe_Snd_UpdateStateB(void)",
+  "params": {},
+  "summary": "Variant of the driver frame step used when a new command block must be acquired: same prologue, then it selects a free/busy block with 0x10D388, and either re-sends through 0x10D920/Svc_RequestWithRetry or waits and sends through Svc_WaitReadyAndSendRequest, before restoring the pending flag.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now named - Svc_QuerySessionInfoLocked (0x10D388), Svc_RequestWithRetry (0x10D430), Svc_WaitReadyAndSendRequest (0x10CDE0) - so this is confirmed to be the 'pick a command block, then submit' branch of 0x1078A8, called from Engine_DispatchFrameCallbacks. Still maybe_ because the two branches' selection rule is not decoded.",
+  "previous_name": "maybe_Snd_UpdateStateB",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00107AD4",
+  "name": "maybe_Snd_IsRunning",
+  "signature": "bool maybe_Snd_IsRunning(void)",
+  "params": {},
+  "summary": "Returns true when the driver state machine reports state 1 (0x10CC10). Used by Engine_DispatchFrameCallbacks as its first dispatch gate.",
+  "confidence": 0.42,
+  "evidence": "NEW: the caller is now the confident Engine_DispatchFrameCallbacks, which tests this before the frame step - so 'is the state machine in state 1' is confirmed as a gate. 'Running' and the Snd_ owner both remain readings of that state number, so maybe_ stays.",
+  "previous_name": "maybe_Snd_IsRunning",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00107AE8",
+  "name": "maybe_Snd_IsActive",
+  "signature": "u32 maybe_Snd_IsActive(void)",
+  "params": {},
+  "summary": "Returns true when either state source is non-zero (0x10CC20 or 0x113A00), i.e. the second dispatch gate of Engine_DispatchFrameCallbacks.",
+  "confidence": 0.42,
+  "evidence": "NEW: pairs with 0x107AD4 and is tested by the same named caller immediately after it, so the 'either of the two state sources is live' reading holds; the owner is still unproven.",
+  "previous_name": "maybe_Snd_IsActive",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00108C00",
+  "name": "maybe_Gfx_InitE8Record",
+  "signature": "GfxE8Record* maybe_Gfx_InitE8Record(GfxE8Record* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Initialises one 0xE8-byte record: clears the ten leading words, then memsets the two 0x60-byte buffers at +0x28 and +0x88 (0x116AE0 is memset). Returns the record.",
+  "confidence": 0.45,
+  "evidence": "Corrected: the old 'Fs cache entry' reading had no support, while the layout is provable from the body - the second buffer at +0x88 plus 0x60 ends exactly at 0xE8, which is the stride the pair constructor 0x1051F4 uses. NEW: 0x1051F4 is its only other caller and builds two of these back to back.",
+  "previous_name": "maybe_Fs_CacheEntry_Init",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001094C0",
+  "name": "maybe_Gfx_GetMemoryRegion",
+  "signature": "void maybe_Gfx_GetMemoryRegion(void)",
+  "params": {},
+  "summary": "Bounds check over the two VRAM regions: compares the requested size against the region bases/limits returned by 0x11099C/0x1109D8 (0x20000 and 0x30000) and forwards the request either to the region allocator 0x10E66C or to the channel allocator's virtual allocate (+4), routing failures to 0x118100.",
+  "confidence": 0.42,
+  "evidence": "NEW: the two helpers it calls are the VRAM region base/limit getters (analysed in this batch as 0x1109A0/0x1109DC, real entries 0x11099C/0x1109D8) - which turns the old vague 'chooses between 0x20000/0x30000' into a confirmed 'bounds-check the request against a region'. The body is damaged (in_r3, unrecovered jump table), so maybe_ stays.",
+  "previous_name": "maybe_Gfx_GetMemoryRegion",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00109F6C",
+  "name": "maybe_Gfx_GetGpuMemorySize",
+  "signature": "u32 maybe_Gfx_GetGpuMemorySize(int region)",
+  "params": {
+   "param_1": "region"
+  },
+  "summary": "Returns the size of a VRAM region: 0x180000 for the 0x20000 region and 0x280000 for the 0x30000 region when the extended-memory query 0x11981C succeeds, otherwise 0x300000.",
+  "confidence": 0.45,
+  "evidence": "NEW: the three sizes line up with the region bases/limits found in this batch (0x1F000000+0x180000 vs 0x1F300000...) so the VRAM reading is now supported by the sibling getters, not just by the constants. The body still depends on flags Ghidra could not attribute (in_ZR), so maybe_ stays.",
+  "previous_name": "maybe_Gfx_GetGpuMemorySize",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010C642",
+  "name": "maybe_Snd_WriteChannelEntry",
+  "signature": "void maybe_Snd_WriteChannelEntry(char* obj, unsigned int value, unsigned int extra)",
+  "params": {
+   "param_1": "obj",
+   "param_2": "value",
+   "param_3": "extra"
+  },
+  "summary": "Writes a channel entry: stores a halfword at +2 and (when the object's first byte is non-zero) a word at +4, then, if the driver's slot byte at 0x7F2C3C is set, mirrors the word there and calls the channel data/address setter 0x118D00 with the fixed context 0x7EF414.",
+  "confidence": 0.3,
+  "evidence": "Corrected owner, still ambiguous: it is the only caller of 0x118D00 (a Snd_SetChannel* field setter), so 'Gfx command queue' was the wrong module, but the body is badly damaged (unaff_r6 for the object, in_s0 for the value) so the parameter layout cannot be trusted and no precise field name is possible.",
+  "previous_name": "maybe_Gfx_QueueCommand",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010C664",
+  "name": "Gfx_InitChannelRecord",
+  "signature": "void Gfx_InitChannelRecord(GfxChannelRecord* rec, u32 id, u32 owner)",
+  "params": {
+   "param_1": "rec",
+   "param_2": "id",
+   "param_3": "owner"
+  },
+  "summary": "Initialises a channel record: stores the id at +0 and the owner at +4, initialises the sub-object at +0xC (0x10C4B8) and sets its state word to 1 with the two queue slots at -1.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the body is a pure record initialiser and its sibling 0x1072C4 (also in this batch) writes the same three sentinels (state 1, -1, -1) after the same 0x10C4B8 call, so the 'channel record init' reading holds for both. Nothing contradicts the Gfx_ owner.",
+  "previous_name": "maybe_Gfx_InitChannelRecord",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0010C854",
+  "name": "maybe_Snd_StopVoiceGroup",
+  "signature": "void maybe_Snd_StopVoiceGroup(SoundVoiceGroup* group)",
+  "params": {
+   "param_1": "group"
+  },
+  "summary": "Stops and resets one voice group: releases the stream context 0x7F2C3C through 0x112E18, invalidates the four channel ids at +0x4C..+0x4F (the 4 playback channels of the group) and clears the active byte.",
+  "confidence": 0.48,
+  "evidence": "NEW: the caller is 0x107628, the sound shutdown path, and the four -1 bytes at +0x4C..0x4F are exactly the number of voices one stream owns - so 'stop this group and invalidate its channels' is confirmed as the behaviour. The name keeps maybe_ only because 'voice group' is a label for the struct, not something the code states.",
+  "previous_name": "maybe_Snd_StopVoiceGroup",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010C8C4",
+  "name": "maybe_Snd_ResumeChannels",
+  "signature": "void maybe_Snd_ResumeChannels(void)",
+  "params": {},
+  "summary": "Re-arms the stream queue: when the pending-channel mask (*0x7AEA98 & ~mask[1]) is non-zero it sets the sync object at +8, marks both flags and re-enables the stream context 0x7EF414 through 0x1132DC.",
+  "confidence": 0.42,
+  "evidence": "NEW: it operates on the same 0x7AEA98 queue object and the same 0x7EF414 context as 0x10C90C (the frame prologue), so the pair is the 'queue has work / begin frame' handshake; 0x1132DC has since been renamed maybe_Snd_TeardownStreamContext, which makes 're-enable' the complement of that. Owner and the exact mask meaning remain unproven.",
+  "previous_name": "maybe_Snd_ResumeChannels",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010C90C",
+  "name": "maybe_Snd_BeginFrame",
+  "signature": "void maybe_Snd_BeginFrame(void)",
+  "params": {},
+  "summary": "Frame prologue: when the queue flags allow it, sets the completion event (0x112E38), publishes the current buffer pointer from 0x7EF3C4+0xC0, clears the two dirty flags, executes a data-synchronisation barrier and takes the mutex at +8.",
+  "confidence": 0.4,
+  "evidence": "Corrected prefix: the object it drives (0x7AEA98 flags, 0x7EF414/0x7EF3C4 contexts) is the same one the Snd_* stream/queue code uses (0x10C8C4, 0x112E38, 0x1132DC), not a display object, so 'Gfx_BeginFrame' named the wrong module. The body also contains a broken expression in the readable C (`*0x007AEA98 0x007AEA98[1]`), which is the AND the summary describes.",
+  "previous_name": "maybe_Gfx_BeginFrame",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0010CB30",
+  "name": "maybe_Gfx_InvokeCallbacks",
+  "signature": "void maybe_Gfx_InvokeCallbacks(void)",
+  "params": {},
+  "summary": "Invokes the two registered per-frame callbacks of the object at 0x7AE954 (slots +0x40/+0x44 with their context words +0x80/+0x84), after a conditional call to 0x1139A0.",
+  "confidence": 0.42,
+  "evidence": "NEW: nothing in the new context identifies the object at 0x7AE954 - the same object is used by Snd_UpdateState (0x1078A8), which is why the Gfx_ prefix is doubtful but not provably wrong. Kept as maybe_ with the callback slots spelled out.",
+  "previous_name": "maybe_Gfx_InvokeCallbacks",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010CB74",
+  "name": "maybe_Gfx_ResetStateBlock",
+  "signature": "void maybe_Gfx_ResetStateBlock(void)",
+  "params": {},
+  "summary": "Clears the 28 state/counter words of the global block at 0x7AE954 (fields +0xC, +0x10...+0x3C and their +0x4C...+0x88 partners) after re-initialising its owner with 0x114398.",
+  "confidence": 0.42,
+  "evidence": "NEW: the block is the same 0x7AE954 object whose callbacks 0x10CB30 invokes, so the two are the reset/notify pair of one object. The pattern of interleaved word pairs is stated in the summary because that is what a modder needs; the object's owner is still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Gfx_ResetStateBlock",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010F050",
+  "name": "maybe_Container_RemoveSmallSetEntry",
+  "signature": "void maybe_Container_RemoveSmallSetEntry(u32 owner, int element, Container* set)",
+  "params": {
+   "param_1": "owner",
+   "param_3": "set"
+  },
+  "summary": "Removes one of at most four tracked elements: derives the index from the element address relative to the container's +0xA8 array (magic divide by 0x11), requires index < 4, tests the corresponding bit of the 4-bit occupancy mask at +0x2CC, releases the slot and decrements the live count at +0x2D0.",
+  "confidence": 0.45,
+  "evidence": "NEW: the release it calls is now named maybe_Mem_PoolDestroy, i.e. the container hands the slot back to a pool, which supports the 'remove + release' reading. The owner type is still unknown, so maybe_ stays.",
+  "previous_name": "maybe_Container_RemoveSmallSetEntry",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0010F31C",
+  "name": "maybe_Container_ResetObject",
+  "signature": "void* maybe_Container_ResetObject(void* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Resets an 0x8C-byte object: zeroes the state words at +0x38..+0x74, memsets the whole 0x84 bytes, then sets the two flag bytes at +0x84/+0x85 to 0 and the invalid index -1 at +0x88. The readable C shows the memset twice, which is Ghidra duplicating a call whose result it lost.",
+  "confidence": 0.32,
+  "evidence": "Still ambiguous: no caller exists in the readable tree (it must be reached from a vtable or an initialiser table), and the double memset makes the exact field order uncertain. NEW context adds nothing; the summary now explains the duplicated memset instead of repeating it as fact.",
+  "previous_name": "maybe_Container_ResetObject",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001109A0",
+  "name": "maybe_Gfx_GetVramRegionEnd",
+  "signature": "u32 maybe_Gfx_GetVramRegionEnd(u32 region)",
+  "params": {
+   "param_1": "region"
+  },
+  "summary": "Returns the inclusive end address of a VRAM region: 0x1F2FFFFF for region 0x20000 and 0x1F5FFFFF (both = base + 0x2FFFFF) for region 0x30000, and 0 for any other value. The real entry is 0x11099C - the seed at 0x1109A0 starts mid-function, which is why the readable C shows a flag input it never sets.",
+  "confidence": 0.45,
+  "evidence": "Corrected from 'GetLcdWidth': a width cannot be 0x1F2FFFFF, and the asm shows the value is a literal returned after the 0x11981C capability query. NEW: the only caller (0x1094C0) compares a requested size against this value and against the base returned by 0x1109D8, i.e. the pair is a range, not a dimension - and 0x1F000000 is the 3DS VRAM window.",
+  "previous_name": "maybe_Gfx_GetLcdWidth",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001109DC",
+  "name": "maybe_Gfx_GetVramRegionBase",
+  "signature": "u32 maybe_Gfx_GetVramRegionBase(u32 region)",
+  "params": {
+   "param_1": "region"
+  },
+  "summary": "Returns the base address of a VRAM region: 0x1F000000 or 0x1F180000 for region 0x20000, 0x1F300000 or 0x1F380000 for region 0x30000, 0 otherwise; the extra 0x180000 appears when the extended-memory query 0x11981C succeeds (the same 0x180000 that Gfx_GetGpuMemorySize adds). The real entry is 0x1109D8 - 0x1109DC is a mid-seed.",
+  "confidence": 0.45,
+  "evidence": "Corrected from 'GetLcdHeight' for the same reason as 0x1109A0: the returned literals are region addresses, and the 0x180000 delta matches Gfx_GetGpuMemorySize's extended-memory sizes. NEW: callers 0x1094C0 and (via 0x1109D8) nothing else, used only for range checks.",
+  "previous_name": "maybe_Gfx_GetLcdHeight",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011233C",
+  "name": "maybe_Os_CallFinalizers",
+  "signature": "void maybe_Os_CallFinalizers(void)",
+  "params": {},
+  "summary": "Runs the eight registered shutdown callbacks of the table at 0x7E79B8 once, then clears the 'initialised' byte at 0x7AEA02.",
+  "confidence": 0.45,
+  "evidence": "NEW: there are two sibling tables of eight hooks - this one at 0x7E79B8, and 0x7E7998 which 0x118788 (Snd_FlushChannels) and 0x11ECC0 walk at flush time - so the slots are per-module hooks of one driver; this is the shutdown variant, which also clears the init flag. The owner is still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Os_CallFinalizers",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001123B0",
+  "name": "maybe_Snd_SetUnitFlagBit",
+  "signature": "unsigned int maybe_Snd_SetUnitFlagBit(unsigned int handle, unsigned int enable, unsigned int unit, unsigned int bit)",
+  "params": {
+   "param_2": "enable",
+   "param_3": "unitIndex"
+  },
+  "summary": "Read-modify-write of a per-unit flag bit: builds the mask 1<<(enable+unit), compares it with the cached mask at 0x7AEA0C, sends the new state through the command-0x15 stub 0x11874C and updates the cache. Returns 0xC8A0A7F8 (already in that state / no session) instead of resending.",
+  "confidence": 0.45,
+  "evidence": "Corrected prefix: the stub it drives (0x11874C, header 0x00150082) is the driver's unit-flag command, and the session handle comes from 0x7AEA08 - the same driver context as the Snd_SetChannel* family, so 'Gfx' named the wrong module. NEW: the function is a cache-guarded RMW, which is why it returns a success code without any IPC when the bit is already right.",
+  "previous_name": "maybe_Gfx_SetUnitFlagBit",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00112800",
+  "name": "maybe_Snd_ReleaseChannelObjects",
+  "signature": "void maybe_Snd_ReleaseChannelObjects(void* ctx)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Walks the 24 channel objects hanging off ctx+0x18DC and releases the object each one points at +0x68 (0x11EE6C), a plain teardown loop for the 24 DSP channels.",
+  "confidence": 0.45,
+  "evidence": "Corrected prefix: the 24-entry stride and the +0x18DC array belong to the driver context (the same 24-channel table the Snd_SetChannel* setters use), so the tear-down is not graphics. NEW: 0x11EE6C is called nowhere else, so the loop is the only evidence - hence maybe_.",
+  "previous_name": "maybe_Gfx_ReleaseChannelObjects",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00112848",
+  "name": "maybe_Snd_ResetChannelUnits",
+  "signature": "void maybe_Snd_ResetChannelUnits(unsigned char* block, unsigned char value)",
+  "params": {
+   "param_1": "block",
+   "param_2": "value"
+  },
+  "summary": "Fills a 12-byte parameter block with the given byte, then for both units clears the filter-info halfword (+2 at stride 0x14) and the filter-coefficient halfword (+0x2A at stride 0x34) and re-submits both through 0x118E58/0x118FD4 (maybe_Snd_SetChannelFilterInfo / maybe_Snd_SetChannelFilterCoefficients).",
+  "confidence": 0.45,
+  "evidence": "NEW: the companion 0x112888 (also in this batch) performs the same two field clears on the live state without the 12-byte fill, which pins this one as 'fill the parameter block and reset both units'. The callee names show both pushes are filter writers, so the old ADPCM reading of +0x2A was wrong; the two strides (0x14 and 0x34) are what distinguishes the two unit structures. maybe_ stays because the structures themselves are unnamed.",
+  "previous_name": "maybe_Snd_ResetChannelUnits",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00112888",
+  "name": "maybe_Snd_ResetChannelUnitsInPlace",
+  "signature": "void maybe_Snd_ResetChannelUnitsInPlace(ChannelState* state)",
+  "params": {
+   "param_1": "state"
+  },
+  "summary": "Clears the filter-info halfword (+2, stride 0x14) and the filter-coefficient halfword (+0x2A, stride 0x34) of unit 0 and unit 1 directly in the caller's channel state and pushes both zeroed records to the command stream.",
+  "confidence": 0.45,
+  "evidence": "NEW: called from 0x112E38 (InitStreamContext) and by 0x112848's family, so it is the 'apply the reset to the live state' half. Ghidra removed four unreachable blocks from the body, so maybe_ stays.",
+  "previous_name": "maybe_Snd_ResetChannelUnitsInPlace",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00112A00",
+  "name": "maybe_Snd_ResetChannelUnitsToDefault",
+  "signature": "void maybe_Snd_ResetChannelUnitsToDefault(ChannelState* state)",
+  "params": {
+   "param_1": "state"
+  },
+  "summary": "Restores both units to the default value 0xFFFF: writes it to the filter-info field at +0 (stride 0x14) and the filter-coefficient field at +0x28 (stride 0x34), then re-submits both through 0x118E58/0x118FD4.",
+  "confidence": 0.42,
+  "evidence": "NEW: third member of the reset family (with 0x112848 and 0x112888), called from 0x112E38; the 0xFFFF default is visible in the body, which is what the summary now says instead of 'the default in g_00112A58' (that literal is 0x0000FFFF).",
+  "previous_name": "maybe_Snd_ResetChannelUnitsToDefault",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00112A60",
+  "name": "maybe_Snd_FlushChannelBlock",
+  "signature": "void maybe_Snd_FlushChannelBlock(void)",
+  "params": {},
+  "summary": "20-byte thunk: calls 0x1129F4 (the command-block getter used by 0x112848/0x112888) and discards the result. Called once from the sound shutdown path 0x107628; the side effect the call is made for is not visible in the thunk.",
+  "confidence": 0.32,
+  "evidence": "Corrected: 'Gfx_DispatchPendingCommands' claimed a role the body does not show - there is no dispatch, only one call whose return value is dropped. NEW: 0x1129F4 is now identified as the command-block getter (0x112848 stores its result and writes the unit fields through it), so this is a flush/touch of that block, but the effect is unproven.",
+  "previous_name": "maybe_Gfx_DispatchPendingCommands",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00112CAC",
+  "name": "maybe_Snd_RestoreChannelState",
+  "signature": "void maybe_Snd_RestoreChannelState(ChannelState* state)",
+  "params": {
+   "param_1": "state"
+  },
+  "summary": "Re-applies a saved channel state to the driver context: the data/address word, then per unit the loop info, ADPCM word and ADPCM state, then format, length, output select, rate, volume and finally the unit level; clears the saved pending word at +0x2C.",
+  "confidence": 0.45,
+  "evidence": "NEW: every setter it calls is now a named member of the same batch family (0x118D00, 0x118F5C, 0x118BAC, 0x118DCC, 0x119140, 0x118CA0, 0x119254, 0x118C38, 0x1191A0, 0x118B58), and its mirror 0x112A9C is the save half - so the 'replay a saved state' reading is confirmed. It stays maybe_ because it inherits the uncertainty of those field names.",
+  "previous_name": "maybe_Snd_RestoreChannelState",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011302C",
+  "name": "maybe_Snd_SetupChannelBuffers",
+  "signature": "void maybe_Snd_SetupChannelBuffers(StreamContext* ctx, int doubleBuffer)",
+  "params": {
+   "param_1": "context",
+   "param_2": "useSecondBuffer"
+  },
+  "summary": "One-time layout of the stream buffers: optionally uploads the 0x1080-byte wave buffer, asks the driver for the buffer count/size through two queried commands, splits the shared region into 24 blocks of 0xC0, 24 of 0xC and 24 of 0x20 bytes, stores the six pointer arrays and finally latches the double-buffer index into +0x1322.",
+  "confidence": 0.45,
+  "evidence": "NEW: the callees are now named (maybe_Snd_QueryChannelInfo twice, 0x11863C for the address translation) and the 0x1322 selector it writes is exactly the field every Snd_SetChannel* setter reads, which confirms the 'lay out the double-buffered channel table' reading. The 688-byte body is otherwise unchanged, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetupChannelBuffers",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00113554",
+  "name": "Svc_IpcCmdB0000",
+  "signature": "int Svc_IpcCmdB0000(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Parameterless IPC request with header 0x000B0000 on the session handle at 0x7AF900; on success it copies the second reply word (TLS+0x88) to *out and returns the first (TLS+0x84).",
+  "confidence": 0.5,
+  "evidence": "Confirmed as a command stub: header 0xB0000 and the 0x7AF900 session handle are both in the code. NEW: the literal pool of the neighbouring initialiser holds the 'srv:' name string, so this is the srv session - which is what makes the 0x7AF900 global meaningful, but the command itself still has no name, and the name does not claim one.",
+  "previous_name": "maybe_Svc_IpcCmdB0000",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00113924",
+  "name": "maybe_Gfx_InitInterrupts",
+  "signature": "void maybe_Gfx_InitInterrupts(u8* flag)",
+  "params": {
+   "param_1": "flag"
+  },
+  "summary": "Clears the caller's flag byte, then (when the incoming zero flag allows it) arms the three interrupt sources with 0x113A40(3) and programs the locked command 0x3E0080.",
+  "confidence": 0.3,
+  "evidence": "Still damaged decompilation: the body reads a condition from the caller's flags (in_ZR) and uses a register Ghidra left unnamed (unaff_r4), so neither the parameter list nor the arming sequence can be trusted. Kept as maybe_ with the same cautious wording.",
+  "previous_name": "maybe_Gfx_InitInterrupts",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001142A0",
+  "name": "maybe_Snd_SetSuspendState",
+  "signature": "void maybe_Snd_SetSuspendState(unsigned int suspend, GfxVBlankState* state)",
+  "params": {
+   "param_1": "suspend",
+   "param_2": "state"
+  },
+  "summary": "Level-triggered suspend/resume switch: when the stored flag at state+3 is set it clears it and calls the resume request (0x119444), otherwise it sets the flag and calls the suspend request (0x1193DC); the two 'already in that state' results are accepted, a negative result goes to the error reporter 0x118924.",
+  "confidence": 0.45,
+  "evidence": "Corrected: the two helpers it calls are the driver's suspend and resume requests (command 0x16/0x17, both analysed in this batch), not a vblank service, so 'SetVBlankEnable' named the wrong thing. NEW: the stored flag is inverted relative to the call (flag set -> resume), which is what makes this a state switch rather than a one-way setter.",
+  "previous_name": "maybe_Gfx_SetVBlankEnable",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00114514",
+  "name": "Svc_QuerySessionInfo",
+  "signature": "int Svc_QuerySessionInfo(u8 cmd, u8 * out0, u32 * out1, u32 * out2, u32 * out3)",
+  "params": {
+   "param_1": "commandByte",
+   "param_2": "out0",
+   "param_3": "out1",
+   "param_4": "out2",
+   "param_5": "out3"
+  },
+  "summary": "Sends a one-byte command (header 0x00050040, command 0x05, one normal parameter) and copies the four reply words TLS+0x88..+0x94 into the caller's four outputs; the session layer uses it to poll a session's state before sending a request.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the confident caller Svc_WaitReadyAndSendRequest (0x10CDE0) calls it with command 0xff and four outputs and only proceeds when it returns non-negative, and 0x10D388 - already named Svc_QuerySessionInfoLocked - is its second caller, i.e. the pair is the locked/unlocked query. Header 0x00050040 confirms the single-parameter command.",
+  "previous_name": "maybe_Svc_QuerySessionInfo",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00114728",
+  "name": "maybe_Svc_PollStatusFlags",
+  "signature": "void maybe_Svc_PollStatusFlags(void)",
+  "params": {},
+  "summary": "Refreshes a pair of one-byte status flags: queries commands 0x3B and 0x3C, ORs both reply bytes into 0x7AF0DC, and when the 0x13 command returns 0xC9405001 it acknowledges with the 0x3D command (both zero).",
+  "confidence": 0.45,
+  "evidence": "NEW: the two command stubs it calls (0x11FB54 = 0x3B, 0x11FADC = 0x3C) and the acknowledge pair (0x11FB90 = 0x13, 0x11FB18 = 0x3D) are all in this batch and now described by their headers, which turns the old vague 'refreshes flags' into a concrete query/acknowledge sequence. The meaning of the ORed byte is still unknown, so maybe_ stays.",
+  "previous_name": "maybe_Svc_PollStatusFlags",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00114B12",
+  "name": "maybe_Svc_ThumbFragment",
+  "signature": "void maybe_Svc_ThumbFragment(u32 arg1, u32 b, u32 c, u32 d)",
+  "params": {},
+  "summary": "Not a function start: the decoded bytes are a byte-swap idiom (rev of arg1, then stores of d at +0 and c at +0x1C/+0x20/+0x24/+0x28 of the swapped pointer) belonging to the routine that begins before this address. Kept only for coverage bookkeeping.",
+  "confidence": 0.25,
+  "evidence": "The old name ('Gfx_ThumbRoutine114B12') admitted it was a mid-function seed but still claimed a Gfx routine; the stores are the tail of the session/descriptor initialiser that ends at this address (the same region as 0x1149AA, the other mis-seeded Thumb entry in this batch). Nothing new can be recovered from the seed, so confidence stays at the 0.25 floor.",
+  "previous_name": "maybe_Gfx_ThumbRoutine114B12",
+  "previous_confidence": 0.25,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001165B4",
+  "name": "maybe_Gfx_NewRenderQueue",
+  "signature": "GfxRenderQueue* maybe_Gfx_NewRenderQueue(u32 arg1)",
+  "params": {
+   "param_1": "allocator"
+  },
+  "summary": "Allocates and initialises a 0x348-byte queue: 16 slots, each with a 0x18-byte and a 0x10-byte descriptor; the texture/handle words at +0x188/+0x18C/+0x194 are cleared and a 0.5f is stored at +0x288 in each 0xC-byte tail. Returns 0 when the allocator hook is null.",
+  "confidence": 0.45,
+  "evidence": "NEW: 16 slots with per-slot texture handles and a 0.5 float is the shape of a 16-texture-unit render state table, and the allocator hook is called through the caller-supplied vtable (+0), i.e. this is library-side allocation. The 0x348 layout is stated in the summary because that is what a modder needs; the 'render queue' label is still an interpretation, so maybe_ stays.",
+  "previous_name": "maybe_Gfx_NewRenderQueue",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00116D1C",
+  "name": "maybe_Gfx_ReleaseCommandBuffers",
+  "signature": "void maybe_Gfx_ReleaseCommandBuffers(GfxCommandList* list)",
+  "params": {
+   "param_1": "list"
+  },
+  "summary": "When the list's 'owns buffers' bit (byte +4, bit 0) is set, releases the three buffer pairs (+0x58/+0x34, +0x60/+0x3C, +0x64/+0x40) through 0x116DA4.",
+  "confidence": 0.45,
+  "evidence": "NEW: unchanged body, still no direct caller (it is reached through a vtable), but the three released (pointer, size) pairs match the command-list objects built by 0x116368/0x116430 - so the summary now names the pairs. Kept as maybe_ because the object type is inferred from the layout.",
+  "previous_name": "maybe_Gfx_ReleaseCommandBuffers",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00116DAC",
+  "name": "maybe_Game_ApplyValueToHandle",
+  "signature": "void maybe_Game_ApplyValueToHandle(u32 arg1, u8 index, int * handle, u32 value)",
+  "params": {
+   "param_2": "recordIndex",
+   "param_3": "handle",
+   "param_4": "value"
+  },
+  "summary": "Game data layer: if the caller holds a live handle, resolves the record for the given index through the data manager (0x11BAC0) and, unless that record is still in state 1, writes the value into the handle's object (0x11B530).",
+  "confidence": 0.42,
+  "evidence": "Corrected prefix: its first callee is the now-confident Game_GetDataManager, so this is the game's data layer, not the pack/file layer the old 'Pack_' prefix suggested. NEW: the record state test (+4 == 1) is the same one used by 0x116E44 and 0x11AE88, i.e. 'skip records that are still loading'.",
+  "previous_name": "maybe_Pack_HandleApplyIfLoaded",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00117078",
+  "name": "maybe_Os_SendServiceInitRequest",
+  "signature": "int maybe_Os_SendServiceInitRequest(u32 handle)",
+  "params": {
+   "param_1": "handle"
+  },
+  "summary": "Builds the request block (0x117098) and sends the fixed command 0x0863 through 0x11DED4, returning the SDK result. Called at the end of every archive load in this region.",
+  "confidence": 0.4,
+  "evidence": "Kept, with the old evidence corrected: header 0x08630000 decodes as command 0x0863 with no normal and no translated parameters, so the earlier claim of 'three normal and three handle parameters' was wrong (that decoding belongs to a different header). NEW: the three callers are 0x1114F4/0x111C58/0x111C72, the archive loaders, which check the result and abort through 0x11ED40.",
+  "previous_name": "maybe_Os_SendServiceInitRequest",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011709C",
+  "name": "maybe_Os_AssertAndGetState",
+  "signature": "u32 maybe_Os_AssertAndGetState(u32* object)",
+  "params": {
+   "param_1": "object"
+  },
+  "summary": "Asserts that *object is non-zero (routing to 0x11ED40 with 0xE0A046DB otherwise) and then returns the second word of the global at 0x7AEA38.",
+  "confidence": 0.35,
+  "evidence": "Corrected: the old name promised 'object ready', but the function only proves the pointer is non-null and then returns an unrelated global word - no readiness is tested. NEW: the returned word is the same 0x7AEA38 global the Snd_* driver code uses as its context slot, so this is an 'assert then read the driver state' helper; no caller, so maybe_ stays.",
+  "previous_name": "maybe_Os_AssertObjectReady",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00117458",
+  "name": "maybe_Gfx_BlitWorker",
+  "signature": "void maybe_Gfx_BlitWorker(int enable)",
+  "params": {},
+  "summary": "Walks the 32-bit occupancy bitmap of a render/surface table (bitmap at +0x80, count at +0x88, records at +0x7C stride 0x14) and re-submits every live record whose flags (+0x11) clear bits 0x18 and whose first word is non-zero (0x11B530).",
+  "confidence": 0.25,
+  "evidence": "Still a mis-seeded Thumb entry (functions_index says size 0x568 but the prologue is earlier), so the register-state variables in the body (unaff_r4) cannot be trusted. NEW: the record stride 0x14 and the flag bits are stated because they are readable, but the caller/owner is unknown and 'Blit' is only a guess.",
+  "previous_name": "maybe_Gfx_BlitWorker",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00117CBC",
+  "name": "Os_EventSetAll",
+  "signature": "void Os_EventSetAll(OsEvent* event)",
+  "params": {
+   "param_1": "event"
+  },
+  "summary": "Signals an event/light-lock: atomically negates the counter, and when it had waiters (old value != -1 and the new value > 0) wakes them with the kernel synchronisation call 0x11CC10.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the atomic negate + 'if it had waiters, wake with count 1' sequence is the canonical CTR event signal, and both callers (0x114E60 and 0x117E88, the unlock half of the monitor pair) use it as the wake step. The name matches the code, so the maybe_ prefix is dropped.",
+  "previous_name": "maybe_Os_EventSetAll",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00117E3C",
+  "name": "Snd_LockSystemMonitor",
+  "signature": "void Snd_LockSystemMonitor(void)",
+  "params": {},
+  "summary": "Locks the sound system's monitor: calls the sound-system accessor 0x5177DC, adds 0x34 to the returned object and falls into the monitor-lock body at 0x117E50. Its mirror 0x51864C adds the same 0x34 and branches to the monitor unlock 0x117ED0, which is what proves the pair.",
+  "confidence": 0.5,
+  "evidence": "Corrected from 'Os_Abort': 0x5177DC is not a panic routine but `ldr r0,[pc,#0x90]` into the sound-system accessor 0x5177E0 (which returns the object at 0x7F09C8 after an init assert), so nothing here aborts. NEW: its eight callers are the movie-track create/pause/start/update functions, which lock this monitor in the else branch of the movie manager's own lock, and the exact mirror 0x51864C (add 0x34, branch to 0x117ED0 = unlock) is called by the same functions for the release half.",
+  "previous_name": "maybe_Os_Abort",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001185E8",
+  "name": "maybe_Snd_QueryChannelInfo",
+  "signature": "unsigned int maybe_Snd_QueryChannelInfo(unsigned int cmd, unsigned int in, unsigned int size, unsigned short* outCount)",
+  "params": {
+   "param_1": "command",
+   "param_4": "outCount"
+  },
+  "summary": "Forwards a channel query to the driver when the session at 0x7AEA08 is open; when it is not, writes 0 to *outCount and returns the 'no session' code 0xC8A0A7F8.",
+  "confidence": 0.45,
+  "evidence": "NEW: its only caller 0x11302C (SetupChannelBuffers) calls it twice - once to ask for the buffer count and once for the size - which confirms the 'query with an output count' reading. The actual IPC goes through 0x11EBD8 (command 0x10, submits a descriptor), so maybe_ stays (the query/size wording is still inferred).",
+  "previous_name": "maybe_Snd_QueryChannelInfo",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118648",
+  "name": "maybe_Hid_GetEventObject",
+  "signature": "u32 maybe_Hid_GetEventObject(HidObject* obj, u32* out, u32 arg3, u32 b)",
+  "params": {
+   "param_1": "object",
+   "param_2": "out",
+   "param_3": "defaultValue",
+   "param_4": "arg"
+  },
+  "summary": "Stores its third argument in *out, then, if the object owns a session handle at +8, sends command 0x0C through 0x11EC40 and lets it overwrite *out with the reply. The function always returns the constant 0xC8A0A7F8 - it never returns the IPC result, so the return value carries no information.",
+  "confidence": 0.4,
+  "evidence": "Kept, with the return value corrected: the old summary implied the cached result reflects the query, but the body never assigns the IPC result to it. NEW: 0x11EC40 (command 0x0C) has this function as its only caller, so the pair is a single command wrapper; the Hid_ owner is still only an inference from the surrounding input code.",
+  "previous_name": "maybe_Hid_GetEventObject",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118788",
+  "name": "maybe_Snd_FlushChannels",
+  "signature": "void maybe_Snd_FlushChannels(void)",
+  "params": {},
+  "summary": "Per-frame flush of the active channel bank: if the 'active' byte at 0x7AEA00 is set, reconfigures the two unit records through 0x11E9C4, runs the eight registered flush callbacks, clears the flag and finally sends the per-session teardown command 0x20.",
+  "confidence": 0.45,
+  "evidence": "NEW: it walks the same eight-hook table at 0x7E7998 as 0x11ECC0 (the stop-time variant); 0x11233C walks a different one at 0x7E79B8. The closing call 0x11EBA0 and the closing call 0x11EBA0 is now known to be driver command 0x20 - so the flush/close reading holds. The 0x7AEA00 owner is still unnamed, so maybe_ stays.",
+  "previous_name": "maybe_Snd_FlushChannels",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118B58",
+  "name": "maybe_Snd_SetUnitLevel",
+  "signature": "void maybe_Snd_SetUnitLevel(ChannelBuffer* buf, u32 level)",
+  "params": {
+   "param_1": "context",
+   "param_2": "level"
+  },
+  "summary": "Writes a 32-bit level word at +0xBC of the channel block and sets bit 0x10000 in the block's unit-dirty word at +0xC0 (a different mask from the field-dirty word at +0).",
+  "confidence": 0.45,
+  "evidence": "NEW: the summary now separates the two dirty words - the family's other setters OR their bit into the word at +0 while this one ORs into +0xC0, and the same 0x10000 bit is used by 0x118D00's field write, so the two masks must not be confused. Caller 0x112CAC (restore channel state) passes the saved byte +3. Field meaning still inferred, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetUnitLevel",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118CA0",
+  "name": "maybe_Snd_SetChannelFormat",
+  "signature": "unsigned int maybe_Snd_SetChannelFormat(ChannelBuffer* buf, unsigned short format)",
+  "params": {
+   "param_1": "context",
+   "param_2": "format"
+  },
+  "summary": "Writes the halfword at +0x18 of the channel block and marks it dirty with bit 0x8000000.",
+  "confidence": 0.45,
+  "evidence": "NEW: 0x112CAC replays the saved state byte +1 through it in the order pan -> format -> length -> output -> rate -> volume, which is the standard channel-parameter order, but the ordering is the only argument for calling this field 'format'. The offset (+0x18) and the dirty bit are certain, the meaning is not.",
+  "previous_name": "maybe_Snd_SetChannelFormat",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118D00",
+  "name": "maybe_Snd_SetChannelDataAddress",
+  "signature": "void maybe_Snd_SetChannelDataAddress(ChannelBuffer* buf, unsigned int address)",
+  "params": {
+   "param_1": "context",
+   "param_2": "address"
+  },
+  "summary": "Stores a 32-bit word at +4 of the channel block and sets dirty bit 0x10000. The value arrives in a register Ghidra did not name (in_s0), so the second parameter is only implied by the ABI.",
+  "confidence": 0.4,
+  "evidence": "NEW: its only caller is 0x10C642 (also in this batch), which passes a value it has just mirrored into its own object - consistent with a buffer/sample address being published, but not proof. The damaged second argument keeps this at maybe_.",
+  "previous_name": "maybe_Snd_SetChannelDataAddress",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118DCC",
+  "name": "maybe_Snd_SetChannelAdpcmState",
+  "signature": "unsigned int maybe_Snd_SetChannelAdpcmState(ChannelBuffer* buf, int index, unsigned short value)",
+  "params": {
+   "param_1": "context",
+   "param_2": "index",
+   "param_3": "value"
+  },
+  "summary": "Writes one of the two halfwords at +0x24/+0x26 and sets the matching dirty bit: index 0 -> 0x40, index 1 -> 0x80; any other index writes the field but sets no bit.",
+  "confidence": 0.45,
+  "evidence": "NEW: 0x112CAC replays the two saved bytes +0x24/+0x25 through it, one per unit, so the two-slot indexing is confirmed. The 'ADPCM state' reading is still an inference from the bit pair 0x40/0x80 sitting in the low byte of the dirty word.",
+  "previous_name": "maybe_Snd_SetChannelAdpcmState",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00118F5C",
+  "name": "maybe_Snd_SetUnitLoopInfo",
+  "signature": "void maybe_Snd_SetUnitLoopInfo(ChannelBuffer* buf, int index)",
+  "params": {
+   "param_1": "context",
+   "param_2": "index"
+  },
+  "summary": "Stores a 32-bit word at +8 (index 0) or +0xC (index 1) of the channel block and sets dirty bit 0x1000000 or 0x2000000. The value is passed in a register Ghidra left unnamed (in_s0).",
+  "confidence": 0.4,
+  "evidence": "NEW: both callers (0x112A9C save, 0x112CAC restore) pass a saved 32-bit word per unit, so the two-slot shape holds; 'loop info' is a guess from the pair of 32-bit slots, and the dropped argument keeps this at maybe_.",
+  "previous_name": "maybe_Snd_SetUnitLoopInfo",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00119140",
+  "name": "maybe_Snd_SetChannelPan",
+  "signature": "unsigned int maybe_Snd_SetChannelPan(ChannelBuffer* buf, unsigned short pan)",
+  "params": {
+   "param_1": "context",
+   "param_2": "pan"
+  },
+  "summary": "Writes the halfword at +0x16 of the channel block and sets dirty bit 0x4000000.",
+  "confidence": 0.45,
+  "evidence": "NEW: 0x112CAC (restore) replays the saved state byte +2 through it, immediately before the format write, and 0x112D98 (SetOutputMode) copies the same field from a saved state - so it is confirmed to be a per-channel state field written from saved data. 'Pan' remains the best guess for a 16-bit field at that position between rate and volume.",
+  "previous_name": "maybe_Snd_SetChannelPan",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001191A0",
+  "name": "maybe_Snd_SetChannelVolume",
+  "signature": "void maybe_Snd_SetChannelVolume(ChannelBuffer* buf, unsigned short volume)",
+  "params": {
+   "param_1": "context",
+   "param_2": "volume"
+  },
+  "summary": "Writes the halfword at +0x10 of the channel block and sets dirty bit 0x8000.",
+  "confidence": 0.45,
+  "evidence": "NEW: the offset is +0x10 (the old summary wrote 'puVar2+4', which is the word index - worth stating correctly), and 0x112CAC replays the saved state word +0x32 through it last before the unit level. Volume/mixer level for a 16-bit field at that position is still an inference, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetChannelVolume",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011938C",
+  "name": "maybe_Gfx_GetQueueStatus",
+  "signature": "int maybe_Gfx_GetQueueStatus(int index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Reads the pending byte at +1 of the per-thread queue object selected by index (TLS+0x5C array) - a command-list busy predicate.",
+  "confidence": 0.42,
+  "evidence": "NEW: 0x113714 writes the same TLS+0x5C queue objects, so the 'per-thread queue slot' reading is confirmed; no caller exists because it is a two-instruction inline-able predicate. The owner is still unproven, so maybe_ stays.",
+  "previous_name": "maybe_Gfx_GetQueueStatus",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001193AC",
+  "name": "maybe_Os_StoreThreadLocalValue",
+  "signature": "void maybe_Os_StoreThreadLocalValue(uint32_t value, uint32_t arg2)",
+  "params": {
+   "param_1": "value",
+   "param_2": "arg2"
+  },
+  "summary": "Allocator shim: passes the per-thread block (0x11F730), the global at 0x7418D0 and the two arguments to the OS command-0x08 helper 0x11F65C.",
+  "confidence": 0.42,
+  "evidence": "NEW: the callee is now described as a command-0x08 IPC request (0x11F65C, in this batch) and the only caller is 0x1160AC (Mem_CommitAllocation), so 'the allocator publishes a per-thread value through an OS command' is confirmed; what the value means is not, hence maybe_.",
+  "previous_name": "maybe_Os_StoreThreadLocalValue",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001193DC",
+  "name": "Snd_RequestSuspend",
+  "signature": "int Snd_RequestSuspend(void)",
+  "params": {},
+  "summary": "Asks the runtime to suspend: if the runtime predicate 0x11F20C holds it sends command 0x16 with mode 0, and on success clears the runtime object's +0x30 flag; otherwise it returns the cached 'not initialised' code.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: its pair 0x119444 is called from the same place with the flag inverted, both are reached from 0x1142A0 (the suspend/resume switch), and the command-0x16 stub (0x1196F8) carries the mode byte this function supplies as 0. The two functions differ only in that flag value and in which command stub they call, which is exactly what the names claim.",
+  "previous_name": "maybe_Snd_RequestSuspend",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00119444",
+  "name": "Snd_RequestResume",
+  "signature": "int Snd_RequestResume(void)",
+  "params": {},
+  "summary": "Counterpart of Snd_RequestSuspend: if the runtime predicate holds it sends the parameterless resume command (0x17) and on success sets the runtime object's +0x30 flag.",
+  "confidence": 0.5,
+  "evidence": "Confirmed together with 0x1193DC: same structure, flag value 1 instead of 0, command 0x17 instead of 0x16, and the caller 0x1142A0 uses the two as the two branches of one switch. NEW: the flag pair (+0x30 = 0/1) is written through 0x11F584 in both.",
+  "previous_name": "maybe_Snd_RequestResume",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00119AF4",
+  "name": "maybe_Snd_SetMasterEnable",
+  "signature": "void maybe_Snd_SetMasterEnable(int enable)",
+  "params": {
+   "param_1": "enable"
+  },
+  "summary": "Switches the driver's global output on/off: enable (arg 0) requires the ready predicate 0x11E9B4 and arms the stream through 0x118814; disable (arg non-zero) requires the current flag and stops it through 0x11ECC0; the flag byte at 0x7AEA04 is then updated.",
+  "confidence": 0.45,
+  "evidence": "Kept, with the argument sense made explicit (0 = enable, non-zero = disable - the readable C only shows the two branches). NEW: its only caller 0x10CF50 is the pause/mute path of the frame driver, which fits a master on/off switch; the owner is still inferred from the 0x7AEA00 context.",
+  "previous_name": "maybe_Snd_SetMasterEnable",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00119B4C",
+  "name": "maybe_Gfx_GetEventData",
+  "signature": "void maybe_Gfx_GetEventData(u32* out8)",
+  "params": {
+   "param_1": "out8"
+  },
+  "summary": "Copies the eight words produced by 0x11F5C0 into the caller's 8-word buffer; 0x11F5C0 queries a thread-local object through 0x123508 and normalises its field bits.",
+  "confidence": 0.4,
+  "evidence": "Kept: the body is a pure 8-word copy, so 'snapshot of a status record' is confirmed, but nothing says the record is a GPU/event record - the producer 0x11F5C0 works on a TLS object and is unnamed. No caller exists to help.",
+  "previous_name": "maybe_Gfx_GetEventData",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011A7D0",
+  "name": "maybe_Hid_UpdateCalibration",
+  "signature": "void maybe_Hid_UpdateCalibration(void)",
+  "params": {},
+  "summary": "If the calibration slot at 0x11A808 is active, reads the current calibration id with command 0x13 and, when it matches the cached id at 0x11A80C, acknowledges it with command 0x3D.",
+  "confidence": 0.42,
+  "evidence": "NEW: the two commands it uses are now identified by their headers (0x11FB90 = command 0x13 reading a byte, 0x11FB18 = command 0x3D sending one), which confirms the 'read id, compare with the cached id, acknowledge' shape. That the ids are calibration data is still the HID-side reading, so maybe_ stays.",
+  "previous_name": "maybe_Hid_UpdateCalibration",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011AC6E",
+  "name": "maybe_Hid_ThumbReader",
+  "signature": "u32 maybe_Hid_ThumbReader(void)",
+  "params": {},
+  "summary": "Mis-seeded Thumb entry inside the HID reader: the real prologue is before this address, so the decoded body (Ghidra's literal 'return 0x4C') is not the function. The surrounding code reads HID shared memory and 0x11AD3C is the pad reader.",
+  "confidence": 0.25,
+  "evidence": "Kept: nothing in the new context changes the fact that this address is not a function start (functions_index claims 0x13E Thumb bytes that overlap the preceding routine). The name at least says 'Thumb seed, not a function', which is the useful information.",
+  "previous_name": "maybe_Hid_ThumbReader",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011AE5C",
+  "name": "Container_ListAppend",
+  "signature": "void Container_ListAppend(List* list, void* node)",
+  "params": {
+   "param_1": "list",
+   "param_2": "node"
+  },
+  "summary": "Appends a node to an intrusive list: splices it after the current tail (0x11AE18) and patches the list head/tail (0x11FE24).",
+  "confidence": 0.5,
+  "evidence": "Confirmed: its only caller 0x114C58 is the slot-release routine that 0x10F050 (small-set remove) uses, i.e. freed slots are put back on a free list with this append - which matches the pointer patching the body performs. The name describes exactly what the code does.",
+  "previous_name": "maybe_Container_ListAppend",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011B212",
+  "name": "maybe_Hid_NormalizeAxis",
+  "signature": "int maybe_Hid_NormalizeAxis(u32 arg1, u32 max, u32 arg3, int value)",
+  "params": {
+   "param_2": "max",
+   "param_4": "value"
+  },
+  "summary": "Circle-pad normalisation: clamps one axis against the deadzone/range, builds the squared sum with the other component, takes the integer square root and scales both outputs by 0x80 (signed divide 0x11CD80); returns the radius.",
+  "confidence": 0.42,
+  "evidence": "Still damaged: the body writes its two results through registers Ghidra could not name (unaff_r9/unaff_r10) and is only 24 bytes according to the index, so the parameter list is unreliable. NEW: the sqrt/scale arithmetic is in the summary because it is readable, but the HID ownership remains an inference.",
+  "previous_name": "maybe_Hid_NormalizeAxis",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011B534",
+  "name": "maybe_Hid_SetVibration",
+  "signature": "void maybe_Hid_SetVibration(HidVibration* vib, u32 pattern)",
+  "params": {
+   "param_1": "vib",
+   "param_2": "pattern"
+  },
+  "summary": "Programs a vibration pattern: keeps the larger of the two float arguments at +0xB8 and the other at +0xBC, stores the pattern at +0xC0 and zeroes the phase counter at +0xC4; 0x11CBD4 snaps both floats to the hardware range.",
+  "confidence": 0.45,
+  "evidence": "Kept: the float arguments still arrive in VFP registers (in_s0/in_s1), so the parameter list is inferred, and 'vibration' is read from the +0xB8..+0xC4 layout rather than proved. NEW context adds nothing - the body is unchanged and has no callers.",
+  "previous_name": "maybe_Hid_SetVibration",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011B7EC",
+  "name": "maybe_Os_EnsureInitialized",
+  "signature": "u32 maybe_Os_EnsureInitialized(void)",
+  "params": {},
+  "summary": "One-time initialiser whose body Ghidra merged into its neighbour (no readable C file exists): if the flag at 0x7AECE0 is clear it calls 0x11B958 and the runtime check 0x10009C, then returns the cached object at 0x7E8320.",
+  "confidence": 0.35,
+  "evidence": "Kept, with the one new fact that can be stated: 0x10009C is the routine every other 'is this initialised?' guard in this region calls (0x106F04, 0x1109DC, 0x1142A0 all route their failure case there), so it is an init/abort check, not an initialiser. There is still no readable body (status 'covered_by'), so the name stays maybe_.",
+  "previous_name": "maybe_Os_EnsureInitialized",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011C818",
+  "name": "maybe_Os_ThreadExit",
+  "signature": "void maybe_Os_ThreadExit(u32 arg1, u32 arg2, u32* cleanup)",
+  "params": {
+   "param_3": "cleanupCallback"
+  },
+  "summary": "Thread-entry cleanup: if a cleanup callback is registered it clears the slot and calls it with six arguments (five zeros and arg2), then issues svc 0x3C and does not return on the normal path.",
+  "confidence": 0.45,
+  "evidence": "Kept: the call-then-svc shape and the dead return still match a thread trampoline, and nothing in the new context identifies the svc number. The six-argument call is worth stating because it does not match the usual one-argument cleanup hook, which is part of why the name stays maybe_.",
+  "previous_name": "maybe_Os_ThreadExit",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011CF9C",
+  "name": "maybe_Gfx_FinalizeSubsystem",
+  "signature": "void maybe_Gfx_FinalizeSubsystem(void)",
+  "params": {},
+  "summary": "20-byte thunk: calls the sub-initialiser 0x115E68 with argument 0. 0x115E68 is one of the four sub-initialisers Gfx_InitSubsystems (0x110698) uses, so a 0 argument selects its 'all/finalise' mode.",
+  "confidence": 0.4,
+  "evidence": "Corrected: the old name picked 'textures' out of four possible sub-initialisers with nothing in the body to support it - the only argument is the literal 0. NEW: 0x115E68 is now known to be one of the four sub-initialisers of the renderer init path, so this is that subsystem's finalise call; which subsystem is still unnamed.",
+  "previous_name": "maybe_Gfx_FinalizeTextures",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011DED4",
+  "name": "maybe_Os_IpcCmd0863",
+  "signature": "int maybe_Os_IpcCmd0863(u32* handle, u32* out)",
+  "params": {
+   "param_1": "sessionHandle",
+   "param_2": "out"
+  },
+  "summary": "Sends the fixed command 0x0863 (header 0x08630000: no normal and no translated parameters) on the session in *handle, and on success copies the reply word at TLS+0x88 to *out.",
+  "confidence": 0.45,
+  "evidence": "Renamed from 'ServiceInitWithHandle' to the command it actually sends, because the header has no parameters at all and nothing in the body mentions a service initialisation. NEW: its only caller is 0x117078, the archive-load tail call, so the pair is 'build a request block, send command 0x0863' - the old 'three normal and three handle parameters' description of that command was wrong.",
+  "previous_name": "maybe_Os_IpcServiceInitWithHandle",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011E63C",
+  "name": "maybe_Os_WaitSemaphore",
+  "signature": "void maybe_Os_WaitSemaphore(int* sem)",
+  "params": {
+   "param_1": "semaphore"
+  },
+  "summary": "Counted semaphore wait with owner hand-off: while the counter is negative it decrements and arbitrates through 0x11CC10, and when the count turns positive it flips the sign back and returns; the positive branch flips the sign and returns immediately.",
+  "confidence": 0.45,
+  "evidence": "Kept: the negative-count-is-waiters convention and the 0x11CC10 arbitration call are the CTR semaphore pattern, and the same primitive appears in 0x117EF0/0x117F5C (the signal side). The body is a five-level nested loop with no caller, so the name stays maybe_.",
+  "previous_name": "maybe_Os_WaitSemaphore",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011EAB4",
+  "name": "Svc_IpcCmd1100C2Read",
+  "signature": "int Svc_IpcCmd1100C2Read(int* session, u32 arg2, int b, u16 c, u16 d, u8* out)",
+  "params": {
+   "param_1": "session",
+   "param_6": "out"
+  },
+  "summary": "Sends command 0x11 with three normal and two translated parameters (header 0x001100C2) and copies the reply byte at TLS+0x88 to *out; returns the reply word at TLS+0x84.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the header 0x001100C2 and the descriptor b<<4|10 are both in the body, matching the name's command id and parameter counts. NEW: its three callers (0x11E940, 0x11E98E, 0x11E9C4) are the driver's query/submit helpers, all in the same 0x11E9xx block, so this is one command of one session.",
+  "previous_name": "maybe_Svc_IpcCmd1100C2Read",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011EB14",
+  "name": "Svc_IpcCmd20040",
+  "signature": "int Svc_IpcCmd20040(int* session, u16 value, u8* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_3": "out"
+  },
+  "summary": "Sends command 0x02 with one normal parameter (header 0x00020040) and copies the reply byte at TLS+0x88 to *out.",
+  "confidence": 0.5,
+  "evidence": "Confirmed as a command stub: header 0x00020040 and the reply copy are in the body and the name states exactly that. There are still no callers, so which service owns the session remains open - which the name does not claim.",
+  "previous_name": "maybe_Svc_IpcCmd20040",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011EBD8",
+  "name": "maybe_Snd_SendIpcBuffer",
+  "signature": "int maybe_Snd_SendIpcBuffer(unsigned int* session, unsigned int value, unsigned int zero, unsigned int address, unsigned short size, unsigned short* outSize)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_4": "address",
+   "param_5": "size",
+   "param_6": "outSize"
+  },
+  "summary": "Submits a buffer descriptor: header 0x001000C0 (command 0x10, three normal parameters), then it temporarily overwrites the thread's two translated-descriptor words at +0x180 with size<<14|2 and the address, sends svc 0x32, restores both words and copies the reported size back.",
+  "confidence": 0.45,
+  "evidence": "Kept, with the header corrected: the literal is 0x001000C0 (three normal parameters), not the 'size packed into the header' the old summary implied - the size goes into the descriptor word at +0x180, which is why the two words are saved and restored. NEW: its only caller 0x1185E8 (QueryChannelInfo) passes the count it wants back, so 'submit a buffer and report the size' holds.",
+  "previous_name": "maybe_Snd_SendIpcBuffer",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011EC40",
+  "name": "Svc_IpcCmdC0040",
+  "signature": "int Svc_IpcCmdC0040(int* session, u32 arg2, u32* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_3": "out"
+  },
+  "summary": "Sends command 0x0C with one normal parameter (header 0x000C0040) and copies the reply word at TLS+0x88 to *out.",
+  "confidence": 0.5,
+  "evidence": "Confirmed as a command stub by its header and reply copy. NEW: its only caller 0x118648 (a HID-side wrapper) ignores the returned result and only uses the reply word, which is consistent with a plain query.",
+  "previous_name": "maybe_Svc_IpcCmdC0040",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011EC7C",
+  "name": "Svc_IpcCmd10040",
+  "signature": "int Svc_IpcCmd10040(int* session, u16 value, u16* out)",
+  "params": {
+   "param_1": "session",
+   "param_2": "value",
+   "param_3": "out"
+  },
+  "summary": "Sends command 0x10 with one normal parameter (header 0x00100040) and copies the reply halfword at TLS+0x88 to *out.",
+  "confidence": 0.5,
+  "evidence": "Confirmed as a command stub by its header and reply copy. NEW observation worth recording: the same command id 0x10 also appears in 0x11EBD8 but with three normal parameters, so the two must target different services (each takes its session from the caller's object).",
+  "previous_name": "maybe_Svc_IpcCmd10040",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011ECC0",
+  "name": "maybe_Snd_FlushChannelsOnStop",
+  "signature": "void maybe_Snd_FlushChannelsOnStop(void)",
+  "params": {},
+  "summary": "The 'stop' entry of the channel flush: clears the active byte at 0x7AEA00, and if a flush is pending submits the final unit configuration (0x11E9C4), runs the eight registered callbacks, clears the pending byte and sends the session command 0x20.",
+  "confidence": 0.45,
+  "evidence": "Corrected: the body is the same flush sequence as 0x118788 (Snd_FlushChannels) - same context 0x7AEA00, same 0x11E9C4 call, same eight-callback table at 0x7E7998, same closing command 0x20 - so it is not an 'interrupt relay'. NEW: its only caller is 0x119AF4 (SetMasterEnable) in the disable branch, which is what makes this the stop-time variant.",
+  "previous_name": "maybe_Gfx_ProcessInterruptRelay",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0011EE0C",
+  "name": "maybe_Container_ObjectDtor",
+  "signature": "void maybe_Container_ObjectDtor(ContainerObject* self)",
+  "params": {
+   "param_1": "self"
+  },
+  "summary": "Base-class destructor of the refcounted object family: installs the base vtable 0x11EE68, frees the two heap-owned members at +0x0C and +0x10 and clears the singly linked node list at +0x10.",
+  "confidence": 0.45,
+  "evidence": "NEW: its callers are now named - 0x6E75FC and 0x6E76B0 are the script engine's table/value destructors (they install derived vtables and tail-call this), and 0x505780 is a multiple-inheritance destructor that adjusts its pointer by -0x3C/-0xB8 first. So the object is a shared refcounted base used by both the script VM and game objects, not a container. The free calls lost their arguments in the readable C (func_0011C814() with none), which is why the name keeps maybe_.",
+  "previous_name": "maybe_Container_ObjectDtor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011F6C0",
+  "name": "maybe_Snd_SendIpcStatus",
+  "signature": "int maybe_Snd_SendIpcStatus(unsigned int* session, unsigned int handle, unsigned int flags, unsigned int* out0, unsigned int* out1)",
+  "params": {
+   "param_1": "session",
+   "param_2": "handle",
+   "param_3": "flags",
+   "param_4": "out0",
+   "param_5": "out1"
+  },
+  "summary": "Status query with header 0x00130042 (command 0x13, one normal and two translated words): stores the handle and flags, sends svc 0x32, and on success writes TLS+0x88 to *out1 and TLS+0x90 to *out0 - note the outputs are swapped relative to the parameter order.",
+  "confidence": 0.42,
+  "evidence": "Kept: the body is a plain two-reply query, so 'status' is a fair label, but nothing identifies the service. NEW: the reply/parameter swap and the exact header are now stated, and the only caller (0x119498) passes a transfer size and flags - the old 'audio layer' attribution is still only inferred from that caller.",
+  "previous_name": "maybe_Snd_SendIpcStatus",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011FADC",
+  "name": "Svc_QueryStatus3C",
+  "signature": "int Svc_QueryStatus3C(u8 * out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Parameterless IPC query with header 0x3C0000 (command 0x3C) on the fixed session at 0x7B0054; on success writes the reply byte at TLS+0x88 to *out and returns the status word.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the header 0x3C0000 is in the body and the name states exactly that. NEW: its only caller 0x114728 ORs this byte together with the one from 0x11FB54 (command 0x3B), so the two are the two halves of one status byte - which is why keeping the command id in the name is more useful than inventing a meaning.",
+  "previous_name": "maybe_Svc_QueryStatus3C",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0011FB54",
+  "name": "Svc_QueryStatus3B",
+  "signature": "int Svc_QueryStatus3B(u8 * out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Parameterless IPC query with header 0x3B0000 (command 0x3B, written as the literal 0x3AFFF4+0xC) on the fixed session at 0x7B0054; writes the reply byte at TLS+0x88 to *out.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the header value 0x3B0000 is computed from the neighbouring string literal plus 0xC, and the name states it. NEW: it is the second half of the pair ORed together by 0x114728 (the other is command 0x3C), which confirms the two are one status query.",
+  "previous_name": "maybe_Svc_QueryStatus3B",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0012033C",
+  "name": "maybe_Gfx_CmdList_ResetSlot",
+  "signature": "void maybe_Gfx_CmdList_ResetSlot(u32 index)",
+  "params": {
+   "param_1": "index"
+  },
+  "summary": "Marks a command-list slot free: resolves the slot for the index with 0x120368 between two calls to the lock helper 0x12032C and stores -1 into the 0x98-byte slot header.",
+  "confidence": 0.35,
+  "evidence": "Kept: the two calls to 0x12032C bracket the slot lookup, so they are a lock/unlock pair (the same helper serves both directions), and the -1 store marks the slot free. NEW: no caller and no other user of 0x120368, so the command-list ownership is still inferred from the neighbouring 0x1200xx block.",
+  "previous_name": "maybe_Gfx_CmdList_ResetSlot",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001228FC",
+  "name": "maybe_Os_IpcCmd0BGetThreadValue",
+  "signature": "int maybe_Os_IpcCmd0BGetThreadValue(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Thread-side query: sends command 0x0B (header 0xB0000, no parameters) on the session at 0x7B2D2C and, on success, writes the second reply word (TLS+0x8C) to *out.",
+  "confidence": 0.45,
+  "evidence": "Corrected: the command byte is the only thing that distinguishes this from its twin 0x123C9C (command 0x0A), and their callers are the current-thread and current-process handle getters (0x11DF0C / 0x122440) - so the pair is the thread/process variant of one query, not a generic 'thread local value'. Still maybe_ because what the word means is not visible.",
+  "previous_name": "maybe_Os_GetThreadLocalValue",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00122E78",
+  "name": "maybe_Snd_SetChannelMode",
+  "signature": "unsigned int maybe_Snd_SetChannelMode(SndMixer* mixer, int channel, int mode, unsigned char priority)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "mode",
+   "param_4": "priority"
+  },
+  "summary": "Sets a channel's play mode (byte at +0xE) and, when the mode is 0 (stopped), its priority (+0x39), then marks the channel block dirty with bit 0x20000. Uses the second channel table (selector +0x131E, pointers at +0x10B4), not the +0x1322/+0x10A4 table the field setters use.",
+  "confidence": 0.45,
+  "evidence": "NEW: the two parallel channel tables are now distinguished - the field setters use selector 0x1322 with pointers at +0x10A4, while this and 0x122EF8/0x122F74/0x123000/0x123070/0x1230E8/0x123174 use 0x131E with +0x10B4 - which matters for anyone reading the offsets. Caller 0x11EE78 passes mode 0/1/2, supporting the 'play mode' reading, but it stays maybe_.",
+  "previous_name": "maybe_Snd_SetChannelMode",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00122EF8",
+  "name": "maybe_Snd_SetChannelWord34",
+  "signature": "unsigned int maybe_Snd_SetChannelWord34(SndMixer* mixer, int channel, unsigned int value)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "value"
+  },
+  "summary": "Stores a 32-bit word at +0x34 of the channel block and marks it dirty with bit 0x40000. The only caller (0x11EE78) computes the value before the call, so it is a caller-supplied parameter rather than a fixed constant.",
+  "confidence": 0.42,
+  "evidence": "Corrected: 'Param1' named nothing at all. The offset (+0x34), the dirty bit (0x40000) and the fact that the caller supplies the value are the only facts, so the name now states the offset; the old evidence called the argument a 'gain', but the 0x11EE78 call site does not prove that.",
+  "previous_name": "maybe_Snd_SetChannelParam1",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00122F74",
+  "name": "maybe_Snd_SetChannelWaveData",
+  "signature": "unsigned int maybe_Snd_SetChannelWaveData(SndMixer* mixer, int channel, unsigned int* data)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "data"
+  },
+  "summary": "Copies 0x20 bytes from the caller's descriptor into the channel's wave slot (table at +0x1234 selected by the +0x1322 double-buffer index) and sets dirty bit 4.",
+  "confidence": 0.48,
+  "evidence": "NEW: the source table +0x1234 is the same one 0x11302C (SetupChannelBuffers) lays out, and the 0x20-byte copy matches the per-buffer descriptor size, so 'copy the wave/buffer descriptor into this channel' is now supported by two sites rather than one. Only the word 'wave' remains a label, so maybe_ stays.",
+  "previous_name": "maybe_Snd_SetChannelWaveData",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123000",
+  "name": "maybe_Snd_SetChannelWord3A",
+  "signature": "unsigned int maybe_Snd_SetChannelWord3A(SndMixer* mixer, int channel, unsigned short value)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "value"
+  },
+  "summary": "Stores a 16-bit value at +0x3A of the channel block and marks it dirty with bit 0x400000.",
+  "confidence": 0.42,
+  "evidence": "Corrected: 'Param2' named nothing. The offset (+0x3A), the width (16-bit) and the dirty bit (0x400000) are the facts; the single caller (0x11EE78) passes a value it has just computed, so no field meaning can be attached.",
+  "previous_name": "maybe_Snd_SetChannelParam2",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00123070",
+  "name": "maybe_Snd_SetChannelLoopPoints",
+  "signature": "unsigned int maybe_Snd_SetChannelLoopPoints(SndMixer* mixer, int channel, unsigned short start, unsigned short end)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "start",
+   "param_4": "end"
+  },
+  "summary": "Writes a byte at +0xF and a halfword at +0x3E of the channel block and marks it dirty with bit 0x800000.",
+  "confidence": 0.45,
+  "evidence": "Kept: the paired position write (one byte plus one halfword, one dirty bit) still reads like a loop start/end pair, and the single caller (0x11EE78) supplies both values. The offsets are now stated explicitly, which is the only hard evidence.",
+  "previous_name": "maybe_Snd_SetChannelLoopPoints",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001230E8",
+  "name": "maybe_Snd_SetChannelAdpcmParams",
+  "signature": "unsigned int maybe_Snd_SetChannelAdpcmParams(SndMixer* mixer, int channel, unsigned short a, unsigned short b, unsigned short c, unsigned short d, unsigned short e)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel"
+  },
+  "summary": "Writes five consecutive fields of the channel block (+0x40, +0x42, +0x44, +0x46 and the byte at +0x45) and marks it dirty with bit 0x1000000.",
+  "confidence": 0.45,
+  "evidence": "Kept: five consecutive 16-bit fields written together is the shape of a decoder parameter block, and 'ADPCM' is the best candidate for a block that also has ADPCM state fields at +0x24/+0x26. NEW: the exact field offsets are now listed (the old summary said +0x40..+0x46 without saying which were bytes), and the parameter names were de-invented.",
+  "previous_name": "maybe_Snd_SetChannelAdpcmParams",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123174",
+  "name": "Snd_SetChannelMatrix",
+  "signature": "void Snd_SetChannelMatrix(SndMixer* mixer, SndChannel* channel)",
+  "params": {
+   "param_1": "channelState",
+   "param_2": "unused"
+  },
+  "summary": "Scales the twelve coefficients at +0x0E..+0x19 of the caller's channel state by the scalar at +0x1A and hands the 3x4 result to the matrix writer 0x124050.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: twelve multiplications by one scalar followed by a call to the (now analysed) 12-word matrix writer is exactly 'scale the channel matrix by its gain', and its only caller 0x11EE78 passes the channel state it has just updated. The parameter list in the old signature was wrong (the second argument is unused), which the summary now says.",
+  "previous_name": "maybe_Snd_SetChannelMatrix",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00123564",
+  "name": "Snd_DetachChannel",
+  "signature": "void Snd_DetachChannel(SndMixer* mixer, SndChannel* channel)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel"
+  },
+  "summary": "Detaches a channel from the mixer's list: unlinks its list node at +0x110 (0x11FCBC) and clears the active word at +0x18. The mirror of the priority insert 0x11FD1C.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the callee 0x11FCBC is the list-link helper whose counterpart 0x11FD1C inserts by priority, and the only caller 0x546EA0 is the voice-release path that detaches the voice from its source/decoder/queue - so 'detach this channel' is what the code does. The old 0.30 reflected the missing caller, which now exists.",
+  "previous_name": "maybe_Snd_DetachChannel",
+  "previous_confidence": 0.3,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001237A0",
+  "name": "maybe_Os_Timer_ConvertTicks",
+  "signature": "void maybe_Os_Timer_ConvertTicks(s64* outMs, int stem, s64 ticksA, int stemB, u32 perSecond, int scale)",
+  "params": {
+   "param_1": "outMs"
+  },
+  "summary": "Converts a 64-bit tick delta to milliseconds: subtracts the two 64-bit stamps, scales by the per-second factor, converts through the double helper 0x124ACC, rounds with 0x125034 and stores value*1000. The 0x20C49BA5E353F7CF magic constant is the multiplicative inverse of 1000.",
+  "confidence": 0.42,
+  "evidence": "Kept: the 1000-inverse magic and the final multiply by 1000 support 'ticks to milliseconds', but the argument list is a guess (the stamps arrive as register pairs) and the only caller is 0x122484. NEW context adds nothing beyond confirming the caller.",
+  "previous_name": "maybe_Os_Timer_ConvertTicks",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123B68",
+  "name": "maybe_Os_Timer_RefreshHandle",
+  "signature": "void maybe_Os_Timer_RefreshHandle(u32* handleOut)",
+  "params": {
+   "param_1": "handleOut"
+  },
+  "summary": "Replaces a kernel handle: queries command 0x0C into a local word, closes the handle previously stored in *handleOut (svc 0x23 = close handle), then stores the new value there. Errors go to the assert reporter 0x11ED40.",
+  "confidence": 0.45,
+  "evidence": "Corrected: the old 'ReadCounter' described only the query half. The body closes the value already in *out before overwriting it, so the output is a handle that is being swapped, not a counter being read. NEW: the query it calls (0x124CA0) is now identified as command 0x0C with a two-word reply.",
+  "previous_name": "maybe_Os_Timer_ReadCounter",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00123BB0",
+  "name": "maybe_Snd_CreateChannelBuffers",
+  "signature": "int maybe_Snd_CreateChannelBuffers(unsigned int width, unsigned int height, char* mode)",
+  "params": {
+   "param_1": "width",
+   "param_2": "height",
+   "param_3": "mode"
+  },
+  "summary": "Creates the pair of buffers: when *mode is 0 it rounds both dimensions up (+4 below 0x40, +5 above, minimum 8), calls the buffer setup 0x122200 with the shared block sizes, and on failure calls 0x122484 and the session finaliser.",
+  "confidence": 0.4,
+  "evidence": "Kept: the +4/+5 rounding with an 8-byte minimum is buffer-size arithmetic and the two calls are the create/finish pair, but neither call is named yet (0x122484 is also called by the performance-sampling loop, so it is a generic 'finish' step, not necessarily buffer-specific). The owner stays an inference, so maybe_ stays.",
+  "previous_name": "maybe_Snd_CreateChannelBuffers",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123C9C",
+  "name": "maybe_Os_IpcCmd0AGetProcessValue",
+  "signature": "int maybe_Os_IpcCmd0AGetProcessValue(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Process-side query: sends command 0x0A (header 0xA0000, no parameters) on the session at 0x7B2D2C and, on success, writes the second reply word (TLS+0x8C) to *out.",
+  "confidence": 0.45,
+  "evidence": "Corrected: this is the exact twin of 0x1228FC (command 0x0B) and its caller is the current-process handle getter (0x122440) while 0x1228FC's caller is the thread one, so the pair is the process/thread variant of one query rather than a 'process-local value'. Still maybe_ because the returned word's meaning is not visible.",
+  "previous_name": "maybe_Os_GetProcessLocalValue",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00123FAE",
+  "name": "maybe_Os_MainRamRangeFragment",
+  "signature": "u32 maybe_Os_MainRamRangeFragment(u32 addr)",
+  "params": {},
+  "summary": "Not a function start: the address lies 0x196 bytes inside 0x123E18 (the main-RAM address translator) and repeats its bounds compare plus the 'base + addr' return. It only appears in the batch because a 0xB5xx halfword matched the Thumb-push scan.",
+  "confidence": 0.3,
+  "evidence": "Corrected wording: the old name claimed a separate 'range B' entry point, but there is no branch target or data pointer to this address - it is interior code of 0x123E18. The body also depends on caller registers (unaff_r5, in_CY), which confirms it is a fragment.",
+  "previous_name": "maybe_Os_TranslateMainRamRangeB",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00124050",
+  "name": "Snd_WriteChannelMatrix",
+  "signature": "unsigned int Snd_WriteChannelMatrix(SndMixer* mixer, int channel, unsigned int* matrix)",
+  "params": {
+   "param_1": "mixer",
+   "param_2": "channel",
+   "param_3": "matrix"
+  },
+  "summary": "Copies twelve 32-bit words (three groups of four, from matrix-2, matrix+0xE and matrix+0x1E) into the channel block at +2, +0x12 and +0x22, then marks the block dirty with 0xE000000.",
+  "confidence": 0.5,
+  "evidence": "Confirmed: three four-word copy loops into three consecutive 0x10-byte slots is a 3x4 transform write, and its only caller 0x123174 scales exactly twelve coefficients before calling it. NEW: the odd source offsets (-2, +0xE, +0x1E) are now stated, because they are what a reimplementation has to match.",
+  "previous_name": "maybe_Snd_WriteChannelMatrix",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00124CA0",
+  "name": "Os_IpcQueryCommand0C",
+  "signature": "int Os_IpcQueryCommand0C(u32* out)",
+  "params": {
+   "param_1": "out"
+  },
+  "summary": "Parameterless IPC query with header 0x000C0000 (command 0x0C) on the fixed session at 0x7B2D2C; on success copies the second reply word (TLS+0x8C) to *out and returns the first (TLS+0x84).",
+  "confidence": 0.5,
+  "evidence": "Confirmed: the header 0x000C0000 and the two reply words are in the body, and the name states exactly that. NEW: its only caller 0x123B68 uses the pair as 'new handle + status' while swapping a stored handle, which is consistent with a handle/query command.",
+  "previous_name": "maybe_Os_IpcQueryCommand0C",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00125098",
+  "name": "maybe_std_UnwindPersonalityRoutine",
+  "signature": "u32 maybe_std_UnwindPersonalityRoutine(void* state, void* ucb, void* context)",
+  "params": {
+   "param_1": "state",
+   "param_2": "ucb",
+   "param_3": "context"
+  },
+  "summary": "ARM EHABI personality routine: calls the unwind bytecode interpreter 0x1250BC, whose inline opcode words follow the call site, and returns an unwind reason code. The whole 0x125098-0x125738 region is C++ exception support, not game code.",
+  "confidence": 0.48,
+  "evidence": "Kept: the 'push {r4,lr}; bl 0x1250BC; .word 0x806DB6DB' sequence with inline unwind opcodes is the EHABI personality shape, and 0x723E7C/0x723EF0 also call 0x1250BC at the end of .text. NEW: Ghidra cannot decompile past the inline data (halt_baddata), so the body cannot be verified further - the name is as good as it gets.",
+  "previous_name": "maybe_std_UnwindPersonalityRoutine",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00125D84",
+  "name": "maybe_std_CopyPointerListAndSync",
+  "signature": "u32 maybe_std_CopyPointerListAndSync(u32* desc, u32* out)",
+  "params": {
+   "param_1": "descriptor",
+   "param_2": "out"
+  },
+  "summary": "Copies a count-driven array of double-dereferenced pointers (desc[1] holds the array, desc[2] the count) into the caller's buffer; for a count of exactly one it instead clears the first word and issues svc 0x24 (wait for one handle).",
+  "confidence": 0.4,
+  "evidence": "Kept: the two-pass unrolled copy and the special count==1 path (svc 0x24) are readable, but the descriptor layout is only inferred from the offsets and there is no caller. NEW context adds nothing - the neighbours are the unwinder fragments, so the std_ prefix is the only safe family.",
+  "previous_name": "maybe_std_CopyPointerListAndSync",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00126B0C",
+  "name": "maybe_Video_ConvertBlocks32_SamePlane",
+  "signature": "u64 maybe_Video_ConvertBlocks32_SamePlane(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "In-place colour/format conversion over four lanes 0x400 bytes apart: reads 8 packed bytes per step from src+0x2000, combines them with saturating 8-bit difference/average arithmetic and the two per-channel constants at +0x10/+0x14, and writes the result back to the same buffer.",
+  "confidence": 0.45,
+  "evidence": "NEW: the 'same plane' half is now confirmed by the dispatcher 0x12A84C, which selects this routine only when the context's two leading words are equal and the three-plane variant 0x129EF4 otherwise. The '32' in the name is not confirmed - the routine advances 8 bytes per step with 0x100-byte lane spacing - so maybe_ stays.",
+  "previous_name": "maybe_Video_ConvertBlocks32_SamePlane",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00126EF4",
+  "name": "maybe_Video_ConvertBlocks32_A",
+  "signature": "void* maybe_Video_ConvertBlocks32_A(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Second stage of the conversion, always run: reads 8 packed bytes per step from four lanes 0x400 apart starting at src+0x2000, converts them with saturating difference/average arithmetic and the per-channel constants, and writes backwards into four lanes at 0x408/0x808/0xC08.",
+  "confidence": 0.45,
+  "evidence": "NEW: both dispatchers (0x12A81C and 0x12A84C) call it unconditionally after their selected variant, so 'the common second stage' is confirmed - the old summary already said 'variant A of three', which is misleading. Byte-identical twins at 0x12AC6C and 0x12E9E4 remain the reason the _A/_B/_C suffix exists.",
+  "previous_name": "maybe_Video_ConvertBlocks32_A",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0012762C",
+  "name": "maybe_Video_ConvertBlocks16_A",
+  "signature": "void* maybe_Video_ConvertBlocks16_A(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Same conversion on 16-byte blocks: reads six lanes 0x100 apart, averages neighbouring bytes and saturates the differences, with an outer count of f_c-8. Selected by the dispatcher 0x12A81C when the context's two pointers are equal.",
+  "confidence": 0.45,
+  "evidence": "NEW: the selection condition is now read from the dispatcher (0x12A81C picks this when *self == self[1], and the plane variant 0x1290A0 otherwise), which confirms it is the 'in place, one plane' member of the family. Twin at 0x12B3A4.",
+  "previous_name": "maybe_Video_ConvertBlocks16_A",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001281E0",
+  "name": "maybe_Video_ConvertBlocks32B_A",
+  "signature": "void* maybe_Video_ConvertBlocks32B_A(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Third member of the conversion family: same four-lane read/write pattern with an outer count of f_c (not f_c-8) and a different byte unpack; always invoked by the dispatcher 0x12A81C.",
+  "confidence": 0.45,
+  "evidence": "NEW: it is the unconditional tail of 0x12A81C (so it always runs after the selected 16-byte/plane variant), which is the same role 0x126EF4 plays for 0x12A84C. Twin at 0x12BF58.",
+  "previous_name": "maybe_Video_ConvertBlocks32B_A",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001290A0",
+  "name": "maybe_Video_ConvertPlanes4_A",
+  "signature": "void* maybe_Video_ConvertPlanes4_A(ConvertArg* descriptor)",
+  "params": {
+   "param_1": "descriptor"
+  },
+  "summary": "Plane-oriented member of the conversion family: takes an explicit descriptor (source, destination, length, plane count), loops four times over the plane pointers and converts each plane with the same saturating colour arithmetic. Selected by 0x12A81C when the two pointers differ.",
+  "confidence": 0.45,
+  "evidence": "NEW: the descriptor's four fields and the 'iVar81 = 4' plane loop are confirmed by the body, and the dispatcher condition (pointers differ) is now known, which is what makes this the 'separate buffers' variant. Twin at 0x12CE18.",
+  "previous_name": "maybe_Video_ConvertPlanes4_A",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00129EF4",
+  "name": "maybe_Video_ConvertPlanes3_A",
+  "signature": "void* maybe_Video_ConvertPlanes3_A(ConvertArg* descriptor)",
+  "params": {
+   "param_1": "descriptor"
+  },
+  "summary": "Sibling of 0x1290A0 with the same four-field descriptor and 4x-unrolled plane loop; selected by the second dispatcher 0x12A84C (the 'pointers are equal' branch).",
+  "confidence": 0.45,
+  "evidence": "NEW: the two dispatchers are now fully read - 0x12A81C pairs 0x12762C with 0x1290A0, and 0x12A84C pairs 0x126B0C with this one - so the 'sibling' wording is confirmed and the 3-vs-4 plane numbering in the names is the only unproven part. Twin at 0x12DC6C.",
+  "previous_name": "maybe_Video_ConvertPlanes3_A",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0012A81C",
+  "name": "maybe_Video_ConvertSelect_A",
+  "signature": "void maybe_Video_ConvertSelect_A(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Dispatcher of the first conversion family: when the context's two leading pointers differ it runs the plane variant 0x1290A0, otherwise the 16-byte block variant 0x12762C, and then always runs the common 32-byte stage 0x1281E0.",
+  "confidence": 0.45,
+  "evidence": "NEW: all three targets are in this batch and their bodies confirm the pairing, so the dispatcher's structure is now fully known; the name keeps maybe_ only because 'A' is a copy index, not a meaning. Twin at 0x12E594 and 0x13230C.",
+  "previous_name": "maybe_Video_ConvertSelect_A",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0012A84C",
+  "name": "maybe_Video_ConvertSelectB_A",
+  "signature": "void maybe_Video_ConvertSelectB_A(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "Dispatcher of the second conversion family: picks the 8-byte in-place variant 0x126B0C or the three-plane variant 0x129EF4 on the same 'pointers differ' test, then always runs the 32-byte stage 0x126EF4.",
+  "confidence": 0.45,
+  "evidence": "NEW: same reasoning as 0x12A81C - both targets are analysed in this batch, and the literal pool at 0x12A87C holds the two dispatcher addresses 0x12A81C/0x12A84C, confirming the pair is published together as a vtable/table entry. Twin at 0x12E5C4 and 0x13233C.",
+  "previous_name": "maybe_Video_ConvertSelectB_A",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0012A884",
+  "name": "maybe_Video_ConvertBlocks8_B",
+  "signature": "void* maybe_Video_ConvertBlocks8_B(ConvertCtx* self)",
+  "params": {
+   "param_1": "context"
+  },
+  "summary": "8-byte-block member of the family (copy B): reads four lanes 0x400 apart from src+0x800 with ~0x40/0x40 lane spacing, 8 bytes per step and an outer count of f_c-8; the smallest member of the family.",
+  "confidence": 0.42,
+  "evidence": "NEW: its only caller is 0x12E5C4 (the B copy of the dispatcher), which confirms the copy grouping. The lane offsets stated here are from the body (+0x80/-0x40/+0x40), not the '0x1800..0x1c00' the old summary claimed - that was copy A's layout.",
+  "previous_name": "maybe_Video_ConvertBlocks8_B",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ }
+]

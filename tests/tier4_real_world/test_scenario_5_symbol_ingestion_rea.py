@@ -5,7 +5,7 @@ Verifies knowledge base ingestion and REA MCP workflow readiness.
 
 import json
 import unittest
-from tests.common import SYMBOLS_FILE, TOOLS_DIR, run_python_tool
+from tests.common import AGENT_LOG_FILE, SYMBOLS_FILE, TOOLS_DIR, run_python_tool
 
 
 class TestScenario5SymbolIngestionRea(unittest.TestCase):

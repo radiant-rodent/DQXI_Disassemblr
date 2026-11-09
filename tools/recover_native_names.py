@@ -61,6 +61,24 @@ def main() -> int:
             taken.add(new)
             renamed += 1
     INDEX.write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows), encoding="utf-8")
+    # Persist the names in the raw export too.  Otherwise re-running
+    # tools/organize_ghidra.py rebuilds functions_merged.jsonl from
+    # functions.jsonl and silently drops these 79 names (the organised tree then
+    # shows FUN_ filenames for functions that are already named).
+    raw = ROOT / "decomp" / "ghidra" / "functions.jsonl"
+    if raw.is_file():
+        raw_rows = [json.loads(line) for line in raw.read_text(encoding="utf-8").splitlines() if line.strip()]
+        raw_index = {r.get("address"): r for r in raw_rows}
+        for row in rows:
+            target = raw_index.get(row.get("address"))
+            if target is None:
+                continue
+            old, new = target.get("name") or "", row.get("name") or ""
+            if old != new:
+                target["name"] = new
+                if target.get("signature") and old:
+                    target["signature"] = target["signature"].replace(old, new)
+        raw.write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in raw_rows), encoding="utf-8")
     OUT.write_text(json.dumps({f"0x{a:08X}": n for a, n in sorted(names.items())}, indent=1), encoding="utf-8")
     named = sum(1 for r in rows if not UNNAMED.match(r["name"]))
     print(f"{len(names)} binding-table names; renamed {renamed} unnamed functions; "

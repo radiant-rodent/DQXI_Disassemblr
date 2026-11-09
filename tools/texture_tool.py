@@ -27,8 +27,8 @@ from PIL import Image, PngImagePlugin
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-if "../reference project" not in sys.path:
-    sys.path.insert(0, "../reference project")
+if "../3DS_Translate" not in sys.path:
+    sys.path.insert(0, "../3DS_Translate")
 
 from tools import pack
 
@@ -337,6 +337,151 @@ def decode_tiled(data: bytes, sw: int, sh: int, name: str) -> np.ndarray:
     return rgba
 
 
+def encode_tiled(rgba: np.ndarray, sw: int, sh: int, name: str) -> bytes:
+    """Encodes RGBA (sh, sw, 4) into Morton-tiled PICA200 pixel data.
+
+    This is the exact inverse of :func:`decode_tiled` for every uncompressed
+    format, including the 4-bit L4/A4 formats and the byte-swapped RGBA8/RGB8
+    layouts. ``sw``/``sh`` are the *stored* (power-of-two) dimensions.
+    """
+    if name in ("ETC1", "ETC1A4"):
+        from tools.etc1_encode import encode_etc1
+
+        return encode_etc1(rgba, alpha=name == "ETC1A4")
+    if name not in _BPP:
+        raise ValueError(f"cannot encode PICA format {name!r}")
+
+    rgba = np.asarray(rgba, dtype=np.uint8)
+    if rgba.shape[0] < sh or rgba.shape[1] < sw:
+        raise ValueError(f"image {rgba.shape[1]}x{rgba.shape[0]} smaller than stored {sw}x{sh}")
+    rgba = rgba[:sh, :sw]
+    r = rgba[..., 0].astype(np.uint32)
+    g = rgba[..., 1].astype(np.uint32)
+    b = rgba[..., 2].astype(np.uint32)
+    a = rgba[..., 3].astype(np.uint32)
+
+    if name == "RGBA8":
+        lin = np.stack([a, b, g, r], -1).astype(np.uint8)
+    elif name == "RGB8":
+        lin = np.stack([b, g, r], -1).astype(np.uint8)
+    elif name == "RGBA4":
+        lin = (((r * 15 + 127) // 255) << 12 | ((g * 15 + 127) // 255) << 8
+               | ((b * 15 + 127) // 255) << 4 | ((a * 15 + 127) // 255)).astype("<u2")
+    elif name == "RGBA5551":
+        lin = (((r * 31 + 127) // 255) << 11 | ((g * 31 + 127) // 255) << 6
+               | ((b * 31 + 127) // 255) << 1 | (a >= 128)).astype("<u2")
+    elif name == "RGB565":
+        lin = (((r * 31 + 127) // 255) << 11 | ((g * 63 + 127) // 255) << 5
+               | ((b * 31 + 127) // 255)).astype("<u2")
+    elif name == "LA8":
+        lin = (((r & 255) << 8) | (a & 255)).astype("<u2")
+    elif name == "LA4":
+        lin = ((((r * 15 + 127) // 255) << 4) | ((a * 15 + 127) // 255)).astype(np.uint8)
+    elif name == "L8":
+        lin = (r & 255).astype(np.uint8)
+    elif name == "A8":
+        lin = (a & 255).astype(np.uint8)
+    elif name in ("L4", "A4"):
+        lin = ((((a if name == "A4" else r) * 15 + 127) // 255)).astype(np.uint8)
+    elif name == "HiLo8":
+        lin = ((((r & 255) << 8) | (g & 255))).astype("<u2")
+    else:  # pragma: no cover - _BPP and the branches above cover every format
+        raise ValueError(f"cannot encode PICA format {name!r}")
+
+    stored = np.zeros((sh * sw,) + lin.shape[2:], dtype=lin.dtype)
+    stored[_order(sw, sh)] = lin
+    if _BPP[name] == 4:
+        # two 4-bit pixels share a byte: low nibble is the even pixel, as in decode_tiled
+        flat = stored.astype(np.uint8)
+        return ((flat[0::2] & 15) | ((flat[1::2] & 15) << 4)).astype(np.uint8).tobytes()
+    return stored.astype(lin.dtype).tobytes()
+
+
+def bflim_mip_count(data: bytes) -> int:
+    """Number of stored mip levels (>=1). DQXI UI textures normally store one."""
+    info = bflim_info(data)
+    sw, sh, _ = _stored_dims(info)
+    name = FORMATS.get(info["format"], ("RGBA8", 32))[0]
+    base = tiled_size(sw, sh, name)
+    body = len(data) - 0x28
+    if base <= 0 or body < base:
+        return 1
+    levels = 1
+    remaining = body - base
+    w, h = sw, sh
+    while remaining > 0 and (w > 1 or h > 1):
+        w, h = max(1, w // 2), max(1, h // 2)
+        size = tiled_size(max(8, w), max(8, h), name)
+        if size > remaining:
+            break
+        remaining -= size
+        levels += 1
+    return levels
+
+
+def validate_bflim_replacement(orig: bytes, png_path: Path,
+                               allow_resize: bool = False) -> tuple[list[str], list[str]]:
+    """Checks a replacement PNG against the 3DS limits for the original BFLIM.
+
+    Returns ``(warnings, errors)``. Errors mean the encoded file would not be a
+    drop-in replacement; warnings are hardware limits the modder should know
+    about (VRAM, power-of-two padding, lossy ETC1, mips).
+
+    With ``allow_resize=True`` a PNG of a different size is accepted: the BFLIM
+    header stores the new dimensions and the payload is re-tiled for them, so the
+    texture itself is valid — the layout that draws it keeps its pane size and
+    UVs, so it will be stretched to fit.  Every other limit still applies.
+    """
+    from PIL import Image
+
+    warnings: list[str] = []
+    errors: list[str] = []
+    info = bflim_info(orig)
+    with Image.open(png_path) as img:
+        width, height = img.size
+    resized = (width, height) != (info["width"], info["height"])
+    if resized and not allow_resize:
+        errors.append(
+            f"PNG is {width}x{height} but the BFLIM is {info['width']}x{info['height']}; "
+            "resize it with nearest-neighbour, or pass --allow-resize to store the "
+            "new dimensions (the game stretches it to the pane)"
+        )
+    if resized and allow_resize:
+        warnings.append(
+            f"texture resized {info['width']}x{info['height']} -> {width}x{height}; "
+            "the BFLIM stores the new size, but the layout's pane/UVs are unchanged, so "
+            "the picture is scaled by the game and mip levels do not exist for it"
+        )
+        info = dict(info, width=width, height=height)
+    for value, axis in ((info["width"], "width"), (info["height"], "height")):
+        if value & (value - 1):
+            warnings.append(f"{axis} {value} is not a power of two; the PICA200 pads it to the next one")
+        if value > 2048:
+            errors.append(f"{axis} {value} exceeds the 3DS maximum texture size of 2048")
+    sw, sh, _ = _stored_dims(info)
+    if (sw, sh) != (info["width"], info["height"]):
+        warnings.append(
+            f"stored texture is padded to {sw}x{sh}; the padding shows when UVs leave 0..1"
+        )
+    mips = bflim_mip_count(orig)
+    if mips > 1:
+        warnings.append(
+            f"the BFLIM stores {mips} mip levels; only the base level is replaced and the "
+            "rest stay as the retail image (distant views may differ)"
+        )
+    if info["format"] in (10, 11):
+        warnings.append(
+            f"{info['format_name']} is lossy: re-encoding changes pixels slightly. "
+            "Use an RGBA8 source asset if you need an exact image"
+        )
+    if info["format"] in (12, 13):
+        warnings.append(f"{info['format_name']} is a 4-bit per-pixel mask; only 16 grey levels are stored")
+    size = info["width"] * info["height"]
+    if size > 1024 * 1024:
+        warnings.append("a texture this large competes with the map for 3DS VRAM (6 MiB total)")
+    return warnings, errors
+
+
 def decode_bflim(data: bytes) -> tuple[np.ndarray, dict]:
     """Decodes BFLIM bytes into an RGBA uint8 array (H, W, 4) and metadata dictionary."""
     info = bflim_info(data)
@@ -402,46 +547,12 @@ def encode_bflim(
     if rot:
         full = np.rot90(full, -1)
 
-    r = full[..., 0].astype(np.uint32)
-    g = full[..., 1].astype(np.uint32)
-    b = full[..., 2].astype(np.uint32)
-    a = full[..., 3].astype(np.uint32)
-
-    if name == "RGBA4":
-        lin = ((r * 15 + 127) // 255 << 12) | ((g * 15 + 127) // 255 << 8) | ((b * 15 + 127) // 255 << 4) | ((a * 15 + 127) // 255)
-        dt = "<u2"
-    elif name == "RGBA5551":
-        lin = ((r * 31 + 127) // 255 << 11) | ((g * 31 + 127) // 255 << 6) | ((b * 31 + 127) // 255 << 1) | (a >= 128)
-        dt = "<u2"
-    elif name == "RGB565":
-        lin = ((r * 31 + 127) // 255 << 11) | ((g * 63 + 127) // 255 << 5) | ((b * 31 + 127) // 255)
-        dt = "<u2"
-    elif name == "RGBA8":
-        lin = np.stack([a, b, g, r], -1)
-        dt = np.uint8
-    elif name == "LA8":
-        lin = (r << 8) | a
-        dt = "<u2"
-    elif name == "LA4":
-        lin = ((r * 15 + 127) // 255 << 4) | ((a * 15 + 127) // 255)
-        dt = np.uint8
-    elif name in ("A8",):
-        lin = a
-        dt = np.uint8
-    elif name in ("L8",):
-        lin = r
-        dt = np.uint8
-    else:
-        # Fallback to RGBA8
-        lin = np.stack([a, b, g, r], -1)
-        dt = np.uint8
-        name, bpp, fmt = "RGBA8", 32, 9
-        info = dict(info)
-        info["format"] = 9
-
-    stored = np.zeros((sh * sw,) + lin.shape[2:], dtype=lin.dtype)
-    stored[_order(sw, sh)] = lin
-    body = stored.astype(dt).tobytes()
+    if name not in _BPP:
+        raise ValueError(
+            f"BFLIM format {fmt} is not encodable; supported: "
+            + ", ".join(sorted({v[0] for v in FORMATS.values()}))
+        )
+    body = encode_tiled(full, sw, sh, name)
 
     if footer_template and len(footer_template) >= 0x28:
         footer = bytearray(footer_template[-0x28:])
@@ -495,8 +606,14 @@ def bflim_to_png(bflim_data: bytes, png_path: Path, write_meta: bool = True) -> 
     return info
 
 
-def png_to_bflim(png_path: Path, orig_bflim_data: bytes | None = None) -> bytes:
-    """Reads PNG and reconstructs BFLIM binary with metadata."""
+def png_to_bflim(png_path: Path, orig_bflim_data: bytes | None = None,
+                 allow_resize: bool = False) -> bytes:
+    """Reads PNG and reconstructs BFLIM binary with metadata.
+
+    Dimensions and format come from the original file (a drop-in replacement).
+    With ``allow_resize=True`` the PNG's own width/height are stored instead, so
+    a modder can ship a bigger or smaller texture.
+    """
     img = Image.open(str(png_path)).convert("RGBA")
     rgba = np.array(img, dtype=np.uint8)
 
@@ -525,14 +642,16 @@ def png_to_bflim(png_path: Path, orig_bflim_data: bytes | None = None) -> bytes:
             "flags": 0,
             "alignment": 0,
         }
+    elif allow_resize:
+        info = dict(info, width=img.width, height=img.height)
 
     return encode_bflim(rgba, info, footer_template=orig_bflim_data)
 
 
 def read_romfs():
-    sys.path.insert(0, "../reference project")
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     return f, ncch.romfs()
 
 

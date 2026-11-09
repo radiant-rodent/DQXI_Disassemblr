@@ -1,0 +1,171 @@
+[
+ {
+  "class": "Field_Effect",
+  "type": "FieldEffect",
+  "summary": "Small 2D-effect handle container (the R2_002 pass calls the same object UiEffectList): it owns up to two packed effect handles, one shared alpha/enable value and a pointer to a Field_EffectDesc. The message window passes itself to Ui_EffectHandleList_EnableAll/ReleaseAll, so this object is the window's first base sub-object.",
+  "size": 84,
+  "base": null,
+  "confidence": 0.6,
+  "evidence": "No vtable store was recovered. Layout comes from 0x0018F404 Field_Effect_SetAlphaAll and 0x0018F5E8 Field_Effect_StopAll (loop `i < self->f_18`, handle word at self+8+i*8, alpha at +0x1C) and from 0x0019EDDC/0x0019FF40, which both call Field_EffectDesc_Build(self->f_50). The identical layout is used by the R2_002 names Ui_EffectHandleList_EnableAll (0x0018F570) and Ui_EffectHandleList_ReleaseAll (0x0018F374); their callers (Ui_MessageWindow_UpdateOpen 0x00615A90, asm `mov r0,r4; bl #0x18f570`) pass the message window itself, i.e. the list sits at offset 0 of the window.",
+  "fields": [
+   {
+    "offset": 24,
+    "name": "handleCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.85,
+    "evidence": "Loop bound of the 8-byte handle entries at self+8: `for (i = 0; i < self->f_18; i++)` in 0x0018F404, 0x0018F5E8, 0x0018F570 and 0x0018F374; asm 0x0018F41C `ldr r0,[r4,#0x18]` / 0x0018F474 `cmp r0,r6`."
+   },
+   {
+    "offset": 28,
+    "name": "alpha",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "0x0018F404 stores the alpha argument here after applying `alpha & 0xFF` to every effect instance; 0x0018F5E8 resets it to 0; Ui_EffectHandleList_EnableAll (0x0018F570) sets it to 1. Cached 'current alpha / enabled' value, compared before the loop so a repeated call is a no-op."
+   },
+   {
+    "offset": 80,
+    "name": "effectDesc",
+    "type": "Field_EffectDesc*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "0x0019EDDC and 0x0019FF40 both do `Field_EffectDesc_Build(self->f_50)`; 0x001D6958 builds a 0x70-byte Field_EffectDesc and returns desc+0x70, so +0x50 holds the descriptor pointer."
+   }
+  ]
+ },
+ {
+  "class": "Field_NpcManager",
+  "type": "FieldNpcManager",
+  "summary": "Field scene-object base (vtable 0x00764A38): the only recovered method is the deleting destructor 0x00335D28, which is the shared Field_Object destructor, and the three known fields are the embedded head of the intrusive child-object list. The generated 'NpcManager' name is not supported by any evidence.",
+  "size": 516,
+  "base": null,
+  "confidence": 0.4,
+  "evidence": "vtable 0x00764A38: slot 1 = 0x00335DAC Field_Object_DtorBase, slot 2 = 0x00335D28 (this deleting dtor), slot 4 = 0x00335C24 Field_Object_ReleaseChildList. The ctor at 0x00335CA8 installs 0x00764A38 and is itself called by Actor2D_AnimNodeCtor (asm 0x0028E64C `bl #0x335ca8`), so this is the Field_Object base class, not an NPC manager. The generated class name is kept because the project already uses it in signatures.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Ctor 0x00335CA8 `str r1,[r0]` with r1 = 0x00764A38; the deleting dtor 0x00335D28 re-stores the same value (`*self = 0x00764A38`)."
+   },
+   {
+    "offset": 504,
+    "name": "childListSentinel",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ctor 0x00335CA8 sets it to self+0x1F8 (`add r1,r0,#0x1f8; str r1,[r0,#0x1f8]`), i.e. the head node's object slot points at itself. Field_Object_ReleaseChildList (0x00335C24) and the dtor walk the list until `node->obj == self->f_1F8`, so this word is the end-of-list marker."
+   },
+   {
+    "offset": 508,
+    "name": "childListFirst",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ctor 0x00335CA8 sets it to self+0x1F8 (empty list); the dtor starts its walk from `self[0x7f]` and unlinks with `[r2,#4] = r1`, so this is the head node's `next` pointer (node layout {obj@0, next@4, prev@8})."
+   },
+   {
+    "offset": 512,
+    "name": "childListLast",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Ctor 0x00335CA8 sets it to self+0x1F8 (empty list); the dtor's unlink `[r1,#8] = r2` writes the head node's `prev` pointer, so this is the last child node."
+   }
+  ]
+ },
+ {
+  "class": "Field_DragController",
+  "type": "FieldDragController",
+  "summary": "Touch-drag target scene object: when the player touches or drags it, it records the delta between its own position and the player actor's position and then walks that actor one unit per frame toward itself, playing action 0x0B and firing event command 0x15 when the delta reaches zero.",
+  "size": 748,
+  "base": "Actor2D_AnimNode",
+  "confidence": 0.55,
+  "evidence": "Ctor 0x002B4854 calls the base ctor 0x0028E630 (the 4-byte `ldr ip,[pc,#0x74]` prologue of Actor2D_AnimNodeCtor) and installs vtable 0x0075F158; dtor 0x002B48C4 restores the base vtable 0x0075D55C, whose slot 2 is Actor2D_AnimNode_DeletingDtor. The batch's base Actor_HandleRef is wrong: Actor_HandleRef_Ctor is called on self+0x298, so that is a member sub-object, not the base. Field_Gadget (0x003A25D0) is a template copy of this class with the same +0x297/+0x298 layout.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Ctor 0x002B4854 stores 0x0075F158 at +0; vtable slots 9/31/32 are this class's own methods (0x002B42AC, 0x002B4750 OnEvent, 0x002B432C Update)."
+   },
+   {
+    "offset": 120,
+    "name": "posX",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Own X position: OnEvent 0x002B4750 computes `f_2E4 = f_78 - actor->f_78` and passes f_78 as the action-0x0B target X to Actor_TryPlayActionSeq0B; vtable slot 0x002B42AC loads the pair with `ldrd r0,r1,[r4,#0x78]` and subtracts it from the target rect corner. Integer (fixed-point/grid units), not float."
+   },
+   {
+    "offset": 124,
+    "name": "posY",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Own Y position: OnEvent 0x002B4750 computes `f_2E8 = f_7C - actor->f_7C` and passes f_7C as the action-0x0B target Y; the same `ldrd` in 0x002B42AC reads it as the second word of the position pair."
+   },
+   {
+    "offset": 556,
+    "name": "vtableSecondary",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Ctor 0x002B4854 stores vtable+0x98 (0x0075F1F0) here; the base ctor 0x0028E630 does the same for every Actor2D_AnimNode (`str r2,[r0],#0x22c`), and the dtor restores 0x0075D55C+0x98. Secondary vtable pointer of the embedded second base sub-object."
+   },
+   {
+    "offset": 588,
+    "name": "actorHandleRef",
+    "type": "Actor_HandleRef",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Base ctor 0x0028E630 calls Actor_HandleRef_Ctor(obj+0x24C) and then sets +0x294 = 0xFFFF and +0x296 = 0; OnEvent 0x002B4750 compares the dispatched event target with self+0x24C and, for that node, plays action 0x0B on the player actor using self->f_78/f_7C and the rect from f_2E0."
+   },
+   {
+    "offset": 663,
+    "name": "dragState",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.85,
+    "evidence": "0 = idle, 1 = dragging, 2 = finishing. Ctor 0x002B4854 writes 0; OnEvent sets 1 when the drag starts; Update 0x002B432C switches on it, sets 2 when both deltas are zero, and resets it to 0 when the event-scene test 0x00636AFC returns 0."
+   },
+   {
+    "offset": 664,
+    "name": "maybe_dragHandleRef",
+    "type": "Actor_HandleRef",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Ctor 0x002B4854 calls Actor_HandleRef_Ctor(self+0x298) (asm `add r0,r0,#0x298` path via `piVar2 + 0xa6`); OnEvent's second branch (event target == self+0x298) stores `f_2E4 = f_78 - actor->f_78`, `f_2E8 = f_7C - actor->f_7C` and arms dragState = 1. Which actor the handle refers to is not recovered, hence maybe_."
+   },
+   {
+    "offset": 736,
+    "name": "targetCoordRecord",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Pointer to the drag target's coordinate/action record: OnEvent 0x002B4750 reads s16 x@+0, y@+2, w@+0x10, h@+0x12 plus u32@+8, u32@+0x14 and u8@+0x17 to fill the action-0x0B parameter block (params[2]=x+w, params[3]=y+h), and vtable slot 0x002B42AC uses x+w / y+h to pick the actor's facing animation. Ctor 0x002B4854 sets it to 0 and no recovered function assigns a record, so the record type is unknown; S_025 named the same offset targetCoordRecord (s16*) in the sibling candidate class Field_MarkerWidget."
+   },
+   {
+    "offset": 740,
+    "name": "dragDeltaX",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Remaining X distance to move the actor: OnEvent stores `f_78 - actor->f_78`; Update 0x002B432C adds sign(delta) to actor+0xC4 and rewrites the field as sign*(|delta|-1); the drag finishes when both deltas equal the zero pair at 0x007BE2D4."
+   },
+   {
+    "offset": 744,
+    "name": "dragDeltaY",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Remaining Y distance to move the actor: OnEvent stores `f_7C - actor->f_7C`; Update adds sign(delta) to actor+0xC8 and decrements the magnitude by one per frame, exactly like dragDeltaX."
+   }
+  ]
+ }
+]

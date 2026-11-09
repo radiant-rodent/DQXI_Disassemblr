@@ -1,108 +1,110 @@
-# Getting Started
+# Getting started (environment and data tree)
 
-This guide is for a developer who has never touched a 3DS game before. It explains what to run,
-what each output means, and where to make a first safe edit.
+Read [`../README.md`](../README.md) for what the project is, then
+[`FIRST_MOD.md`](FIRST_MOD.md) for the 10-minute edit. This page is only about *preparing the
+machine and the generated data*.
 
-## 0. Prerequisites
+## Prerequisites
 
-- Windows 10/11 (the scripts use PowerShell paths; Python itself is portable).
-- Python 3.12 with `Pillow`, `numpy`, `capstone`.
-- Rust toolchain (for the viewer/editor).
-- A legally obtained `DQXI.3ds` cartridge image. The project expects the reference image at
-  `..\reference project\DQXI.3ds` or `original/DQXI.3ds`.
-- Optional: Ghidra 12.1.4 + JDK 21 only if you want to regenerate native code.
+- Windows 10/11 with PowerShell (the commands below are PowerShell-compatible).
+- Python 3.12 with `Pillow`, `numpy` and `capstone` (used by conversion, model and disassembly
+  tools). `python -m pip install pillow numpy capstone` if they are missing.
+- Rust toolchain (`cargo`) only for DQXI Studio / the viewer.
+- Ghidra 12.1.4 + JDK 21 only if you want to regenerate the raw decompiler export.
+- Your own legally obtained `DQXI.3ds` dump. The reference copy is
+  `..\3DS_Translate\DQXI.3ds`; the project's extracted baseline lives in
+  `original/` and `build/`.
+- Optional for a real console: a 3DS/2DS with Luma3DS and an SD card.
 
-Check the baseline first:
+Run everything from the repository root. Use the module form shown here:
 
 ```powershell
-python tools/verify.py
-python tests/run_all.py
-cd viewer_rs; cargo test
+python -m tools.verify_project
 ```
 
-## 1. Build the data tree
+`OVERALL: PASS` means the generated tree is consistent (build, assets, readable code, maps,
+editor binary). The first run prints one line per check. If it fails, fix that check before
+editing anything — see `audit/PROJECT_VERIFICATION.json`.
 
-The full extraction is about 10 GB and takes several minutes.
+The guides use `python -m tools.<tool>` from the repository root; the equivalent
+`python tools/<tool>.py` form also works.
+
+## 1. Regenerate the extracted tree (only if `game_data/` is missing)
+
+The extraction is about 10 GB and takes several minutes:
 
 ```powershell
-python tools/extract_game_data.py --all
-python tools/extract_arcs.py
+python -m tools.extract_game_data --all
+python -m tools.extract_arcs
 ```
 
 Result:
 
-- `game_data/romfs/` — exact original files, including `.pack`/`.paca` containers.
-- `game_data/packs/` — every archive member exploded.
-- `game_data/arcs/` — every SARC member (`bflyt`, `bflan`, `bflim`).
+- `game_data/romfs/` — exact original files, including `.pack`/`.paca` containers;
+- `game_data/packs/` — every archive member exploded;
+- `game_data/arcs/` — every SARC member (`bflyt`, `bflan`, `bflim`, …).
 
 If a command stops, fix the first reported file; do not silently skip it. The manifests in
 `audit/` and `game_data/manifest.json` are the source of truth for coverage.
 
-## 2. Convert to standard formats
+## 2. Convert to standard formats (only if `game_assets/` is missing)
 
 ```powershell
-python tools/convert_assets.py --all
-python tools/map_tool.py export --all
+python -m tools.convert_assets --all
+python -m tools.map_tool export --all
 ```
 
-This writes `game_assets/`. The conversion is intentionally separated from extraction so you can
-re-run one family without touching the originals:
+This writes `game_assets/`. One family at a time is also supported and is what you want when
+iterating:
 
 ```powershell
-python tools/convert_assets.py --textures
-python tools/convert_assets.py --models --workers 12   # one process per core; ~2.5 min for all 10,542 BCH
+python -m tools.convert_assets --textures
+python -m tools.convert_assets --models --workers 12   # ~2.5 min for all 10,542 BCH
+python -m tools.convert_assets --tables
 ```
 
-## 3. Explore
+The text banks (`game_assets/text/`) are produced separately:
 
 ```powershell
-run_viewer_rs.bat
+python -m tools.text_tool export
 ```
 
-The sidebar now indexes the complete converted library, not just the old curated samples.
+`tools.table_edit` and `tools.text_tool` also work directly on the extracted BXON files if you do
+not want the JSON dump first; the editors use the dump.
 
-## 4. Make a first safe edit
-
-1. `run_editor.bat`
-2. Search for `b001_101a` (Cobblestone area).
-3. Select a cyan marker in the viewport.
-4. Change its X position by +2.
-5. Click **Save project** (writes `editor_projects/b001_101a.json`).
-6. Click **Export BXON** (writes `game_assets/maps/b001_101a/level3d.patched.bxon`).
-7. Build a modified ROM:
+## 3. Open DQXI Studio
 
 ```powershell
-python tools/patch_game.py --map b001_101a
+run_editor.bat        # level editor
+run_viewer_rs.bat     # project browser
 ```
 
-The patched image is `build/DQXI_patched.3ds`.
+Both build `viewer_rs/target/release/viewer_rs.exe` on first use (a few minutes). Set
+`DQXI_START_SECTION=<section>` to choose the start panel; the 13 sections are listed in
+[EDITOR.md](EDITOR.md).
 
-## 5. Read the code
+The Studio's data-edit buttons shell out to the same Python tools, so the CLI commands in
+[EDITING.md](EDITING.md) are also available without the GUI.
 
-Start with:
-
-- `decomp/ghidra/README.md`
-- `decomp/ghidra/COVERAGE.md`
-- `decomp/ghidra/by_subsystem/Memory_and_Heaps/` for a small, concrete subsystem
-- `symbols.json` for recovered names
-
-The old `decomp/functions/` tree is legacy pseudocode. Do not use it as the primary source.
-
-## 6. When something looks wrong
-
-- Check `audit/GAP_REPORT.md` and `audit/SOURCE_QUALITY.md`.
-- Check the relevant `game_assets/*_summary.json` for conversion errors.
-- Re-run the smallest family (one texture, one table, one map) rather than the whole pipeline.
-- Never modify `..\reference project`; it is a read-only reference.
-
-## 7. Optional: build a C source replacement
+## 4. Verify before you edit
 
 ```powershell
-python tools/setup_arm_toolchain.ps1
-python tools/check_clean_c.py
-python tools/build_c_replacement.py
-python tools/build.py
+python -m tools.build            # asm/ -> build/code.bin, must say 0 differences
+python -m tools.verify_project   # data + coverage + editor + patched-ROM report
+python tests/run_all.py          # tier 1-4 end-to-end suite
+cd viewer_rs; cargo test; cd ..
 ```
 
-`InitBss`, `GetTalkPartyNoIndex`, `GetTalkPartyPageSize`, and `GetTalkPartyYesIndex` are already replaced and bit-verified. See
-`docs/SOURCE_REPLACEMENT.md` to add another function.
+`tools.build` is the safety net for the whole native-code side: if it is green, the assembly
+tree still describes the retail executable. Never weaken that check to make an edit pass.
+
+## 5. If something looks wrong
+
+- `audit/GAP_REPORT.md` and `audit/SOURCE_QUALITY.md` for known coverage gaps,
+- `game_assets/*_summary.json` / `*_manifest.jsonl` for conversion errors,
+- `progress/progress.html` for the current state of every subsystem,
+- [`TESTING_EMULATOR.md`](TESTING_EMULATOR.md) for emulator start-up problems (the fixed RPC
+  port is the usual cause: only one Azahar at a time).
+
+Never modify `..\3DS_Translate`; it is a read-only reference (the translation
+workspace is also the source of the emulator harness).

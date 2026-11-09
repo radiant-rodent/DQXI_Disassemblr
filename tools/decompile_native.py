@@ -6,7 +6,7 @@ human-readable C source files:
 - Identifies function boundaries via ARM and Thumb prologue analysis (stmfd / push lr).
 - Analyzes basic blocks, literal pool references, and call targets.
 - Reconstructs function prototypes, parameters, control-flow statements (if, while, return).
-- Resolves known symbols and addresses discovered in reference project.
+- Resolves known symbols and addresses discovered in 3DS_Translate.
 - Generates modular C files in decomp/functions/ and an index catalog in decomp/functions_index.json.
 
 Usage:
@@ -320,14 +320,14 @@ def process_function_batch(batch: list, text_bytes: bytes, out_dir: Path, symbol
 
     catalog = []
     for item in batch:
-        addr, mode, next_addr, sym_name = item
+        addr, mode, next_addr, sym_name, stem = item
         func_size = next_addr - addr
 
         decomp_c = decompile_function(text_bytes, addr, next_addr, mode, sym_name, md_arm, md_thumb, symbols)
-        out_file = out_dir / f"{sym_name}.c"
+        out_file = out_dir / f"{stem}.c"
         out_file.write_text(decomp_c, encoding="utf-8")
 
-        rel_path = f"decomp/functions/{sym_name}.c"
+        rel_path = f"decomp/functions/{stem}.c"
         catalog.append({
             "address": f"0x{addr:08X}",
             "name": sym_name,
@@ -370,6 +370,12 @@ def main():
         next_addr = prologues[i+1][0] if i + 1 < len(prologues) else TEXT_END
         sym_name = symbols.get(addr, f"func_{addr:08X}")
         items.append((addr, mode, next_addr, sym_name))
+    # Windows file names ignore case: std_strtod / std_Strtod must not share one file.
+    taken: set[str] = set()
+    for i, (addr, mode, next_addr, sym_name) in enumerate(items):
+        stem = sym_name if sym_name.lower() not in taken else f"{sym_name}_{addr:08X}"
+        taken.add(stem.lower())
+        items[i] = (addr, mode, next_addr, sym_name, stem)
 
     # Split into batches for multi-threading
     num_threads = min(16, os.cpu_count() or 4)

@@ -11,9 +11,9 @@ Both compile with the xPack ARM GNU toolchain and produce retail bytes at `0x001
 `0x00158874`.
 
 ```powershell
-python tools/setup_arm_toolchain.ps1   # one-time
-python tools/build_c_replacement.py    # compiles + compares
-python tools/build.py                  # overlays all verified C replacements
+powershell -File tools/setup_arm_toolchain.ps1   # one-time
+python -m tools.build_c_replacement    # compiles + compares
+python -m tools.build                  # overlays all verified C replacements
 ```
 
 Expected:
@@ -35,8 +35,8 @@ address, so a new function needs no manual `build.py` integration.
    ARM/Thumb sequence; for higher-level C, compile and compare, then adjust types/optimization.
    If the function calls another fixed address, add `"link_text": True` and
    `"defsyms": {"callee": 0x...}` so the relocation resolves to the retail target.
-3. Run `python tools/build_c_replacement.py`.
-4. Run `python tools/build.py`; it overlays every verified blob automatically and must still
+3. Run `python -m tools.build_c_replacement`.
+4. Run `python -m tools.build`; it overlays every verified blob automatically and must still
    produce both bit-matching hashes.
 
 ## Current scope

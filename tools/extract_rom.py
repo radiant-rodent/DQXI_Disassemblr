@@ -29,7 +29,7 @@ if _TOOLS_DIR not in sys.path:
 
 import blz
 
-DEFAULT_ROM_PATH = r"..\reference project\DQXI.3ds"
+DEFAULT_ROM_PATH = r"..\3DS_Translate\DQXI.3ds"
 DEFAULT_OUT_DIR = os.path.abspath(os.path.join(_TOOLS_DIR, "..", "original"))
 
 CHUNK_SIZE = 16 * 1024 * 1024  # 16 MB

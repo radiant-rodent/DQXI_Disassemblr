@@ -1,0 +1,721 @@
+[
+ {
+  "address": "0x0016C3AC",
+  "name": "maybe_Battle_ValidatePartyCommands",
+  "signature": "uint32_t maybe_Battle_ValidatePartyCommands(BattleManager* self)",
+  "params": {},
+  "summary": "Validates every unit in the battle party list (battleWork+0x4260) and then commits the accepted ones: pass 1 requires all units to pass their vtable+0x10 predicate, pass 2 additionally requires the manager's +0x190 slot to accept them, pass 3 calls vtable+0x30(unit, 0, 1) on each accepted unit. Returns 1 when the party is ready and 0 otherwise; with an empty party it falls back to Battle_HasUnitInState1C.",
+  "confidence": 0.45,
+  "evidence": "FACTS.md: +0x4260 is the party list, not a command queue, so 'QueuedCommands' was imprecise. The now-named Battle_HasUnitInState1C (0.50) is the empty-party fallback, and the third pass mutates state through vtable+0x30, so the function validates and then commits the party's commands.",
+  "previous_name": "maybe_Battle_ValidateQueuedCommands",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0016C128",
+  "name": "Battle_UpdateUnitCommandPhase",
+  "signature": "uint32_t Battle_UpdateUnitCommandPhase(BattleUnit* unit)",
+  "params": {
+   "unit": "battle unit whose command byte +0xBC is advanced"
+  },
+  "summary": "Advances one battle unit's command state machine: reads the unit's command byte (+0xBC), matches it against the four stored command slots (f_fd/f_100/f_103/f_106) and the literal states 3 and +0x40, clears the 3D balloon-pool flag at battleWork+0x4324 when the battle is in 3D mode, and finishes by setting the unit state through vtable+0x198 or vtable+0x14(9). Returns 0 for an unset (-1) or unknown command byte.",
+  "confidence": 0.5,
+  "evidence": "Battle_CheckUnitCommandCondition (0.50) documents f_fd/f_100/f_103/f_106 as the four stored command slots, and this function dispatches on the unit's command byte against exactly those slots (plus the literal state 3 and unit+0x40), notifies the balloon pool at battleWork+0x4324 in 3D mode, and sets the unit state through vtable+0x198 / vtable+0x14(9).",
+  "previous_name": "maybe_Battle_UpdateUnitCommandPhase",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0016C714",
+  "name": "Battle_RefreshEffectCommandList",
+  "signature": "void Battle_RefreshEffectCommandList(void)",
+  "params": {},
+  "summary": "44-byte wrapper: fetches the battle work (work+8 -> +0x5C) and rebuilds its effect/command entry list through 0x00207DEC. Called from BattleScene_RefreshCommandWidgets.",
+  "confidence": 0.5,
+  "evidence": "The single callee 0x00207DEC is now documented as the effect/command list rebuild (Menu_BuildEffectCommandList + Item_LookupRecord + std_qsort) and the single caller is the named BattleScene_RefreshCommandWidgets, so 'RefreshBattleUi' was too broad for a 44-byte wrapper that only rebuilds that one list.",
+  "previous_name": "maybe_Battle_RefreshBattleUi",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0016D438",
+  "name": "Battle_RefreshUnitLineupEntries",
+  "signature": "void Battle_RefreshUnitLineupEntries(BattleManager* self)",
+  "params": {
+   "self": "battle work; lineup fields f_c0..f_e0 are rewritten"
+  },
+  "summary": "Counts the present units in each of the four battle unit lists (battleWork+0x4298 + i*0x1C), stores the first unit's data id and the per-list count into the lineup fields (f_c4/f_cc/f_d4/f_dc and f_d0/f_d8/f_e0), then hands the assembled descriptor to the popup-entry builder 0x003FE054. Called from Battle_ResetLineupState.",
+  "confidence": 0.55,
+  "evidence": "The caller is the named Battle_ResetLineupState (0.50) and the callee 0x003FE054 is a Ui_PopupEntry_* builder (Ui_PopupEntry_ClearAll + Text_GetRecordString + Menu_Actor_PlayUiAnimation), so the function refreshes the unit-lineup display entries; 'EntryEffects' wrongly suggested visual effects.",
+  "previous_name": "maybe_Battle_SpawnUnitEntryEffects",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001715C4",
+  "name": "maybe_Battle_DetachCurrentActor",
+  "signature": "void maybe_Battle_DetachCurrentActor(void)",
+  "params": {},
+  "summary": "Calls the current battle actor's vtable+0x28 (a no-argument teardown slot) and hides the battle target window at battleWork+0x431C. Called at the start of BattleScene_AttachPrimaryUnitModels, i.e. it detaches the previous actor presentation before the models are re-attached; it touches no scene state.",
+  "confidence": 0.45,
+  "evidence": "The only caller is the named BattleScene_AttachPrimaryUnitModels (0.50), which calls it immediately before re-attaching every unit's model, and the sibling Battle_FinishBattleScene (0x001714D4) is the real scene teardown (it drives the scene object at currentActor+0x204 through vtable+0x18/+0x74 and creates a popup). 'CloseBattleScene' therefore overstated what this 80-byte function does.",
+  "previous_name": "maybe_Battle_CloseBattleScene",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00171614",
+  "name": "Battle_UpdateActorModels",
+  "signature": "uint32_t Battle_UpdateActorModels(BattleManager* self, uint32_t arg2)",
+  "params": {
+   "self": "battle work; actor-model set at +0x35C, frame counter at +0x304"
+  },
+  "summary": "Per-frame update of the battle scene's actor-model set (Event_ActorModels_Update on the set at self+0x35C with the frame counter at self+0x304); when the battle work has a current actor (+0x4320) whose +0x404 byte is set, it also pushes state 8 into the object at self+0xE4 through vtable+0x14. Always returns 1.",
+  "confidence": 0.5,
+  "evidence": "The callee Event_ActorModels_Update is now named (0.50) and is the per-frame cutscene actor-model update; the same +0x35C model set is used by BattleScene_AttachPrimaryUnitModels, so this is the battle's model-set tick rather than an action animation. The +0xE4 object's vtable+0x14(int) is the same state setter that 0x0016C128 calls with 9.",
+  "previous_name": "maybe_Battle_UpdateActionAnim",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00173624",
+  "name": "Battle_SelectTargetsMode8",
+  "signature": "void Battle_SelectTargetsMode8(Battle* battle, u32 arg2, u32 arg3, u32 arg4)",
+  "params": {
+   "battle": "battle work",
+   "arg3": "group index forwarded to Battle_SelectActionTargets",
+   "arg4": "output array of unit pointers"
+  },
+  "summary": "Mode-8 target-selection entry: forwards to Battle_SelectActionTargets(battle, out, groupIndex, 8) and then default-constructs the four 8-byte target descriptors with the 0x005906C0 constructor. Reached only through the mode table at 0x00726B18 (no direct callers).",
+  "confidence": 0.5,
+  "evidence": "Battle_SelectActionTargets is now named (0.60) and takes (self, out, groupIndex, arg4, arg5); this wrapper forwards its own arg4 as the `out` array and passes 8, then builds the same 4x8-byte descriptor array (std_ConstructArray with ctor 0x005906C0) as 0x00174674. It has no direct callers, consistent with a dispatch-table entry.",
+  "previous_name": "maybe_Battle_SelectTargetsMode8",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00174174",
+  "name": "Battle_SpawnResultPopupEntry",
+  "signature": "uint32_t Battle_SpawnResultPopupEntry(BattleManager* self)",
+  "params": {
+   "self": "battle work; result code at +0x128, timer at +0x134"
+  },
+  "summary": "Battle-end step: on the first call (timer f_134 = 0xBBB) it branches on the battle result code f_128 - code 1 builds the result descriptor and posts it through Ui_PopupEntry_SpawnActorSpanEntry, code 2 additionally sets f_f9 first. Both branches post the same popup entry.",
+  "confidence": 0.5,
+  "evidence": "The only callee is the now-named Ui_PopupEntry_SpawnActorSpanEntry (0.50), a popup-entry builder (Mem_AllocAligned_2 of a 0x20C entry plus Ui_PopupEntry_ClearAll), not an effect spawner; the branch is on the battle result code f_128, which Battle_Update also tests.",
+  "previous_name": "maybe_Battle_SpawnBattleEndEffect",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00174674",
+  "name": "maybe_Battle_CollectActionTargets",
+  "signature": "void maybe_Battle_CollectActionTargets(Battle* battle, u32 arg2, u32** selection)",
+  "params": {
+   "battle": "battle work",
+   "selection": "8-slot array from Battle_TargetMarker_Update; [0] is the primary unit, [1..4] receive the collected targets"
+  },
+  "summary": "Takes the 8-slot target-marker selection array: spawns the primary entry's action effect (vtable+0x80 + Gfx_Scene_SpriteCtx_Init + Actor_SpawnEffectBlock), collects up to four further units whose data id (+0x768) differs from the primary's into slots 1..4, computes the minimum Battle_CalcTurnOrderPriority over them and pushes the command-queue entries (event ids 0x11/0x12/0x13/0x32).",
+  "confidence": 0.45,
+  "evidence": "The disassembly (Ghidra truncated the body after the vtable+0x80 call) shows `strne r5, [r4, r8, lsl #2]` writing the collected units into the caller's array slots 1..4, then Battle_CalcTurnOrderPriority per slot and Battle_CommandQueue_PushEntry with event ids 0x11/0x12/0x13/0x32. Battle_Update passes the array filled by Battle_TargetMarker_Update, so the function fills targets; 'ClearTargets' was the opposite of what it does.",
+  "previous_name": "maybe_Battle_ClearTargets",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00176394",
+  "name": "maybe_Game_GetDataRowFloatField",
+  "signature": "float maybe_Game_GetDataRowFloatField(float offset, int index)",
+  "params": {
+   "offset": "float added to the field value (passed in s0)",
+   "index": "0..2 selects +0xA0/+0xA4/+0xA8 of the first data row"
+  },
+  "summary": "Returns the float at +0xA0/+0xA4/+0xA8 (selected by index 0..2) of the first row of the data table reached through Game_GetDataManager()->f_0->f_81C, plus the float offset passed in s0; other indices return the raw default constant. Ghidra dropped the float return, so the readable C looks like a void query.",
+  "confidence": 0.4,
+  "evidence": "Disassembly: `vmov.f32 s17, s0` saves the float argument, `bl 0x11CB38` (Game_GetDataManager) then `bl 0x63CDA0` returns the first row, then `vldreq s0,[r0,#0xa0/0xa4/0xa8]` + `vadd.f32 s16, s0, s17` and `vmov.f32 s0, s16` returns it. The caller Field_CheckZonePoint assigns the result to its threshold variables, which Ghidra shows as bare constants 50.0/80.0/100.0/30.0 - so this is a float getter, not a data-manager query.",
+  "previous_name": "maybe_Game_QueryDataManager",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002E4C20",
+  "name": "maybe_Ui_Object_DtorStringListC",
+  "signature": "UiObject* maybe_Ui_Object_DtorStringListC(UiObject* self)",
+  "params": {
+   "self": "object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14"
+  },
+  "summary": "Non-deleting destructor variant: installs the hard-coded vtable g_002E4C6C, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and returns self. Same body as 0x002E4488 minus the trailing pool free, so it is the base-destructor half of that pair.",
+  "confidence": 0.45,
+  "evidence": "Re-read against the now-confident std_RbTree_EraseNode (0.65): the +4 teardown is the intrusive-list destroy idiom (0x0010EC00 finds the last node, std_RbTree_EraseNode erases it), and the only difference from 0x002E4488/0x002E4BD4 is the missing func_0010F6CC pool free. The class is still unidentified, so the letter suffix stays.",
+  "previous_name": "maybe_Ui_Object_DtorStringListC",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003433A0",
+  "name": "maybe_Ui_StatusWindow_ClearSceneObjects",
+  "signature": "void maybe_Ui_StatusWindow_ClearSceneObjects(UiStatusWindow* window, u32 arg2, u32 arg3)",
+  "params": {
+   "window": "status window; scene-object tree at +0x53E4, registered-object list at +0x1DC/+0x1E0"
+  },
+  "summary": "Unregisters one Field2D object's scene objects: takes the current Field2D object's key ((work+8)->f_88->f_8->f_14), finds its entry in the window's tree at +0x53E4, walks the registered-object list at +0x1DC/+0x1E0 and calls vtable+0x14 on every element whose id matches one of the entry's 0x40 slots, then clears the flag at +0x414, resets all 0x40 slots and erases the tree node.",
+  "confidence": 0.45,
+  "evidence": "The sibling 0x00343174 is now named Ui_StatusWindow_RebuildSceneObjects (0.50) and uses the same +0x53E4 tree and 0x40-slot table, which supports the StatusWindow attribution; the Field2D manager (work+8)->f_88 supplies the lookup key. No callers exist, so the class attribution is still by layout only.",
+  "previous_name": "maybe_Ui_StatusWindow_ClearSceneObjects",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0017C570",
+  "name": "maybe_Ui_Object_DtorPooledA",
+  "signature": "void maybe_Ui_Object_DtorPooledA(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; child list at +0x20, optional child at +0x88, list at +8, flag at +0x18",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable, drains the intrusive child list at +0x20 calling each node's vtable+4 (deleting destructor), releases the optional child at +0x88 through vtable+0xC, unlinks the list at +0x24/+0x28, destroys the list at +8 when the flag at +0x18 is set, clears the pool slot 0x007B4D68[(u16 at +4) & 0x3FF] and frees the block.",
+  "confidence": 0.45,
+  "evidence": "The trailing func_0010F6CC is now understood as the pool deallocator (it reads the 8-byte block header and tail-calls the pool's vtable+4), which confirms the 'Pooled' part and the 0x007B4D68 slot clear; the owning class is still unidentified, so the A suffix stays.",
+  "previous_name": "maybe_Ui_Object_DtorPooledA",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001C70B4",
+  "name": "maybe_Ui_Object_DtorStringOnly",
+  "signature": "void maybe_Ui_Object_DtorStringOnly(UiObject* self)",
+  "params": {
+   "self": "pooled object; list at +0x10, ownership flag at +0x14"
+  },
+  "summary": "Minimal pooled-object destructor: destroys the intrusive list at +0x10 when the ownership flag at +0x14 is set, then frees the block through func_0010F6CC (the pool deallocator). No vtable store, so it is the shared teardown tail rather than a class destructor.",
+  "confidence": 0.45,
+  "evidence": "func_0010F6CC is now identified as the pool deallocator (block header at -8, pool vtable+4), and the +0x10 teardown is the standard intrusive-list destroy (0x0010EC00 + std_RbTree_EraseNode, 0.65). The caller Field_InitSceneObjects gives no class, so the maybe_ stays.",
+  "previous_name": "maybe_Ui_Object_DtorStringOnly",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001D6D48",
+  "name": "maybe_Ui_Object_DtorPooledB",
+  "signature": "void maybe_Ui_Object_DtorPooledB(UiObject* self)",
+  "params": {
+   "self": "pooled object; children at +0x28/+0x2C, list at +8, flag at +0x18"
+  },
+  "summary": "Deleting destructor of a pooled object: installs vtable 0x00759FAC, destroys the child at +0x2C through vtable+4 and clears the field, releases the child at +0x28 through vtable+0xC, destroys the list at +8 when the flag at +0x18 is set, clears the pool slot 0x007B5D70[(u16 at +4) & 0x3FF] and frees the block.",
+  "confidence": 0.42,
+  "evidence": "Same pool-deallocator tail (func_0010F6CC) and intrusive-list destroy idiom as 0x0017C570, now that std_RbTree_EraseNode is confident (0.65); the class behind vtable 0x00759FAC is still unidentified and there are no callers, so the B suffix stays.",
+  "previous_name": "maybe_Ui_Object_DtorPooledB",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002ADC20",
+  "name": "maybe_Container_List3_Dtor",
+  "signature": "Container* maybe_Container_List3_Dtor(Container* self)",
+  "params": {
+   "self": "container; three children at +0xC/+0x10/+0x14, tree at +0x1C, list at +0x34/+0x38"
+  },
+  "summary": "Deleting destructor of a container that owns three child pointers and one intrusive tree: installs vtable g_list3DtorTable, destroys the three children at +0xC/+0x10/+0x14 through vtable+4, unlinks the list at +0x34/+0x38, erases every node of the tree at +0x1C (successor via 0x00115358/0x00115390), destroys the list at +0x1C when the flag at +0xB is set, and frees the block.",
+  "confidence": 0.45,
+  "evidence": "std_RbTree_EraseNode is now confident (0.65), which fixes the +0x1C structure as an intrusive red-black tree and the loop as a full-tree erase; the concrete container type is still unknown, so the descriptive name stays a maybe_.",
+  "previous_name": "maybe_Container_List3_Dtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002E4488",
+  "name": "maybe_Ui_Object_DtorStringListA",
+  "signature": "void maybe_Ui_Object_DtorStringListA(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block through func_0010F6CC. Byte-identical to 0x002E4BD4, 0x0046B5C0 and 0x0046BDEC.",
+  "confidence": 0.45,
+  "evidence": "The +4 teardown is the intrusive-list destroy idiom (0x0010EC00 finds the last node, std_RbTree_EraseNode erases it, now 0.65) and func_0010F6CC is the pool deallocator; the class is still unidentified, so the A suffix stays.",
+  "previous_name": "maybe_Ui_Object_DtorStringListA",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002E4BD4",
+  "name": "maybe_Ui_Object_DtorStringListB",
+  "signature": "void maybe_Ui_Object_DtorStringListB(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block. Byte-identical to 0x002E4488, 0x0046B5C0 and 0x0046BDEC - only the vtable the caller passes differs.",
+  "confidence": 0.45,
+  "evidence": "Confirmed byte-identical to the named sibling 0x002E4488 by re-reading both bodies; the intrusive-list destroy (std_RbTree_EraseNode, 0.65) and the pool free are the same. No caller and no vtable constant, so the class stays unknown.",
+  "previous_name": "maybe_Ui_Object_DtorStringListB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0046B5C0",
+  "name": "maybe_Ui_Object_DtorStringListD",
+  "signature": "void maybe_Ui_Object_DtorStringListD(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block. Byte-identical to 0x002E4488/0x002E4BD4/0x0046BDEC.",
+  "confidence": 0.45,
+  "evidence": "The disassembly is 0x4C bytes (0x0046B5C0..0x0046B60C) and matches 0x002E4488 instruction for instruction (`str r1,[r0]`, `add r1,r0,#0x48`, `ldm r1,{r1,r2}`, `ldrb r0,[r0,#0x14]`, `bl 0x10EC00`, `bl 0x10EC14`, `b 0x10F6CC`). 'Container_Node' implied the object *is* a container node, but it only unlinks a list stored inside itself, so the prefix was unsupported; the extra callees in the xref belong to the next function at 0x0046B610.",
+  "previous_name": "maybe_Container_Node_DtorA",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0046BDEC",
+  "name": "maybe_Ui_Object_DtorStringListE",
+  "signature": "void maybe_Ui_Object_DtorStringListE(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block. Byte-identical to 0x002E4488/0x002E4BD4/0x0046B5C0.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x002E4488 and 0x0046B5C0, which the disassembly confirms; 'Container_Node' had no supporting evidence (the object only unlinks an internal list), so it is renamed into the same family as its twins. Reached only through a vtable, so the class stays unknown.",
+  "previous_name": "maybe_Container_Node_DtorB",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004A37B8",
+  "name": "maybe_Ui_Object_DtorListBase",
+  "signature": "UiObject* maybe_Ui_Object_DtorListBase(UiObject* self)",
+  "params": {
+   "self": "object; intrusive list header at +0, link flag at +0x10"
+  },
+  "summary": "Non-deleting base destructor: destroys the intrusive list whose header sits at self+0 when the link byte at +0x10 is set, then returns self. It stores no vtable and frees nothing, so it is the base-class half of a deleting destructor pair.",
+  "confidence": 0.45,
+  "evidence": "The neighbouring 0x004A37E8 is now identified as the Field_HandleRef deleting destructor (vtable 0x00775534, per its own R3_045 entry), so the old 'Ui_ActorWidget' class attribution is unsupported - nothing in this body names a widget. The +0 teardown is the standard intrusive-list destroy (0x0010EC00 + std_RbTree_EraseNode, 0.65).",
+  "previous_name": "maybe_Ui_ActorWidget_DtorBase",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0055F7EC",
+  "name": "maybe_Container_EraseByKey",
+  "signature": "void maybe_Container_EraseByKey(Container* container, unsigned key)",
+  "params": {
+   "container": "container; tree header at +0x10, root at +0x18",
+   "key": "key to erase (arrives in r12, not r1)"
+  },
+  "summary": "Erases the tree entry at the lower bound of a key: walks the red-black tree at container+0x10/+0x18, and when the lower-bound node exists it tears the payload down (stops the timer through func_0010F69C, clears +0x30, destroys the list at +0, frees the block).",
+  "confidence": 0.3,
+  "evidence": "Disassembly confirms the operation (`add r1,r0,#0x10`, `ldr r0,[r0,#0x18]`, then the tree walk comparing `[r0,#0x14]` against `ip`), but the key really does arrive in r12 and the body keeps a pointer in unaff_r4, so the decompilation is damaged and the confidence stays at 0.3 per FACTS.md.",
+  "previous_name": "maybe_Container_EraseByKey",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00591378",
+  "name": "maybe_Ui_Object_DtorStringListF",
+  "signature": "void maybe_Ui_Object_DtorStringListF(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block. Byte-identical to 0x002E4488/0x002E4BD4/0x0046B5C0/0x0046BDEC.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x002E4488 and 0x0046B5C0; 'Container_Node' had no supporting evidence (the object only unlinks an internal list), so it joins the same family as its twins. No caller and no vtable constant, so the class stays unknown.",
+  "previous_name": "maybe_Container_Node_DtorD",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00591918",
+  "name": "maybe_Ui_Object_DtorStringListG",
+  "signature": "void maybe_Ui_Object_DtorStringListG(UiObject* self, u32 vtable)",
+  "params": {
+   "self": "pooled object; intrusive list at +0x48/+0x4C, list at +4, flag at +0x14",
+   "vtable": "vtable to install"
+  },
+  "summary": "Deleting destructor of a pooled object: installs the vtable passed in, unlinks the intrusive list at +0x48/+0x4C, destroys the list at +4 when the ownership flag at +0x14 is set, and frees the block. Byte-identical to 0x002E4488/0x002E4BD4/0x0046B5C0/0x0046BDEC.",
+  "confidence": 0.42,
+  "evidence": "Byte-identical to 0x002E4488 and 0x0046B5C0; 'Container_Node' had no supporting evidence, so it joins the same family as its twins. Reached only through a vtable, so the class stays unknown.",
+  "previous_name": "maybe_Container_Node_DtorE",
+  "previous_confidence": 0.42,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00180B94",
+  "name": "maybe_Field_RegisterNamedActorsA",
+  "signature": "void maybe_Field_RegisterNamedActorsA(FieldObject* self)",
+  "params": {
+   "self": "field object; name table at +0x248 (0x18-byte entries), cursor at +0x2AC, count at +0x2B0"
+  },
+  "summary": "Registers an actor for every entry added to the object's name table since the last call: with the world flag at (work+8)+0x44 clear and the table at +0x248 present, it walks entries f_2AC+1..f_2B0, skips entries whose first word is not positive, resolves the relative name pointer at entry+4 through the object-manager map lookup 0x0033D99C((work+8)+0x58, name) and calls Ui_RegisterActor(resolved, self, 0). Then stores the last index in f_2AC.",
+  "confidence": 0.45,
+  "evidence": "0x0033D99C is a red-black-tree map lookup (it walks the tree at obj+0x1E8 comparing node+0x14 against the key word), so the table entries are named resources resolved through the object manager, and Ui_RegisterActor (0.50) is the registration. The old 'Anim' was an unsupported guess - nothing in the body says animation - so the name is now vague but correct.",
+  "previous_name": "maybe_Field_RegisterAnimActors",
+  "previous_confidence": 0.38,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001835AC",
+  "name": "maybe_Field_RegisterNamedActorsB",
+  "signature": "void maybe_Field_RegisterNamedActorsB(FieldActor* self)",
+  "params": {
+   "self": "field object; name table at +0x314 (0x28-byte entries), cursor at +0x354, count at +0x358"
+  },
+  "summary": "Same registration pass as 0x00180B94 for a second table: with the world flag at (work+8)+0x44 clear and the table at +0x314 present, it walks entries f_354+1..f_358, skips entries whose first word is not positive, resolves the relative name pointer at entry+4 through 0x0033D99C((work+8)+0x58, name) and calls Ui_RegisterActor(resolved, self, 0). Then stores the last index in f_354.",
+  "confidence": 0.45,
+  "evidence": "0x0033D99C is a red-black-tree map lookup (tree at obj+0x1E8, key at node+0x14), so the 0x28-byte entries hold named resources; the loop, the cursor update and the Ui_RegisterActor call are identical to 0x00180B94. The old 'Rail' was an unsupported guess (the first pass said so itself), so the name is now vague but correct.",
+  "previous_name": "maybe_Field_RegisterRailActors",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00184958",
+  "name": "maybe_Field_RegisterNamedActorsC",
+  "signature": "void maybe_Field_RegisterNamedActorsC(int self, u32 arg2)",
+  "params": {
+   "self": "field object (lost to unaff_r4); name table at +0x314, cursor at +0x354, count at +0x358"
+  },
+  "summary": "Damaged third copy of the 0x001835AC registration pass: the same 0x28-byte name-table loop over +0x314 with the f_354..f_358 cursor and the same 0x0033D99C + Ui_RegisterActor calls, but Ghidra lost r4/r5 and mis-decoded the prologue as a coprocessor move.",
+  "confidence": 0.3,
+  "evidence": "The surviving body is the same loop as 0x001835AC (0x0033D99C map lookup, Ui_RegisterActor, f_354 = f_358 at the end), but it is full of unaff_r4/unaff_r5 and a coprocessor_movefromRt prologue, so per FACTS.md the confidence stays at 0.3 and the name keeps maybe_.",
+  "previous_name": "maybe_Field_RegisterRailActors2",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00237034",
+  "name": "maybe_Ui_Overlay_UpdateSlotVisibility",
+  "signature": "void maybe_Ui_Overlay_UpdateSlotVisibility(UiOverlay* self, UiOverlayEntry* entry)",
+  "params": {
+   "self": "UI overlay manager; mode byte at +0x281, sub-object at +0x16C",
+   "entry": "overlay entry; position at +0x78/+0x7C, cell at +0xB0/+0xB4"
+  },
+  "summary": "Chooses the entry's display state: mode 8 places the slot marker (0x004D78E4 on the sub-object at +0x16C plus Ui_RegisterActor), mode 9 clears self+0x280, and every other mode hit-tests the entry's cell and position against the Field2D view (0x0062F0E0/0x0062C388/0x0062C3B0/0x0062CB64/0x0062C23C) to pick state 3, else 2, which is then applied with func_005E7848(entry, state, 0).",
+  "confidence": 0.45,
+  "evidence": "The five-call chain is now recognisable as a hit test (its neighbours 0x0062C260 Ui_HitTestRows and 0x0062C988 Ui_HitTest_FindCell are named), and the final func_005E7848(entry, 2-or-3, 0) applies the chosen state; 'visibility' is still an interpretation of what states 2 and 3 mean, so the maybe_ stays.",
+  "previous_name": "maybe_Ui_Overlay_UpdateSlotVisibility",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0023CD7C",
+  "name": "maybe_Ui_Overlay_ApplyPlacement",
+  "signature": "void maybe_Ui_Overlay_ApplyPlacement(UiOverlay* self, u32* coords, u8 flag)",
+  "params": {
+   "self": "UI overlay manager; mode byte at +0x281, sub-object at +0x16C",
+   "coords": "two words copied to sub-object +0x48/+0x4C",
+   "flag": "byte stored at sub-object +0x50"
+  },
+  "summary": "Applies placement parameters to the overlay's sub-object at +0x16C and re-registers it: 0x004D78E4 writes the overlay mode byte to +0x45, the two coordinate words to +0x48/+0x4C and the flag byte to +0x50, then Ui_RegisterActor re-binds the sub-object under the field object manager's slot (work+8)+0x54->+0x20.",
+  "confidence": 0.45,
+  "evidence": "Disassembly of 0x004D78E4 shows it is a five-instruction setter (`strb r1,[r0,#0x45]`, `ldr r1,[r2]`/`str r1,[r0,#0x48]`, `ldr r1,[r2,#4]`/`str r1,[r0,#0x4c]`, `strb r3,[r0,#0x50]`), so the arguments are a coordinate pair and a flag, not an 'anchor path'; the function applies placement and re-registers the sub-object.",
+  "previous_name": "maybe_Ui_Overlay_UpdateAnchorPath",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00464450",
+  "name": "maybe_Field_ReleaseActorSlot",
+  "signature": "void maybe_Field_ReleaseActorSlot(void* self)",
+  "params": {
+   "self": "field object; interaction request block at +0x3C"
+  },
+  "summary": "Releases the actor binding at self+0x3C when the global flag at 0x007A65A8 is set and Field_TryPlayerInteract succeeds for the request block at self+0x3C: it tail-calls Ui_RegisterActor(self+0x3C, 0, 0), which clears the two packed actor ids.",
+  "confidence": 0.4,
+  "evidence": "Disassembly: `add r0,r0,#0x3c; bl 0x651460` (Field_TryPlayerInteract), then `ldrb r1,[0x007A65A8]; cmpne r0,#0` and a tail `b 0x17C054` with r1=r2=0. Ui_RegisterActor (0.50) packs actor ids into holder+0xC/+0xD and uses the 0xFFFFF800 sentinel for a missing actor, so passing 0 clears the binding. There is no child list and no window here, so 'Ui_Window_DetachChildListA' was wrong on both the subsystem and the operation.",
+  "previous_name": "maybe_Ui_Window_DetachChildListA",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00182A28",
+  "name": "maybe_Field_Actor_PlayIdleAnimation",
+  "signature": "int maybe_Field_Actor_PlayIdleAnimation(void* self)",
+  "params": {
+   "self": "field actor; animation index at +0x313, height at +0x374, scene node at +0x160"
+  },
+  "summary": "Plays the animation named by the global name table g_007A3C6C indexed by the actor's state byte f_313, falling back to entry 0 when that name is missing; then, when the actor's height f_374 is set, recomputes the instance transform (0x0066A244) and corrects the height through 0x005F7784 before clearing the three loop bytes at f_160+0x550..0x556.",
+  "confidence": 0.45,
+  "evidence": "The named callers Actor_CheckInteractionRange (0.50) and maybe_Actor_StartAnimTimer both drive actor animation, and Anim_PlayByNameIfPresent (0.50) is the play call, so the animation reading holds; 'Idle' is still an inference - the index comes from the actor's state byte f_313, not from an idle check. The body is identical to 0x001833E8 (maybe_Anim_PlayByNameB).",
+  "previous_name": "maybe_Field_Actor_PlayIdleAnimation",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0018BF48",
+  "name": "maybe_Script_SqValueList_Dtor",
+  "signature": "void maybe_Script_SqValueList_Dtor(void* self)",
+  "params": {
+   "self": "value-array holder; tag word at +4, owner link at +0x14, refcounted block at +0x1C, elements at +0x2C"
+  },
+  "summary": "Destructor of a refcounted value-array holder: installs vtable 0x007589F4, unlinks itself from its owner (0x00245C40), releases the refcounted block at +0x1C and, when it was the last reference, resets every 8-byte element to the shared null value and releases the old one; then destroys the element array through std_destroy_range with the refcount release 0x001BF798 and installs the base vtable 0x0075A728.",
+  "confidence": 0.45,
+  "evidence": "The element destructor 0x001BF798 is now the confident Gfx_Node_RefPtr_Release (0.90) - a generic refcount release, not specifically SQObjectPtr - so the 'Squirrel value' reading rests on the vtable pair 0x007589F4/0x0075A728 and the 0x8000000 tag bit. The body also carries unaff_r7 (a mis-decoded global load of the shared null value), so the maybe_ stays.",
+  "previous_name": "maybe_Script_SqValueList_Dtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F0B80",
+  "name": "Message_FormatArgSlotPool_DtorDelete",
+  "signature": "void Message_FormatArgSlotPool_DtorDelete(void* self)",
+  "params": {
+   "self": "arg-slot pool; 16 slots of 0x108 bytes start at +4"
+  },
+  "summary": "Deleting destructor of the formatted-message argument slot pool: installs vtable 0x0075B3BC, clears the global pool pointer 0x007AC834, destroys the sixteen 0x108-byte slots at +4 and frees the block.",
+  "confidence": 0.6,
+  "evidence": "FACTS.md fixes *0x007AC834 as the formatted-message argument buffer with 0x108-byte slots (Message_FormatArgSlot_Reset, 0.70, indexes it as *0x007AC834 + slot*0x108), and this destructor clears exactly that global and destroys 16 elements of 0x108 bytes - so the object is the argument-slot pool, not a 'message window pane pool'. The 16 'Menu_OpenMessageDialog*' callers in the xref are callers of the mid-function split symbol 0x001F0BE4 (a message-pane getter inside this range), not of this destructor.",
+  "previous_name": "maybe_Ui_MessageWindowPanePool_DtorDelete",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004740E0",
+  "name": "maybe_Ui_List_DtorWithArray",
+  "signature": "void* maybe_Ui_List_DtorWithArray(UiList* self)",
+  "params": {
+   "self": "list widget; four 0x1C4-byte rows at +0, sentinel at +0x714, vtable slot at +0x710"
+  },
+  "summary": "Non-deleting destructor of a list widget: installs vtable 0x00782EE8 at +0x710, relinks the intrusive sentinel at +0x714/+0x718/+0x71C back to itself, clears the counter at +0x720, copies the default timing block from 0x0072B34C and destroys the four 0x1C4-byte rows embedded at the start of the object. Returns self.",
+  "confidence": 0.45,
+  "evidence": "The only caller is now the named Menu_HorseRace_DeletingDtor (0x004114D0), so this is a member destructor run by the horse-race screen teardown; the row element routine 0x00411F24 is the same one the screen rows use. The class is still only known as 'a list owned by that screen', so the maybe_ stays.",
+  "previous_name": "maybe_Ui_List_DtorWithArray",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001E4BC0",
+  "name": "maybe_Ui_SubTable_Dtor",
+  "signature": "Ui_SubTable* maybe_Ui_SubTable_Dtor(Ui_SubTable* self)",
+  "params": {
+   "self": "object; vtable at +0, state bytes at +4/+5, sub-table pointer at +8"
+  },
+  "summary": "Non-deleting destructor of a small object that owns a three-entry sub-table: installs vtable 0x0075A694, clears the state bytes at +4/+5, destroys the three 0x10-byte sub-entries behind the pointer at +8, frees that block and clears the pointer. Returns self.",
+  "confidence": 0.45,
+  "evidence": "The sibling 0x001E4B4C performs the same 3x0x10 destruction and is called by the confident Gfx_ScreenViewEntry_Reset, while 0x001E4A40 builds the same three 0x10-byte entries - so the shape is certain but the owning class is not, and the only caller (maybe_Ui_PooledRecord_ResetB) is itself a maybe_ name.",
+  "previous_name": "maybe_Ui_SubTable_Dtor",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001F2438",
+  "name": "maybe_Ui_Array_DestroyThunk",
+  "signature": "void maybe_Ui_Array_DestroyThunk(u32 arg1, void* elementDtor, u32 arg3, u32 count)",
+  "params": {
+   "arg1": "array base (lost to unaff_r5)",
+   "elementDtor": "per-element destructor",
+   "count": "element count (lost to unaff_r6)"
+  },
+  "summary": "Damaged 24-byte Thumb thunk that tail-calls std_destroy_range with its base pointer and element size taken from the caller-saved registers r5/r6; Ghidra lost both arguments, so only the call target is trustworthy.",
+  "confidence": 0.3,
+  "evidence": "The callee 0x00100BE0 is the confident std_destroy_range (0.80), i.e. an array destructor, so the 'Destroy' wording is right; the body still reads unaff_r5/unaff_r6 and no caller exists, so per FACTS.md the confidence stays at 0.3 and the name keeps maybe_.",
+  "previous_name": "maybe_Ui_Array_DestroyThunk",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0070DA70",
+  "name": "maybe_Field2D_Sprite_DestroySubObjects",
+  "signature": "Field2DSprite* maybe_Field2D_Sprite_DestroySubObjects(Field2DSprite* self)",
+  "params": {
+   "self": "2D field sprite; sub-object at +0xD8, ring links at +0xCC/+0xC8"
+  },
+  "summary": "Releases the 2D field sprite's child sub-object: unlinks the node at (+0xD8)+0xC8 from its ring, clears both links, then destroys the nine 0x14-byte records at (+0xD8)+0x10 through their element destructor 0x001C3858. Returns the sprite.",
+  "confidence": 0.45,
+  "evidence": "No `bl` in asm/text targets this address, so it is reached through a 2D-sprite vtable (the old 'only caller 0x5C3FE4' was wrong); the 0x14-stride nine-element block and the ring unlink are as described, and std_destroy_range is now confident (0.80). The owning class is still only inferred from the Field2D manager layout.",
+  "previous_name": "maybe_Field2D_Sprite_DestroySubObjects",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0018DE24",
+  "name": "maybe_Ui_PickWeightedKeyValue",
+  "signature": "u32 maybe_Ui_PickWeightedKeyValue(void* key)",
+  "params": {
+   "key": "four u16 weights read as the first four words"
+  },
+  "summary": "Picks a weighted-random slot from a four-entry key and returns a random value inside that slot's range: Math_WeightedRandomIndexDefaultRng(key, 4, 0) chooses the slot, the two range accessors 0x0015FA90/0x0015D13C give its first and last index, and the game RNG at (work+8)+0x98 is reduced modulo (last-first+1) and added to first.",
+  "confidence": 0.45,
+  "evidence": "0x005F9650 is now the confident Math_WeightedRandomIndexDefaultRng (0.55, a weighted random index over the passed weights), so the first pass's 'hashes the first four u16' reading was wrong - this is a random pick, not a hash. The game RNG at work+0x98 (FACTS.md) supplies the value. The caller maybe_Ui_EquipWindow_InitMemberTables does not pin the class, so the maybe_ stays.",
+  "previous_name": "maybe_Ui_ItemList_GetSlotRange",
+  "previous_confidence": 0.35,
+  "change": "corrected"
+ },
+ {
+  "address": "0x004AE12C",
+  "name": "maybe_Ui_PickWeightedEntryValue",
+  "signature": "u32 maybe_Ui_PickWeightedEntryValue(void* self)",
+  "params": {
+   "self": "three 0xC-byte entries {min, max, weight} at +0, +0xC, +0x18; previous pick at +0x24"
+  },
+  "summary": "Chooses one of three weighted 0xC-byte entries (entries 0 and 2 are zeroed when they were the previous pick, so the same entry is not chosen twice in a row) and returns a random value inside that entry's [min, max] range, remembering the chosen index at +0x24.",
+  "confidence": 0.45,
+  "evidence": "The weights at +8/+0x14/+0x20 go through the now-confident Math_WeightedRandomIndexDefaultRng (0.55) and the value is 0x0011CD80(gameRng % (hi-lo+1)) + lo with the game RNG at work+0x98 - which is the *game* RNG, not the battle RNG at battleWork+0x4218, so the 'Battle_' prefix was wrong. The only caller is a UI teardown path, so the maybe_ stays.",
+  "previous_name": "maybe_Battle_PickWeightedValueRange",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0018E3D0",
+  "name": "maybe_Ui_PickWeightedStepIndex",
+  "signature": "u32 maybe_Ui_PickWeightedStepIndex(void* self)",
+  "params": {
+   "self": "range bytes at +0xA (low) and +0xB (high)"
+  },
+  "summary": "Picks a weighted-random index inside the object's [f_a, f_b] range: it builds the fixed weight table {0, 400, 200, 150, 100, 50, 40, 10}, zeroes every entry outside the range, calls Math_WeightedRandomIndexDefaultRng(table, 8, 0) and clamps the result back into [f_a, f_b].",
+  "confidence": 0.4,
+  "evidence": "Math_WeightedRandomIndexDefaultRng is now confident (0.55) and the eight values are used as *weights* for an index pick, not as sizes - the function returns an index in [f_a, f_b], so 'PickSizeStep' described the table values rather than the result. No caller pins the consumer, so the maybe_ stays.",
+  "previous_name": "maybe_Ui_PickSizeStep",
+  "previous_confidence": 0.3,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00191DE4",
+  "name": "Member_SetItemAtSlot",
+  "signature": "void Member_SetItemAtSlot(PartyMember* member, int slot, u16 itemId)",
+  "params": {
+   "member": "party member; 24 u16 item ids at +0xEC",
+   "slot": "inventory slot 0..23",
+   "itemId": "item id to store"
+  },
+  "summary": "Writes an item id into inventory slot `slot` of a party member (member+0xEC + slot*2): when the slot is currently equipped it unequips it first through Party_Member_UnequipInventorySlot, then stores the id and, if anything was unequipped, refreshes the derived data (0x00191E3C) and recalculates the member's stats.",
+  "confidence": 0.65,
+  "evidence": "FACTS.md fixes the member inventory as 24 u16 ids at member+0xEC and func_006292A4 as the 'slot is equipped' test, and the body is exactly that: equipped test, unequip, `*(u16*)(member + slot*2 + 0xec) = itemId`, then Party_Member_RecalculateStats. All 13 named callers are inventory operations (Party_Member_EquipInventorySlot, Party_Member_MoveInventoryToBag, Ui_ItemList_RemoveItem, Party_ValidateEquipment...).",
+  "previous_name": "maybe_Member_SetItemAtSlot",
+  "previous_confidence": 0.42,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00191F70",
+  "name": "Member_SwapInventorySlots",
+  "signature": "u32 Member_SwapInventorySlots(PartyMember* a, int slotA, PartyMember* b, int slotB)",
+  "params": {
+   "a": "first party member",
+   "slotA": "first inventory slot",
+   "b": "second party member",
+   "slotB": "second inventory slot"
+  },
+  "summary": "Swaps the item ids in two party-member inventory slots (member+0xEC + slot*2): unequips either slot first when it is equipped, exchanges the two u16 ids, then refreshes both members and recalculates the stats of whichever member had something unequipped. Always returns 1.",
+  "confidence": 0.65,
+  "evidence": "FACTS.md fixes the member inventory at member+0xEC and func_006292A4 as the equipped test; the body reads both slots, unequips the equipped ones, exchanges the two u16 values and calls Party_Member_RecalculateStats on each side. The only caller (maybe_Ui_EquipRow_UpdateCompareText) is an equipment-comparison UI path, which fits a slot swap.",
+  "previous_name": "maybe_Member_SwapInventorySlots",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00193098",
+  "name": "maybe_Party_ShiftRecordSlots",
+  "signature": "void maybe_Party_ShiftRecordSlots(void* self, u32 record)",
+  "params": {
+   "self": "object holding a five-slot array of 0x44-byte records at +0x92F4..+0x9448",
+   "record": "0x44-byte record to insert"
+  },
+  "summary": "Inserts a 0x44-byte record into the five-slot array at +0x92F4: it first checks the record at +0x92F4 for the 0xFF/-1 sentinels (and measures the string at +0x92FC), then memcpy's the new record into the shifted slot, or appends it at +0x9404 when the list is full.",
+  "confidence": 0.3,
+  "evidence": "The stride 0x44 and the range +0x92F4..+0x9448 (five slots) are visible, but the shift count is recovered as the nonsense literal 0x78787879 (a division by 0x44 turned into a magic multiply) and the string measure 0x00100B74 (wcslen) is mis-marked noreturn, so the body is damaged and the confidence drops to 0.3 per FACTS.md. 'Skill' was an unsupported guess about the record contents, so it is dropped.",
+  "previous_name": "maybe_Party_ShiftSkillSlots",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x002C2344",
+  "name": "Ui_Panel_SetState5",
+  "signature": "u32 Ui_Panel_SetState5(void* self)",
+  "params": {
+   "self": "UI panel; widget at +0x228, descriptor at +0x330, controller at +0x35C"
+  },
+  "summary": "Step handler of the same template as Ui_Panel_SetState7 (0x00194F00): ticks the widget at self+0x228 with the descriptor at self+0x330, and once the widget reports ready asks the controller at self+0x35C for state 5 through vtable+0x14 and commits it with vtable+0x10. Always returns 1.",
+  "confidence": 0.5,
+  "evidence": "scores.jsonl puts this function and 0x00194F00 in the same vtable (0x0062F680, one sibling each), and the two bodies are the same step-request template with only the state id (5 vs 7) and the field offsets differing - so the 'DateDisplay' class attribution was unsupported and the sibling's established Ui_Panel_SetState<N> convention applies.",
+  "previous_name": "maybe_Ui_DateDisplay_OnReady",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00194F00",
+  "name": "Ui_Panel_SetState7",
+  "signature": "u32 Ui_Panel_SetState7(void* self, const void* desc)",
+  "params": {
+   "self": "UI panel; widget at +0x34D8, controller at +0x3574",
+   "desc": "descriptor; widget data at +0x520"
+  },
+  "summary": "Step handler: ticks the widget at self+0x34D8 with the descriptor block at desc+0x520, and once the widget reports ready asks the controller at self+0x3574 for state 7 through vtable+0x14 and commits it with vtable+0x10. Always returns 1.",
+  "confidence": 0.5,
+  "evidence": "The twin 0x001950B0 is already named Ui_Panel_SetState7B at 0.50 with the same body and the same literal 7, and scores.jsonl puts both in vtable 0x0062F680; the tick callee is the named Ui_Widget_Update (0.50). The name only claims the state id, which is what the body shows.",
+  "previous_name": "maybe_Ui_Panel_SetState7",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0019B130",
+  "name": "maybe_Ui_Window_UpdatePaneState",
+  "signature": "void maybe_Ui_Window_UpdatePaneState(void* self)",
+  "params": {
+   "self": "window; flags at +0x1BC, pane at +0x120, gauge at +0x930, gauge args at +0x1BE..+0x1C0"
+  },
+  "summary": "Per-frame pane/gauge update: when flag bit 2 of +0x1BC is set it pops the pane at +0x120; otherwise it sets the gauge at +0x930 from the three bytes at +0x1BE..+0x1C0 when bit 0 is set, and pushes the pane when bits 1/8 are set.",
+  "confidence": 0.45,
+  "evidence": "The body is only flag tests plus Ui_Window_PopPane / Ui_Window_PushPane / maybe_Ui_Gauge_SetValue - there is no animation step at all, so 'UpdateDetailAnim' described something the function does not do. 'Equipment' was inferred from the gauges; the class is still unidentified, so the maybe_ stays.",
+  "previous_name": "maybe_Ui_EquipmentWindow_UpdateDetailAnim",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x0019EAA8",
+  "name": "maybe_Ui_MessageWindow_CloseWithBalloon",
+  "signature": "void maybe_Ui_MessageWindow_CloseWithBalloon(UiMessageWindow* self)",
+  "params": {
+   "self": "message window; transition record at (+0xB0)+0x146, variant widget at +0x84"
+  },
+  "summary": "Closes the balloon variant of the message window: finishes the window transition on the record at (+0xB0)+0x146 through Ui_SmithMenu_FinishTransition and releases the variant widget held at self+0x84.",
+  "confidence": 0.45,
+  "evidence": "The close family is now named (Ui_MessageWindow_CloseWithTalkData, Ui_MessageWindow_CloseWithWindowOnly, maybe_Ui_MessageWindow_CloseWithEmote all call the same Ui_SmithMenu_FinishTransition), so the two-step close shape is confirmed; but nothing identifies the widget at +0x84 as a balloon, and the release helper 0x001EB368 is itself a maybe_ name, so the variant word stays unproven.",
+  "previous_name": "maybe_Ui_MessageWindow_CloseWithBalloon",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0019ECA8",
+  "name": "Ui_MessageWindow_CloseWithCharacter",
+  "signature": "void Ui_MessageWindow_CloseWithCharacter(UiMessageWindow* self)",
+  "params": {
+   "self": "message window; character widget at +0x5C, transition record at (+0xB0)+0x146"
+  },
+  "summary": "Closes the character-bound variant of the message window: rebinds the displayed character record for the widget at self+0x5C through FieldScene_RebindCharacter and then finishes the window transition on the record at (+0xB0)+0x146.",
+  "confidence": 0.5,
+  "evidence": "The callee 0x00206AE4 is now the named FieldScene_RebindCharacter (0.50) and takes a CharacterRecord pointer - which is exactly what this function passes - so the variant is the character-rebinding one, not a 'layout' one. The sibling Ui_MessageWindow_CloseWithTalkData is already a confident name, so the family prefix is established.",
+  "previous_name": "maybe_Ui_MessageWindow_CloseWithLayout",
+  "previous_confidence": 0.45,
+  "change": "corrected"
+ },
+ {
+  "address": "0x001A2FB4",
+  "name": "maybe_Ui_Object_SetOwner",
+  "signature": "void maybe_Ui_Object_SetOwner(UiObject* self, UiObject* owner)",
+  "params": {
+   "self": "UI object; owner field at +0x28, notifier object at +0x10",
+   "owner": "new owner (arrives in r1; Ghidra shows it as in_s0)"
+  },
+  "summary": "Re-parents a UI object: stores the new owner at +0x28, then notifies the object at +0x10 through vtable+8 and clears its active flag through vtable+0xC(0).",
+  "confidence": 0.45,
+  "evidence": "The owner store and the two vtable calls are visible, but the owner argument is recovered from in_s0 (the ARM hard-float register trap in FACTS.md), so the prototype is uncertain; two of the three callers are still garbage symbol names (tEb, LFb), so the class and the exact owner semantics stay unproven.",
+  "previous_name": "maybe_Ui_Object_SetOwner",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001A4028",
+  "name": "SpriteActor_UpdateTouchAndPosition",
+  "signature": "uint32_t SpriteActor_UpdateTouchAndPosition(SpriteActor* self)",
+  "params": {
+   "self": "2D sprite actor; embedded Field_Object2D at +0x3B8, state byte at +0x3C4, position at +0x78/+0x7C"
+  },
+  "summary": "Per-frame touch and position step: returns 1 while an event is running ((work+8)+0x6C non-zero); when the sprite's state byte is 4 it advances the embedded Field_Object2D touch state, returns 1 if the touch query is still busy, and otherwise submits the sprite position to the current field actor (0x005F34F0 + Gfx_Actor_BuildTransformFromPosition). Returns 0 when nothing was done.",
+  "confidence": 0.5,
+  "evidence": "The body is fully readable through named callees - Field_Object2D_UpdateTouchState (0.50) on the embedded object at +0x3B8, the touch query 0x0064C740, and maybe_Gfx_Actor_BuildTransformFromPosition - so the touch-step-plus-position-submit reading is confirmed; only the class prefix is inferred from the embedded Field_Object2D.",
+  "previous_name": "maybe_SpriteActor_UpdateTouchAndPosition",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ }
+]

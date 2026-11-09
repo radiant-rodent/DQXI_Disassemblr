@@ -1,0 +1,1741 @@
+[
+  {
+    "address": "0x001002F8",
+    "name": "std_FormatPutStringNarrow",
+    "signature": "void std_FormatPutStringNarrow(FormatStream* stream, const char* text, u32 precision)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "text",
+      "param_3": "precision"
+    },
+    "summary": "Writes a narrow (char) string into a printf-style format sink, honouring the field precision and updating the remaining-width and written-count fields; each byte is handed to the sink's putc callback.",
+    "confidence": 0.62,
+    "evidence": "Called by 0x100C3C's narrow path; body loops text[0..precision] and calls (*stream->putc)(byte, stream->cookie) inside 0x2FF71C/0x2FF748 (padding begin/end); stream layout matches the printf stream used by std_PrintfFormatInt (0x1003F8, N_001) and std_PrintfFormatFloat (0x300090, N_001)."
+  },
+  {
+    "address": "0x00100354",
+    "name": "std_PrintfFormatInt32",
+    "signature": "void std_PrintfFormatInt32(FormatStream* stream, int conv, va_list* ap)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "conv",
+      "param_3": "ap"
+    },
+    "summary": "Formats a 32-bit signed/unsigned decimal integer (%d/%u/i) for the printf core: extracts the value from the va_list, builds the sign/space/plus prefix, converts digits and emits them through the shared padding writer.",
+    "confidence": 0.62,
+    "evidence": "conv==0x75 ('u') takes the unsigned path via 0x2FF780 (va_arg), otherwise 0x2FF76A (signed divmod) with sign detection and prefixes at 0x1003B0/0x1003B4/0x1003B8/0x1003BC; calls 0x2FF798 for digit extraction and 0x2FF7C4 (padding/zero-fill writer). Sits immediately before std_PrintfFormatInt (0x1003F8, N_001) which is the 64-bit variant."
+  },
+  {
+    "address": "0x001004E0",
+    "name": "std_PrintfFormatHex64",
+    "signature": "void std_PrintfFormatHex64(FormatStream* stream, int conv, u32 hi, u32 lo)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "conv",
+      "param_3": "hi",
+      "param_4": "lo"
+    },
+    "summary": "Formats a 64-bit value as hexadecimal (%x/%X), building digits from the 64-bit hi:lo pair and emitting the selected '0x' prefix plus zero padding.",
+    "confidence": 0.72,
+    "evidence": "Nibble loop over arg3/arg4 with shifts (hi:lo 64-bit), digit table selected by the 0x800 flag (0x1004F0/0x100504), '0x' prefix added when conv==0x70 ('p'), then 0x2FF7C4. Same calling convention as std_PrintfFormatOctal64 (0x100E18)."
+  },
+  {
+    "address": "0x00100538",
+    "name": "std_PrintfFormatHexArg",
+    "signature": "void std_PrintfFormatHexArg(FormatStream* stream, int conv, va_list* ap)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "conv",
+      "param_3": "ap"
+    },
+    "summary": "va_arg wrapper for the hex formatter: fetches a 32-bit argument from the va_list and delegates to std_PrintfFormatHex64 with a zero high word.",
+    "confidence": 0.6,
+    "evidence": "Body is exactly `uVar1 = func_002FF780(*arg3, arg1); func_001004E0(arg1, arg2, uVar1, 0);` - va_arg helper 0x2FF780 (the same helper used for 'u' in 0x100354) plus the 64-bit hex formatter; mirrors std_PrintfFormatOctalArg (0x100E5C)."
+  },
+  {
+    "address": "0x00100658",
+    "name": "std_mbrlen",
+    "signature": "int std_mbrlen(const char* s, int n, mbstate_t* ps)",
+    "params": {
+      "param_1": "s",
+      "param_2": "n",
+      "param_3": "ps"
+    },
+    "summary": "C89 mbrlen: measures how many bytes of a multibyte sequence are consumed, using the caller's mbstate and returning -2 for an incomplete sequence and -1 for an illegal one.",
+    "confidence": 0.72,
+    "evidence": "Tail-calls 0x10067C (mbrtowc) with pwc=NULL, i.e. func_0010067C(0,s,n,ps); handles the NULL-s default ('\\0' one-byte sequence); both return codes -1/-2 are the C standard's (size_t)-1/-2 conventions."
+  },
+  {
+    "address": "0x0010067C",
+    "name": "std_mbrtowc",
+    "signature": "int std_mbrtowc(u16* pwc, const char* s, int n, mbstate_t* ps)",
+    "params": {
+      "param_1": "pwc",
+      "param_2": "s",
+      "param_3": "n",
+      "param_4": "ps"
+    },
+    "summary": "C99 mbrtowc: decodes one multibyte character into a wide character using the current locale's converter, returning the bytes consumed, 0 for a null character, -2 for an incomplete sequence and -1 (setting errno EILSEQ) for an invalid one.",
+    "confidence": 0.75,
+    "evidence": "Uses the locale hook 0x2FF9D0 (same converter the printf code uses) with the caller's mbstate; sets errno through 0x2FF9C4 ('*puVar2 = 4') on invalid input; signature (pwc,s,n,ps) and -1/-2 returns match the C standard; callers are std_mbrlen (0x100658) and the wide/multibyte printf paths."
+  },
+  {
+    "address": "0x00100A90",
+    "name": "std_wcsncat",
+    "signature": "u16* std_wcsncat(u16* dest, const u16* src, int count)",
+    "params": {
+      "param_1": "dest",
+      "param_2": "src",
+      "param_3": "count"
+    },
+    "summary": "Wide-character strncat: finds the end of dest, appends at most count wide characters from src and terminates the result.",
+    "confidence": 0.82,
+    "evidence": "Body: scan dest for 0, copy up to count src elements, write terminating 0, return dest. Exact wcsncat semantics; sibling 0x100AD6 was named std_Utf16CompareN by N_032 so the UTF-16 vocabulary is already established."
+  },
+  {
+    "address": "0x00100C3C",
+    "name": "std_FormatPutStringNarrowDispatch",
+    "signature": "u32 std_FormatPutStringNarrowDispatch(FormatStream* stream)",
+    "params": {
+      "param_1": "stream"
+    },
+    "summary": "Chooses how to emit a narrow %s argument: if the stream is in byte mode it writes the bytes verbatim, otherwise it converts the multibyte text to wide characters first.",
+    "confidence": 0.55,
+    "evidence": "Checks stream+0x14 (wide-mode flag) and calls 0x1002F8 (byte writer) when 0 or 0x100D28 (multibyte-to-wide) otherwise, returns 1; identical dispatch shape to 0x100FB4 (maybe_std_FormatSinkPutString, N_037) which handles %ls."
+  },
+  {
+    "address": "0x00100D28",
+    "name": "std_FormatPutMultibyteAsWide",
+    "signature": "void std_FormatPutMultibyteAsWide(FormatStream* stream, const char* text, int count)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "text",
+      "param_3": "count"
+    },
+    "summary": "Emits a multibyte string to a wide-character sink: a first pass counts characters with mbrtowc (honouring precision in characters, not bytes) and a second pass converts and writes each wide character.",
+    "confidence": 0.55,
+    "evidence": "Two passes using 0x2FF9D0 (mbrtowc); decrements stream->f_18 by the character count, then calls the sink callback with u16 values and increments f_20; the stream flags at +0x1c hold the precision limit."
+  },
+  {
+    "address": "0x00100DB8",
+    "name": "std_FormatPutStringWide",
+    "signature": "void std_FormatPutStringWide(FormatStream* stream, const u16* text, u32 precision)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "text",
+      "param_3": "precision"
+    },
+    "summary": "Writes a wide (UTF-16) string into a wide printf sink, honouring precision and updating width/count fields; the mirror image of std_FormatPutStringNarrow.",
+    "confidence": 0.65,
+    "evidence": "Same structure as 0x1002F8 but indexed on u16 and calling the sink with each u16; called by 0x100FB4 when the stream is in wide mode."
+  },
+  {
+    "address": "0x00100E18",
+    "name": "std_PrintfFormatOctal64",
+    "signature": "void std_PrintfFormatOctal64(FormatStream* stream, u32 conv, u32 hi, u32 lo)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "conv",
+      "param_3": "hi",
+      "param_4": "lo"
+    },
+    "summary": "Formats a 64-bit value as octal (%o), including the alternate-form leading '0' and zero padding.",
+    "confidence": 0.72,
+    "evidence": "Three-bit digit loop over hi:lo (`arg3 & 7` + '0'), the 0x20 flag forces the leading zero and decrements the width field, then 0x2FF7C4; direct sibling of the hex formatter 0x1004E0."
+  },
+  {
+    "address": "0x00100E5C",
+    "name": "std_PrintfFormatOctalArg",
+    "signature": "void std_PrintfFormatOctalArg(FormatStream* stream, u32 conv, va_list* ap)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "conv",
+      "param_3": "ap"
+    },
+    "summary": "va_arg wrapper for the octal formatter: fetches a 64-bit argument and splits it into high/low words for std_PrintfFormatOctal64.",
+    "confidence": 0.58,
+    "evidence": "Body: `uVar1 = func_002FF780(*arg3,arg1); func_00100E18(arg1,arg2,uVar1>>32,uVar1,0);` - 64-bit va_arg helper plus the octal formatter."
+  },
+  {
+    "address": "0x00100F24",
+    "name": "std_PrintfFormatSpecialFloat",
+    "signature": "void std_PrintfFormatSpecialFloat(FormatStream* stream, u32 flags, int conv, int sign)",
+    "params": {
+      "param_1": "stream",
+      "param_2": "flags",
+      "param_3": "conv",
+      "param_4": "sign"
+    },
+    "summary": "Emits the three-character special float spellings (inf/INF/nan/NAN) for the printf core, adjusting the width by the sign character and honouring the uppercase flag.",
+    "confidence": 0.6,
+    "evidence": "Exactly three characters are written from one of the four 3-byte literals at 0x100F9C/0x100FA0/0x100FA4/0x100FA8, selected by conv<7 and the 0x800 uppercase flag; width field (stream+0x18) is reduced by 3 or 4; caller is std_PrintfFormatFloat (0x300090, N_001)."
+  },
+  {
+    "address": "0x00101918",
+    "name": "std_ParseInfNan",
+    "signature": "int std_ParseInfNan(u32 lo, u32 hi, int* endpos, int* scanctx, int pos, u32 bits, int len, int ch)",
+    "params": {
+      "param_1": "lo",
+      "param_2": "hi",
+      "param_3": "endpos",
+      "param_4": "scanctx",
+      "param_5": "pos",
+      "param_6": "bits",
+      "param_7": "len",
+      "param_8": "ch"
+    },
+    "summary": "Recognises the textual 'inf', 'infinity' and 'nan(...)' forms in strtod and fills the result's float bits (infinity plus optional sign, or a quiet NaN with the parenthesised payload skipped).",
+    "confidence": 0.7,
+    "evidence": "Compares the current character against 'I'/'N' (mask 0xffffffdf) and expects 'nf'/'aN'; on success writes 0x7F800000-style exponent bits and 0x400000 quiet-NaN bit into the float union; sibling 0x101314 std_Strtod / 0x101100 std_StrtofCore (N_001) are its only logical callers."
+  },
+  {
+    "address": "0x00101AA0",
+    "name": "maybe_std_Abort",
+    "signature": "void maybe_std_Abort(void)",
+    "params": {},
+    "summary": "Tiny libc wrapper that tail-calls the fatal-exit routine at 0x100F04; most likely abort() or a terminate helper.",
+    "confidence": 0.35,
+    "evidence": "Body is a single tail call to 0x100F04, which has no readable C file; it sits in the newlib block immediately before std_isspace (0x100F10, N_037) and next to std_strtod, and has no callers (called through a table/atexit slot)."
+  },
+  {
+    "address": "0x00101B74",
+    "name": "Engine_Initialize",
+    "signature": "void Engine_Initialize(void)",
+    "params": {},
+    "summary": "One-time engine bring-up: initialises the heap system (InitHeaps), then lazily creates and wires every global subsystem singleton (resource caches, renderer, sound, task pool, input) using the repeated 'init-flag + aligned size + allocate + construct' pattern.",
+    "confidence": 0.5,
+    "evidence": "No callers (called from the startup/init table), it is the only caller of InitHeaps (0x102EF8) besides itself, creates ~12 globals via func_00116AE0(size, tag) + ctor (0x103724, 0x104A38, 0x1052C8, 0x104ED8, 0x103594, 0x10293C...), and finally calls func_00107D00/0x102EC0; mode 'arm' with a 0xC78 body."
+  },
+  {
+    "address": "0x00102828",
+    "name": "maybe_Os_InitTimeStrings",
+    "signature": "void maybe_Os_InitTimeStrings(void)",
+    "params": {},
+    "summary": "Fills three fields of a small global record from a 0x300308 lookup and the two constant-string getters 0x105238/0x105280, offsetting one by +1.",
+    "confidence": 0.3,
+    "evidence": "Body: iVar1 = func_00300308(0,g_00102870); *(iVar1+4) = func_00105238(0)+1; iVar1->f_c = func_00105280(0); the getters return '&literal + constant offset' (see 0x105238/0x105280), so this seeds string/locale fields; no callers found."
+  },
+  {
+    "address": "0x00102904",
+    "name": "Engine_InitializeSubsystems",
+    "signature": "void Engine_InitializeSubsystems(void)",
+    "params": {},
+    "summary": "Runs the fixed ordered list of subsystem initialisers (OS/runtime, display, task pool, time step) that must follow heap setup; called from Engine_Initialize.",
+    "confidence": 0.5,
+    "evidence": "Body is an argument-free call chain 0x107024 -> 0x1071AC -> 0x107544 -> 0x1075FC -> 0x10DA2C(0x1e) -> 0x107618(3) -> 0x107608(1); called from 0x101B74 (Engine_Initialize) right after the cache/cache-set construction."
+  },
+  {
+    "address": "0x0010293C",
+    "name": "maybe_Gfx_UpdateFrameTasks",
+    "signature": "void maybe_Gfx_UpdateFrameTasks(FrameContext* self, int arg2)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2"
+    },
+    "summary": "Per-frame service update: advances up to five timed fade records, services the pending-transfer list, releases finished transfer slots and, when arg2==0, drops bulk-transfer bits; called from the main loop.",
+    "confidence": 0.42,
+    "evidence": "Body decodes a 5-entry bitmask at self+0x1AB0 with (start,current,step,remaining) float tuples, calls 0x105584/0x105AFC/0x10967C/0x106280, and is called from 0x694E18 (main loop) together with 0x101B74/0x10411C/0x104204/0x104520; exact owning subsystem (Gfx vs Fs) not proven."
+  },
+  {
+    "address": "0x00102B90",
+    "name": "maybe_Engine_GetUpdateMode",
+    "signature": "int maybe_Engine_GetUpdateMode(void)",
+    "params": {},
+    "summary": "Returns 1 or 2 depending on the sign of the value produced by 0x107E9C, i.e. maps a status/flag to a two-valued mode.",
+    "confidence": 0.32,
+    "evidence": "Body: `iVar1 = func_00107E9C(); return (iVar1 >> 0x1f) + 1;` - the same (x>>31)+1 idiom used for handle/status normalisation elsewhere; no callers."
+  },
+  {
+    "address": "0x00102BA4",
+    "name": "maybe_Engine_DispatchFrameCallbacks",
+    "signature": "void maybe_Engine_DispatchFrameCallbacks(void)",
+    "params": {},
+    "summary": "Main-loop callback dispatcher: runs up to four registered callbacks from each of several global callback arrays (frame begin, render, frame end), guarded by the runtime-state checks 0x10D68C/0x10CC00.",
+    "confidence": 0.45,
+    "evidence": "Walks 4-entry {fn,arg} arrays rooted at g_00102EB0 (offsets 0, 9, 0x12, 0x1B entries), invoking each non-null callback; brackets them with 0x11383C, 0x117C58/0x117B78 (lock), 0x1095A4(1/0); called from 0x694E18 (main loop) and 0x101B74."
+  },
+  {
+    "address": "0x00102EC8",
+    "name": "maybe_Gfx_SetFramePeriod",
+    "signature": "void maybe_Gfx_SetFramePeriod(u32 period, FrameContext* ctx)",
+    "params": {
+      "param_1": "period",
+      "param_2": "ctx"
+    },
+    "summary": "Stores a period/frame-duration value in two fields of the context and resets the two timing helpers.",
+    "confidence": 0.35,
+    "evidence": "Body writes arg1 to ctx+8 and ctx+0x14 and calls 0x107894(0)/0x107880(0); no callers (table slot), so the meaning of the value is inferred from the two mirrored writes."
+  },
+  {
+    "address": "0x00103544",
+    "name": "maybe_Fs_Channel_InitFields",
+    "signature": "u32 maybe_Fs_Channel_InitFields(FsChannel* self, u32 arg2, u32 arg3, u32 arg4)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Initialises one transfer channel object: stores its heap/callback pointer, builds the linked-list head at +0xE104/+0xE118 and creates the asynchronous transfer primitive (0x10EAB0) with the channel's 0x2000-byte staging buffer.",
+    "confidence": 0.4,
+    "evidence": "Writes f_E114=arg2, func_00111CD8(&f_E118,0,arg3,arg4,arg4), f_E104=self+4, then 0x10EAB0(&f_E0F8, f_E114, 0x2000, 0x11, 0xFFFFFFFE); called once from Engine_Initialize (0x101B74) with the cache-set base at +0x334."
+  },
+  {
+    "address": "0x00103594",
+    "name": "maybe_Fs_ChannelTable_Create",
+    "signature": "void maybe_Fs_ChannelTable_Create(FsChannelTable* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Constructs a 255-entry channel/queue table: allocates the object, installs the table vtable, fills each 0x18-byte entry with the entry constructor and terminates the array.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x10E8C0(self+4), sets vtable slots from g_00103714/0x18, then 0x100050(entries, g_00103718, 0x18, 0xFF) = 'call ctor for 255 elements of 0x18 bytes'; the caller 0x101B74 stores the result in g_0010233C and immediately passes it to 0x103544."
+  },
+  {
+    "address": "0x00103724",
+    "name": "Fs_CacheSet_Initialize",
+    "signature": "void Fs_CacheSet_Initialize(FsCacheSet* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Builds the whole streaming-resource cache: allocates per-category slot pools and buffers for every pack category (sound, cmn_cache, weapon, PL_256/400, F_/B_ motion, sound, model, UI) and registers them in the named-table at the end.",
+    "confidence": 0.78,
+    "evidence": "Inline string literals in the body: s_sound_00103FD0, s_cmn_cache_00103FD8, s_weapon_00103FE4, s_PL_256_00103FEC, s_PL_400_00103FF4, s_F_PLmotion_00103FFC, s_F_Cache_00104008, s_Cache1/2, s_B_PLsound/PLmotion/ENsound/ENmodel/ENmotion; then 0x10928C registers Common/ModeCmn/CacheCmn/Weapon/FldPlayer/BtlPlayer/BtlEnmMdl/BtlEnmMot/BtlPSound/BtlESound/Field/UICmn/UI/SoundCmn/TempSct/Fails (count 0xF). Slot pools come from 0x108624/0x108750/0x1086CC/0x1087F4 with sizes 0x80000/0x40000/0x64000/0x12C000/0xBC0000."
+  },
+  {
+    "address": "0x0010411C",
+    "name": "maybe_Gfx_SubmitDrawList",
+    "signature": "void maybe_Gfx_SubmitDrawList(GfxContext* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Submits the accumulated draw/command list for the current frame: takes the renderer lock, releases the transfer list, and for every queued entry calls the renderer's slot-0x20 command with the frame constants.",
+    "confidence": 0.4,
+    "evidence": "Body: 0x10AF94(&local); 0x108F64(local); if g_001041F0 then for i in (self->f_54..f_58)/8 call (*(entry->vtable+0x20))(entry,0x3F,local_18,0x100,10); called from 0x101B74 and the main loop 0x694E18."
+  },
+  {
+    "address": "0x00104204",
+    "name": "maybe_Gfx_ReleaseRenderContext",
+    "signature": "void maybe_Gfx_ReleaseRenderContext(GfxContext* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Flushes the renderer and destroys the owned renderer object (virtual slot +4), clearing the pointer.",
+    "confidence": 0.45,
+    "evidence": "Body: 0x10AF94/0x1092A0 lock+flush, then if self->f_18 != 0 call (*(*f_18+4))() and set f_18=0; called from Engine_Initialize and the main-loop teardown path 0x694E18, symmetric with 0x10411C."
+  },
+  {
+    "address": "0x00104240",
+    "name": "Fs_MountDefaultArchives",
+    "signature": "void Fs_MountDefaultArchives(void)",
+    "params": {},
+    "summary": "Lazily mounts the built-in archives once: initialises the archive device, opens the system file handle, registers the default mounts (name,size) and aborts through 0x118924 on failure.",
+    "confidence": 0.5,
+    "evidence": "Guarded by g_001042A8; calls 0x106AC0, 0x10BDF8 (Os_AcquireSharedSession), 0x106A6C, 0x1074AC(g_001042B0,g_001042AC) (Os_CreateEvent with a literals pair), 0x107514; error path func_00118924(iVar2, 0x104298); mirrors 0x1042B4 which undoes it."
+  },
+  {
+    "address": "0x001042B4",
+    "name": "Fs_UnmountDefaultArchives",
+    "signature": "void Fs_UnmountDefaultArchives(void)",
+    "params": {},
+    "summary": "Undoes Fs_MountDefaultArchives: closes the event/device handles and clears the mounted flag.",
+    "confidence": 0.5,
+    "evidence": "Guarded by g_001042FC; calls 0x107470(g_00104300) (Os_CheckHandleClosed), 0x106A38 (Os_CloseHandleIfOpen), error path 0x118924(...,0x1042EC), then clears *pcVar1; exact mirror of 0x104240."
+  },
+  {
+    "address": "0x00104430",
+    "name": "maybe_Mem_ResizePageBlock",
+    "signature": "int maybe_Mem_ResizePageBlock(u32 size)",
+    "params": {
+      "param_1": "size"
+    },
+    "summary": "Grows or shrinks a page-granular memory block: when the size shrinks it unmaps the tail pages, when it grows it maps new pages and remembers the new base/size.",
+    "confidence": 0.42,
+    "evidence": "Only acts when (arg1 & 0xFFF)==0, compares with the current size at g_0010450C[1], then calls 0x1053D0(base,0,len,1,0) to unmap or 0x1053D0(base,0,len,0x10003,3) to map; stores the new base/size back; no callers (vtable/table slot)."
+  },
+  {
+    "address": "0x00104520",
+    "name": "Fs_CacheSet_UpdateEntries",
+    "signature": "void Fs_CacheSet_UpdateEntries(FsCacheSet* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame cache-set update: walks the entry lists, sorts them by the 0x84 priority byte, applies pending visibility transitions through the entry vtable (+0x10/+0x14), releases unloaded entries (+0xC/+0x28) and merges the done-list.",
+    "confidence": 0.62,
+    "evidence": "Uses intrusive lists at self+0xC (head self+0x30) and self+0x34; entry vtable slots +0xC/+0x10/+0x14/+0x28; entry byte +0x84 is the sort key and +0x85/+0x86 the visible/pending flags; calls 0x1235A4 (list splice) and 0x109600 (list clear); called from 0x101B74 and main loop 0x694E18."
+  },
+  {
+    "address": "0x001047B0",
+    "name": "Fs_CacheSet_BeginEvict",
+    "signature": "void Fs_CacheSet_BeginEvict(FsCacheSet* set)",
+    "params": {
+      "param_1": "set"
+    },
+    "summary": "Asks every currently loaded cache entry to prepare for eviction (entry vtable slot +0x18).",
+    "confidence": 0.55,
+    "evidence": "Iterates the list at set[0]/set[1] and calls (*(*entry+0x18))() when entry byte +0x85 is set; sibling trio 0x1048BC (+0x1C), 0x10490C (+0x20) with the same loop; called around the main-loop frame in 0x101B74/0x694E18."
+  },
+  {
+    "address": "0x00104800",
+    "name": "Fs_CacheSet_ReleaseEntries",
+    "signature": "void Fs_CacheSet_ReleaseEntries(FsCacheSet* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Releases cache entries that are no longer visible: unloads them (vtable +0x14), clears the visible/pending bytes, destroys the object (+0xC) and frees it (+0x28) until the done-list is empty.",
+    "confidence": 0.6,
+    "evidence": "Loop terminates when the list cursor equals self->f_1C; unlinks via 0x109620/0x109658; calls slots +0x14/+0xC/+0x28 exactly like 0x104520; called from 0x101B74, 0x55AD28 and the main loop."
+  },
+  {
+    "address": "0x001048BC",
+    "name": "Fs_CacheSet_EndEvict",
+    "signature": "void Fs_CacheSet_EndEvict(FsCacheSet* set)",
+    "params": {
+      "param_1": "set"
+    },
+    "summary": "Second eviction phase: calls entry vtable slot +0x1C on every loaded entry (commit/discard prepared evictions).",
+    "confidence": 0.55,
+    "evidence": "Same 3-line list walk as 0x1047B0 but slot +0x1C; part of the 0x1047B0/0x1048BC/0x10490C slot-0x18/0x1C/0x20 family."
+  },
+  {
+    "address": "0x0010490C",
+    "name": "Fs_CacheSet_Flush",
+    "signature": "void Fs_CacheSet_Flush(FsCacheSet* set)",
+    "params": {
+      "param_1": "set"
+    },
+    "summary": "Third eviction phase: calls entry vtable slot +0x20 on every loaded entry (final flush of cached blocks).",
+    "confidence": 0.55,
+    "evidence": "Same list walk as 0x1047B0/0x1048BC but slot +0x20; the three functions are always called together from 0x104520 and the main loop."
+  },
+  {
+    "address": "0x0010496C",
+    "name": "Fs_CacheSet_Shutdown",
+    "signature": "void Fs_CacheSet_Shutdown(FsCacheSet* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Destroys all remaining cache entries: unlinks each block from the free list, detaches its buffer, releases the underlying allocation (0x10F6CC) and empties the set.",
+    "confidence": 0.62,
+    "evidence": "Walks self->f_1C..f_14 list via 0x115358/0x115390, frees f_34 via 0x10F69C, detaches f_10 records with 0x10EC00/0x10EC14 (intrusive-tree unlink), then 0x10F6CC(entry); called from Engine_Initialize and main-loop teardown."
+  },
+  {
+    "address": "0x00104A38",
+    "name": "Gfx_Display_Initialize",
+    "signature": "void Gfx_Display_Initialize(GfxDisplay* self, u32 arg2, u32 arg3, u32 arg4, u32 arg5)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "arg4",
+      "param_5": "arg5"
+    },
+    "summary": "Initialises the dual-screen display: allocates 2-3 framebuffer/wave buffers per screen, four 0x200x0x200 and 0x100x0x200 render targets, the GPU shared block and the frame-timing counters.",
+    "confidence": 0.55,
+    "evidence": "Allocates 3 buffers per i in 0..1 with sizes n*96000, n*0x12C00, n*96000 (n=2 or 3 from Gfx config), two 0x100000-byte target blocks with 0x100 sub-entries, then 0x10944C(&f_C4,0x200,0x200,...) x4, and finally (config<<0x12) bytes for f_1E4 with svc 0x28; called from 0x101B74 with the display singleton; the 400/0x140 screen constants appear in 0x109FB0."
+  },
+  {
+    "address": "0x00104D0C",
+    "name": "Gfx_Display_Shutdown",
+    "signature": "void Gfx_Display_Shutdown(GfxDisplay* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Releases everything Gfx_Display_Initialize allocated: the shared block, the six per-screen buffers, the two 0x100000 target buffers and the two mapped regions.",
+    "confidence": 0.6,
+    "evidence": "Frees f_1E4 (0x10F69C), then 3 pointers x 2 screens at self+4, then f_44/f_48 for 2 entries, then 0x10E66C(...,f_BC/f_C0); exact inverse of 0x104A38; called from Engine_Initialize and the main loop."
+  },
+  {
+    "address": "0x00104DC0",
+    "name": "Gfx_Display_PresentFrame",
+    "signature": "void Gfx_Display_PresentFrame(GfxDisplay* self, u32 flags, u32 timestamp)",
+    "params": {
+      "param_1": "self",
+      "param_2": "flags",
+      "param_3": "timestamp"
+    },
+    "summary": "Frame presentation: waits for the vsync deadline, DMA-copies the finished framebuffer lines (0x400 stride x 0xF0 rows) to the visible buffer, then swaps the active buffer index.",
+    "confidence": 0.62,
+    "evidence": "Computes elapsed ticks with g_00104EC8/g_00104ECC, spins with 0x11CC94, copies with 0x10AD60(0x400, buf, buf, 0xF0) and 0x10AD60(g_00104ED4, buf[1], 0, 0xF0), then `f_1D=f_1C; f_1C=~f_1C&1` and 0x108430; 0x400x0xF0 is exactly a 3DS top-screen 400x240 framebuffer."
+  },
+  {
+    "address": "0x00104ED8",
+    "name": "maybe_Gfx_InitDefaultTexture",
+    "signature": "void maybe_Gfx_InitDefaultTexture(GfxTextureSlot* self, TextureConfig* cfg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "cfg"
+    },
+    "summary": "Creates a small default texture: allocates a 0x10x0x10 texture through the renderer's allocator, registers it and marks the slot valid.",
+    "confidence": 0.42,
+    "evidence": "Stores arg2+4 into self+8, then 0x106AC0/0x106BA8/0x10BDF8 prologue, allocates 0x10x0x10 via 0x106B80, calls the renderer allocator (*(*self+8))(0x10,4), stores f_10 and calls 0x106D5C(...,0x10,0x10,...); pairs with 0x104F58."
+  },
+  {
+    "address": "0x00104F58",
+    "name": "maybe_Gfx_ReleaseDefaultTexture",
+    "signature": "void maybe_Gfx_ReleaseDefaultTexture(GfxTextureSlot* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Destroys the default texture created by 0x104ED8 and releases its owner reference.",
+    "confidence": 0.42,
+    "evidence": "Guarded by self->f_C; calls 0x106BFC(*g_00104FB0), the virtual destructor on the renderer object, 0x11224C, then clears f_C/f_10 and the owner pointer."
+  },
+  {
+    "address": "0x00104FDC",
+    "name": "maybe_Gfx_InitDisplayDriver",
+    "signature": "u32 maybe_Gfx_InitDisplayDriver(void)",
+    "params": {},
+    "summary": "Brings up the graphics driver once: stores the runtime flag, reads the display timing values (0x106F04/0x107298), and when they indicate a usable display config registers the 0x3000-byte command buffer and sets the display mode 10.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x106F04, 0x107298, 0x107328(g_00105040,0x3000), 0x10C574(0,10); sets *g_00105038=1 and returns 1; failure path checks the 64-bit result against g_0010503C; called from Engine_Initialize and 0x106BFC-adjacent init path."
+  },
+  {
+    "address": "0x00105044",
+    "name": "Input_Initialize",
+    "signature": "void Input_Initialize(InputState* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Initialises the input state object: verifies the three global pad/touch/timer records are constructed (asserting through 0x10009C), then binds the pad and touch sub-states.",
+    "confidence": 0.5,
+    "evidence": "Asserts g_00105180[4]/[8]/[0xC] thread flags, then 0x108A00(self+4, g_001051A0-0x58) (pad sticks) and 0x108878(self+0xEC, g_00105194) (button masks); called from Engine_Initialize and the main loop with the global input object."
+  },
+  {
+    "address": "0x001051F4",
+    "name": "maybe_Gfx_GetCmdBufOffsets",
+    "signature": "int maybe_Gfx_GetCmdBufOffsets(GfxCmdBuf* self, u32 value)",
+    "params": {
+      "param_1": "self",
+      "param_2": "value"
+    },
+    "summary": "Stores a value in a command-buffer header and returns the offset of its two chained sub-blocks by pointer arithmetic (0xE8/0xEC).",
+    "confidence": 0.3,
+    "evidence": "Body: *arg1=arg2; iVar1=0x108C00(arg1+1); iVar1=0x108C00(iVar1+0xE8); return iVar1-0xEC; fixed 0xE8/0xEC strides suggest header+payload layout, but no caller and no string to confirm the owner."
+  },
+  {
+    "address": "0x00105238",
+    "name": "maybe_Os_GetDefaultLocaleString",
+    "signature": "int maybe_Os_GetDefaultLocaleString(char* name)",
+    "params": {
+      "param_1": "name"
+    },
+    "summary": "Returns a pointer to the built-in default locale/region string, or 0 when an override name is supplied and resolves through 0x10540C.",
+    "confidence": 0.35,
+    "evidence": "Body: if (arg2 && *arg2 && 0x10540C(g_00105278+0x10525C) != 0) return 0; return &g_00105278 + g_0010527C; i.e. a literal-pool offset into a constant; used by 0x102828 to seed two record fields; the exact literal is not recovered because the object is a data blob in .text."
+  },
+  {
+    "address": "0x00105280",
+    "name": "maybe_Os_GetRegionString",
+    "signature": "int maybe_Os_GetRegionString(char* name)",
+    "params": {
+      "param_1": "name"
+    },
+    "summary": "Second constant-string getter, structurally identical to 0x105238 but reading the second literal-pool block.",
+    "confidence": 0.35,
+    "evidence": "Same body shape as 0x105238 with g_001052C0/g_001052C4 and 0x1052A4; called by 0x102828 next to 0x105238, so the pair seeds two related string fields."
+  },
+  {
+    "address": "0x001052C8",
+    "name": "maybe_Gfx_GetRenderContext",
+    "signature": "GfxContext* maybe_Gfx_GetRenderContext(GfxContext** out)",
+    "params": {
+      "param_1": "out"
+    },
+    "summary": "Lazily creates and returns the process-wide graphics/render context singleton (0x1F8 bytes), constructing it once through the 0x100050 element-constructor helper.",
+    "confidence": 0.45,
+    "evidence": "28 callers including Gfx_CharShadowPass_Init (0x2D4F28), 0x5668A0-0x56AFFC, 0x616DB4; guarded by g_001053B4 and stores into g_001053B8; allocates 0x1F8 bytes with 0x11FE8C/0x11CFAC/0x116AE0 and runs the ctor g_001053C0 with g_001053C4 (0xC, 2); same lazy-singleton shape as 0x10AF00."
+  },
+  {
+    "address": "0x00105500",
+    "name": "Os_WaitFlagByte",
+    "signature": "void Os_WaitFlagByte(OsWaitObject* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Spins (sleeping between polls) until the byte flag at self+0xE3C5 becomes non-zero.",
+    "confidence": 0.5,
+    "evidence": "Body: while (arg1->f_E3C5 == 0) func_0011CC94(0,0); 0x11CC94 is the sleep/yield helper used by every polling loop in this region (e.g. 0x107D00, 0x10D884); recovered-only entry point."
+  },
+  {
+    "address": "0x00105570",
+    "name": "maybe_Os_ClearWaitFlag",
+    "signature": "u32 maybe_Os_ClearWaitFlag(u32 value)",
+    "params": {
+      "param_1": "value"
+    },
+    "summary": "Calls 0x10B258 and returns its argument unchanged; a thin wrapper used to clear/observe a wait flag.",
+    "confidence": 0.3,
+    "evidence": "Body is `func_0010B258(); return arg1;` with no callers; 0x10B258 is a two-instruction helper (no readable C), so only the wrapper shape is known."
+  },
+  {
+    "address": "0x00106280",
+    "name": "maybe_Gfx_ReleaseFinishedUploads",
+    "signature": "void maybe_Gfx_ReleaseFinishedUploads(GfxUploadQueue* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Reaps completed texture uploads: for four queues it walks the bitmask of live slots, frees finished blocks through the renderer (0x10EF64/0x10F044 under a monitor), returns the slot to the free list and records the completion tick.",
+    "confidence": 0.45,
+    "evidence": "Four slot masks at self+0x90.., 0x14-byte records at self+0x7C with stride 0x280, free-list at self+0x80, monitor lock 0x117E50/0x117ED0, pool compaction 0x11AE20, tick g_00106434; called from 0x10293C when self->f_8C>0."
+  },
+  {
+    "address": "0x00106460",
+    "name": "maybe_Os_GetThreadClass",
+    "signature": "u32 maybe_Os_GetThreadClass(void)",
+    "params": {},
+    "summary": "Returns 1 or 2 depending on whether 0x1146F0 reports zero; a two-valued thread/scheduler classification.",
+    "confidence": 0.3,
+    "evidence": "Body: `iVar1 = func_001146F0(); return iVar1 == 0 ? 1 : 2;` no callers; same two-value pattern as 0x102B90 and 0x107B1C."
+  },
+  {
+    "address": "0x0010673C",
+    "name": "maybe_Os_SequenceTask_Ctor",
+    "signature": "OsSequenceTask* maybe_Os_SequenceTask_Ctor(OsSequenceTask* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Constructs a task/sequence object: initialises three intrusive list heads, sets the state bytes, and names it \"SequenceTask\" (truncated to 31 chars) using the same naming helper as other engine objects.",
+    "confidence": 0.49,
+    "evidence": "Inline literal s_SequenceTask_00106888 is copied into self+0x19 after 0x11CCA0(strlen)+1 clamped to 0x1F and 0x11142C(memcpy); sets self[0x21]=3, byte+0x85/0x86=0, byte+0x87=1, self[0x24]=-1, f_29=0xFF; the object is allocated as 0xB0 bytes by 0x107F84 and then used as an Fs task."
+  },
+  {
+    "address": "0x001068AC",
+    "name": "maybe_Fs_SetTransferPriority",
+    "signature": "void maybe_Fs_SetTransferPriority(FsTransferObject* self, int mode)",
+    "params": {
+      "param_1": "self",
+      "param_2": "mode"
+    },
+    "summary": "Applies a transfer priority/mode to the twelve channel sub-objects (setting their 'enabled' flag through the vtable) and starts or stops the bulk transfer when the mode crosses 4.",
+    "confidence": 0.42,
+    "evidence": "Builds a 12-entry pointer table self+0x20/0x24/0x2C/0x30/0x34/0x3C/0x38/0x40/0x44/0x48/0x4C/0x50, indexes the 5-byte-per-mode table g_00106A0C by arg2, calls (*(*obj+0x14))(obj,0/1); then if mode==4 arms the 0x10E5D8 transfer for {f_10,f_14}, else cancels with 0x10E64C; called from 0x103724 and 0x38859C."
+  },
+  {
+    "address": "0x00106A38",
+    "name": "Os_CloseHandleIfOpen",
+    "signature": "int Os_CloseHandleIfOpen(void)",
+    "params": {},
+    "summary": "Closes the remembered kernel handle once (svc CloseHandle) and clears the stored handle.",
+    "confidence": 0.62,
+    "evidence": "Body reads *g_00106A68, performs software_interrupt(0x23) (3DS svc 0x23 = CloseHandle), returns the negative result on failure, otherwise zeroes the global and returns 0; mirror of 0x107470 and 0x10EA00's handle teardown."
+  },
+  {
+    "address": "0x00106BA8",
+    "name": "maybe_Os_InitTimeoutBase",
+    "signature": "void maybe_Os_InitTimeoutBase(void)",
+    "params": {},
+    "summary": "Seeds the global timeout record from the two timing helpers: stores 10x the tick period and sets the 'ready' flags when the time source is usable.",
+    "confidence": 0.35,
+    "evidence": "Body: iVar2 = 0x10BE98(); g_00106BF8[0x18] = iVar2*10; [0x1C] = (iVar2*10)>>31; if (0x10BE20()!=0) byte[1]=1; then sets byte[0]=1 if either is non-zero; used by the socket/IPC wait loops (0x106D5C)."
+  },
+  {
+    "address": "0x00106BFC",
+    "name": "Fs_UnmountByName",
+    "signature": "u32 Fs_UnmountByName(const char* name)",
+    "params": {
+      "param_1": "name"
+    },
+    "summary": "Looks up a mounted archive by its 8-byte device name (text before ':' or 8 chars) in a 32-entry mount table and unmounts it, releasing the mount object.",
+    "confidence": 0.62,
+    "evidence": "Parses up to 8 chars into a 64-bit key (same loop as 0x10B6D4), scans g_00106D50 (0x20 entries of 0x10 bytes) for the key, zeroes the entry, calls the object's virtual slot +0x30, and clears g_00106D58+8 when it was the default; returns the table's error sentinel g_00106D54 on miss; callers include 0x104F58's teardown path."
+  },
+  {
+    "address": "0x00106D5C",
+    "name": "Fs_MountByName",
+    "signature": "u32 Fs_MountByName(const char* name, u32 arg2, u32 arg3, u32 arg4)",
+    "params": {
+      "param_1": "name",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Opens a service/archive handle for a named mount and registers it in the mount table (0x10B6D4); on any failure closes the temporary handle and reports through 0x11ED40.",
+    "confidence": 0.5,
+    "evidence": "Calls 0x10B830(&local) to create the mount object, then 0x10B6D4(name, object, 0, 0, ...), and on negative results closes the object via its +0x30 slot and calls 0x11ED40(result, 0x106DEC); called from 0x106BFC's counterpart and by the renderer init."
+  },
+  {
+    "address": "0x00106E84",
+    "name": "Os_ReentrantLock_Acquire",
+    "signature": "u32 Os_ReentrantLock_Acquire(OsLock* lock)",
+    "params": {
+      "param_1": "lock"
+    },
+    "summary": "Reentrant lock acquisition: if the current thread id (TPIDRURO) differs from the recorded owner it runs the slow path (0x10BD34), then records the owner and increments the recursion count.",
+    "confidence": 0.62,
+    "evidence": "Reads coproc p15 thread/process id, compares lock+4, calls 0x10BD34(lock) when different and returns 0 on failure, writes the current id back, `++*(lock+8)` and returns 1; called by every global init/teardown block in this region (e.g. 0x102BA4)."
+  },
+  {
+    "address": "0x00106F04",
+    "name": "maybe_Os_GetLockDepth",
+    "signature": "int maybe_Os_GetLockDepth(void)",
+    "params": {},
+    "summary": "Returns the first word of the global lock object after asserting that its 'initialised' bit is set.",
+    "confidence": 0.4,
+    "evidence": "Checks bit 0 of g_00106F64[1], aborts via 0x10009C if unset, returns *g_00106F64; used by 0x104FDC as the value stored into the runtime flag byte."
+  },
+  {
+    "address": "0x00107024",
+    "name": "maybe_Os_InitSyncPrimitives",
+    "signature": "int maybe_Os_InitSyncPrimitives(void)",
+    "params": {},
+    "summary": "Creates the global event/queue primitive used for inter-thread signalling: obtains the syscall-ready state (0x113430), allocates the shared block (0x1192C0), clears its tables and registers it in the wait list.",
+    "confidence": 0.48,
+    "evidence": "Guarded by g_001070E8+8; calls 0x113430(0), 0x1192C0(g_001070EC, g_001070F0, strlen(g_001070F0),0), clears 3x8 words at g_001070F4, then 0x10CCB0(g_001070F8) and 0x10BD64(g_001070FC); called from 0x102904 (Engine_InitializeSubsystems)."
+  },
+  {
+    "address": "0x00107100",
+    "name": "maybe_Os_WaitSyncObject",
+    "signature": "u32 maybe_Os_WaitSyncObject(void)",
+    "params": {},
+    "summary": "Waits for the global synchronisation object and returns its transferred value: releases the eight wait slots, spins on the event (0x1180B0, sleeping) and consumes the result.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x11C814 on the lock and eight slots, loops `while (0x1180B0(event)==0) 0x11CC94(...)`, then 0x1186B8(value) and 0x118064(event), marks byte+3=1; called from 0x1071F4 and 0x1047B0-adjacent teardown."
+  },
+  {
+    "address": "0x001071AC",
+    "name": "maybe_Os_SetupWaitTimeouts",
+    "signature": "void maybe_Os_SetupWaitTimeouts(void)",
+    "params": {},
+    "summary": "Initialises the wait-timeout record: sets the two 16-bit timeout fields to 0xFF, stores the period, and marks the object ready when 0x11E9C4 succeeds.",
+    "confidence": 0.4,
+    "evidence": "Writes g_001071F0->f_1C = g_001071E8, f_20 = g_001071EC, *(u16*)(+4)=0xFF, *(u16*)(+6)=0xFF; if (0x11E9C4() & 0x80000000)==0 then byte+3=1; called from 0x102904 (Engine_InitializeSubsystems)."
+  },
+  {
+    "address": "0x001071F4",
+    "name": "Os_ShutdownSyncPrimitives",
+    "signature": "void Os_ShutdownSyncPrimitives(void)",
+    "params": {},
+    "summary": "Tears down the synchronisation primitive: flushes the wait object, closes the kernel handle (svc 0x23), stores the final tick and releases the global spinlock.",
+    "confidence": 0.5,
+    "evidence": "Calls 0x107628 (sound shutdown) and 0x107100 (Os_WaitSyncObject), releases eight slots via 0x11C814, 0x10CC30(g_00107288) list-remove, svc 0x23, copies g_00107290+4 into the record, then spins on hasExclusiveAccess(g_00107294) and clears it; called from Engine_Initialize and the main loop."
+  },
+  {
+    "address": "0x00107208",
+    "name": "maybe_Os_SignalSyncShutdown",
+    "signature": "void maybe_Os_SignalSyncShutdown(void)",
+    "params": {},
+    "summary": "Same shutdown sequence as 0x1071F4 but without the sound flush; signals the global sync object to stop.",
+    "confidence": 0.42,
+    "evidence": "Byte-for-byte the tail of 0x1071F4 from 'if (0x10CC30(g_00107288))' onwards including svc 0x23 and the exclusive-access clear; separate entry used by a table/atexit slot."
+  },
+  {
+    "address": "0x001072C4",
+    "name": "maybe_Gfx_InitChannelQueue",
+    "signature": "void maybe_Gfx_InitChannelQueue(GfxChannel* self, u32 handle)",
+    "params": {
+      "param_1": "self",
+      "param_2": "handle"
+    },
+    "summary": "Initialises a GPU channel record: stores the handle, sets up its two sub-objects (0x10C4B8/0x10C660) and resets the queue/state words to the 'idle' sentinel.",
+    "confidence": 0.38,
+    "evidence": "Writes *self=arg2, 0x10C4B8(self+2), sets f_24/f_40/f_48/f_4C sentinels and calls 0x10C660(&f_2C, 0x1125BC()); no callers, but the 0x10Cxxx helpers are the Gfx channel family (0x10C574/0x10C664)."
+  },
+  {
+    "address": "0x00107328",
+    "name": "Gfx_InitializeCommandBuffers",
+    "signature": "void Gfx_InitializeCommandBuffers(void* base, u32 size, u32 arg3, u32 arg4)",
+    "params": {
+      "param_1": "base",
+      "param_2": "size",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Registers the two 0x1000-byte GPU command buffers at base and base+0x2000, maps the shared memory block and stores the display timing block.",
+    "confidence": 0.5,
+    "evidence": "Guarded by g_001073AC; asserts size<0x3000 through 0x11C814, calls 0x11E80C(handle, base,0x1000,0,3) twice, 0x111E28(g_001073B8), 0x10BA30(base+0x1000); called from 0x104FDC with g_00105040 and size 0x3000."
+  },
+  {
+    "address": "0x00107470",
+    "name": "Os_CheckHandleClosed",
+    "signature": "int Os_CheckHandleClosed(int* handle)",
+    "params": {
+      "param_1": "handle"
+    },
+    "summary": "Closes a handle if the 'pending close' flag is set and reports the stored status: returns the handle value on failure, 0 after a successful close.",
+    "confidence": 0.5,
+    "evidence": "Body: if (*g_001074A4) { svc 0x23; result=*arg1; if (result>=0) {*g_001074A4=0; result=0;} }; called by 0x1042B4 as the undo of 0x1074AC."
+  },
+  {
+    "address": "0x001074AC",
+    "name": "Os_CreateEvent",
+    "signature": "int Os_CreateEvent(u32 namePtr, u32 nameSize)",
+    "params": {
+      "param_1": "namePtr",
+      "param_2": "nameSize"
+    },
+    "summary": "Creates a named kernel event once: waits for the runtime to be ready and registers the event with 0x1192C0; sets the created flag on success.",
+    "confidence": 0.5,
+    "evidence": "Guarded by g_0010750C; calls 0x113430(0) then 0x1192C0(arg1,arg2,strlen(arg2),0); sets *pcVar1=1; called by 0x104240 with two literal-pool arguments (name/size pair)."
+  },
+  {
+    "address": "0x00107514",
+    "name": "maybe_Os_GetThreadIpcResult",
+    "signature": "u32 maybe_Os_GetThreadIpcResult(void)",
+    "params": {},
+    "summary": "Performs an svc 0x32 request on the thread IPC buffer (0x210000 descriptor) and returns the 32-bit reply word.",
+    "confidence": 0.42,
+    "evidence": "Sets TPIDRURO+0x80 = 0x210000, calls software_interrupt(0x32) (SendSyncRequest), returns TPIDRURO+0x84 when the result is non-negative; identical shape to 0x10CA70/0x10DC84 which are confirmed IPC wrappers."
+  },
+  {
+    "address": "0x00107544",
+    "name": "maybe_Snd_Initialize",
+    "signature": "void maybe_Snd_Initialize(void)",
+    "params": {},
+    "summary": "Brings up the sound/stream subsystem once: creates the stream context, sets up channel buffers and registers the seven DSP command blocks.",
+    "confidence": 0.49,
+    "evidence": "Guarded by g_001075D8; calls 0x113430(0), 0x112E38(g_001075E0,0) (maybe_Snd_InitStreamContext, N_032), 0x112834, 0x111E08, 0x10C738/0x10C720, 0x112844, 0x10BF58(g_001075F8,g_001075F4,g_001075F0); called from 0x102904 (Engine_InitializeSubsystems)."
+  },
+  {
+    "address": "0x00107628",
+    "name": "maybe_Snd_Shutdown",
+    "signature": "u8 maybe_Snd_Shutdown(void)",
+    "params": {},
+    "summary": "Tears down the sound/stream subsystem created by 0x107544: releases the DSP blocks, stream context and command buffers.",
+    "confidence": 0.49,
+    "evidence": "Calls 0x10BF08, 0x10C720, 0x112A60, 0x10C854, 0x10C72C and 0x1132DC(g_001076A4,0) (maybe_Snd_TeardownStreamContext, N_032); guarded by g_0010768C; called from 0x1071F4."
+  },
+  {
+    "address": "0x001076AC",
+    "name": "maybe_Snd_OpenService",
+    "signature": "u32 maybe_Snd_OpenService(void)",
+    "params": {},
+    "summary": "Opens the DSP/sound service session: sends the service-name IPC request, waits for the reply, then submits the sound command buffer and stores the returned session handle.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x10CA70 (IPC svc 0x32) storing the reply at g_00107754+0xC, builds a 0x20-byte request (type 4, five parameters) and calls 0x111F60(g_00107754+0x10, &local_28, g_00107760, &local_2C); error path 0x118100."
+  },
+  {
+    "address": "0x0010783C",
+    "name": "maybe_Os_SetThreadPriorityMode",
+    "signature": "void maybe_Os_SetThreadPriorityMode(int mode)",
+    "params": {
+      "param_1": "mode"
+    },
+    "summary": "Maps a small mode (0/1/2) onto the scheduler helpers 0x113A40/0x1143C8, ignoring other values.",
+    "confidence": 0.35,
+    "evidence": "Body switch: mode 0/1 -> 0x113A40(); 0x1143C8(mode); mode 2 -> 0x113A40(1); called from 0x102BA4's callback dispatch."
+  },
+  {
+    "address": "0x001078A8",
+    "name": "maybe_Snd_UpdateState",
+    "signature": "void maybe_Snd_UpdateState(void)",
+    "params": {},
+    "summary": "Sound/render state step: when the 'active' flag is set it stops the current sequence, then advances the DSP state machine and notifies the registered callback before flushing the command block.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x113A40(3)/0x1143C8(0) when *g_001079B4, then 0x10CC20, 0x113A00, 0x113F08(0), 0x10CB18, 0x10DA64, the callback pcVar2->f_38(pcVar2->f_78), 0x10D884, 0x10CDE0(0,0,*g_001079B8), 0x10CF50(...), and restores the flag; called from 0x102BA4."
+  },
+  {
+    "address": "0x001079C0",
+    "name": "maybe_Snd_UpdateStateB",
+    "signature": "void maybe_Snd_UpdateStateB(void)",
+    "params": {},
+    "summary": "Variant of 0x1078A8 used when a new command block must be acquired: selects a free/busy command block (0x10D388) and either reuses or submits it.",
+    "confidence": 0.4,
+    "evidence": "Same prologue as 0x1078A8, then 0x10D388(2,0,&local_20,&local_24,0), compares the two returned block ids, and calls 0x10D920+0x10D430 or 0x10D884+0x10CDE0 accordingly; called from 0x102BA4."
+  },
+  {
+    "address": "0x00107AD4",
+    "name": "maybe_Snd_IsRunning",
+    "signature": "bool maybe_Snd_IsRunning(void)",
+    "params": {},
+    "summary": "Returns true when the sound state machine reports state 1.",
+    "confidence": 0.35,
+    "evidence": "Body: `return func_0010CC10() == 1;` used by 0x102BA4 as the first dispatch gate (the 'sound active' check)."
+  },
+  {
+    "address": "0x00107AE8",
+    "name": "maybe_Snd_IsActive",
+    "signature": "u32 maybe_Snd_IsActive(void)",
+    "params": {},
+    "summary": "Returns true when either of the two sound/render state sources is non-zero.",
+    "confidence": 0.35,
+    "evidence": "Body: `return func_0010CC20() != 0 || func_00113A00() != 0;` used by 0x102BA4 as the second dispatch gate."
+  },
+  {
+    "address": "0x00107B1C",
+    "name": "maybe_Gfx_QueryDisplayInfo",
+    "signature": "int maybe_Gfx_QueryDisplayInfo(void)",
+    "params": {},
+    "summary": "Issues the display query command (0x11) on the display channel under the global lock and normalises the result to 1/2.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x119BA8 (lock), 0x10DCD8(g_00107B50,0x11,&arg) (Svc_SendRequestArg on command 0x11), 0x119E1C (unlock), returns (result>>31)+1; called from 0x102AE8."
+  },
+  {
+    "address": "0x00107D00",
+    "name": "maybe_Gfx_WaitSyncSubmit",
+    "signature": "int maybe_Gfx_WaitSyncSubmit(u32 a, u32 b, u32 c)",
+    "params": {
+      "param_1": "a",
+      "param_2": "b",
+      "param_3": "c"
+    },
+    "summary": "Waits for the display/GPU state machine to leave the transient states and submits a command, retrying on the 'busy' result codes with a 10-tick sleep.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x10D68C/0x10CC00 (state gates), 0x1139E0/0x1139F0(9), spins while 0x10DD1C(1) returns one of g_00107E8C/0x90/0x94 (10-tick sleep), then 0x10DC84(a,b,c) with the same retry set, 0x114284/0x114298, svc 3; error path 0x11ED40."
+  },
+  {
+    "address": "0x00107D3C",
+    "name": "maybe_Gfx_WaitSyncSubmitNoLock",
+    "signature": "int maybe_Gfx_WaitSyncSubmitNoLock(u32 a, u32 b, u32 c)",
+    "params": {
+      "param_1": "a",
+      "param_2": "b",
+      "param_3": "c"
+    },
+    "summary": "Lock-free copy of 0x107D00's wait-and-submit sequence.",
+    "confidence": 0.42,
+    "evidence": "Identical body to 0x107D00 minus the 0x10D68C/0x10CC00 gate and the lock helpers; called by 0x107D00's neighbour 0x107B54."
+  },
+  {
+    "address": "0x00107E9C",
+    "name": "maybe_Gfx_QueryStatus",
+    "signature": "u32 maybe_Gfx_QueryStatus(u32 arg)",
+    "params": {
+      "param_1": "arg"
+    },
+    "summary": "Issues the status query 0x10DD58 under the global lock and returns its result.",
+    "confidence": 0.38,
+    "evidence": "Calls 0x119BA8, 0x10DD58(arg), 0x119E1C; called from 0x102B90."
+  },
+  {
+    "address": "0x00107EC4",
+    "name": "maybe_Gfx_HandleVBlank",
+    "signature": "void maybe_Gfx_HandleVBlank(void)",
+    "params": {},
+    "summary": "Vblank/display event handler: if the screen is on it queries the current scanline, and when a new frame is due (bit 0x20 clear) it re-arms the display state and submits a 0x1000-byte command.",
+    "confidence": 0.42,
+    "evidence": "Calls 0x10CAC8(0), 0x119BA8/0x119E1C, 0x113954/0x113964 (state), 0x10DD94 (svc wrapper), then 0x1139F0(0x62), 0x10D6B0, 0x10CF50(&local,val,0x1000,local_10,0), 0x10D910, 0x10D67C, 0x10D69C, 0x10D6BC."
+  },
+  {
+    "address": "0x00107F84",
+    "name": "Fs_Task_Create",
+    "signature": "u32 Fs_Task_Create(FsTaskPool* pool, TaskDescriptor* desc)",
+    "params": {
+      "param_1": "pool",
+      "param_2": "desc"
+    },
+    "summary": "Creates and registers an asynchronous file task: allocates the 0xB0-byte task object, copies its name, hashes it, inserts it into the pool's balanced tree and starts it.",
+    "confidence": 0.55,
+    "evidence": "Allocates 0xB0 via 0x109DC8, calls 0x10673C (maybe_Os_SequenceTask_Ctor, name \"SequenceTask\"), copies desc+0x18 pointers, computes a hash with g_0010829C/0x82A0, inserts via 0x11FFC4 + 0x10EE9C(tree insert), sets task[0x22]=pool and byte+0x86; only caller is 0x1068AC / the Fs cache init path."
+  },
+  {
+    "address": "0x00108318",
+    "name": "Gfx_ReleaseSubObjects",
+    "signature": "u64 Gfx_ReleaseSubObjects(GfxDisplay* self, u32 arg2)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2"
+    },
+    "summary": "Releases the seven per-screen sub-objects (color/depth buffers at 0xC/0x3C/0x6C/0x9C/0xCC/0xFC/0x12C) of the display object.",
+    "confidence": 0.5,
+    "evidence": "Seven calls to 0x10E64C(self+0xC/+0x3C/+0x6C/+0xCC/+0x9C/+0xFC/+0x12C); called from 0x101B74 and 0x694E18; the 0x30-byte stride matches the four 0x10944C target descriptors created in 0x104A38."
+  },
+  {
+    "address": "0x00108430",
+    "name": "Gfx_WaitFrameInterval",
+    "signature": "void Gfx_WaitFrameInterval(GfxDisplay* self, u32 frameTicks)",
+    "params": {
+      "param_1": "self",
+      "param_2": "frameTicks"
+    },
+    "summary": "Enforces the frame-rate limit: computes the elapsed ticks since the last frame and busy-waits the remaining interval, then records the new timestamp and marks the frame started.",
+    "confidence": 0.5,
+    "evidence": "Uses svc 0x28, g_00108500 (ticks/ms), g_00108504 (min interval), 0x110BC0 for the actual wait, stores f_1E8; called from 0x104DC0 (present) with the frame flags; sets f_1F0 through 0x11383C."
+  },
+  {
+    "address": "0x00108574",
+    "name": "Fs_Cache_SetHandleArray",
+    "signature": "FsHandleArray* Fs_Cache_SetHandleArray(FsHandleArray* self, u32* handles, u32 count, void* allocator)",
+    "params": {
+      "param_1": "self",
+      "param_2": "handles",
+      "param_3": "count",
+      "param_4": "allocator"
+    },
+    "summary": "Wraps a fixed list of block handles (count u32 values) in a small owning object that copies them into a newly allocated array.",
+    "confidence": 0.55,
+    "evidence": "Sets vtable g_00108620, stores count and allocates count*4 through the allocator's virtual slot, then copies the handles two-at-a-time; called from 0x103724 for the 1-element and 5-element handle sets of the cache manager."
+  },
+  {
+    "address": "0x00108624",
+    "name": "Fs_Cache_CreateSlotPool58",
+    "signature": "FsSlotPool* Fs_Cache_CreateSlotPool58(FsSlotPool* self, int bufferSize, int slotCount, void* bufferAlloc, void* slotAlloc)",
+    "params": {
+      "param_1": "self",
+      "param_2": "bufferSize",
+      "param_3": "slotCount",
+      "param_4": "bufferAlloc",
+      "param_5": "slotAlloc"
+    },
+    "summary": "Creates a two-level cache pool: slotCount 0x58-byte slot records from one allocator plus a bufferSize*slotCount data area from another, and records the slot count in the first record.",
+    "confidence": 0.5,
+    "evidence": "Allocates slotCount*0x58 with allocator arg5 and bufferSize*slotCount with allocator arg4 at 0x80 alignment, zero-fills the slot array, writes the u16 count at +0x54; vtable g_001086C8 (slots 0x56D028/0x56CF18/...); used by 0x103724 with (0x4000,0x40) and (0x12C00,0x1A) etc."
+  },
+  {
+    "address": "0x001086CC",
+    "name": "Fs_Cache_CreateSlotPool58Into",
+    "signature": "FsSlotPool* Fs_Cache_CreateSlotPool58Into(FsSlotPool* self, u32 bufferSize, int slotCount, u32 buffer, u32 totalSize, void* slotAlloc)",
+    "params": {
+      "param_1": "self",
+      "param_2": "bufferSize",
+      "param_3": "slotCount",
+      "param_4": "buffer",
+      "param_5": "totalSize",
+      "param_6": "slotAlloc"
+    },
+    "summary": "Same 0x58-byte slot pool as 0x108624 but into an externally supplied data buffer (no second allocation).",
+    "confidence": 0.5,
+    "evidence": "Identical header setup and count write as 0x108624, but f_18 is arg4 instead of an allocation; used by 0x103724 for the 0xBC0000 shared model/motion area split into 4/0xBC/0x24 sub-caches."
+  },
+  {
+    "address": "0x00108750",
+    "name": "Fs_Cache_CreateSlotPool54",
+    "signature": "FsSlotPool* Fs_Cache_CreateSlotPool54(FsSlotPool* self, u32 bufferSize, int slotCount, void* bufferAlloc, void* slotAlloc)",
+    "params": {
+      "param_1": "self",
+      "param_2": "bufferSize",
+      "param_3": "slotCount",
+      "param_4": "bufferAlloc",
+      "param_5": "slotAlloc"
+    },
+    "summary": "Creates the 0x54-byte-record variant of the cache pool (buffer plus slot array, both allocated).",
+    "confidence": 0.5,
+    "evidence": "Allocates slotCount*0x54 with arg5 and bufferSize*slotCount with arg4, zero-fills, sets f_2/f_3; vtable g_001087F0 (0x56D8C4...); used by 0x103724 for the 0x80000/6 and 0x40000/8 motion pools."
+  },
+  {
+    "address": "0x001087F4",
+    "name": "Fs_Cache_CreateSlotPool54Into",
+    "signature": "FsSlotPool* Fs_Cache_CreateSlotPool54Into(FsSlotPool* self, u32 bufferSize, int slotCount, u32 buffer, u32 totalSize, void* slotAlloc)",
+    "params": {
+      "param_1": "self",
+      "param_2": "bufferSize",
+      "param_3": "slotCount",
+      "param_4": "buffer",
+      "param_5": "totalSize",
+      "param_6": "slotAlloc"
+    },
+    "summary": "0x54-byte-record cache pool over an externally supplied data buffer.",
+    "confidence": 0.5,
+    "evidence": "Same as 0x108750 but f_18=arg4; used by 0x103724 for the 0x12C000/1 and 0xBC0000/3 caches."
+  },
+  {
+    "address": "0x00108878",
+    "name": "Input_UpdateButtonMasks",
+    "signature": "void Input_UpdateButtonMasks(InputButtons* self, PadSnapshot* pad)",
+    "params": {
+      "param_1": "self",
+      "param_2": "pad"
+    },
+    "summary": "Converts a raw HID button snapshot into three engine bitmasks (held, newly pressed, newly released) using the 19-entry mapping table, and forwards them to the input event handler.",
+    "confidence": 0.55,
+    "evidence": "Reads local_48/46/44 (three u16 halves of a pad state), shifts against the 0x13-entry table g_001089F8, sets the 0x10/0x80/0x40/0x200000 style flags, then 0x10E8D0(self,held,pressed,released); called from Input_Initialize (0x105044) with the global button block at +0xEC."
+  },
+  {
+    "address": "0x00108A00",
+    "name": "Input_UpdatePadState",
+    "signature": "void Input_UpdatePadState(InputState* self, InputPad* pad, PadSnapshot* snap)",
+    "params": {
+      "param_1": "self",
+      "param_2": "pad",
+      "param_3": "snap"
+    },
+    "summary": "Reads the analog stick / circle-pad state, converts the raw axis values to the engine's 16-bit range and merges the digital button edges into the input state.",
+    "confidence": 0.55,
+    "evidence": "Calls 0x112640(pad,&local_40) (raw read), 0x10C2D4(snap,&local_58) (touch/pad), then 0x112448/0x112450 for the axis conversion, builds 0x10- or 0x18-bit masks from g_00108BFC and calls 0x10E8D0; called from Input_Initialize (0x105044) with self+4."
+  },
+  {
+    "address": "0x00108C00",
+    "name": "maybe_Fs_CacheEntry_Init",
+    "signature": "FsCacheEntry* maybe_Fs_CacheEntry_Init(FsCacheEntry* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Initialises a cache-entry record: clears the counters, installs the sentinel values in the two sub-lists and pre-fills the two 0x60-byte inline buffers.",
+    "confidence": 0.4,
+    "evidence": "Sets self[0]=0, self[1]=g_00108C58, self[6..9]=same, calls 0x116AE0(self+10,0x60) and 0x116AE0(self+0x22,0x60); called from 0x1051F4 and 0x10EAB0's size arithmetic (0xE8/0xEC), i.e. a fixed-layout record, but the owner is not proven."
+  },
+  {
+    "address": "0x00108C5C",
+    "name": "maybe_Input_InitManager",
+    "signature": "void maybe_Input_InitManager(InputManager* self, u32 arg2, u32 arg3, u32 arg4, int arg5)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "arg4",
+      "param_5": "arg5"
+    },
+    "summary": "Builds the input manager: allocates the 256-entry pointer rings for two pad sources, initialises their queues and stores the screen/sampling parameters.",
+    "confidence": 0.42,
+    "evidence": "Pushes 256 pointers into two free-lists at self+0x17C0 and self+0x2830 (entries at +0x860), calls 0x110E10/0x110ED0 for the 0x100-element queues, then a large pad-config branch with 0x10C2D4/0x112448/0x112450 and 0x10E8D0; called from 0x103724 (cache init) - the owning subsystem is inferred from the pad calls."
+  },
+  {
+    "address": "0x00108F22",
+    "name": "maybe_Input_UpdatePadStateThumb",
+    "signature": "void maybe_Input_UpdatePadStateThumb(int mode, u32 a2, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7, u32 a8)",
+    "params": {
+      "param_1": "mode",
+      "param_2": "a2",
+      "param_3": "a3",
+      "param_4": "a4",
+      "param_5": "a5",
+      "param_6": "a6",
+      "param_7": "a7",
+      "param_8": "a8"
+    },
+    "summary": "Thumb-mode variant of the pad-state update; same bit-mask mapping as 0x108A00 but with several arguments lost to Ghidra (unaff_r*).",
+    "confidence": 0.35,
+    "evidence": "Identical constants and call sequence to 0x108A00 (0x10C2D4, 0x10E8D0, 0x112448/0x112450) and the same g_00108BFC table; entry is Thumb (0x108F22) unlike the ARM body it mirrors, and registers r4-r11 are read uninitialised."
+  },
+  {
+    "address": "0x00108F64",
+    "name": "maybe_Snd_UpdateVoiceList",
+    "signature": "void maybe_Snd_UpdateVoiceList(SoundRuntime* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame sound/voice bookkeeping: retires finished voice slots, moves completed blocks from the two pending lists to the free lists and releases the block objects.",
+    "confidence": 0.4,
+    "evidence": "Advances a 3-slot ring at self+0x2C3C, walks the lists at self+0x2C40/0x2840, unlinks records (f_3C=4, f_74), pushes to the free list, frees via 0x10F6CC, calls 0x1166B4 (maybe_Snd_PushBufferEntry, N_032) and 0x10E988/0x10E9C4 list appliers; called from 0x10411C (render submit) so it is part of the render/sound hand-off."
+  },
+  {
+    "address": "0x001092A0",
+    "name": "maybe_Gfx_ReleaseDisplayChannel",
+    "signature": "void maybe_Gfx_ReleaseDisplayChannel(GfxDisplayChannel* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Closes the display/GPU channel handle: waits for the pending close (svc 0x24), marks both liveness bytes, signals the event and clears the handle.",
+    "confidence": 0.48,
+    "evidence": "Checks self->f_344, uses svc 0x24 twice, compares g_00109348 == handle*0x400000, sets f_358/f_348, calls 0x118170, svc 0x23 clears the handle, then 0x10EA00(&f_340); called from 0x104204 and 0x10AE00 family."
+  },
+  {
+    "address": "0x0010935C",
+    "name": "Gfx_MapResourceFormat",
+    "signature": "u32 Gfx_MapResourceFormat(u32 kind, u32 unused, u32 format, u32 size)",
+    "params": {
+      "param_1": "kind",
+      "param_2": "unused",
+      "param_3": "format",
+      "param_4": "size"
+    },
+    "summary": "Maps a resource format id (0x100..0x105) to its GPU alignment/flag value and allocates the resource through the matching channel object.",
+    "confidence": 0.5,
+    "evidence": "switch on format: 0x100/0x102 -> 4, 0x101 -> 0x80, 0x103 -> 0x40, 0x104/0x105 -> 0x10; then dispatch on kind 0x10000/0x20000/0x30000 to g_00109448->f_14/f_18/f_1C and 0x10E780(size, align,...); format ids match the sibling Gfx format enums."
+  },
+  {
+    "address": "0x001094C0",
+    "name": "maybe_Gfx_GetMemoryRegion",
+    "signature": "void maybe_Gfx_GetMemoryRegion(void)",
+    "params": {},
+    "summary": "Chooses between the GPU memory regions 0x20000/0x30000 based on the requested size and forwards the request to the region owner or the channel allocator.",
+    "confidence": 0.4,
+    "evidence": "Compares in_r3 against 0x1109D8(0x20000)/0x11099C(0x20000) and then 0x30000, then either 0x10E66C(region) or (*(*f_14+4))(f_14,size); error paths 0x118100; no callers (table slot)."
+  },
+  {
+    "address": "0x001095A8",
+    "name": "maybe_Gfx_SetDisplayEnable",
+    "signature": "void maybe_Gfx_SetDisplayEnable(int enable, DisplayState* state)",
+    "params": {
+      "param_1": "enable",
+      "param_2": "state"
+    },
+    "summary": "Enables or disables the display: when the request differs from the current state it either sets display mode 10 or commits the pending mode.",
+    "confidence": 0.42,
+    "evidence": "If state->byte+1: when enable==0 and 0x10C51C()==0 -> 0x10C574(0,10); when enable!=0 and 0x10C51C()!=0 -> 0x10C534(); no callers (called through 0x108F64's queue?)."
+  },
+  {
+    "address": "0x0010967C",
+    "name": "maybe_Gfx_UploadQueuedTextures",
+    "signature": "void maybe_Gfx_UploadQueuedTextures(GfxUploadQueue* self, u32 arg2, int count)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2",
+      "param_3": "count"
+    },
+    "summary": "Uploads queued texture blocks: takes the renderer lock, walks the pending bitmask, copies each block into the GPU-side slot and signals the completion semaphore.",
+    "confidence": 0.45,
+    "evidence": "Uses mutex 0x111D50 and semaphore 0x1180B0/0x1186B8, svc 0x24/0x14, self->f_68 entries of 0x1C*8 bytes at self->f_24, calls 0x10DF40/0x10DF90/0x10E174 per block and increments self->f_70; called from 0x10293C with count 8."
+  },
+  {
+    "address": "0x00109E28",
+    "name": "Gfx_SwapFrameBuffers",
+    "signature": "void Gfx_SwapFrameBuffers(GfxDisplay* self, u32 arg2, u32 arg3, u32 arg4)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Swaps the display's double-buffer index and resets the just-retired 0x4C-byte buffer record so the next frame starts with an empty queue.",
+    "confidence": 0.55,
+    "evidence": "Calls 0x1180E0/0x1180F0 then 0x1193A8, clears the record at self+0x20+f_B8*0x4C with 0x10AC54, sets f_B9=f_B8, f_B8=~f_B8&1, and zeroes f_C/f_10/f_14/f_20/f_24/f_28/f_30/f_34 of the new record; called from Engine_Initialize and main loop 0x694E18."
+  },
+  {
+    "address": "0x00109E88",
+    "name": "Gfx_ReleaseBufferRecord",
+    "signature": "void Gfx_ReleaseBufferRecord(GfxBufferRecord* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Releases a 0x4C-byte buffer record: frees its f_18 block array (f_20 * 0x1C bytes) and clears all counters.",
+    "confidence": 0.55,
+    "evidence": "If self and (self+4 or self+0x18): 0x116AE0(self->f_18, self->f_20*0x1C) then zero f_C/f_10/f_14/f_20/f_24/f_28/f_30/f_34; called from 0x104A38/0x108F64; the same field set is initialised by 0x109EE8."
+  },
+  {
+    "address": "0x00109EE8",
+    "name": "Gfx_InitBufferRecord",
+    "signature": "void Gfx_InitBufferRecord(GfxBufferRecord* self, u32 size, u32 buffer, int count, u32 blockPtr)",
+    "params": {
+      "param_1": "self",
+      "param_2": "size",
+      "param_3": "buffer",
+      "param_4": "count",
+      "param_5": "blockPtr"
+    },
+    "summary": "Initialises a 0x4C-byte buffer record: sets the 0x300-byte header size, stores the buffer/size, resets the queues and allocates the count*0x1C block array.",
+    "confidence": 0.55,
+    "evidence": "0x116AE0(self,0x44), f_2C=0x300, f_C=0, self+8=arg2, self+4=arg3, f_18=arg5, f_1C=arg4, then 0x116AE0(arg5, arg4*0x1C); called from 0x104A38 for the two 0x100000/0x100 descriptors."
+  },
+  {
+    "address": "0x00109F6C",
+    "name": "maybe_Gfx_GetGpuMemorySize",
+    "signature": "u32 maybe_Gfx_GetGpuMemorySize(int region)",
+    "params": {
+      "param_1": "region"
+    },
+    "summary": "Returns the GPU memory region size (0x180000, 0x280000 or 0x300000) depending on the region and whether the extended-memory capability is present.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x11981C and returns 0x180000 for region != 0x30000 when available, 0x280000 for 0x30000 when available, otherwise 0x300000; called by 0x104FDC's neighbours while sizing the GPU heap."
+  },
+  {
+    "address": "0x00109FB0",
+    "name": "Gfx_InitializeContext",
+    "signature": "u32 Gfx_InitializeContext(GfxDriver* driver, int driverArg)",
+    "params": {
+      "param_1": "driver",
+      "param_2": "driverArg"
+    },
+    "summary": "Brings up the whole GPU context: stores the 400x240 / 320x240 screen geometry, calls the driver to allocate the 0x10000-byte command buffer, sets up the shared-memory blocks and registers every GPU state (blend, depth, cull, texture units).",
+    "confidence": 0.68,
+    "evidence": "Sets 0xF0/0xF0/400/0x140 at g_0010A954, calls (*driver)(0x10000,0x100,0,...), 0x10FFD8, 0x10F74C, 0x110624, 0x10F790, 0x110470, then a long list of 0x1136D4(register,value) GPU state writes (0x1C2/0xD1/0x1C1/0x92 etc.) and registers seven 0x1138B4 unit callbacks; called from 0x104A38 with the display singleton and the driver vtable."
+  },
+  {
+    "address": "0x0010AC88",
+    "name": "maybe_Gfx_SetFrameReadyFlag",
+    "signature": "void maybe_Gfx_SetFrameReadyFlag(GfxDisplay* self, FrameRecord* rec, u8 value)",
+    "params": {
+      "param_1": "self",
+      "param_2": "rec",
+      "param_3": "value"
+    },
+    "summary": "Stores the frame-ready byte on the active frame record and, when the display is in the 0x300 state, signals the frame event.",
+    "confidence": 0.45,
+    "evidence": "Body: rec->f_11=value; if (self->f_2C == 0x300) { 0x1197FC(); 0x116104(); 0x11980C(); }; called from 0x109FB0's tail and 0x10AE64."
+  },
+  {
+    "address": "0x0010AD08",
+    "name": "maybe_Gfx_SignalFrameReady",
+    "signature": "void maybe_Gfx_SignalFrameReady(void)",
+    "params": {},
+    "summary": "If a frame record is active, publishes its ready byte and wakes the waiting frame event.",
+    "confidence": 0.42,
+    "evidence": "Uses g_0010AD5C->f_A0 (active record), 0x1197FC/0x11980C (interrupt mask around the update), sets record byte -0x1A = 1; called from 0x104DC0 (present) with the display singleton."
+  },
+  {
+    "address": "0x0010AD60",
+    "name": "Gfx_CopyFramebuffer",
+    "signature": "void Gfx_CopyFramebuffer(u32 dstType, u32 src, u32 dst, int rows, int format)",
+    "params": {
+      "param_1": "dstType",
+      "param_2": "src",
+      "param_3": "dst",
+      "param_4": "rows",
+      "param_5": "format"
+    },
+    "summary": "Copies a framebuffer rectangle between the CPU and the LCD controllers: handles the four pixel formats (0x8051/0x8056/0x8057/0x8D62), the 0x400 line stride and the alternating 0x14C buffer parity.",
+    "confidence": 0.58,
+    "evidence": "Format switch sets the per-pixel word count (1/2/3/4) then 0x110C70(bufferIndex, self->f_14C, src, dst, words*rows, flags, self->f_14C); 0x400/0xF0 are the top-screen stride/height; called from 0x104DC0 twice per present with formats from g_00104ED4."
+  },
+  {
+    "address": "0x0010AE64",
+    "name": "maybe_Gfx_WaitFrameDeadline",
+    "signature": "void maybe_Gfx_WaitFrameDeadline(void)",
+    "params": {},
+    "summary": "Blocks until the frame deadline expires, invoking the registered deadline callback with the remaining tick count.",
+    "confidence": 0.45,
+    "evidence": "Reads g_0010AEFC->f_178/f_17C (deadline tick pair), loops on 0x1112E0 (tick), and when the deadline passed calls the f_170 callback; calls 0x113700 to yield between polls; used by 0x104DC0."
+  },
+  {
+    "address": "0x0010AF00",
+    "name": "maybe_Gfx_GetRenderContextB",
+    "signature": "GfxContext* maybe_Gfx_GetRenderContextB(GfxContext** out)",
+    "params": {
+      "param_1": "out"
+    },
+    "summary": "Second lazily created process-wide renderer context getter (0x37C-byte object), identical in shape to 0x1052C8 but used by the 49 UI/popup/field call sites.",
+    "confidence": 0.42,
+    "evidence": "49 callers (Ui_PopupEntry_Spawn*, Battle_UiFlow_*, Field_InitSceneObjects, maybe_Gfx_MoveNode_CreateA...); guarded by g_0010AF84, allocates 0x37C via 0x11FE8C/0x11CFAC/0x116AE0 and constructs with vtable g_0010AF90; separate singleton from 0x1052C8's 0x1F8 object."
+  },
+  {
+    "address": "0x0010B2C4",
+    "name": "Anim_Sequence_CtorBase",
+    "signature": "AnimSequence* Anim_Sequence_CtorBase(AnimSequence* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Base constructor of the engine's keyed animation/timeline object: installs the vtable, clears the state, initialises the inline 4-element key array and sets the default state id.",
+    "confidence": 0.5,
+    "evidence": "106 callers (Ui_PopupEntry_Spawn*, Battle_UiFlow_*, Ui_LoadingScreen_Create, Field_Actor_PlayAttachedEffect...); sets vtable g_0010B504 (0x75A79C: slots 0x6C2EE8 timeline advance, 0x6C310C, 0x6C31C8), zeroes fields, then 0x100050(self+7, g_0010B50C, 4) = run the initialiser g_0010B50C on one 4-byte element; the vtable's timeline object uses 12 states of 0x18 bytes with per-state callbacks."
+  },
+  {
+    "address": "0x0010B6AC",
+    "name": "maybe_Gfx_RegisterChannelName",
+    "signature": "u32 maybe_Gfx_RegisterChannelName(u32 value, ChannelNameRecord* rec)",
+    "params": {
+      "param_1": "value",
+      "param_2": "rec"
+    },
+    "summary": "Stores a value in a channel record and registers the record in the global channel-name list.",
+    "confidence": 0.35,
+    "evidence": "Body: rec->f_10=arg1; local=arg1; 0x1111B40(&local, g_0010B6D0); returns 0; no callers, and 0x1111B40 is an unnamed list insert."
+  },
+  {
+    "address": "0x0010B6D4",
+    "name": "Fs_RegisterMountByName",
+    "signature": "u32 Fs_RegisterMountByName(const char* name, u32 object, u8 arg3, u8 arg4)",
+    "params": {
+      "param_1": "name",
+      "param_2": "object",
+      "param_3": "arg3",
+      "param_4": "arg4"
+    },
+    "summary": "Registers an open archive in the 32-entry mount table under its 8-byte device name; returns the 'already mounted' / 'table full' sentinel on failure.",
+    "confidence": 0.58,
+    "evidence": "Same name parser as 0x106BFC (max 8 chars before ':', with the default name from g_0010B81C), then scans g_0010B824 (0x20 * 0x10) for a free slot and stores object/arg3/arg4; returns g_0010B820/0x828/0x82C sentinels; called from 0x106D5C and 0x503D48-0x5040E4."
+  },
+  {
+    "address": "0x0010B830",
+    "name": "Gfx_CreateChannel",
+    "signature": "u32 Gfx_CreateChannel(GfxChannel** out, u32 arg2, u32 a3, u32 a4, u32 a5, u32 a6, u32 a7)",
+    "params": {
+      "param_1": "out",
+      "param_2": "arg2",
+      "param_3": "a3",
+      "param_4": "a4",
+      "param_5": "a5",
+      "param_6": "a6",
+      "param_7": "a7"
+    },
+    "summary": "Creates a GPU channel object: gets a command-buffer slot, allocates the 0x130-byte channel, opens the command buffer and submits the initialisation request.",
+    "confidence": 0.5,
+    "evidence": "Calls 0x1118D4 (maybe_Gfx_GetCommandSlot, N_032), 0x116AE0(slot,0x130), 0x1119BC, then 0x111AA0(...,0xC,1,0) and the channel virtual slot +0x3C to get a buffer, and 0x1114F4 to bind; on failure releases the channel (+0x30); called from 0x106D5C and 0x10B830's neighbours."
+  },
+  {
+    "address": "0x0010B9E0",
+    "name": "maybe_Gfx_SetFrameTimeBudget",
+    "signature": "void maybe_Gfx_SetFrameTimeBudget(u32 tick, u32* out)",
+    "params": {
+      "param_1": "tick",
+      "param_2": "out"
+    },
+    "summary": "Stores a tick/budget value in the global frame-timing record (converting 1000/tick) and copies the five timing fields to the caller.",
+    "confidence": 0.38,
+    "evidence": "Writes g_0010BA2C[1]=arg1, *g_0010BA2C = (1000/arg1) + existing, then if out copies 5 words from g_0010BA2C; called from 0x10C574 with the display mode."
+  },
+  {
+    "address": "0x0010BA40",
+    "name": "maybe_Gfx_ShutdownChannel",
+    "signature": "u32 maybe_Gfx_ShutdownChannel(void)",
+    "params": {},
+    "summary": "Shuts down the GPU channel: releases the command slots, closes the kernel handle (svc 0x23), signals the frame event and marks the channel closed.",
+    "confidence": 0.48,
+    "evidence": "Guarded by g_0010BB1C; calls 0x1221C0, svc 0x24/0x23, 0x118170, 0x111BEC/0x111BAC, 0x11E54C, 0x119350(g_0010BB2C,0) with error 0x118924; called from 0x1073BC (Gfx_ShutdownGlobalState, N_032), 0x10C548 and 0x10C574."
+  },
+  {
+    "address": "0x0010BB34",
+    "name": "Gfx_OpenGpuChannel",
+    "signature": "int Gfx_OpenGpuChannel(u32 arg1)",
+    "params": {
+      "param_1": "arg1"
+    },
+    "summary": "Opens the GPU service session and its three command buffers: creates the event, allocates the 0x1000-byte blocks, initialises the four channel queues and sends the open request.",
+    "confidence": 0.52,
+    "evidence": "Calls 0x111C54, 0x122200(f_C,0x1000,2000,0x500,0x200), 0x1116A14, 0x1122484, svc 0x32 via 0x111CD8/0x111F60, then 0x1111CD8(g_0010BD1C...) and 0x117B78; the 0x1000/2000/0x500/0x200 constants match the GPU command-buffer setup in 0x107328; called from 0x10C574."
+  },
+  {
+    "address": "0x0010BDF8",
+    "name": "Os_AcquireSharedSession",
+    "signature": "void Os_AcquireSharedSession(void)",
+    "params": {},
+    "summary": "Acquires the process-wide shared service session once; on failure reports through 0x11ED40.",
+    "confidence": 0.5,
+    "evidence": "Body: iVar1 = func_00112050(); if (iVar1<0 && iVar1<0) func_0011ED40(iVar1,0x10BE10); 0x112050 is named maybe_Os_AcquireSharedSession in N_032; called from 0x104240, 0x104ED8, 0x10C738, 0x5016D8, Ui_IconAtlas_Load."
+  },
+  {
+    "address": "0x0010C1C8",
+    "name": "Input_ReadTouchState",
+    "signature": "u32 Input_ReadTouchState(InputTouch* self, TouchSnapshot* out)",
+    "params": {
+      "param_1": "self",
+      "param_2": "out"
+    },
+    "summary": "Samples the touch panel: issues the touch IPC query, computes the pressed/released edges against the previous sample and scales the calibration values.",
+    "confidence": 0.52,
+    "evidence": "Calls 0x1148F0(*(*self+4), g_0010C2D0, 1, ...) (maybe_Gfx_FindCommandRoom is a misnomer; the call is a service query), then out[1]=(new^old)&~old, out[2]=old&~new, out[0]=new, and 0x114798 for the two calibrated ranges shifted by 2/3; the edge masks are the same convention as 0x10C2D4."
+  },
+  {
+    "address": "0x0010C2D4",
+    "name": "Input_ReadPadState",
+    "signature": "u32 Input_ReadPadState(InputPad* self, PadSnapshot* out)",
+    "params": {
+      "param_1": "self",
+      "param_2": "out"
+    },
+    "summary": "Samples the buttons/circle pad: reads the raw state, stores it in the snapshot and derives the held, newly-pressed and newly-released masks.",
+    "confidence": 0.62,
+    "evidence": "Calls 0x10C51C (pad ready), 0x112640(self+0x58,...) for the raw read, or 0x1124CC/0x1179B0/0x114AB4 for the calibrated path; writes out+4 = raw, out+6 = (new^old)&~old, out+8 = old&~new and keeps self->f_54 as previous; called by Input_UpdatePadState (0x108A00) and 0x1095A8's family."
+  },
+  {
+    "address": "0x0010C47C",
+    "name": "maybe_Input_SetPadMode",
+    "signature": "void maybe_Input_SetPadMode(InputPad* self, int mode)",
+    "params": {
+      "param_1": "self",
+      "param_2": "mode"
+    },
+    "summary": "Maps an external pad-mode value (0/1/2) onto the internal mode byte and the sampling flag.",
+    "confidence": 0.45,
+    "evidence": "Body: self->f_38 = mode; self->f_70 = (mode==0 ? 0 : (mode==1 ? 1 : (mode==2 ? 2 : 0))); called from 0x108A00 as the first step of the pad update."
+  },
+  {
+    "address": "0x0010C51C",
+    "name": "maybe_Gfx_IsChannelReady",
+    "signature": "bool maybe_Gfx_IsChannelReady(void)",
+    "params": {},
+    "summary": "Returns true when the GPU/display channel state machine is in state 4 (ready).",
+    "confidence": 0.45,
+    "evidence": "Body: `return func_0010B9D0() == 4;` used by 0x1051AC, 0x1095A8, 0x10C2D4, 0x10C574 and 0x112640 as the 'channel open' gate."
+  },
+  {
+    "address": "0x0010C574",
+    "name": "Gfx_SetDisplayMode",
+    "signature": "void Gfx_SetDisplayMode(u32 param, u32 mode)",
+    "params": {
+      "param_1": "param",
+      "param_2": "mode"
+    },
+    "summary": "Switches the display/GPU channel to another mode (8..0x20): validates the mode, shuts the previous channel down, re-opens it with the new timing and publishes the result code.",
+    "confidence": 0.55,
+    "evidence": "Validates `mode-8 <= 0x18`, locks 0x117E50, switches on 0x10B9D0 (state 5 -> 0x10BA40 shutdown), 0x10B9E0(mode&0xFF,0), 0x10BB34(param), stores a result code at param+2, error literal uRam0010C65C and result code 0xE0E04FEE for an invalid mode; called from 0x104FDC, 0x1095A8 and 0x10C574 itself."
+  },
+  {
+    "address": "0x0010C664",
+    "name": "maybe_Gfx_InitChannelRecord",
+    "signature": "void maybe_Gfx_InitChannelRecord(GfxChannelRecord* rec, u32 id, u32 owner)",
+    "params": {
+      "param_1": "rec",
+      "param_2": "id",
+      "param_3": "owner"
+    },
+    "summary": "Initialises a small GPU channel record with its id/owner and resets the three queue counters to their sentinels.",
+    "confidence": 0.4,
+    "evidence": "Body: *rec=id; rec[1]=owner; iVar1=0x10C4B8(rec+3); iVar1->f_24=1; f_2C=0xFFFFFFFF; f_30=0xFFFFFFFF; the 0x10C4B8 sub-object and the 0xFFFFFFFF sentinels tie it to the Gfx channel family (0x1072C4)."
+  },
+  {
+    "address": "0x0010C854",
+    "name": "maybe_Snd_StopVoiceGroup",
+    "signature": "void maybe_Snd_StopVoiceGroup(SoundVoiceGroup* group)",
+    "params": {
+      "param_1": "group"
+    },
+    "summary": "Stops and resets one voice group: releases the stream context and invalidates the four channel ids.",
+    "confidence": 0.4,
+    "evidence": "Body: if (*arg1) { 0x112E18(g_0010C884); bytes [0x4C..0x4F]=0xFF; *arg1=0; }; called from 0x107628 (sound shutdown) and 0x10C720's family."
+  },
+  {
+    "address": "0x0010C8C4",
+    "name": "maybe_Snd_ResumeChannels",
+    "signature": "void maybe_Snd_ResumeChannels(void)",
+    "params": {},
+    "summary": "If any channel still has pending work, re-enables the stream context and marks the group as running.",
+    "confidence": 0.4,
+    "evidence": "Body: if ((*g_0010C904 & ~g_0010C904[1]) != 0) { 0x111CD8(g_0010C904+8,1); 0x1132DC(g_0010C908,1); byte[1]=1; byte[2]=1; }."
+  },
+  {
+    "address": "0x0010CA70",
+    "name": "Svc_SendRequestIpc",
+    "signature": "int Svc_SendRequestIpc(u32* out)",
+    "params": {
+      "param_1": "out"
+    },
+    "summary": "Generic IPC request stub: primes the thread's kernel command buffer with the 0x20000-header descriptor and performs svc 0x32 (SendSyncRequest), returning the reply word.",
+    "confidence": 0.55,
+    "evidence": "Writes TPIDRURO+0x80 = 0x20000, svc 0x32, then on success *out = TPIDRURO+0x8C and result = TPIDRURO+0x84; the same TLS+0x80 command-buffer convention as 0x10DC84/0x10DD1C/0x10DD94 which are pure svc wrappers; called by 0x1076AC."
+  },
+  {
+    "address": "0x0010CB30",
+    "name": "maybe_Gfx_InvokeCallbacks",
+    "signature": "void maybe_Gfx_InvokeCallbacks(void)",
+    "params": {},
+    "summary": "Invokes the two registered per-frame callbacks of the global display object.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x1139A0() then (*(g_0010CB68->f_40))(g_0010CB68->f_80) and the tail callback f_44(f_84); no callers (table/vector slot)."
+  },
+  {
+    "address": "0x0010CB74",
+    "name": "maybe_Gfx_ResetStateBlock",
+    "signature": "void maybe_Gfx_ResetStateBlock(void)",
+    "params": {},
+    "summary": "Resets the large global GPU state block (0x88 bytes of counters) to zero after re-initialising its owner.",
+    "confidence": 0.4,
+    "evidence": "Calls 0x114398 then writes 0 to g_0010CBFC fields f_C, f_10...f_88 (pairs 0x4C/0x50 etc.); no callers."
+  },
+  {
+    "address": "0x0010CC30",
+    "name": "Os_ListRemoveNodeIfPresent",
+    "signature": "void Os_ListRemoveNodeIfPresent(OsListNode* node)",
+    "params": {
+      "param_1": "node"
+    },
+    "summary": "Removes a node from a global doubly-linked list under the global monitor, tolerating nodes that are not in the list.",
+    "confidence": 0.62,
+    "evidence": "Takes 0x117E50, walks g_0010CCAC+4 links until it finds arg1, unlinks it updating head/tail (g_0010CCAC+4/+8), zeroes node->next/prev, releases the monitor; called from 0x1071F4/0x107208; standard list-remove pattern."
+  },
+  {
+    "address": "0x0010CF50",
+    "name": "maybe_Gfx_NegotiateDisplayMode",
+    "signature": "int maybe_Gfx_NegotiateDisplayMode(u32* outA, u32 arg2, u32 arg3, int* outB, u32* outC, u32 a6, u32 a7, u32 a8)",
+    "params": {
+      "param_1": "outA",
+      "param_2": "arg2",
+      "param_3": "arg3",
+      "param_4": "outB",
+      "param_5": "outC",
+      "param_6": "a6",
+      "param_7": "a7",
+      "param_8": "a8"
+    },
+    "summary": "Runs the display-mode negotiation state machine: translates the low-level status codes (1..0x41) to engine display modes, retries on transient codes and drives the enable/disable transitions.",
+    "confidence": 0.45,
+    "evidence": "Switches on 0x1139E0 state 99/0x62/..., calls 0x11A50C (status query), maps results with the 0x10-0x80 flags via 0x114344, uses 0x1139F0/0x114284/0x114298/0x114700/0x114714 and error 0x118924; called from 0x1078A8, 0x1079C0, 0x107EC4, 0x10DA64, 0x51B7C4, 0x51CC68."
+  },
+  {
+    "address": "0x0010D388",
+    "name": "maybe_Svc_QueryThreadInfo",
+    "signature": "void maybe_Svc_QueryThreadInfo(u32 kind, u8* outByte, u32* out0, u32* out1, u32* out2)",
+    "params": {
+      "param_1": "kind",
+      "param_2": "outByte",
+      "param_3": "out0",
+      "param_4": "out1",
+      "param_5": "out2"
+    },
+    "summary": "Queries a per-thread kernel object and returns four output fields; wraps the query in the global lock.",
+    "confidence": 0.42,
+    "evidence": "Calls 0x119BA8 (lock), 0x114514(kind, local_2C, &local_28, &local_24, local_20), 0x119E1C (unlock), error 0x118924; outputs are byte + 3 words; called by 0x1079C0."
+  },
+  {
+    "address": "0x0010D40C",
+    "name": "maybe_Svc_QueryThreadInfoEx",
+    "signature": "u32 maybe_Svc_QueryThreadInfoEx(u32 kind)",
+    "params": {
+      "param_1": "kind"
+    },
+    "summary": "Locked variant of the thread-info query returning a single word.",
+    "confidence": 0.4,
+    "evidence": "Recovered entry point: 0x119BA8(); result = func_0x00114584(arg1); 0x119E1C(); same lock pairing and naming as 0x10D388."
+  },
+  {
+    "address": "0x0010D6CC",
+    "name": "maybe_Os_OpenServiceHandle",
+    "signature": "void maybe_Os_OpenServiceHandle(u32 namePtr, int arg2, int arg3)",
+    "params": {
+      "param_1": "namePtr",
+      "param_2": "arg2",
+      "param_3": "arg3"
+    },
+    "summary": "Opens a service handle by name and submits its initial command: creates the two kernel objects when absent, signals the event and sends the request.",
+    "confidence": 0.45,
+    "evidence": "Calls 0x12038C(&local) twice for the two handles, svc 0x23 on close, 0x111CD8(g_0010D868,1), 0x111F60(g_0010D86C+0xC, &local_38, g_0010D870, auStack_28), error 0x118100; used by the display/channel init path 0x107B54."
+  },
+  {
+    "address": "0x0010D884",
+    "name": "maybe_Svc_WaitStateE",
+    "signature": "void maybe_Svc_WaitStateE(void)",
+    "params": {},
+    "summary": "Polls the display/GPU state machine until it leaves the transient codes, sleeping 10 ticks between polls.",
+    "confidence": 0.42,
+    "evidence": "0x1139F0(0xE), then locked loop `while ((v = 0x114650()) is g_0010D900/904/908) 0x11CC94(g_0010D90C*10, ...)`; called from 0x1078A8 and 0x1079C0."
+  },
+  {
+    "address": "0x0010D920",
+    "name": "maybe_Svc_WaitState5",
+    "signature": "int maybe_Svc_WaitState5(u32 arg1)",
+    "params": {
+      "param_1": "arg1"
+    },
+    "summary": "Waits for state 5 completion: polls the state machine, handles the enable/disable flip and returns the final status.",
+    "confidence": 0.42,
+    "evidence": "0x10DA64(0), 0x1139F0(5), polls 0x114680(arg1) while it is one of g_0010DA18/1C/20, then reconciles 0x113980/0x11391C/0x10CAC8; returns g_0010DA28 as success; called from 0x1079C0."
+  },
+  {
+    "address": "0x0010DA38",
+    "name": "maybe_Svc_SendRequestLocked",
+    "signature": "u32 maybe_Svc_SendRequestLocked(u32 a, u32 b)",
+    "params": {
+      "param_1": "a",
+      "param_2": "b"
+    },
+    "summary": "Sends a two-argument request on the service channel with the global lock held.",
+    "confidence": 0.42,
+    "evidence": "Body: 0x119BA8(); result = 0x1146B8(a,b); 0x119E1C(); same lock pair as 0x10D388/0x10D40C."
+  },
+  {
+    "address": "0x0010DA64",
+    "name": "maybe_Svc_WaitState3",
+    "signature": "int maybe_Svc_WaitState3(u32 arg1, u8* out)",
+    "params": {
+      "param_1": "arg1",
+      "param_2": "out"
+    },
+    "summary": "Waits for state 3 completion with optional 0x400/0x200 capability checks and returns the resulting display mode.",
+    "confidence": 0.42,
+    "evidence": "Checks 0x113964 with 0x11A36C(0x400,...) and 0x1139B0 with 0x11A36C(0x200,...), 0x1139F0(3), polls 0x114614(arg1) while in g_0010DBC4/C8/CC, then 0x10CF50 on success; called from 0x1078A8/0x1079C0/0x107D00/0x107D3C/0x10D920."
+  },
+  {
+    "address": "0x0010DC84",
+    "name": "Svc_SendRequest2",
+    "signature": "u32 Svc_SendRequest2(u32 word, int arg2, u32 arg3)",
+    "params": {
+      "param_1": "word",
+      "param_2": "arg2",
+      "param_3": "arg3"
+    },
+    "summary": "Sends a two-word request through svc 0x32 and returns the reply word.",
+    "confidence": 0.6,
+    "evidence": "Builds the TLS+0x80 request (command word from g_0010DCD0, f_84=arg2, f_88=0, f_90=arg2<<14|2, f_94=arg1, f_8C=arg3), svc 0x32, returns TLS+0x84; direct callee of the retry loops 0x107D00/0x107D3C."
+  },
+  {
+    "address": "0x0010DCD8",
+    "name": "Svc_SendRequestArg",
+    "signature": "int Svc_SendRequestArg(u32 service, u32 cmd, u16* out)",
+    "params": {
+      "param_1": "service",
+      "param_2": "cmd",
+      "param_3": "out"
+    },
+    "summary": "Sends a request with a service id and command index, returning the 16-bit reply through out.",
+    "confidence": 0.6,
+    "evidence": "TLS+0x80 = g_0010DD14; f_84=arg1; f_88=arg2; svc 0x32; on success *out = TLS+0x88 and returns TLS+0x84; called from 0x107B1C with command 0x11."
+  },
+  {
+    "address": "0x0010DD1C",
+    "name": "Svc_SendRequestByte",
+    "signature": "u32 Svc_SendRequestByte(u8 value)",
+    "params": {
+      "param_1": "value"
+    },
+    "summary": "Sends a one-byte request through svc 0x32 and returns the reply word.",
+    "confidence": 0.6,
+    "evidence": "TLS+0x80 = g_0010DD50; f_84 = value; svc 0x32; returns TLS+0x84; called from the 0x107D00 retry loop with value 1."
+  },
+  {
+    "address": "0x0010DD94",
+    "name": "Svc_SendRequestWord",
+    "signature": "u32 Svc_SendRequestWord(u32 value)",
+    "params": {
+      "param_1": "value"
+    },
+    "summary": "Sends a one-word request through svc 0x32 and returns the reply word.",
+    "confidence": 0.6,
+    "evidence": "TLS+0x80 = g_0010DDC4; f_84 = value; svc 0x32; returns TLS+0x84; called from 0x107EC4."
+  },
+  {
+    "address": "0x0010E540",
+    "name": "Container_NameMap_Find",
+    "signature": "void* Container_NameMap_Find(Container* map, const char* name)",
+    "params": {
+      "param_1": "map",
+      "param_2": "name"
+    },
+    "summary": "Looks up a string key in the engine's name map and returns the stored pointer, or NULL when absent or equal to the map's sentinel.",
+    "confidence": 0.68,
+    "evidence": "Scans name to its terminator, calls 0x1167C8(&slot, map+0x18) (red-black-tree find), compares the found value with map->f_1C (empty sentinel) and returns 0 for a miss; called by Container_HashTableInsert (0x107FC0) and Fs_Task_Create (0x107F84)."
+  },
+  {
+    "address": "0x0010E78C",
+    "name": "Mem_Heap_FindFreeBlock",
+    "signature": "int Mem_Heap_FindFreeBlock(MemHeap* heap, int size, int align, u32 flags)",
+    "params": {
+      "param_1": "heap",
+      "param_2": "size",
+      "param_3": "align",
+      "param_4": "flags"
+    },
+    "summary": "First-fit allocator over the heap's free list: aligns the request, finds the smallest suitable block, splits it when there is room and moves the remainder onto the free list.",
+    "confidence": 0.72,
+    "evidence": "Walks heap->f_14 free list (sentinel &heap->f_10), computes 0x11CFAC(size+align-1, align)*align, picks the block with the smallest remaining space, then either unlinks it or splits it into a new node and relinks both lists; exact classic heap-split logic; no callers in the export (called through the heap vtable)."
+  },
+  {
+    "address": "0x0010E988",
+    "name": "Container_List_ApplyA",
+    "signature": "void Container_List_ApplyA(Container* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Invokes a visitor (0x115108) on every node of the intrusive list rooted at self+0x80.",
+    "confidence": 0.5,
+    "evidence": "Walks *self->f_80 until it equals self->f_7C, calling 0x115108(*node); twin 0x10E9C4 uses 0x1150FC; both are called by 0x108F64."
+  },
+  {
+    "address": "0x0010E9C4",
+    "name": "Container_List_ApplyB",
+    "signature": "void Container_List_ApplyB(Container* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second visitor variant over the same intrusive list, using the detach-and-notify helper 0x1150FC.",
+    "confidence": 0.5,
+    "evidence": "Identical loop to 0x10E988 but calls 0x1150FC(*node); used by 0x108F64 to retire completed blocks."
+  },
+  {
+    "address": "0x0010EA00",
+    "name": "Gfx_CommandBuffer_Release",
+    "signature": "void Gfx_CommandBuffer_Release(GfxCommandBuffer* self, u32 arg2)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg2"
+    },
+    "summary": "Releases an async command/transfer buffer: closes its kernel handle if it is still open and frees the 8-aligned block.",
+    "confidence": 0.5,
+    "evidence": "If self->f_10: svc 0x24 then, when g_0010EAAC == handle*0x400000, svc 0x24 again, mark byte+8, 0x118170, svc 0x23 and clear the handle; then 0x10F69C(self->f_10); called by 0x1092A0 and by every *Shutdown caller of 0x10EAB0 (Gfx_StreamSlot_Release, Sound_StreamPlayer_Shutdown...)."
+  },
+  {
+    "address": "0x0010EAB0",
+    "name": "Gfx_CommandBuffer_Submit",
+    "signature": "u32 Gfx_CommandBuffer_Submit(GfxCommandBuffer* self, u32 heap, u32 size, u32 arg4, u32 arg5)",
+    "params": {
+      "param_1": "self",
+      "param_2": "heap",
+      "param_3": "size",
+      "param_4": "arg4",
+      "param_5": "arg5"
+    },
+    "summary": "Submits an asynchronous command/transfer: allocates an 8-aligned size-byte buffer, builds the request descriptor and sends it on the object's handle, keeping the buffer for the completion callback.",
+    "confidence": 0.5,
+    "evidence": "Releases any previous buffer (0x10EA00), allocates `(size+7)&~7` via 0x10F6EC(heap) at 4-byte alignment, stores f_10/f_14, builds the 4-word request from g_0010EBA4/0xEBA8/0xEBAC and calls 0x111F60(self+4, &local_30, g_0010EBA0, ..., self->f_10+size, arg4,arg5); on failure frees and clears; callers: Pack_DecodeStringData, Ui_LoadIconTextures, Gfx_StreamSlot_Init, Gfx_BufferChannel_Init."
+  },
+  {
+    "address": "0x0010EC14",
+    "name": "std_RbTree_EraseNode",
+    "signature": "void std_RbTree_EraseNode(RbNode* node, RbNode* replacement)",
+    "params": {
+      "param_1": "node",
+      "param_2": "replacement"
+    },
+    "summary": "Erases one node from an intrusive red-black tree: transplants the node's parent/left/right links (handling the two-child case), calls the rebalancing helper with the node colour, then restores the tree header's leftmost/rightmost/root links.",
+    "confidence": 0.65,
+    "evidence": "Node layout parent=+4, left=+8, right=+0xC, colour byte=+0x10; the body has the three transplant cases (no child / one child / two children via successor) and finally resets the tree header links (self->f_C, self+8, self+4 all to self, f_10=0); calls 0x115114(colour, parent, sibling, isLeft, node) which performs the rotate/recolour; 92 callers are container erase/insert paths (Container_HashTableInsert 0x107FC0, Container_NamedMap_Remove/Insert, std::map users)."
+  }
+]

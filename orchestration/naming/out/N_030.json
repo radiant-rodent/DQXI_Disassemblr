@@ -1,0 +1,1723 @@
+[
+ {
+  "address": "0x0061176C",
+  "name": "maybe_Ui_DataPanel_SortIdTable",
+  "signature": "void maybe_Ui_DataPanel_SortIdTable(DataPanelRow* rows, u32 unused)",
+  "params": {
+   "rows": "array of 174 four-byte {u16 id; u8 a; u8 b} rows"
+  },
+  "summary": "Insertion-sorts a fixed 174-entry table of 3-byte-in-4 slot records by the per-item sort key that Item_LookupRecord + 0x0066C304 return for the row id; the same routine is used for several list pages of the work struct.",
+  "confidence": 0.42,
+  "evidence": "Same body as 0x00611880 (only base pointer differs); loop bound `arg1 + 0x15c` = 87 u32 steps; comparator is the inlined pair `func_0061BD4C(temp,id)` (item lookup) + `func_0066C304(temp)` (record sort key); uses libstdc++ style rotate `func_0072157C` and heap-sort `func_007181B0` with a 0x40-byte insertion threshold. Table layout {u16 id;u8;u8} matches the row records the bag/browse lists use."
+ },
+ {
+  "address": "0x00611880",
+  "name": "maybe_Ui_DataPanel_SortIdTableAt2b8",
+  "signature": "void maybe_Ui_DataPanel_SortIdTableAt2b8(WorkData* self, u32 unused, u16 key)",
+  "params": {
+   "self": "work/panel object; row table starts at +0x2b8",
+   "key": "unused compare key (reads *row instead)"
+  },
+  "summary": "Identical insertion sort as 0x0061176C but over the embedded row table at self+0x2b8 (up to self+0x274c), i.e. the second list page of the same work/panel structure.",
+  "confidence": 0.42,
+  "evidence": "`for (psVar6 = self + 0x2b8; psVar6 != self + 0x274c ...)` then the exact sort tail of 0x0061176C; same helpers func_0072157C/func_007181B0/func_006112EC."
+ },
+ {
+  "address": "0x00611C28",
+  "name": "maybe_Ui_DataPanel_SortRowsByItemKey",
+  "signature": "void maybe_Ui_DataPanel_SortRowsByItemKey(DataPanelRow* rows)",
+  "params": {
+   "rows": "174-row table of {u16 id;u8;u8} records"
+  },
+  "summary": "Insertion-sorts 174 list rows comparing two item ids through Item_LookupRecord + the item record's leading u16 (display order), i.e. the item-order sort used by bag/equipment lists that maps ids to catalogue order first.",
+  "confidence": 0.45,
+  "evidence": "Bound `arg1 + 0xae` (174 u32 rows); builds two lookup pairs with func_0061BD4C and compares `func_0066C304(pair)` (< on record key); duplicate path breaks ties on `*puVar7` vs the row id. Same shape as 0x0061176C but comparator goes through the full item record."
+ },
+ {
+  "address": "0x00611DE4",
+  "name": "maybe_Ui_DataPanel_SortRowsAt2b8ByItemKey",
+  "signature": "void maybe_Ui_DataPanel_SortRowsAt2b8ByItemKey(WorkData* self)",
+  "params": {
+   "self": "work/panel object; row table at +0x2b8..+0x274c"
+  },
+  "summary": "Same item-order sort as 0x00611C28 applied to the embedded row table at self+0x2b8.",
+  "confidence": 0.45,
+  "evidence": "Loop `puVar10 = (u32*)(self + 0x2b8) ... self + 0x274c`, identical comparator sequence func_0061BD4C/func_0066C304 and the func_007218A8/func_007183A0 rotate+heap-sort tail as 0x00611C28."
+ },
+ {
+  "address": "0x00611FA8",
+  "name": "maybe_Ui_DataPanel_DestroyObjects",
+  "signature": "void maybe_Ui_DataPanel_DestroyObjects(u8* self)",
+  "params": {
+   "self": "object whose first 0x274c bytes are an array of polymorphic elements"
+  },
+  "summary": "Runs the virtual destructor (vtable slot at +0xc of g_00611ff0, adjusted by +0x10) over every 4-byte element of the array that starts at self and ends at self+0x274c - the teardown of the list-object array.",
+  "confidence": 0.45,
+  "evidence": "`do { piVar2 = arg1 + (f10>>1); pcVar1 = *(...); (*pcVar1)(piVar2); arg1 += 4; } while (arg1 != self+0x274c);` with `fc = g_00611ff0->f_c` / `f10 = g_00611ff0->f_10` = the two words of a vtable pointer; called from 0x0064CB24 right after reloading work data."
+ },
+ {
+  "address": "0x006121B4",
+  "name": "std_Str_Length16",
+  "signature": "u32 std_Str_Length16(const u16* text)",
+  "params": {
+   "text": "NUL-terminated UTF-16 string"
+  },
+  "summary": "Returns the number of UTF-16 code units before the NUL terminator. This is the shared string-length helper the list/panel code uses on its label buffers.",
+  "confidence": 0.65,
+  "evidence": "Body is a tail call to 0x00100B74, whose assembly is `movs r1,#0; loop: ldrh r2,[r0]; adds r0,#2; adds r1,#1; cmp r2,#0; bne loop; movs r0,r1; bx lr` (asm/text/text_00100048.s) - an unambiguous UTF-16 strlen. Callers include Text_GlyphSet_CollectFromTable and maybe_Ui_BuildListEntries."
+ },
+ {
+  "address": "0x00612430",
+  "name": "maybe_Ui_DataPanel_SetSecondaryName",
+  "signature": "u32 maybe_Ui_DataPanel_SetSecondaryName(WorkData* self, const void* src)",
+  "params": {
+   "self": "work/panel object; second label buffer at +0x86b4",
+   "src": "0x84-byte source block (label buffer + id)"
+  },
+  "summary": "Copies a 0x84-byte row/label block into self+0x86b4 and returns the UTF-16 length of the name field inside it - i.e. 'set this panel's secondary label and report its length'.",
+  "confidence": 0.45,
+  "evidence": "`func_00116C10(self + 0x86b4, src, 0x84)` (memcpy) followed by a tail call to 0x00100B74 (strlen16, see 0x006121B4) on `self + 0x86c2`; the same 0x84-byte block layout is used for list rows (see 0x00613BE8 which copies 0x84 bytes and then patches bytes 0x84/0x85/0x88)."
+ },
+ {
+  "address": "0x00612848",
+  "name": "maybe_Ui_DataPanel_GetRowNameLength",
+  "signature": "u32 maybe_Ui_DataPanel_GetRowNameLength(WorkData* self, int row)",
+  "params": {
+   "self": "work/panel object",
+   "row": "index into the 50-row table at +0x5fe4"
+  },
+  "summary": "Returns the UTF-16 length of the label of row `row` in the 50-entry list table at self+0x5fe4; the table entry is 0x8c bytes wide and starts with its name buffer.",
+  "confidence": 0.49,
+  "evidence": "Tail call to 0x00100B74 (strlen16) with `self + row*0x8c + 0x5fe4`; the same 0x5fe4/0x8c rows are resolved by 0x006308EC and cleared by 0x006138F0."
+ },
+ {
+  "address": "0x00612FC8",
+  "name": "maybe_Ui_DataPanel_RemoveRowByOwner",
+  "signature": "void maybe_Ui_DataPanel_RemoveRowByOwner(WorkData* self, const u32* key)",
+  "params": {
+   "self": "work/panel object; 20-row table at +0x7b3c",
+   "key": "pointer to the u32 slot key to remove"
+  },
+  "summary": "Searches the 20-row table at self+0x7b3c for the entry whose +0x88 key equals *key, then memmoves the following entries down by one 0x8c record, clears the trailing record and resets the 'current row' fields at +0x8624/+0x8628.",
+  "confidence": 0.49,
+  "evidence": "`if (*(int*)(self + 0x7b3c + i*0x8c + 0x88) == *arg2)` then `func_00116C10(dst, dst+0x8c, (0x13-i)*0x8c)` (memmove 19 rows) then `func_00116AE0(&self->f_85a0, 0x84)` (memset) and `f_8624=f_8625=0; f_8628=-1`. Classic 'erase list entry + reset selection'."
+ },
+ {
+  "address": "0x00613324",
+  "name": "maybe_Ui_DataPanel_SetNameBuffer",
+  "signature": "void maybe_Ui_DataPanel_SetNameBuffer(WorkData* self, const u16* name)",
+  "params": {
+   "self": "work/panel object; 0x80-byte name field at +0x88fa",
+   "name": "UTF-16 source name (up to 0x40 units)"
+  },
+  "summary": "Clears the 0x80-byte UTF-16 name field at self+0x88fa and copies up to 0x40 UTF-16 units of `name` into it.",
+  "confidence": 0.49,
+  "evidence": "Assembly (readable C lost the tail): `memset(self+0x88fa, 0, 0x80)` via 0x001113EC, then `b 0x00100A6C` with r0=self+0x88fa, r1=name, r2=0x40 - a UTF-16 copy; 0x88fa..0x897a is the 0x80-byte name that 0x00614030 copies last in the panel snapshot."
+ },
+ {
+  "address": "0x006135E4",
+  "name": "maybe_Ui_DataPanel_InsertRowCopy",
+  "signature": "bool maybe_Ui_DataPanel_InsertRowCopy(WorkData* self, const DataPanelRow* row)",
+  "params": {
+   "self": "work/panel object; 50-row table at +0x5fe4",
+   "row": "0x8c-byte row to duplicate"
+  },
+  "summary": "If the given row is non-empty (name set, +0x88 key != -1) it copies it into the first free row of the 50-entry table at self+0x5fe4 (a row is free when its name is shorter than 7 UTF-16 units) and reports whether a slot was found.",
+  "confidence": 0.49,
+  "evidence": "Assembly: strlen16(row) < 7, `ldrh [row] != 0 && *(u32*)(row+0x88) != -1`, then loop i in 0..50 over `self + 0x5fe4 + i*0x8c` with strlen16 < 7 and copy. The 0x8c row/0x88 key layout matches 0x00612FC8/0x00612848; the +0x88 key is exactly the 'empty' marker -1 that 0x006138F0 writes."
+ },
+ {
+  "address": "0x006138F0",
+  "name": "maybe_Ui_DataPanel_ResetRowsByIndexList",
+  "signature": "void maybe_Ui_DataPanel_ResetRowsByIndexList(WorkData* self, const u32* indices)",
+  "params": {
+   "self": "work/panel object; 50-row table at +0x5fe4",
+   "indices": "array of 50 row indices to reset"
+  },
+  "summary": "Walks a 50-entry index list and resets each referenced row of the table at self+0x5fe4 to the empty state (0x84 zero bytes, flags 0, key -1).",
+  "confidence": 0.49,
+  "evidence": "`uVar1 = indices[i]; if (uVar1 < 0x32) { row = self + 0x5fe4 + uVar1*0x8c; memset(row,0,0x84); row->f_84=0; row->f_85=0; row->f_88=0xffffffff; }` looping 50 times; identical 'empty row' triple is written by 0x00612FC8."
+ },
+ {
+  "address": "0x00613A9C",
+  "name": "maybe_Ui_DataPanel_SortU16ListByItemKey",
+  "signature": "void maybe_Ui_DataPanel_SortU16ListByItemKey(WorkData* self, WorkData* panel, u32 key, u32 limit)",
+  "params": {
+   "self": "object providing the end bound (self+0x2878)",
+   "panel": "object whose u16 list at +0x3c4 is sorted",
+   "key": "item id whose position is used as the sort pivot",
+   "limit": "unused (overwritten by *puVar7)"
+  },
+  "summary": "Sorts the u16 item-id list at panel+0x3c4 (up to self+0x2878) with a comparator that maps ids to their item record key, using the same rotate/heap-sort tail as the other list sorts.",
+  "confidence": 0.42,
+  "evidence": "Same skeleton as 0x00613C54: scan for `arg3` in the u16 array at arg2+0x3c4, then func_0071E598/func_007178F4 (rotate + heap sort) and inlined insertion sort with `func_00611460(temp, id, prevId)` as comparator; bound `arg1 + 0x2878` matches the panel snapshot region copied by 0x00614030 (`memcpy(&self->f_2878, &arg2->f_2878, 0xd2)`)."
+ },
+ {
+  "address": "0x00613BE8",
+  "name": "maybe_Ui_DataPanel_CopyRowIntoCurrent",
+  "signature": "void maybe_Ui_DataPanel_CopyRowIntoCurrent(WorkData* self, DisplayRow* row)",
+  "params": {
+   "self": "work/panel object; current row at +0x8630",
+   "row": "0x8c-byte source row"
+  },
+  "summary": "Copies a 0x8c row into the 'current row' block at self+0x8630 while preserving the eight 64-bit accumulators at +0x8668..+0x86a0, records the row's owner key (+0x88) into +0x8740 and mirrors +0x8980/+0x8984 into +0x8738/+0x873c.",
+  "confidence": 0.49,
+  "evidence": "memcpy 0x84 bytes to self+0x8630, then restores 8 u64 pairs (f_8668..f_86a4) explicitly, `self->f_8740 = row->f_88` and `self->f_8738/f_873c = self->f_8980/f_8984`. Called from 0x003BD874 with the row returned by 0x00630998, i.e. the row currently selected in a bag/equipment list."
+ },
+ {
+  "address": "0x00613C54",
+  "name": "maybe_Ui_DataPanel_SortU16ListByItemOrder",
+  "signature": "void maybe_Ui_DataPanel_SortU16ListByItemOrder(WorkData* self, WorkData* panel)",
+  "params": {
+   "self": "object providing the end bound (self+0x2878)",
+   "panel": "object whose u16 list at +0x3c4 is sorted"
+  },
+  "summary": "Item-order variant of the u16 list sort: sorts the ids at panel+0x3c4 by looking each id up in the item table and comparing the record key (ties broken on the raw id).",
+  "confidence": 0.45,
+  "evidence": "Same layout/bounds as 0x00613A9C (`arg2+0x3c4` .. `arg1+0x2878`, func_0071ECF8/func_00717AAC), comparator builds two pairs with func_0061BD4C and compares func_0066C304 - i.e. catalogue order rather than func_00611460's comparison."
+ },
+ {
+  "address": "0x00614030",
+  "name": "maybe_Ui_DataPanel_CopyFromWork",
+  "signature": "void maybe_Ui_DataPanel_CopyFromWork(WorkData* self, const WorkData* src)",
+  "params": {
+   "self": "destination panel/screen data block",
+   "src": "source block, normally the game work object at work+0x24a98"
+  },
+  "summary": "Byte-for-byte copy constructor for the ~35 KB work/panel snapshot: copies every field up to +0x8a28 with memcpy in chunks and masks two flag bytes, i.e. 'mirror the live work data into this screen's private copy'.",
+  "confidence": 0.49,
+  "evidence": "Copy chain ends `func_00116C10(&self->f_5fe4,&arg2->f_5fe4,g_00614928)` ... `&self->f_8a28,0x80`; `self->f_88ec = arg2->f_88ec & 1`. Caller 0x002CD2A0 does `func_00614030(self+0x5630, *piVar3 + 0x24a98)` where `*piVar3` is the global game context from 0x006F20C0, proving the source is the game work object; 0x002CE694 (DataPanel restore) does the same."
+ },
+ {
+  "address": "0x00617B80",
+  "name": "maybe_Container_SmallVectorInitFrom",
+  "signature": "int* maybe_Container_SmallVectorInitFrom(int* self, int* src)",
+  "params": {
+   "self": "vector-like object (begin/end/cap at +0/+4/+8)",
+   "src": "source object with a vtable"
+  },
+  "summary": "Initialises a small-vector-style object (begin/end/cap pointing at its inline storage at +0x10/+0x24) from `src`: queries src's element count through vtable slot +0x68 and, when non-zero, delegates to the copy construction path.",
+  "confidence": 0.35,
+  "evidence": "`(**(*src + 0x68))()` count query; `if (src[0x15] == 0) { begin=end=self+0x10; cap=self+0x24; }` else `func_00650860(tmp); func_00617C80(self, tmp)`. Ghidra dropped unreachable blocks (0x00617BF0/0x00617C44), so the copy tail is lost - only the init/empty path is trustworthy."
+ },
+ {
+  "address": "0x00617C80",
+  "name": "maybe_Container_SmallVectorCopyConstruct",
+  "signature": "int* maybe_Container_SmallVectorCopyConstruct(int* self, int* src, u32 unused, u32 unused2)",
+  "params": {
+   "self": "destination vector (begin/end/cap at +0/+4/+8)",
+   "src": "source vector"
+  },
+  "summary": "Copy-constructs the small vector: sets begin/end/cap to the inline buffer then range-checks the source size (aborting via 0x00111378 when the source is larger than the inline capacity).",
+  "confidence": 0.32,
+  "evidence": "Body is `*self=0; self[2]=0; self[1]=self+4; *self=self+4; self[2]=self+9;` followed by three `func_00111378(...)` calls with 'does not return' warnings - Ghidra modelled the element-copy loop as aborts. Called from 0x00617B80, i.e. the same small-vector pair."
+ },
+ {
+  "address": "0x00617EA8",
+  "name": "maybe_Ui_EquipRow_UpdateEquipMark",
+  "signature": "void maybe_Ui_EquipRow_UpdateEquipMark(EquipRow* row)",
+  "params": {
+   "row": "equipment-row widget: +4 owner widget, +8 item id, +0xa slot/party index, +0xc member id"
+  },
+  "summary": "Refreshes the 'equipped' marker and the compare widget of one equipment row: looks up the item's owner (0x001901F4), sets the row label through 0x00612008, re-binds the compare pane via 0x006D7508 and finally plays animation 2/3/0x10 depending on the party member's gender/state.",
+  "confidence": 0.45,
+  "evidence": "`arg1->f_10 < 0x1f` (special 'party slot' ids) selects two paths; calls `func_001901F4(party, arg1->f_c)` then `func_00612008(work+0x24acc, *(u16*)(arg1+8), 1)` and `func_006D7508(*(int*)(arg1+4)+0x120, 0, g_00617fac[2], ...)`, ending in `func_0019BC88(widget, 3/2/0x10)` - 0x0019BC88 is the window animation trigger other workers named Ui_EquipmentWindow_PlayAnim."
+ },
+ {
+  "address": "0x00618394",
+  "name": "maybe_Ui_EquipRow_ClearEquipMark",
+  "signature": "void maybe_Ui_EquipRow_ClearEquipMark(EquipRow* row)",
+  "params": {
+   "row": "equipment-row widget: +4 owner widget, +8 item id, +0xa slot"
+  },
+  "summary": "Clears the highlight of an equipment row: for normal party slots it re-renders the row (0x001903C4) and for special ids above 0x1e it drops the row text entry (0x00611998).",
+  "confidence": 0.42,
+  "evidence": "`func_0061BD4C(tmp, *(u16*)(arg1+8))` item lookup; `if (0x1e < *(u8*)(arg1+10)) func_00611998(work+0x24acc, id); else func_001903C4(func_0035EB98(...), arg1->f_c)` - 0x00611998 is the sibling of 0x00612008 used to unset a row label."
+ },
+ {
+  "address": "0x0061841C",
+  "name": "maybe_Ui_EquipRow_UpdateCompareText",
+  "signature": "void maybe_Ui_EquipRow_UpdateCompareText(EquipRow* row, u32 memberId, u32 slot, int count)",
+  "params": {
+   "row": "equipment-row widget",
+   "memberId": "party member entity id to compare against",
+   "slot": "equipment slot index",
+   "count": "how many candidate items to apply (>=1)"
+  },
+  "summary": "Fills the comparison text of an equipment row: formats the candidate item name into message argument 6, marks the row as better/worse through 0x0066C1A8, then plays one of animation ids 4..0x12 (two-row vs one-row, male/female) and appends the remaining candidates when several are available.",
+  "confidence": 0.49,
+  "evidence": "`func_00629890(entity, arg3)` returns the currently equipped id for slot arg3; `uVar7 = func_0066C99C(pair,1)` (Text_FormatMessageArg) then `func_001F076C(6,uVar7,0)` (Message_SetArg); the anim id choice is driven by `arg1->f_10 < 0x1f`, `iVar5->f_14` (gender) and `iVar6 == g_00618764` (whether the candidate equals the equipped id), ending in func_0019BC88(widget, 4..0x12); the multi-candidate loop uses func_006293A8/func_00191DA4."
+ },
+ {
+  "address": "0x00618774",
+  "name": "maybe_Ui_EquipRow_UpdateCurseMark",
+  "signature": "void maybe_Ui_EquipRow_UpdateCurseMark(EquipRow* row)",
+  "params": {
+   "row": "equipment-row widget; +4 owner widget, +8 item id"
+  },
+  "summary": "Shows the 'cursed equipment' warning for a row: if the item record's flag word (+0x20) has bit 0 clear it plays animation 0x1d, otherwise it pushes a formatted message pane and binds it with animation 0x1c.",
+  "confidence": 0.45,
+  "evidence": "`func_0061BD4C(tmp, *(u16*)(arg1+8))`; `if ((local_14->f_20 & 1) == 0) { func_006D7508(...); func_0019BC88(widget, 0x1d); }` else `uVar2 = func_002BBAD0(0x1c); func_001DAB30(widget+0x1084,uVar2); func_006D7508(...,1)`. Item flag bit 0 + anim ids 0x1c/0x1d are the cursed-item presentation."
+ },
+ {
+  "address": "0x00618928",
+  "name": "maybe_Item_CreateViewModelDesc",
+  "signature": "void* maybe_Item_CreateViewModelDesc(void* self, u32 kind, u32 itemId, u8 variant, u32 extra)",
+  "params": {
+   "self": "optional pre-allocated descriptor (may be null)",
+   "kind": "descriptor kind/target id stored at +4",
+   "itemId": "item id whose record selects the class",
+   "variant": "u8 stored at +0xa (0..0x1f = slot, else model variant)",
+   "extra": "u32 stored at +0xc"
+  },
+  "summary": "Allocates and initialises the C++ view-model descriptor used to draw an item: the item record's type byte (+0x11) selects the vtable (g_00619038..g_006190a8), three special cases (types 1/2 and 0x2b) get their own vtables, and the caller-supplied kind/item/variant/extra are stored at +4/+8/+0xa/+0xc.",
+  "confidence": 0.49,
+  "evidence": "`switch (item->f_11)` with 25 cases, each writing a distinct vtable (`*result = g_00619038` etc.); types 1/7 are special-cased through `func_0066C3A0` (6/7); the common tail is `result[1]=arg2; *(short*)(result+2)=(short)arg3; *(u8*)((int)result+10)=arg4; result[3]=arg5;` after `func_006190D8()` allocation. Caller 0x00199E30 (Ui_EquipmentWindow_Update) uses the result to draw the selected equipment model."
+ },
+ {
+  "address": "0x0061A5C4",
+  "name": "maybe_Ui_Part_SetupSpriteFromRecord",
+  "signature": "void maybe_Ui_Part_SetupSpriteFromRecord(UiPart* self, const UiPartRecord* rec)",
+  "params": {
+   "self": "UI part/sprite host (child table at +0x24c)",
+   "rec": "record: +4/+8 owner ids, +0xc palette id, +0x10 rect, +0x18 layer"
+  },
+  "summary": "Configures a sprite child of a UI part from a record: stores the owner/palette ids, applies the animation frame (0x005F34F0/0x005F36E0), builds a 9-slice sprite descriptor from the record rect and adds it to the child table.",
+  "confidence": 0.4,
+  "evidence": "`self->f_b4 = *(u32*)(rec+4); self->f_b0 = *(u32*)(rec+8); self->f_ac = rec->f_c;` then `func_0028E2A0(self,&desc)` (Gfx_CreateFColAnimator), rect fields `local_6c..local_66 = rect +2/-1`, `func_00335A6C(self,&desc,&self->f_24c,0)` (maybe_Gfx_SpriteActor_AddChild) and `*(u8*)(child+0x238) = 1`. No direct callers were found (called through a vtable/function pointer)."
+ },
+ {
+  "address": "0x0061BA4C",
+  "name": "maybe_Ui_Window_SetBaseVtable",
+  "signature": "void maybe_Ui_Window_SetBaseVtable(UiWindow* self)",
+  "params": {
+   "self": "window object returned by 0x001A66A0"
+  },
+  "summary": "Installs the shared window vtable g_0061ba68 on a freshly obtained window object and clears its 'dirty/visible' byte at +0x49.",
+  "confidence": 0.4,
+  "evidence": "`puVar1 = func_001A66A0(); *puVar1 = g_0061ba68; *(u8*)((int)puVar1 + 0x49) = 0;` Called from Ui_BigWindow_CtorBase / Ui_SkillPanelWindow_Ctor / Ui_ShopWindow_CreateSubObjects, i.e. the common base-constructor step of several windows."
+ },
+ {
+  "address": "0x0061BD4C",
+  "name": "Item_LookupRecord",
+  "signature": "void Item_LookupRecord(ItemRef* out, u16 itemId, u32 unused, u32 unused2)",
+  "params": {
+   "out": "receives {u16 id; ItemRecord* record}",
+   "itemId": "item id to resolve"
+  },
+  "summary": "Resolves an item id to its item-table record: stores the id in the reference struct and, when the id is below the table size, stores the record pointer looked up through the lazily created item table (0x0011CB38 + 0x0063CDD8); otherwise the pointer is null.",
+  "confidence": 0.7,
+  "evidence": "`*arg1 = (short)arg2; if (arg2 < g_0061bd8c) { puVar2 = func_0011CB38(&tmp); *(u32*)(arg1+2) = func_0063CDD8(*puVar2, arg2); } else *(u32*)(arg1+2) = 0;` This is the {id, record*} pair helper used by 30+ call sites (Ui_ItemList_RemoveItem, Party_ValidateEquipment, Shop_BuildFilteredItemList, 0x0063A280, 0x00643xxx...)."
+ },
+ {
+  "address": "0x00622038",
+  "name": "maybe_Container_SetCountFromByteSize",
+  "signature": "void maybe_Container_SetCountFromByteSize(Container* self, u32 byteSize, u32 count)",
+  "params": {
+   "self": "vector-like container (vtable at +0, begin/end at +0x10/+0x14)",
+   "byteSize": "payload size in bytes",
+   "count": "explicit element count, or 0 to derive it"
+  },
+  "summary": "Computes the element count for a container: divides the byte size by the element size reported by vtable slot +8 (rounding up) and stores it at +0x14; when the caller passes count 0 the derived value is used.",
+  "confidence": 0.4,
+  "evidence": "`uVar2 = (**(*self + 8))(self); uVar4 = func_0011CD80(byteSize, uVar2);` then `self[5] = quotient + (remainder != 0)`; assembly (asm/text/text_00600048.s @0x00622038) shows the `cmp r1,#0 / movne r1,#1 / add r0,r0,r1` ceil correction and then a compare of `[r4,#0x10]` vs `[r4,#0x14]`. Ghidra truncated the tail (software_smc/halt_baddata)."
+ },
+ {
+  "address": "0x006246E4",
+  "name": "maybe_Ui_Window_ApplyWorkLayout",
+  "signature": "void maybe_Ui_Window_ApplyWorkLayout(GameContext* ctx)",
+  "params": {
+   "ctx": "game context (work object at ctx+0x24a98)"
+  },
+  "summary": "Rebuilds a 0x40-byte block of layout/sprite ids (16 dwords) from a small allocated record and installs it into the window subsystem at work+0x24a98.",
+  "confidence": 0.42,
+  "evidence": "Zeroes 16 dwords, `func_0018CC14(&local_58)` fills them, `func_00640200(singleton,0xf0)` allocates a 0xf0-byte node, builds a 0x22-byte string from `*piVar1 + piVar1` with `func_001113EC`/`func_00100A74(...,0x11)` and finishes with `func_00613F14(work+0x24a98,&local_58)` - the same work-relative entry point used by 0x00614030's callers."
+ },
+ {
+  "address": "0x0062564C",
+  "name": "maybe_Ui_Part_SetupFromActorSprite",
+  "signature": "void maybe_Ui_Part_SetupFromActorSprite(UiPart* self, Actor* actor)",
+  "params": {
+   "self": "UI part with sprite handles at +0x20/+0xb8",
+   "actor": "source actor whose sprite parts are mirrored"
+  },
+  "summary": "Mirrors an actor's sprite/part state into a UI part: takes the actor's two sprite objects (0x00381820/0x003818B4), marks them dirty, copies the part handles at +0x20/+0xb8, then stores the outfit/attachment bytes (+0x18..+0x1e) derived from 0x00644504/0x006447D0.",
+  "confidence": 0.4,
+  "evidence": "`uVar2 = func_00381820(actor); func_003ECEEC(uVar2,actor); sprite->f_94=1;` twice (two sprite layers), then `func_00311C3C(self+8,actor)`, `func_004E7A50(self+0x2e,actor)`, and the byte block `*(u8*)(self+0x18)=0; +0x19=0; +0x1a/+0x1b = 1 or record[3]/[4]; *(u8*)(self+0x1c)=func_006447D0(actor)`. Caller: maybe_Ui_DataPanel_OpenFromByte (0x003143C8)."
+ },
+ {
+  "address": "0x00627DC4",
+  "name": "maybe_Battle_CheckActorCanAct",
+  "signature": "u32 maybe_Battle_CheckActorCanAct(Actor* self, u32 stateWord, u32 entityId, u32 unused)",
+  "params": {
+   "self": "actor",
+   "stateWord": "packed actor state (used via +0x?? bytes)",
+   "entityId": "entity id to look up"
+  },
+  "summary": "Returns 0 when the actor must not act: its state is one of two special values (8/10 bits 8 and 10 in stateWord), the entity's byte +0xe4 equals 5, or the actor kind byte is 7/8.",
+  "confidence": 0.42,
+  "evidence": "`if ((func_00639954(stateWord,8) == 0 && func_00639954(stateWord,10) == 0) && (entity = func_0035EB98(*ctx, entityId))->f_e4 == 5 || *(u8*)(stateWord+g_00627e3c)==7 || ==8) return 0; return 1;`. 0x00639954 is the same bit-test helper used by 0x006380A0 for state 0x11."
+ },
+ {
+  "address": "0x00628E34",
+  "name": "maybe_Party_GetMemberIdAtCurrentPage",
+  "signature": "u8 maybe_Party_GetMemberIdAtCurrentPage(UiList* self)",
+  "params": {
+   "self": "list/window with current page object at +0x38"
+  },
+  "summary": "Returns the party-member id (entity +0xc8) of the entry at the current page cursor (self->f_38->f_c - 1), or 0xff when the cursor is past the active party count.",
+  "confidence": 0.49,
+  "evidence": "`iVar4 = self->f_38 ? self->f_38->f_c - 1 : 0; iVar3 = func_00643504(ctx)` (party count) `; if (iVar4 < iVar3) { entity = func_0035F6C0(ctx,iVar4); return *(u8*)(entity+200); } return 0xff;` - identical to 0x0063A7D8 but taking the index from the page object."
+ },
+ {
+  "address": "0x006290A8",
+  "name": "std_Str_Length16B",
+  "signature": "u32 std_Str_Length16B(const u16* text)",
+  "params": {
+   "text": "NUL-terminated UTF-16 string"
+  },
+  "summary": "Second UTF-16 strlen wrapper in this cluster (tail call to 0x00100B74); used where the compiler emitted a separate out-of-line copy of the length helper.",
+  "confidence": 0.6,
+  "evidence": "Body is only `func_00100B74(arg1)`; 0x00100B74 is the UTF-16 strlen proven by its assembly (`ldrh/cmp/bne` loop counting 2-byte units). Callers: Ui_ListData_BuildEntries, Text_LayoutPage_BuildLines, Text_GlyphSet_CollectFromTable."
+ },
+ {
+  "address": "0x0062917C",
+  "name": "maybe_Party_IsMemberActive",
+  "signature": "u8 maybe_Party_IsMemberActive(Actor* member, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "member": "party member actor (id byte at +0xc8)"
+  },
+  "summary": "Returns bit 0 of the party-member flag record (looked up by the member's +0xc8 id through 0x0063F8F0), i.e. whether this member currently counts as an active party member.",
+  "confidence": 0.49,
+  "evidence": "`uVar1 = *(u8*)(member+200); iVar4 = func_0063F8F0(*func_0011CB38(&tmp), uVar1); return iVar4 ? (*(u8*)(iVar4+4) & 1) : 0;` - the same flag record and bit 0 that 0x00643504 counts."
+ },
+ {
+  "address": "0x006293F8",
+  "name": "maybe_Party_CountUnlockedSlots",
+  "signature": "int maybe_Party_CountUnlockedSlots(Actor* self)",
+  "params": {
+   "self": "party member actor with two u16 slot ids at +0x19a/+0x19c"
+  },
+  "summary": "Counts how many of the two weapon/equipment slot ids at self+0x19a and +0x19c resolve through the per-id predicate g_00629438 (non-zero), i.e. how many of the actor's two equip slots are filled/unlocked.",
+  "confidence": 0.4,
+  "evidence": "`i = (u16*)(self + 0x19a); do { if ((*g_00629438)(*i) != 0) result++; i++; } while (i != (u16*)(self + 0x19e));` - two ids, indirect predicate through a function pointer stored in .data."
+ },
+ {
+  "address": "0x00629528",
+  "name": "maybe_Battle_CheckActorCanUseItem",
+  "signature": "u32 maybe_Battle_CheckActorCanUseItem(Actor* self, u32 categoryByte)",
+  "params": {
+   "self": "actor (equipment-type table at +0x1274, 0x28 entries)",
+   "categoryByte": "weapon/armour type byte the item must allow"
+  },
+  "summary": "Decides whether an actor may use/equip the item whose record category byte is `categoryByte`: it must appear in the actor's 0x28-entry type table at +0x1274 and must be compatible with the actor's current weapon and armour categories.",
+  "confidence": 0.4,
+  "evidence": "`while (*(u8*)(self + i + 0x1274) != arg2) { if (0x27 < ++i) return 0; }` (a 40-entry u8 table) then `func_0018C184(&ctx)` game-mode test, `func_006292F0(self,0/1)` fetches the two equipped ids and their `f_29` category bytes are compared against `ctx->f_294` and special-cased for categories 0x0a/0x0b."
+ },
+ {
+  "address": "0x006297D8",
+  "name": "maybe_Item_SlotIsCategory6",
+  "signature": "u32 maybe_Item_SlotIsCategory6(Actor* self)",
+  "params": {
+   "self": "actor whose second equipment slot is inspected"
+  },
+  "summary": "Returns 1 when the actor's second equip-slot item is a category-6 item (item record +0x29 == 6) or satisfies the special-class predicate 0x0066C5A8.",
+  "confidence": 0.45,
+  "evidence": "`uVar1 = func_006292F0(self,1); func_0061BD4C(tmp,uVar1); if (record && (func_0066C5A8(tmp) != 0 || record->f_29 == 6)) return 1;` - f_29 is the item category byte also tested by 0x0064923C's filter cases 4..0xd."
+ },
+ {
+  "address": "0x00629844",
+  "name": "maybe_Item_SlotIsSpecialClass",
+  "signature": "u32 maybe_Item_SlotIsSpecialClass(Actor* self)",
+  "params": {
+   "self": "actor whose second equipment slot is inspected"
+  },
+  "summary": "Returns 1 when the actor's second equip-slot item satisfies the 0x0066C5A8 class predicate (used by character-status and item-list code to show the special equip marker).",
+  "confidence": 0.45,
+  "evidence": "`result = func_006292F0(self,1); func_0061BD4C(tmp,result); return (record != 0 && func_0066C5A8(tmp) != 0);` - same slot/predicate pair as 0x006297D8; both are called by 0x00258480 (Ui_CharaStatusWindow_FillPartyMember)."
+ },
+ {
+  "address": "0x00629B74",
+  "name": "maybe_Actor_HasTimestampInRecentList",
+  "signature": "bool maybe_Actor_HasTimestampInRecentList(Actor* self)",
+  "params": {
+   "self": "actor with a 0x20-entry list of 8-byte stamps at +0x975c"
+  },
+  "summary": "Builds a fresh 8-byte stamp through the three chained 0x0011FFFC calls and searches the 32-entry, 8-byte record list at self+0x975c for a match, i.e. 'have I already seen/recorded this stamp?'.",
+  "confidence": 0.4,
+  "evidence": "`func_0011FFFC(&a); func_0011FFFC(&b,a); func_0011FFFC(&stamp,b);` then `for (pcVar3 = self+0x975c; pcVar3 != self+0x985c; pcVar3 += 8)` comparing 4 bytes + 2 u16 = an 8-byte record; loop bound 0x985c-0x975c = 0x100 = 32 records."
+ },
+ {
+  "address": "0x00629D30",
+  "name": "maybe_Item_CountStorableItems",
+  "signature": "u32 maybe_Item_CountStorableItems(WorkData* self)",
+  "params": {
+   "self": "work object (+0x2b0c = 'bag expanded' flag)"
+  },
+  "summary": "Counts item ids that can be stored in the bag: iterates the whole item id range, counts records with the storable flag 0x20 (and, when the bag is not expanded, additionally excludes flag 0x40 / non-zero +0x10), then clamps the result to a configured maximum.",
+  "confidence": 0.45,
+  "evidence": "`if (*(char*)(g_00629e30 + self) == 0 || self->f_2b0c == 0)` selects the two flag tests `(f_20 & 0x20) && f_10 == 0 && !(f_20 & 0x40)` vs `(f_20 & 0x20) && f_10 == 0`; loop bound `g_00629e34` (item count); result `min(count, g_00629e38)`."
+ },
+ {
+  "address": "0x00629E40",
+  "name": "maybe_Item_CountOwnedTypesFromBitmask",
+  "signature": "u32 maybe_Item_CountOwnedTypesFromBitmask(WorkData* self)",
+  "params": {
+   "self": "work object with an owned-item bitmask at +0x4b30"
+  },
+  "summary": "Counts the distinct item types the player owns: walks the ownership bitmask at self+0x4b30, maps every set item id to its type key through 0x0066C368, sets the same bit in a local 0x168-byte bitmap and finally popcounts it, clamped to a maximum.",
+  "confidence": 0.45,
+  "evidence": "`if ((*(u32*)(self + 0x4b30 + ((i&0xffff)>>5)*4) & (1 << (i&0x1f))) != 0)` ... `uVar2 = func_0066C368(pair); local[uVar2>>5] |= 1 << (uVar2&0x1f);` then the classic SWAR popcount (`0x33333333`, `0x0f0f0f0f`, `0x00ff00ff`, `+>>8`, `+>>16`) over 90 dwords, `min(sum, g_00629f70)`."
+ },
+ {
+  "address": "0x00629F80",
+  "name": "maybe_Party_GetMemberRecord",
+  "signature": "void* maybe_Party_GetMemberRecord(WorkData* self, int index)",
+  "params": {
+   "self": "work object (member records at +0x944c, 0x60 bytes each)",
+   "index": "member index"
+  },
+  "summary": "Bounds-checked accessor for the party-member record at self + index*0x60 + 0x944c; returns null when index is negative or >= the member count.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = func_0062A110(self)` (member count) `; if (!(arg2 < 0) && arg2 <= iVar1) result = self + arg2*0x60 + 0x944c;` - the 0x60-byte stride and 0x944c base also appear in 0x0062A110/0x0062A390."
+ },
+ {
+  "address": "0x0062A110",
+  "name": "maybe_Party_GetMemberCount",
+  "signature": "int maybe_Party_GetMemberCount(WorkData* self)",
+  "params": {
+   "self": "work object; member id array at +0x944c..+0x974c"
+  },
+  "summary": "Returns the number of used party-member slots by scanning the member id array at self+0x944c (0xff terminates), with a hard-coded fallback of 8 when the array is empty; Ghidra mangled the loop tail into a noreturn call.",
+  "confidence": 0.45,
+  "evidence": "`pbVar5 = &self->f_944c; pbVar4 = &self->f_974c;` then comparison chain on f_944d/f_944e/f_944f (three consecutive 0xff checks) and `result = 8` for the empty case; the 0x944c base and 0x60 stride are used by 0x00629F80, and the ->f_944c array is the same one 0x00614030 copies (`&self->f_944c` inside the 0x3220 blob)."
+ },
+ {
+  "address": "0x0062A320",
+  "name": "maybe_Party_GetFirstNameLength",
+  "signature": "u32 maybe_Party_GetFirstNameLength(WorkData* self)",
+  "params": {
+   "self": "work object; UTF-16 name at +0x8630"
+  },
+  "summary": "Returns the UTF-16 length of the party/character name stored at self+0x8630 (the same 0x84-byte name block the panel snapshot keeps at +0x8630).",
+  "confidence": 0.49,
+  "evidence": "Decompiled body looks like `if (arg1 != -0x8630) func_00100B74(); return 0;` which is the Ghidra rendering of a tail call `strlen16(self + 0x8630)` - 0x00100B74 is the UTF-16 strlen proven from asm. The +0x8630 name block is copied by 0x00614030 (`&self->f_8630, 0x114`)."
+ },
+ {
+  "address": "0x0062A390",
+  "name": "maybe_Party_HasFreeMemberSlot",
+  "signature": "bool maybe_Party_HasFreeMemberSlot(WorkData* self, u32 unused, PartyLimit* limit)",
+  "params": {
+   "self": "work object",
+   "limit": "object with current/max member counters at +0xbc0/+0xbc1"
+  },
+  "summary": "Returns true when the party has room for one more member: member count plus the difference between the limit object's max (+0xbc0) and current (+0xbc1) counters is greater than zero.",
+  "confidence": 0.49,
+  "evidence": "`iVar2 = 0; if (limit->f_bc1 < limit->f_bc0) iVar2 = limit->f_bc0 - limit->f_bc1; iVar1 = func_0062A110(self); return 0 < iVar1 + iVar2;` - direct use of the member count accessor 0x0062A110."
+ },
+ {
+  "address": "0x0062A3CC",
+  "name": "maybe_Party_GetFirstMemberNameLength",
+  "signature": "u32 maybe_Party_GetFirstMemberNameLength(WorkData* self)",
+  "params": {
+   "self": "work object whose first row label lives at +0x5fe4"
+  },
+  "summary": "If the bag/list holds at least one entry (0x0066B11C > 0) returns the UTF-16 length of the first row label at self+0x5fe4, otherwise 0.",
+  "confidence": 0.42,
+  "evidence": "`iVar1 = func_0066B11C(); if (0 < iVar1) { func_00100B74(arg1 + 0x5fe4); } return 0;` - the noreturn-marked call is the UTF-16 strlen tail call (see std_Str_Length16); +0x5fe4 is the 50-row table base established by 0x006308EC/0x006138F0."
+ },
+ {
+  "address": "0x0062A64C",
+  "name": "maybe_Party_GetSecondRowNameLength",
+  "signature": "u32 maybe_Party_GetSecondRowNameLength(WorkData* self)",
+  "params": {
+   "self": "work object whose row label lives at +0x5fe4"
+  },
+  "summary": "Same 'length of the first row label' helper as 0x0062A3CC but compiled at a second call site (0xEC-byte body, identical control flow).",
+  "confidence": 0.4,
+  "evidence": "Identical decompiled shape to 0x0062A3CC: `func_0066B11C(); if (0 < iVar1) strlen16(arg1 + 0x5fe4); return 0;` - only the surrounding code (0xEC vs 0xBC bytes) differs, so this is a second inline/template instantiation."
+ },
+ {
+  "address": "0x0062AD8C",
+  "name": "maybe_Actor_FillDisplayParams",
+  "signature": "void maybe_Actor_FillDisplayParams(WorkData* self, ActorDisplayParams* out, u32 unused, u32 unused2)",
+  "params": {
+   "self": "work object (defaults at +0x27224..+0x27254, model id at +0x27c60)",
+   "out": "0x44-byte output block"
+  },
+  "summary": "Fills the 0x44-byte display/monitor parameter block of an actor from the work defaults: copies ten 32-bit values, one byte, three more values and the current model id from work+0x27c60.",
+  "confidence": 0.45,
+  "evidence": "`out[0] = 0; *(u16*)(out+2) = *(u16*)(g_0062ae50 + ctx); out[0x40] = 0xff; out->f_c = ctx->f_27224 ... out->f_3c = ctx->f_27254; *(u32*)(out+8) = ctx->f_27c60;` - a plain struct copy from the global game context (0x006F20C0)."
+ },
+ {
+  "address": "0x0062B2A4",
+  "name": "maybe_Actor_IsInRestPose",
+  "signature": "u32 maybe_Actor_IsInRestPose(Actor* self)",
+  "params": {
+   "self": "actor (position/rotation pairs at +0xc/+0x10, +0x2c/+0x30, +0x48/+0x4c)"
+  },
+  "summary": "Returns 1 when the actor is fully idle: its sprite part exists (0x0062F680 on +0x118->f_f84) and every animation/position accumulator equals its target (+0xc==+0x10, +0x2c==+0x30, +0x48==+0x4c, +0x78==0, +0x69==-1).",
+  "confidence": 0.45,
+  "evidence": "`iVar1 = func_0062F680(&self->f_118->f_f84); if (iVar1 != 0 && (self->f_c == self->f_10 && self->f_2c == self->f_30 && self->f_78 == 0 && self->f_48 == self->f_4c && self->f_69 == -1)) return 1;` - a classic 'animator at rest' test."
+ },
+ {
+  "address": "0x0062B3E4",
+  "name": "maybe_Container_ValidateHandle",
+  "signature": "u32 maybe_Container_ValidateHandle(u32* table, u32 index, int checkVirtual)",
+  "params": {
+   "table": "handle table object (entries from +0x250, 8 bytes each)",
+   "index": "handle index (< 0x83)",
+   "checkVirtual": "when non-zero also requires vtable slot +0x34 to return non-zero"
+  },
+  "summary": "Validates a tagged handle against the table's generation/tag word: returns the handle only when its block tag matches the table entry's tag (and, optionally, when the object's virtual predicate agrees), otherwise a masked 'stale handle' value.",
+  "confidence": 0.4,
+  "evidence": "`result = table[index*2 + 0x250];` then `g_0062b458 >> 0xb` block compare, `table = g_0062b45c + (result & (int)arg1 >> 10) * 8; table[1] == result >> 0xb` and `(**(*arg1 + 0x34))()` test; failure returns `result & 0xfffff800 | g_0062b458` (tag patched in). Handle-tag scheme with 0xb-bit index field."
+ },
+ {
+  "address": "0x0062B588",
+  "name": "maybe_Field_HasModelSet",
+  "signature": "bool maybe_Field_HasModelSet(void)",
+  "params": {},
+  "summary": "Returns whether the current map has a model set assigned (0x001C7EA4 returns 0xff when there is none) - i.e. whether 3D field models are available.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = func_001C7EA4(); return iVar1 != 0xff;` - 0x001C7EA4 is already named Field_GetActorModelSetIndex in decomp/native_names.json, and 0xff is its 'no model set' sentinel."
+ },
+ {
+  "address": "0x0062BD90",
+  "name": "maybe_Battle_Actor_PlayStateReaction",
+  "signature": "void maybe_Battle_Actor_PlayStateReaction(BattleActor* self)",
+  "params": {
+   "self": "battle actor; vtable +0xe8 = status query, byte at +0x768 = entity id"
+  },
+  "summary": "Reads the actor's fixed-point stat at entity+0x1a and, for the first matching status among 0x29,0x2a,0x27,0x28 reported by vtable slot +0xe8, triggers the corresponding reaction through 0x0063E05C.",
+  "confidence": 0.42,
+  "evidence": "`VectorUnsignedToFloat(entity->f_1a)` then nested `(**(*self + 0xe8))(self, 0x29/0x2a/0x27/0x28)` queries and `func_0063E05C(*func_0011CB38(&tmp), id)`; the ids 0x27..0x2a are the same status ids 0x0063880C special-cases."
+ },
+ {
+  "address": "0x0062BED8",
+  "name": "maybe_Actor_GetStatusByte",
+  "signature": "u8 maybe_Actor_GetStatusByte(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with entity id at +0x768"
+  },
+  "summary": "Returns the raw status byte (entity +0xda) of the entity referenced by the actor's +0x768 id.",
+  "confidence": 0.49,
+  "evidence": "`entity = func_0035EB98(*ctx, self->f_768); return entity->f_da;` - 0x0035EB98 is the entity-by-id accessor used throughout; the three siblings below test single bits of the same byte."
+ },
+ {
+  "address": "0x0062BF78",
+  "name": "maybe_Actor_GetStatusBit4",
+  "signature": "u32 maybe_Actor_GetStatusBit4(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with entity id at +0x768"
+  },
+  "summary": "Returns bit 4 of the entity status byte (+0xda) of the actor's entity.",
+  "confidence": 0.49,
+  "evidence": "`entity = func_0035EB98(*ctx, self->f_768); return (entity->f_da & 0x10) >> 4;` - same accessor/offset as 0x0062BED8."
+ },
+ {
+  "address": "0x0062BFA4",
+  "name": "maybe_Actor_GetStatusBit7",
+  "signature": "u16 maybe_Actor_GetStatusBit7(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with entity id at +0x768"
+  },
+  "summary": "Returns bit 7 of the entity status byte (+0xda) of the actor's entity.",
+  "confidence": 0.49,
+  "evidence": "`entity = func_0035EB98(*ctx, self->f_768); return (entity->f_da >> 7) & 1;` - third bit-test sibling of 0x0062BED8/0x0062BF78."
+ },
+ {
+  "address": "0x0062F468",
+  "name": "maybe_Actor_FindByField28",
+  "signature": "void* maybe_Actor_FindByField28(ActorHolder* self, u32 fieldValue)",
+  "params": {
+   "self": "object holding an id-validity table at +0xc and an object-pointer array",
+   "fieldValue": "value to match against object+0x28"
+  },
+  "summary": "Linear search over the manager's object array: returns the first live object (validity byte at self+0xc+id set) whose +0x28 field equals the requested value.",
+  "confidence": 0.4,
+  "evidence": "`uVar8 = func_0066AA9C(); ... fe20 = obj->f_e20; f_ea4 = id table; f_e1c = pointer table;` loop guards `*(char*)(id + self + 0xc) != '\\0'` (live check) and returns when `result->f_28 == arg2`. Companion 0x0062F514 matches +0x19 instead."
+ },
+ {
+  "address": "0x0062F514",
+  "name": "maybe_Actor_FindByField19",
+  "signature": "void* maybe_Actor_FindByField19(ActorHolder* self, u32 fieldValue)",
+  "params": {
+   "self": "object holding an id-validity table at +0xc",
+   "fieldValue": "value to match against object+0x19"
+  },
+  "summary": "Same live-object linear search as 0x0062F468 but matching field +0x19 (an item/skill id byte) instead of +0x28.",
+  "confidence": 0.4,
+  "evidence": "`func_0066AA7C(*(u32*)(self+8))` then loop over `f_12f4` entries using `f_13b8` (live ids) and `f_12f0` (pointers), returning when `result->f_19 == arg2` - structurally identical to 0x0062F468 with a shifted field."
+ },
+ {
+  "address": "0x0062F918",
+  "name": "maybe_Item_ComputePriceWithMultiplier",
+  "signature": "int maybe_Item_ComputePriceWithMultiplier(Item* self, ItemRecord* record, int count, u32 unused)",
+  "params": {
+   "self": "object with base price +0x228 and scale/shift +0x22c",
+   "record": "item record (+4 = stack size)",
+   "count": "number of items",
+   "unused": "not used"
+  },
+  "summary": "Computes a scaled item price: base (+0x228) times the record's stack size times count, doubled/shifted by the 2^factor encoded in +0x22c, then clamped so it does not exceed the current money total.",
+  "confidence": 0.45,
+  "evidence": "`result = count * self->f_228 * *(u16*)(record+4);` then `if (f_22c & 1) result *= 2;` and a `result <<= 2` loop f_22c>>1 times; final clamp `if (g_0062f99c < func_0066B2CC(work+0x24a98,0) + result) result = g - current;`."
+ },
+ {
+  "address": "0x0062FB10",
+  "name": "maybe_Ui_ListRow_GetLabelText",
+  "signature": "u8* maybe_Ui_ListRow_GetLabelText(UiListModel* self, u16 rowId)",
+  "params": {
+   "self": "list model with a 0xc-byte entry table at +0x34",
+   "rowId": "row/item id to translate"
+  },
+  "summary": "Resolves the display text for a list row: if the row id appears in the model's 0xc-byte entry table and is not currently overridden (0x0066B9BC), returns the entry's string pointer; otherwise falls back to the formatted item name from 0x0066C99C.",
+  "confidence": 0.49,
+  "evidence": "`if (*row == arg2)` in the `self->f_34` table (entries 0xc bytes: u16 key, ... string offset at +8) then `func_0066B9BC(work+0x24a98,arg2)` override check, returning `*(u8**)(entry+8) + entry`; fallback `func_0061BD4C(pair,arg2); result = func_0066C99C(pair,1)` (Text_FormatMessageArg). Callers: Ui_PokerWindow_*."
+ },
+ {
+  "address": "0x0062FC9C",
+  "name": "maybe_Ui_ListRow_GetLabelStyle",
+  "signature": "int maybe_Ui_ListRow_GetLabelStyle(UiListModel* self, u16 rowId)",
+  "params": {
+   "self": "list model with a 0xc-byte entry table at +0x34",
+   "rowId": "row id"
+  },
+  "summary": "Returns the style/attribute byte (entry +2) of the model's row entry for `rowId`, or 1 for ids in the item range 0xa19..0xa81, or 0 when the row has no entry.",
+  "confidence": 0.45,
+  "evidence": "`if (record && local_18[0] - 0xa19 < 0x69) return 1;` then the entry scan `if (*entry == arg2) return (int)(char)entry[1];` over the same 0xc-byte table as 0x0062FB10."
+ },
+ {
+  "address": "0x0062FD44",
+  "name": "maybe_Ui_ListRow_HasTextOverride",
+  "signature": "u32 maybe_Ui_ListRow_HasTextOverride(UiListModel* self, u16 rowId, u32 unused, u32 unused2)",
+  "params": {
+   "self": "list model with a 0xc-byte entry table at +0x34",
+   "rowId": "row id"
+  },
+  "summary": "Returns 1 when the row has an entry with a non-null string that is not currently overridden, i.e. whether a script-supplied label exists for this row.",
+  "confidence": 0.45,
+  "evidence": "`entry = ...; if (*entry == arg2) { off = entry[2]; if (off == 0) return 0; if (entry + off != 0) { if (func_0066B9BC(work+0x24a98,arg2) != 0) return 0; return 1; } }` - same table/override logic as 0x0062FB10."
+ },
+ {
+  "address": "0x0062FDE4",
+  "name": "maybe_Ui_ListRow_GetTextPixelWidth",
+  "signature": "u32 maybe_Ui_ListRow_GetTextPixelWidth(UiListModel* self, int row, u32 unused)",
+  "params": {
+   "self": "list model (own table at +0x34 or fall back to the global row list)",
+   "row": "row index",
+   "unused": "third argument overwritten from the row table"
+  },
+  "summary": "Estimates the pixel width of a row label: resolves the row's text id, then returns min(text width, 9) using the measured width (0x0062FC04) and a hard cap of 9 units.",
+  "confidence": 0.4,
+  "evidence": "Resolves `uVar1` either from the model's 0xc-byte entry table or from the global list (`func_0063DD38`), then `local_28 = func_0011CFAC(width); local_30[0] = 9; return min(local_28, 9)` guarded by `func_0062FC04(self,row)`."
+ },
+ {
+  "address": "0x0062FFA0",
+  "name": "maybe_Ui_ListRow_SetSelectedIndex",
+  "signature": "void maybe_Ui_ListRow_SetSelectedIndex(u32 self, u32 row, u32 unused, u32 unused2)",
+  "params": {
+   "self": "unused (work context fetched internally)",
+   "row": "index to store"
+  },
+  "summary": "Stores the given row/index into the list model at work+0x24a98 through 0x0066AF08 (the 'selected row' setter used by the draw code).",
+  "confidence": 0.4,
+  "evidence": "`piVar1 = func_006F20C0(&tmp); func_0066AF08(*piVar1 + 0x24a98, arg2);` - 0x0066AF08 is the setter paired with 0x0066B9BC/0x0066B308 in the work-row API."
+ },
+ {
+  "address": "0x006301A4",
+  "name": "maybe_Item_IsAnyRequiredItemElsewhere",
+  "signature": "u32 maybe_Item_IsAnyRequiredItemElsewhere(u32 self, ItemRecord* record, u32 unused, u32 unused2)",
+  "params": {
+   "self": "unused slot 0 (context fetched internally)",
+   "record": "record with four u16 item ids at +0x12/+0x14/+0x16/+0x18"
+  },
+  "summary": "Checks the four item ids stored at record+0x12..+0x18: returns 1 if any of them resolves to a different storage instance than the one the inventory search returns (i.e. the material is held somewhere else).",
+  "confidence": 0.35,
+  "evidence": "Four identical blocks: `id = record->f_12/f_14/f_16/f_18; p = func_00643324(ctx,id); if (p != 0 && (q = func_00642F54(ctx,0xff,id,0)) != p) return 1;`. 0x00643324 = Item storage resolver, 0x00642F54 = inventory search (named Item_CountEquipped in earlier batches - its name may be too specific)."
+ },
+ {
+  "address": "0x006302EC",
+  "name": "maybe_Item_AreRequiredItemsOwned",
+  "signature": "u32 maybe_Item_AreRequiredItemsOwned(u32 self, ItemRecord* record, u32 unused, u32 unused2)",
+  "params": {
+   "self": "unused slot 0 (context fetched internally)",
+   "record": "record with type/flag bytes and four u16 ids at +0x12..+0x18"
+  },
+  "summary": "Alternative ownership test for the same four ids: when the record's +0x1a is -1 all four ids (of category record+0x11) must be present per 0x00642F54, otherwise the record's +0x1a must match the result of 0x0023D078.",
+  "confidence": 0.35,
+  "evidence": "`if (record->f_1a == -1) { if (!func_00642F54(ctx, record->f_11, record->f_12,0)) return 0; ... three more ... } else { uVar2 = func_0023D078(record->f_11,0); if (uVar2 != record->f_1a) return 0; } return 1;` - the negated twin of 0x006301A4."
+ },
+ {
+  "address": "0x006308EC",
+  "name": "maybe_Ui_ListItemRef_ResolveRow",
+  "signature": "void* maybe_Ui_ListItemRef_ResolveRow(UiItemRef* ref, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "ref": "{int index; u8 kind; ...} row reference (kind at +0xc)"
+  },
+  "summary": "Resolves a UI list row reference to the underlying 0x8c-byte record: index into the work's 50-row bag table (kind 0), into the external 0x98-byte list at *g_00630994+0x6b8 (kind 1), or into the 20-row table at +0x7b3c (kind 2).",
+  "confidence": 0.49,
+  "evidence": "`iVar3 = *arg1; if (iVar3 < 0) return 0; cVar1 = ((char*)arg1)[3]; if (cVar1 == 0) result = *piVar2 + 0x24a98 + iVar3*0x8c + 0x5fe4; else if (cVar1 == 1) result = *g_00630994 + 0x6b8 + iVar3*0x98; else if (cVar1 == 2) result = ... + iVar3*0x8c + 0x7b3c;` - used by Ui_SpriteList_LoadPage, maybe_Ui_Row_SetItemIcon, maybe_Actor_ActionSeq_* ."
+ },
+ {
+  "address": "0x00630998",
+  "name": "maybe_Ui_ListItemRef_ResolveRowSimple",
+  "signature": "void* maybe_Ui_ListItemRef_ResolveRowSimple(UiItemRef* ref, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "ref": "row reference (kind at +0xc)"
+  },
+  "summary": "Reduced form of 0x006308EC: resolves kinds 0 (bag table at +0x5fe4) and 2 (+0x7b3c) but returns null for kind 1.",
+  "confidence": 0.49,
+  "evidence": "Same body as 0x006308EC with `else if ((cVar1 != 0x01) && (cVar1 == 0x02))`; caller 0x003BD874 passes the result to 0x00613BE8 (copy current row)."
+ },
+ {
+  "address": "0x006327AC",
+  "name": "maybe_Actor_GetFloatStat1a",
+  "signature": "u32 maybe_Actor_GetFloatStat1a(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with entity id at +0x768"
+  },
+  "summary": "Returns the entity's +0x1a field converted from fixed point through VectorUnsignedToFloat - a stat getter used by the equipment comparison screens.",
+  "confidence": 0.45,
+  "evidence": "`entity = func_0035EB98(*ctx, self->f_768); VectorUnsignedToFloat(entity->f_1a, ...); return (u32)entity->f_1a;` - byte-identical shape to 0x0062BD90's first statement."
+ },
+ {
+  "address": "0x0063287C",
+  "name": "maybe_Model_HasRenderableModel",
+  "signature": "u32 maybe_Model_HasRenderableModel(char* guard)",
+  "params": {
+   "guard": "one-time-init guard byte for the lazily created model object"
+  },
+  "summary": "One-time-initialises the item/actor model object and reports whether its current model handle (0x0024BF68 of +0x6c) is a valid, registered model.",
+  "confidence": 0.35,
+  "evidence": "Magic-static guard pattern (`if (*arg1 == '\\0') { *arg1 = 0; ... func_00293A00(); *puVar2 = g_0063295c; }`), then `uVar5 = func_0024BF68(*(u32*)(obj[2] + 0x6c), 3)` and a handle-tag validity check against g_00632960/g_00632964 - the same 'tag == value>>0xb' scheme as 0x0062B3E4."
+ },
+ {
+  "address": "0x006332FC",
+  "name": "maybe_Anim_GetAnimController",
+  "signature": "void maybe_Anim_GetAnimController(char* guard, u32 animId)",
+  "params": {
+   "guard": "one-time-init guard for the lazily created animation controller",
+   "animId": "animation/action id to select"
+  },
+  "summary": "Lazily creates the animation controller singleton and asks it to play/select `animId` (0x0063ECF0).",
+  "confidence": 0.4,
+  "evidence": "Identical magic-static construction block to 0x0063287C (`if (*arg1 == '\\0') { ... func_0011CFDC(size); *puVar3 = g_00633390; }`) followed by `func_0063ECF0(puVar3, arg2)`; 0x0063ECF0 walks a table of 0x10-byte entries and resolves item ids."
+ },
+ {
+  "address": "0x006344E0",
+  "name": "maybe_Gfx_GetSpriteSize",
+  "signature": "void maybe_Gfx_GetSpriteSize(u32* out, SpriteHandle* sprite)",
+  "params": {
+   "out": "receives two u32 (width/height)",
+   "sprite": "sprite record (+0x18 = engine sprite handle)"
+  },
+  "summary": "Looks the sprite up by its engine handle (0x005F2EC8) and copies its width/height (+0x78/+0x7c) to the caller, or zeroes them when the sprite is not available.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = func_005F2EC8(sprite->f_18); if (iVar1 != 0) { *out = iVar1->f_78; out[1] = iVar1->f_7c; } else { out[1] = 0; *out = 0; }` - only caller 0x005B0C6C keeps the pair for layout math."
+ },
+ {
+  "address": "0x0063469C",
+  "name": "maybe_Battle_CanUseItemOnSelf",
+  "signature": "u32 maybe_Battle_CanUseItemOnSelf(BattleActor* self, u16 itemId)",
+  "params": {
+   "self": "battle actor (sub-objects +0x4a3c/+0x4b7c/+0x4bcc, entity id +0xc)",
+   "itemId": "candidate item id"
+  },
+  "summary": "Battle usability test: for a normal item it defers to 0x00636038 (status/condition check) unless the item type is '#' (0x23) or the id is the special 0x9e0; for a type-'#' item it requires the actor's art/effect slots (+0x4a3c, +0x4b7c, +0x4bcc) to be ready.",
+  "confidence": 0.4,
+  "evidence": "`func_0061BD4C(tmp,itemId)` then `if (record->f_11 != 0x23) { if ((itemId != 0x9e0 || func_0062AB3C(self->f_c) != 0) && func_00636038(self,itemId) == 0) return 0; } else { if (func_0062AB3C(self->f_c)) return func_00654F90(&self->f_4bcc); if (!func_00648D50(&self->f_4a3c) || !func_00654F34(&self->f_4b7c)) return 0; } return 1;`"
+ },
+ {
+  "address": "0x00636000",
+  "name": "maybe_Game_TestInventoryFlag",
+  "signature": "bool maybe_Game_TestInventoryFlag(u32 unused, u32 bitIndex, u32 unused2, u32 unused3)",
+  "params": {
+   "bitIndex": "bit number in the flag array at work+0x2a628"
+  },
+  "summary": "Tests one bit of the global flag array at work+0x2a628.",
+  "confidence": 0.49,
+  "evidence": "`piVar1 = func_006F20C0(&tmp); return (*(u32*)(*piVar1 + 0x2a628 + (bitIndex >> 5)*4) & (1 << (bitIndex & 0x1f))) != 0;` - identical bit-array accessor pattern to 0x006641BF0 (work+0x2d390) and the +0x295c8 bitmap used by 0x0063C048."
+ },
+ {
+  "address": "0x006374F4",
+  "name": "maybe_Battle_IsActorIdleLongEnough",
+  "signature": "bool maybe_Battle_IsActorIdleLongEnough(BattleActor* actor)",
+  "params": {
+   "actor": "battle actor (entity reference at +0x20)"
+  },
+  "summary": "Compares the actor's animation/action timer (0x0063761C) with the action-start time of its entity (0x0063DCA4) and reports whether more than 2 time units have elapsed.",
+  "confidence": 0.42,
+  "evidence": "`func_0066B0E4(work+0x24a98,0); iVar2 = func_0063761C(actor); iVar5 = func_0063DCA4(singleton, actor->f_20->f_768 & 0xffff); return 2 < (int)(iVar2 - iVar5->f_c);` - a timer comparison, likely the 'idle long enough to start acting' test."
+ },
+ {
+  "address": "0x006380A0",
+  "name": "maybe_Battle_CanActorUseAbility",
+  "signature": "u32 maybe_Battle_CanActorUseAbility(BattleActor* self, u16 abilityId)",
+  "params": {
+   "self": "battle actor at +0xa5c4 (entity)",
+   "abilityId": "skill/spell id (0x99/0x9a are special-cased)"
+  },
+  "summary": "Deep usability check for a battle action: rejects ids whose state bit 0x11 is set, requires 0x00629528 (equipment/category) to pass, for ids 0x9a/0x99 additionally requires the vtable predicate 0x7f/0x7e, and finally requires the per-skill flag at record+0x302 when 0x0048E594 says the skill list is active.",
+  "confidence": 0.42,
+  "evidence": "`if (func_00639954(self->f_a5c4,0x11) != 0) return 0; ... if (func_00629528(entity,abilityId) != 1) return 0; if (abilityId==0x9a/0x99) iVar2 = (**(*entity+0xe8))(entity,0x7f/0x7e); ... if (func_0048E594(entity) != 0) { if (func_0063CFC8(singleton,abilityId)->f_302 == 0) return 0; } return 1;`"
+ },
+ {
+  "address": "0x00638350",
+  "name": "maybe_Battle_IsEquippedWeaponType",
+  "signature": "u32 maybe_Battle_IsEquippedWeaponType(BattleActor* self, int slot, u32 unused, u32 unused2)",
+  "params": {
+   "self": "battle actor (+0x5c4 = entity)",
+   "slot": "0 = weapon slot, other = second slot"
+  },
+  "summary": "Returns 1 when the item equipped in the chosen slot has record category 0x13 or 0x0f (the two weapon categories), used by battle damage/attack-type checks.",
+  "confidence": 0.45,
+  "evidence": "`uVar5 = self->f_5c4->f_768 & 0xff; iVar3 = func_006292F0(entity, slot ? 1 : 0); if (iVar3 != g_006383ec) { iVar4 = func_0063CDD8(singleton,iVar3); if (iVar4->f_c == 0x13 || iVar4->f_c == 0x0f) return 1; } return 0;` - the f_c category byte values match those used by 0x0063880C."
+ },
+ {
+  "address": "0x0063880C",
+  "name": "maybe_Battle_CanEquipOrUse",
+  "signature": "u32 maybe_Battle_CanEquipOrUse(BattleActor* self, Actor* actor, int actionId)",
+  "params": {
+   "self": "unused/UI side",
+   "actor": "actor whose stats/equipment are compared",
+   "actionId": "action id (0x1e/0x1f, 0x23/0x24, 0x27/0x28 are handled specially)"
+  },
+  "summary": "Equipment/consumable feasibility check for an action id: for attack-type ids it compares the actor's weapon attack (+0x136/+0x138) scaled by g_00638a24 against a computed stat threshold; for the other ids it rejects categories 0x14/0x0e and compares a general stat against g_00638a24.",
+  "confidence": 0.4,
+  "evidence": "`if (actionId != 0x1e && != 0x1f) { if (0x23/0x24) { uVar2 = func_0048F154(actor); fVar5 = actor->f_136; iVar4 = func_0063822C(self,5); return fVar5*g_00638a24*(float)uVar2 ... } ... }` else `func_0048E2C0(actor,0)` / `f_134` with func_0063822C(self,3/4) and category checks against 0x14/0x0e."
+ },
+ {
+  "address": "0x0063A280",
+  "name": "maybe_Ui_MessagePage_AddItemNameArgs",
+  "signature": "void maybe_Ui_MessagePage_AddItemNameArgs(UiMessageNode* self)",
+  "params": {
+   "self": "message node: +6 kind, +0xc/+0x10/+0x12 item ids"
+  },
+  "summary": "Pushes the item names referenced by a message node into message arguments 5/6 (kind 0xa/0xb), and for kind 0xc writes the id as a raw 16-bit argument, so the message text can embed item names.",
+  "confidence": 0.49,
+  "evidence": "`switch (*(char*)(self+6)) { case 0xc: ... func_00707C1C(g+0x950,self->f_c); case 0xa: pair=lookup(self->f_10); func_001F076C(5, Text_FormatMessageArg(pair,1), 0); case 0xb: arg5 then arg6 with self->f_12 }` - 0x001F076C is named Message_SetArg in earlier batches."
+ },
+ {
+  "address": "0x0063A7B4",
+  "name": "maybe_Party_GetMemberActorData",
+  "signature": "int maybe_Party_GetMemberActorData(u32 unused, int memberIndex, u32 unused2, u32 unused3)",
+  "params": {
+   "memberIndex": "index into the party entity list"
+  },
+  "summary": "Returns the party member's actor data block (entity + 0xca) for the given member index, without a bounds check.",
+  "confidence": 0.49,
+  "evidence": "`func_006F20C0(&tmp); iVar1 = func_0035F6C0(tmp,memberIndex); return iVar1 + 0xca;` - the +0xca offset matches 0x0063A838/0x00643B0C and is the 'member data' base inside the entity record."
+ },
+ {
+  "address": "0x0063A7D8",
+  "name": "Party_GetMemberIdAtIndex",
+  "signature": "u8 Party_GetMemberIdAtIndex(u32 unused, int memberIndex)",
+  "params": {
+   "memberIndex": "index into the party entity list"
+  },
+  "summary": "Returns the party member id (entity +0xc8) for the given index, or 0xff when the index is past the active member count.",
+  "confidence": 0.6,
+  "evidence": "`iVar2 = func_00643504(ctx); if (memberIndex < iVar2) { entity = func_0035F6C0(ctx,memberIndex); return *(u8*)(entity+200); } return 0xff;` - 0x00643504 counts active members; callers 0x0063B5A0/0x0064E010 use it as the row label id."
+ },
+ {
+  "address": "0x0063A820",
+  "name": "maybe_Party_GetActiveCountUnused",
+  "signature": "void maybe_Party_GetActiveCountUnused(u32 unused)",
+  "params": {
+   "unused": "not used"
+  },
+  "summary": "Thin wrapper that only calls the party-count helper (0x00643504) and discards the result; likely a leftover instantiation of the count accessor whose return value the compiler dropped.",
+  "confidence": 0.35,
+  "evidence": "Decompiled body: `local_8[0] = in_r3; func_006F20C0(local_8); func_00643504(local_8[0]);` with no use of the result; 0x0063A8A0 (below) is the same function with the return value kept."
+ },
+ {
+  "address": "0x0063A87C",
+  "name": "maybe_Party_GetMemberActorDataB",
+  "signature": "int maybe_Party_GetMemberActorDataB(u32 unused, int memberIndex, u32 unused2, u32 unused3)",
+  "params": {
+   "memberIndex": "index into the party entity list"
+  },
+  "summary": "Second, identical copy of 0x0063A7B4: returns entity+0xca for the given member index.",
+  "confidence": 0.49,
+  "evidence": "Byte-for-byte the same sequence as 0x0063A7B4 (`func_0035F6C0(ctx,index) + 0xca`); callers 0x0063AA78 (Ui_ListText_GetTextForSlot) and 0x0064DF88 (maybe_Ui_BagList_SetLabel) use both interchangeably."
+ },
+ {
+  "address": "0x0063A8A0",
+  "name": "Party_GetActiveMemberCount",
+  "signature": "int Party_GetActiveMemberCount(GameContext* ctx)",
+  "params": {
+   "ctx": "game context (also receives a hidden register argument in the decompiled view)"
+  },
+  "summary": "Returns the number of active party members by delegating to the member scanner 0x00643504; used everywhere a list needs to know how many party rows to append.",
+  "confidence": 0.65,
+  "evidence": "Assembly at 0x0063A8A0 (asm/text/text_00600048.s) is exactly `mov r0,sp; bl 0x6F20C0; ldr r0,[sp]; bl 0x643504; pop {r3,pc}` - i.e. `return func_00643504(ctx)`. 0x00643504 iterates work->f_27218 members and counts those whose flag record (+4) has bit 0 set. Ghidra's 0x118-byte size is wrong: the code after 0x0063A8B4 belongs to the following vtable helper block."
+ },
+ {
+  "address": "0x0063A9B8",
+  "name": "maybe_Ui_ListCursor_IsPartyCountSlotVisible",
+  "signature": "bool maybe_Ui_ListCursor_IsPartyCountSlotVisible(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; nested list at +0x410"
+  },
+  "summary": "Returns true when the synthetic 'party member count' row (whose index is the active member count) is at or before the last row of the current page.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = func_0063A794()` (last index of the page: `self->f_38 ? self->f_38->f_c - 1 : 0`) `; iVar2 = Party_GetActiveMemberCount(self+0x410); return iVar2 <= iVar1;` - the same index source as 0x0063A9E0/0x00648C3C; callers are the item/shop list cursor handlers."
+ },
+ {
+  "address": "0x0063A9E0",
+  "name": "maybe_Ui_ListCursor_GetPartyCountSlotId",
+  "signature": "u32 maybe_Ui_ListCursor_GetPartyCountSlotId(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; nested list at +0x410"
+  },
+  "summary": "If the party-count row is inside the current page it returns that member's id (Party_GetMemberIdAtIndex at the count index), otherwise the sentinel row id 0x1f.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(self+0x410); iVar2 = func_0063A794(self); if (iVar2 < iVar1) { return Party_GetMemberIdAtIndex(self+0x410, iVar2); } return 0x1f;`"
+ },
+ {
+  "address": "0x0063AA24",
+  "name": "maybe_Ui_ListCursor_IsAtLastRow",
+  "signature": "bool maybe_Ui_ListCursor_IsAtLastRow(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; nested list at +0x410"
+  },
+  "summary": "Returns true when the active member count equals the last row index of the current page (the count row is the page's last row).",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(self+0x410); iVar2 = func_0063A794(self); return iVar1 == iVar2;` - called by the shop item list handlers (maybe_Ui_ShopItemList_HandleInput/BeginBuy)."
+ },
+ {
+  "address": "0x0063AA4C",
+  "name": "maybe_Ui_ListCursor_IsPastLastRow",
+  "signature": "bool maybe_Ui_ListCursor_IsPastLastRow(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; nested list at +0x410"
+  },
+  "summary": "Returns true when the active member count is exactly one past the last row index (cursor sits on the trailing 'end of list' row).",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(self+0x410); iVar2 = func_0063A794(self); return iVar1 == iVar2 + 1;` - companion of 0x0063AA24."
+ },
+ {
+  "address": "0x0063AB0C",
+  "name": "maybe_Ui_ListCursor_GetFirstFreeRow",
+  "signature": "int maybe_Ui_ListCursor_GetFirstFreeRow(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; +4 mode flag"
+  },
+  "summary": "Returns the first row index after the current page's data (last index + 1, or +2 in the alternate mode), used to place the trailing blank/summary row.",
+  "confidence": 0.45,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(); iVar2 = *(char*)(self+4) == 0 ? 1 : 2; return iVar1 + iVar2;` - note the decompiler lost arg1 to the count call; the +4 mode byte selects one or two trailing rows."
+ },
+ {
+  "address": "0x0063ABD8",
+  "name": "maybe_Ui_ListText_GetSlotValueType2",
+  "signature": "u8 maybe_Ui_ListText_GetSlotValueType2(int* self)",
+  "params": {
+   "self": "list-text object: scroll offset at +0xe (+0xc count), slot pairs at +0x50, cursor at +0x4c"
+  },
+  "summary": "Computes the on-screen slot index from the scroll offset and returns the paired value byte for slot entries whose type byte is 2, or 0xff when the slot is another type.",
+  "confidence": 0.45,
+  "evidence": "`iVar4 = arg1[0x13]; uVar3 = arg1[0xe] ? *(u16*)(arg1[0xe]+0xc) : 0; iVar2 = (uVar3 + iVar4*8) - (**(*arg1+0x68))(); if (*(char*)((int)arg1 + iVar2*2 + 0x50) == 2) return *(u8*)((int)arg1 + iVar2*2 + 0x51);` - same +0x50 pair table and formula as 0x0063AC20 (type 1)."
+ },
+ {
+  "address": "0x0063AC20",
+  "name": "maybe_Ui_ListText_GetSlotValueType1",
+  "signature": "u8 maybe_Ui_ListText_GetSlotValueType1(int* self)",
+  "params": {
+   "self": "list-text object (slot pairs at +0x50)"
+  },
+  "summary": "Same slot-index computation as 0x0063ABD8 but returns the paired value only for slot entries of type 1.",
+  "confidence": 0.45,
+  "evidence": "Identical body to 0x0063ABD8 with `== '\\x01'` instead of `== '\\x02'`; both are called from Ui_JumonWindow_UpdateList / maybe_Model_UpdateAttachedParts."
+ },
+ {
+  "address": "0x0063ACB4",
+  "name": "maybe_Ui_ListText_GetFirstKnownItemId",
+  "signature": "u16 maybe_Ui_ListText_GetFirstKnownItemId(UiListText* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "list-text object: page object at +0x38, u16 ids at +0x78"
+  },
+  "summary": "Returns the item id stored at self + (page*0x10) + 0x78 when that id is known to the work inventory (0x0066B308), else 0.",
+  "confidence": 0.45,
+  "evidence": "`uVar4 = self->f_38 ? self->f_38->f_c : 0; if (uVar4 < 0xc) { uVar1 = *(u16*)(self + uVar4*0x10 + 0x78); if (func_0066B308(work+0x24a98,uVar1) != 0) return uVar1; } return 0;` - a 12-entry per-page id table."
+ },
+ {
+  "address": "0x0063AF80",
+  "name": "maybe_Ui_ListWindow_IsRowActivated",
+  "signature": "u32 maybe_Ui_ListWindow_IsRowActivated(ListWindow* self, u32 rowIndex)",
+  "params": {
+   "self": "list window: row object array at +0x3c, count +0x40, current row +0x38",
+   "rowIndex": "row to test"
+  },
+  "summary": "Asks the row object's virtual predicates whether the row at `rowIndex` is activated, taking the current row into account (slot +0x20 on the row, +0x24 as the two-row comparison).",
+  "confidence": 0.4,
+  "evidence": "`piVar1 = *(int**)(self->f_3c + rowIndex*4); if (rowIndex < self->f_40 && (self->f_40 <= self->f_38 || *(int*)(self->f_3c + self->f_38*4) == 0)) return (**(*piVar1+0x20))(); iVar2 = (**(*piVar1+0x20))(); if (iVar2 && (**(*cur+0x24))(cur,rowIndex,...)) return 1;` - virtual row protocol."
+ },
+ {
+  "address": "0x0063B590",
+  "name": "maybe_Ui_ListCursor_GetSummaryRowIndex",
+  "signature": "int maybe_Ui_ListCursor_GetSummaryRowIndex(void)",
+  "params": {},
+  "summary": "Returns the row index of the party-summary row: active member count + 3.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(); return iVar1 + 3;` - sibling of 0x00648BEC (+1) and 0x00643BFC (+1); the +3 offset is used by the bag/equipment list builders that append summary rows."
+ },
+ {
+  "address": "0x0063BF8C",
+  "name": "maybe_Item_GetNameVariantTag",
+  "signature": "void maybe_Item_GetNameVariantTag(u32* out, ItemRecord* record, int slot)",
+  "params": {
+   "out": "receives a pointer into the g_0063c044 name-variant table",
+   "record": "item record (+0x22c = variant count, +0x?? ids)",
+   "slot": "row offset added to the variant index"
+  },
+  "summary": "Chooses the display-name variant for an item: scans up to four candidate variant ids (record id + slot offset), returns the variant entry when the id is owned (bitmap work+0x295c8) and otherwise the default entry.",
+  "confidence": 0.4,
+  "evidence": "`uVar6 = record->f_22c; if (uVar6 < 4) { do { id = *(u16*)(record + slot*2 + 10) + uVar6; pair = Item_LookupRecord(id); if (pair && func_0066C368(pair) == id && (*(u32*)(work+0x295c8 + (id>>5)*4) & 1 << (id&0x1f))) { uVar5 = *(u32*)(g_0063c044 + 1); ... } } while (++uVar6 < 4); }` - two-entry string/pointer table at g_0063c044."
+ },
+ {
+  "address": "0x0063C048",
+  "name": "maybe_Item_HasOwnedNameVariant",
+  "signature": "u32 maybe_Item_HasOwnedNameVariant(ItemRecord* record, int slot)",
+  "params": {
+   "record": "item record with variant ids",
+   "slot": "row offset added to the variant index"
+  },
+  "summary": "Returns 1 when one of the item's name-variant ids (starting at record id + slot) is present in the inventory, continuing to the next id while the mapped id stays unchanged.",
+  "confidence": 0.42,
+  "evidence": "`arg1 += slot*2; func_0061BD4C(tmp,*(u16*)(arg1+10)); while (pair && func_0066C368(pair) == *(u16*)(arg1+10)) { if (bitmap[work+0x295c8] bit set) return 1; func_0061BD4C(tmp, id+1); } return 0;` - same variant/bitmap scheme as 0x0063BF8C."
+ },
+ {
+  "address": "0x0063C0F4",
+  "name": "maybe_Item_FormatNameWithVariant",
+  "signature": "void maybe_Item_FormatNameWithVariant(int record, int slot)",
+  "params": {
+   "record": "item record",
+   "slot": "row offset for the variant id"
+  },
+  "summary": "Formats an item's name using the variant id derived from the record and the current row offset, falling back to the base id when the variant id is not distinct.",
+  "confidence": 0.4,
+  "evidence": "`func_0061BD4C(&base, *(u16*)(rec+slot*2+10)); func_0061BD4C(&variant, base + record->f_22c); if (!variant || func_0066C368(&variant) != base_id) use base; func_0066C99C(choice,1);` - Text_FormatMessageArg on one of the two ids."
+ },
+ {
+  "address": "0x0063C16C",
+  "name": "maybe_Item_CompareNameOrder",
+  "signature": "bool maybe_Item_CompareNameOrder(u16 idA, u32 unused, u16 idB)",
+  "params": {
+   "idA": "left item id",
+   "idB": "right item id"
+  },
+  "summary": "Comparator for sorting item ids by (record +0xe word, then raw id): returns true when the packed key of idA is smaller than that of idB, treating unknown ids as the sentinel g_0063c1dc.",
+  "confidence": 0.49,
+  "evidence": "`func_0061BD4C(&a,idA); func_0061BD4C(&b,idB); uVar2 = aRecord ? CONCAT22(aRecord->f_e, aId) : g_0063c1dc; ... return uVar2 < uVar1;` - 64-bit packed (f_e, id) comparison; called from Text_CharList_Sort and used by the 0x0071E598/0x0071E0D4 sorts."
+ },
+ {
+  "address": "0x0063C690",
+  "name": "maybe_Debug_FindRecordByName",
+  "signature": "int maybe_Debug_FindRecordByName(int self, const char* name, u32 unused, u32 unused2)",
+  "params": {
+   "self": "returned when the name is empty",
+   "name": "NUL-terminated record name"
+  },
+  "summary": "Looks a named record up in the current command/script table: strcmp's the name (0x0010540C) and then scans the table's 0x38-byte records for the matching +0x1c index, returning `self+4` for an empty name.",
+  "confidence": 0.4,
+  "evidence": "`if (func_0010540C(name, &existing) == 0) return self+4;` then `iVar1 = func_0066AA9C(...)`; loop over `f_3648` pointers `result = *(int*)(obj->f_3644 + i*4); if (result->f_1c == iVar3) return result;` where `iVar3 = func_001577FC(0,name)` hashes/resolves the name."
+ },
+ {
+  "address": "0x0063D434",
+  "name": "maybe_Item_FindRewardEntry",
+  "signature": "u32 maybe_Item_FindRewardEntry(WorkData* self, u32 packedTableId, u32 packedKey, u32 unused)",
+  "params": {
+   "self": "work object (per-table pointer array at +0x41c, 54 entries)",
+   "packedTableId": "low byte = table index, high bits = first key",
+   "packedKey": "u16 key pair to match"
+  },
+  "summary": "Searches a reward/drop sub-table (0x28-byte entries with u16/u16/u8 keys at +0x20/+0x22/+0x24) for the entry matching the packed keys, falling back to the generic table at work+0x2a444/0x27508.",
+  "confidence": 0.4,
+  "evidence": "`piVar2 = func_0063F348(self, tableIndex); uVar6 = count*0x28; ... if (entry->f_20 == arg2>>0x10 && entry->f_22 == (arg3&0xffff) && entry->f_24 == (arg3>>0x10)) return entry;` fallback uses `*(u32*)(work + 0x2a444 + (id>>5)*4)` bitmap and `*(char*)(id + work + 0x27508)`; called from Ui_StoryListWindow_BindRowModels and maybe_Ui_StoryModel_SelectPage."
+ },
+ {
+  "address": "0x0063ECF0",
+  "name": "maybe_Item_IsRecipeCraftable",
+  "signature": "u32 maybe_Item_IsRecipeCraftable(WorkData* self, int recipeIndex, u32 unused, u32 unused2)",
+  "params": {
+   "self": "work object whose recipe table is at +0x74c",
+   "recipeIndex": "index into the recipe list (0 = any)"
+  },
+  "summary": "Checks one crafting recipe: for every material id in the selected 0x10-byte recipe entry it requires Item storage resolution (0x00643324) to succeed, returning 0 as soon as one material is missing.",
+  "confidence": 0.49,
+  "evidence": "`i = self->f_74c; if (i) { ... iVar4 = i->f_60; ... i += arg2*0x10; iVar4 = *entry; for (k < iVar4) { u16 id = *(u16*)(materials + k*2); if (func_00643324(ctx,id) == 0) result = 0; } }` - the 0x10-byte entries hold a count plus a relative pointer to a u16 id array."
+ },
+ {
+  "address": "0x0063F430",
+  "name": "maybe_Item_IsAnyRecipeCraftable",
+  "signature": "u32 maybe_Item_IsAnyRecipeCraftable(WorkData* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "work object whose recipe table is at +0x74c"
+  },
+  "summary": "Returns 1 when at least one of the first ten crafting recipes is craftable (same material check as 0x0063ECF0), otherwise 0.",
+  "confidence": 0.49,
+  "evidence": "`do { ... for (i < count) if (func_00643324(ctx, *(u16*)(materials + i*2)) == 0) bVar1 = false; if (!bVar1) return 0; uVar5++; } while (uVar5 < 9); return 1;` - identical inner loop to 0x0063ECF0, wrapped in a 10-entry 'any' scan."
+ },
+ {
+  "address": "0x0063F6D4",
+  "name": "maybe_Ui_ListRow_SumRowHeights",
+  "signature": "u32 maybe_Ui_ListRow_SumRowHeights(ListModel* self, int* rowView, u32 unused, u32 unused2)",
+  "params": {
+   "self": "list model with a 3-byte row table at +0x6d4",
+   "rowView": "object whose vtable slot +8 returns a per-row weight"
+  },
+  "summary": "Sums the per-row heights produced by the row view object (vtable +8) for every visible row in the model's 3-byte row table, clamped to 0xff - i.e. the total height of the visible list.",
+  "confidence": 0.45,
+  "evidence": "`f60 = self->f_6d4->f_60; for (i < f60) { entry = &table[i*3]; if (entry[0] != 0xff && entry[1] != 0xff && entry[2] != 0) { uVar5 += (**(*rowView+8))(rowView); } } if (0xff < uVar5) uVar5 = 0xff;` - the same 3-byte table is read by 0x00640168."
+ },
+ {
+  "address": "0x0063FB6C",
+  "name": "maybe_Ui_ListRow_GetRowHeightClass",
+  "signature": "u8 maybe_Ui_ListRow_GetRowHeightClass(ListModel* self, u32 rowIndex, u32 unused, u32 unused2)",
+  "params": {
+   "self": "list model with a 0xc-byte row table at +0x24c",
+   "rowIndex": "row (< 0x48)"
+  },
+  "summary": "Returns the height class byte (row record +0xb) of the given row, or 0x15 when the global 'large text' flags at work+0x27508/0x27509 are set, or 0xff when the row is out of range.",
+  "confidence": 0.42,
+  "evidence": "`if (rowIndex < 0x48 && self->f_24c) { entry = ... + rowIndex*0xc; result = entry->f_b; }` then `if (*(char*)(work+0x27508) != 0 || *(char*)(work+0x27509) != 0) result = 0x15;`"
+ },
+ {
+  "address": "0x00640168",
+  "name": "maybe_Ui_ListRow_RecalcTotalHeight",
+  "signature": "void maybe_Ui_ListRow_RecalcTotalHeight(ListModel* self, u32 unused)",
+  "params": {
+   "self": "list model",
+   "unused": "passed through to 0x0063F6D4 as the row view"
+  },
+  "summary": "Wrapper that recomputes the model's visible-list height by calling 0x0063F6D4 with the caller-supplied row view.",
+  "confidence": 0.42,
+  "evidence": "`void f(arg1,arg2){ local_8[0]=arg2; func_0063F6D4(arg1,local_8); }` - a thunk whose only body is the height sum."
+ },
+ {
+  "address": "0x00640D08",
+  "name": "maybe_Actor_SetBagSlotId",
+  "signature": "void maybe_Actor_SetBagSlotId(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with a u16 slot id at +0x2b8"
+  },
+  "summary": "Publishes the actor's u16 field at +0x2b8 into the work's bag/row table through 0x0066B3B0.",
+  "confidence": 0.4,
+  "evidence": "`func_0066B3B0(work+0x24a98, self->f_2b8)` where work comes from 0x006F20C0; the +0x2b8 field is a u16 id (same offset family as the actor id blocks copied by 0x00614030)."
+ },
+ {
+  "address": "0x00640DB0",
+  "name": "maybe_Actor_SetSecondBagSlotId",
+  "signature": "void maybe_Actor_SetSecondBagSlotId(Actor* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "actor with a u16 slot id at +0x2ec"
+  },
+  "summary": "Same publish-to-work helper as 0x00640D08 but for the actor's second u16 id at +0x2ec.",
+  "confidence": 0.4,
+  "evidence": "`func_0066B3B0(work+0x24a98, self->f_2ec)` - identical body to 0x00640D08 with a different field."
+ },
+ {
+  "address": "0x00641628",
+  "name": "maybe_Actor_FindCommandByName",
+  "signature": "int maybe_Actor_FindCommandByName(Actor* self, const char* name)",
+  "params": {
+   "self": "actor with nested tables at +0x64/+0x68 and +0x6c/-",
+   "name": "NUL-terminated command/action name"
+  },
+  "summary": "Searches the actor's nested command tables (arrays of 8-byte entries leading to 0x38-byte records with a name at +0x30) for the record whose name matches, returning it or 0.",
+  "confidence": 0.42,
+  "evidence": "`iVar6 = *(int*)(self+100); iVar1 = (self->f_68 - iVar6) >> 3;` outer loop over 8-byte entries, inner over 0x38-byte records with `iVar5 = result->f_30 ? result+0x30+iVar5 : 0; if (func_0010540C(name, iVar5) == 0) return result;` (strcmp). Callers: 0x00179D7C/0x0017A7BC/0x003F44AC."
+ },
+ {
+  "address": "0x00641BA4",
+  "name": "maybe_Ui_IconList_AreAllIdle",
+  "signature": "u32 maybe_Ui_IconList_AreAllIdle(UiIconList* self)",
+  "params": {
+   "self": "icon list with 0x71 (113) icon slots of 0x58 bytes at +0x828"
+  },
+  "summary": "Returns 1 when none of the 113 icon slots is still animating (0x00654D48 reports idle for each).",
+  "confidence": 0.49,
+  "evidence": "`for (i = 0; i < 0x71; i++) if (func_00654D48(self + i*0x58 + 0x828) != 0) return 0; return 1;` - caller is maybe_Ui_IconList_TickOnAnimationEnd."
+ },
+ {
+  "address": "0x00641BF0",
+  "name": "maybe_Message_TestFlagMask",
+  "signature": "bool maybe_Message_TestFlagMask(u32 unused, u8 mask, u32 unused2, u32 unused3)",
+  "params": {
+   "mask": "bit mask to test against work+0x2d390"
+  },
+  "summary": "Tests the caller's mask against the single flag byte at work+0x2d390 (a message-system mode byte).",
+  "confidence": 0.49,
+  "evidence": "`piVar1 = func_006F20C0(&tmp); return (*(u8*)(*piVar1 + 0x2d390) & mask) != 0;` - callers are the message-window step handlers (0x002B04D4 maybe_Ui_MessageWindow_StepBranchOnFlag8, 0x00395E20)."
+ },
+ {
+  "address": "0x00641C94",
+  "name": "maybe_Monster_GetBehaviourIndex",
+  "signature": "u8 maybe_Monster_GetBehaviourIndex(MonsterEntry* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "monster/behaviour record with a u16 id at +4"
+  },
+  "summary": "Looks up the record for the u16 id at self+4 in the current monster/behaviour table and returns its byte at +9, or 0xff when the id or record is missing.",
+  "confidence": 0.42,
+  "evidence": "`if (*(short*)(arg1+4) != -1) { uVar2 = func_0066A74C(*(u32*)(*(int*)(ctx->f_8) + 0xb4)); iVar3 = func_00628EE0(uVar2, *(u16*)(arg1+4)); if (iVar3) return *(u8*)(iVar3+9); } return 0xff;` - the same lookup is used by 0x00641E78."
+ },
+ {
+  "address": "0x00641E78",
+  "name": "maybe_Monster_IsBehaviourEnabled",
+  "signature": "u32 maybe_Monster_IsBehaviourEnabled(MonsterEntry* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "monster/behaviour record with a u16 id at +4"
+  },
+  "summary": "Returns 1 when the record for the u16 id at self+4 exists, has a valid index byte (+9 != 0xff) and its flag byte (+0xa) has bit 0 set.",
+  "confidence": 0.45,
+  "evidence": "`iVar3 = func_00628EE0(func_0066A74C(...), *(u16*)(arg1+4)); if (iVar3 && *(u8*)(iVar3+9) != 0xff && (*(u8*)(iVar3+10) & 1) != 0) return 1; return 0;` - same table as 0x00641C94."
+ },
+ {
+  "address": "0x00641ED8",
+  "name": "maybe_Text_InvokeControlHandler",
+  "signature": "void maybe_Text_InvokeControlHandler(TextControl* self, u16 ownerId, u16* text, u32 unused)",
+  "params": {
+   "self": "control object (+4 = handler index)",
+   "ownerId": "entity id the text belongs to",
+   "text": "UTF-16 text whose first unit selects the handler"
+  },
+  "summary": "Dispatches a text control code: resolves the string (0x0066CCEC), binds the owner entity into the shared text builder, appends the control character, flushes it and jumps through the handler table g_00641f78 indexed by self+4.",
+  "confidence": 0.45,
+  "evidence": "`uVar5 = func_0066CCEC(arg3); if (uVar5 != 0) { uVar2 = *arg3; uVar4 = func_0035EB98(ctx, ownerId); func_0045A5C8(g_00641f70,uVar4); func_00111384(g_00641f74,0xc,0xff); func_0045A5A0(g_00641f70,uVar2,1); func_0045BD14(g_00641f70,0); (**(code**)(g_00641f78 + (u32)*(u8*)(self+4)*4))(); }` - jump table = per-control-code handler."
+ },
+ {
+  "address": "0x00641F90",
+  "name": "maybe_Ui_FindRowByCurrentKey",
+  "signature": "u16* maybe_Ui_FindRowByCurrentKey(UiModel* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "model with a list at +0x44 (records of 0xe u16)"
+  },
+  "summary": "Searches the model's list of 14-u16 records for the one whose first u16 equals the current key at work+0x27c5c, falling back to the sentinel g_0064216c, and returns the record pointer or null.",
+  "confidence": 0.4,
+  "evidence": "Two identical scans: first for `*(u16*)(*ctx + 0x27c5c)`, then for `g_0064216c`, both stepping `puVar3 += 0xe` (14 u16 = 0x1c bytes, the same 0x1c record size used by 0x00645FB8/0x0064733C)."
+ },
+ {
+  "address": "0x00642648",
+  "name": "maybe_Ui_ListModel_Reload",
+  "signature": "void maybe_Ui_ListModel_Reload(void)",
+  "params": {},
+  "summary": "Re-initialises the live list model at work+0x24a98 (0x006126DC), the companion reset of the list tables.",
+  "confidence": 0.45,
+  "evidence": "`piVar1 = func_006F20C0(auStack_8); func_006126DC(*piVar1 + 0x24a98);` - 0x006126DC is the sibling of 0x00612624/0x00612950, the constructors of the same 0x24a98 list object."
+ },
+ {
+  "address": "0x00642688",
+  "name": "maybe_Message_GetWindowMode",
+  "signature": "int maybe_Message_GetWindowMode(void)",
+  "params": {},
+  "summary": "Returns the signed mode byte at work+0x2d303 (message/window display mode).",
+  "confidence": 0.49,
+  "evidence": "`return (int)*(char*)(*func_006F20C0(&tmp) + 0x2d303);` - called by maybe_Ui_SetResultFlags (0x002C244C)."
+ },
+ {
+  "address": "0x006426A8",
+  "name": "maybe_Field_IsLoading",
+  "signature": "bool maybe_Field_IsLoading(void)",
+  "params": {},
+  "summary": "Returns true when the field loader reports a pending load (0x0066B11C on work+0x24a98 is non-zero).",
+  "confidence": 0.42,
+  "evidence": "`iVar2 = func_0066B11C(*func_006F20C0(&tmp) + 0x24a98); return iVar2 != 0;` - 0x0066B11C is the same 'count of pending entries' accessor used by 0x0062A3CC/0x0062A64C; callers are actor action-sequence steps."
+ },
+ {
+  "address": "0x0064274C",
+  "name": "maybe_Item_HasSpecialRangeItem",
+  "signature": "u32 maybe_Item_HasSpecialRangeItem(void)",
+  "params": {},
+  "summary": "Returns 1 when any item id in the special range [g_006427a4-0x21, g_006427a4) is present in the work inventory (0x0066AD5C), used as a story/quest gate.",
+  "confidence": 0.45,
+  "evidence": "`uVar5 = g_006427a4 - 0x21; do { if (func_0066AD5C(work+0x24a98, uVar5 & 0xffff) != 0) return 1; uVar5++; } while (uVar5 < g_006427a4); return 0;` - a 33-id range check through the same storage resolver family as 0x00643324."
+ },
+ {
+  "address": "0x00643324",
+  "name": "Item_GetStoragePointer",
+  "signature": "void* Item_GetStoragePointer(GameContext* ctx, u16 itemId)",
+  "params": {
+   "ctx": "game context (work at +0x24a98)",
+   "itemId": "item id to locate"
+  },
+  "summary": "Resolves which storage holds an item id and returns a pointer to it: special categories use the global fields, then fixed id ranges map to the bag (0x0066B340), the armoury (0x0066B41C), the second bag (0x0066AD5C) or the key-item store (0x0066B308); otherwise every party member's 0x18-u16 equipment table is scanned and the count of matches is added to the shared store lookup.",
+  "confidence": 0.55,
+  "evidence": "`fc = record->f_c;` switch on 0x25/0x27/0x26, then `if (id - 0x9bf > 0x59) { if (id-0xa19 < 0x69) func_0066B41C; if (id-0xa82 < 0x21) func_0066AD5C; if (id-0xaa3 < 0x98) func_0066B308; ... } else func_0066B340;` and the party loop `iVar10 = 0x18; puVar11 = &member->f_f0; ... if (*(u16*)(member + j*2 + 0xf0) == arg2) iVar14++;` then `return func_0066AC7C(&ctx->f_24acc,arg2) + iVar14;`. This is the storage resolver used by 0x0063ECF0/0x0063F430/0x006301A4."
+ },
+ {
+  "address": "0x0064385C",
+  "name": "maybe_Item_GetCountThresholdTag",
+  "signature": "u32 maybe_Item_GetCountThresholdTag(CounterList* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "object with a list of 4-byte count/id entries at +0x20"
+  },
+  "summary": "Walks the count list at self+0x20 and returns the u16 id of the first entry whose count exceeds the current threshold at work+0x???; returns the default g_00643908 when none qualifies.",
+  "confidence": 0.38,
+  "evidence": "`f20 = self->f_20; ... for (i < list->f_60) { entry = list + i*4; if (*(int*)(g_00643904 + *ctx) < (int)*(u32*)entry) return *(u16*)(entry+2); }` then `return g_00643908;` - a threshold/limit comparison over 4-byte {u32 count; u16 id} entries."
+ },
+ {
+  "address": "0x00643A2C",
+  "name": "maybe_Ui_PanelMessage_CanAdvance",
+  "signature": "u32 maybe_Ui_PanelMessage_CanAdvance(PanelMessage* self)",
+  "params": {
+   "self": "panel message object (+0x1c4/+0x1c8 state bytes/longs)"
+  },
+  "summary": "Returns 1 when the panel message may advance: it has no pending sub-object (+0x1c4 == 0), its state word (+0x1c8) is clear or has bit 0 set, and the message queue is non-empty (0x0062F070 > 0).",
+  "confidence": 0.49,
+  "evidence": "`if (((self->f_1c4 == 0) && ((self->f_1c8 & 1) == 0 || self->f_1c8 == 0)) && (iVar1 = func_0062F070(), 0 < iVar1)) return 1;` - caller is Ui_PanelMessageWindow_Update."
+ },
+ {
+  "address": "0x00643A64",
+  "name": "maybe_Party_GetNextMemberId",
+  "signature": "u8 maybe_Party_GetNextMemberId(MemberList* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "member list cursor (+0x38 page object, +0x49 'hide last' flag)"
+  },
+  "summary": "Returns the member id of the row after the current cursor: when the flag at +0x49 is set and the cursor already sits on the last active member it returns 0xff, otherwise the entity id of index (page count) is returned.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_49 != 0) { uVar1 = func_00643504(ctx); uVar4 = self->f_38 ? self->f_38->f_c : 0; if (uVar4 == uVar1) return 0xff; } ... iVar2 = func_0035F6C0(ctx, self->f_38->f_c); return *(u8*)(iVar2+200);` - caller Ui_SkillPanel_OnTabChange."
+ },
+ {
+  "address": "0x00643AC8",
+  "name": "maybe_Party_IsBeyondLastMemberRow",
+  "signature": "bool maybe_Party_IsBeyondLastMemberRow(MemberList* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "member list cursor (+0x38 page object)"
+  },
+  "summary": "Returns true when the active member count is greater than the last row index of the current page, i.e. the member rows overflow the page.",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = func_00643504(ctx); iVar3 = self->f_38 ? self->f_38->f_c - 1 : 0; return iVar1 <= iVar3;` - used by the poker/casino/smith menus to decide whether the party rows fit."
+ },
+ {
+  "address": "0x00643B0C",
+  "name": "maybe_Party_GetMemberDataOrMessageRow",
+  "signature": "int maybe_Party_GetMemberDataOrMessageRow(MemberList* self, int row)",
+  "params": {
+   "self": "member list (mode byte at +4)",
+   "row": "row index"
+  },
+  "summary": "Returns the member data pointer (entity+0xca) for a normal row, or for rows beyond the party count a lazily created message/status object (0x00627308 + 0x00633560) keyed by the mode byte at self+4.",
+  "confidence": 0.45,
+  "evidence": "`result = func_00643504(ctx); if (result <= row) { magic-static object (func_0011CFAC/00116AE0/00627308); result = func_00633560(obj[4], *(u8*)(self+4)); return result; } return func_0035F6C0(ctx,row) + 0xca;` - 0x00627308 is named maybe_Ui_Object_InitHeader in earlier batches."
+ },
+ {
+  "address": "0x00643BFC",
+  "name": "maybe_Party_GetRowCountPlusOne",
+  "signature": "int maybe_Party_GetRowCountPlusOne(void)",
+  "params": {},
+  "summary": "Returns the active party member count plus one (the number of member rows including the summary row).",
+  "confidence": 0.49,
+  "evidence": "`func_006F20C0(local_8); iVar1 = func_00643504(local_8[0]); return iVar1 + 1;` - the +1 sibling of 0x0063B590 (+3)."
+ },
+ {
+  "address": "0x00643C18",
+  "name": "maybe_Party_GetMemberIdAfterCursor",
+  "signature": "u8 maybe_Party_GetMemberIdAfterCursor(MemberList* self, u32 unused, u32 unused2)",
+  "params": {
+   "self": "member list cursor (+0x38 page object)"
+  },
+  "summary": "Returns the member id at index (page count - 1) when that index is still below the active member count, the sentinel 0x1f when the cursor is past the members, or 0xff when the page is empty.",
+  "confidence": 0.45,
+  "evidence": "`uVar2 = func_00643504(ctx); iVar4 = self->f_38 ? self->f_38->f_c - 1 : 0; if (iVar4 < uVar2) { if (iVar5 < func_00643504()) { entity = func_0035F6C0(ctx,iVar5); return *(u8*)(entity+200); } return 0xff; } return 0x1f;` - same cursor/member scheme as 0x0063A9E0."
+ },
+ {
+  "address": "0x00644154",
+  "name": "maybe_Item_CompareNameOrderByKey",
+  "signature": "bool maybe_Item_CompareNameOrderByKey(u32 unused, const u16* idA, const u16* idB)",
+  "params": {
+   "idA": "u16 item id (high bit = flag, masked off)",
+   "idB": "u16 item id (high bit = flag, masked off)"
+  },
+  "summary": "Comparator used by the equipment list sort: resolves both ids through the item-index table (0x0063E998, masking bit 0x8000) and compares their catalogue keys via Item_LookupRecord.",
+  "confidence": 0.49,
+  "evidence": "`puVar3 = func_0063E998(*func_0011CB38(&tmp), *arg2 & 0x7fff); uVar4 = puVar3 ? *puVar3 : g_006441f4; func_0061BD4C(&a,uVar4);` repeated for arg3, then `return func_0066C304(&a) < func_0066C304(&b);` - caller Ui_ListWindow_SortRows."
+ },
+ {
+  "address": "0x006441FC",
+  "name": "maybe_Item_GetNameVariantFlags",
+  "signature": "u32 maybe_Item_GetNameVariantFlags(ItemRecord* self)",
+  "params": {
+   "self": "equipment list entry with a u16 id at +0xa"
+  },
+  "summary": "Returns 2 when the item's exclusive flag is already owned, 1 when one of its three alternative-variant ids is owned, and 0 otherwise - the 'new/owned' marker of an equipment row.",
+  "confidence": 0.45,
+  "evidence": "`puVar3 = func_0063E998(singleton, *(u16*)(self+10) & 0x7fff); iVar6 = work + 0x2a2c8;` then bit tests `puVar3[6]` → 2, else `puVar3[4] || puVar3[2] || *puVar3` → 1, else 0. A 4-entry variant id list with an exclusive entry."
+ },
+ {
+  "address": "0x006442C4",
+  "name": "maybe_Item_GetVariantName",
+  "signature": "u8* maybe_Item_GetVariantName(ItemRecord* self)",
+  "params": {
+   "self": "equipment list entry with a u16 id at +0xa"
+  },
+  "summary": "Returns the formatted name of the item's first name variant when the variant resolves to a real item record, else a fallback empty string.",
+  "confidence": 0.45,
+  "evidence": "`puVar3 = func_0063E998(singleton, *(u16*)(self+10) & 0x7fff); if (puVar3 && Item_LookupRecord(&pair,*puVar3), pair) return func_0066C99C(&pair,1); return &LAB_00644328;` - the string formatting used for list labels."
+ },
+ {
+  "address": "0x00645480",
+  "name": "maybe_Ui_Status_GetTotalStat",
+  "signature": "int maybe_Ui_Status_GetTotalStat(void)",
+  "params": {},
+  "summary": "Sums 19 stat fields of the work object (+0x28584..+0x293c4) into a single total, used by the status screen for the combined-stat display.",
+  "confidence": 0.49,
+  "evidence": "Body is a straight-line sum of `iVar2->f_293c4 + f_293c0 + f_28590 + f_28c64 + f_290a4 + f_29284 + f_29288 + f_28584 + f_28c58 + f_2928c + f_29290 + f_285bc + f_28c8c + f_290ac + f_29294 + f_29298 + f_2927c + f_288fc + f_28eb0`."
+ },
+ {
+  "address": "0x00645FB8",
+  "name": "maybe_Ui_Part_FindAnimRecord",
+  "signature": "u32 maybe_Ui_Part_FindAnimRecord(UiPart* self, u32 animId, u32 unused, u32 unused2)",
+  "params": {
+   "self": "UI part: record array at +4, count at +8, entity id at +0",
+   "animId": "animation/part id to find"
+  },
+  "summary": "Searches the part's 0x1c-byte animation records for the entry whose u16 id at +8 equals `animId`; when found and the record is marked active (+0x10) it also requires the entity's action state to differ (0x00629348).",
+  "confidence": 0.45,
+  "evidence": "`iVar4 = *(int*)(self+4); iVar6 = iVar4 + *(int*)(self+8)*0x1c;` loop `result = *(u16*)(iVar5+8)` until match; then `if (iVar4 == iVar5) result = 1; else if (iVar5->f_10 != 0) { uVar3 = func_0035EB98(ctx, *self); result = func_00629348(uVar3, *(u16*)(iVar5+8)) ^ 1; }` - the same 0x1c records used by 0x0064733C/0x00641F90."
+ },
+ {
+  "address": "0x00646060",
+  "name": "maybe_Ui_Part_FindAnimRecordInList",
+  "signature": "u32 maybe_Ui_Part_FindAnimRecordInList(UiPart* self, AnimRecord* record, u32 unused, u32 unused2)",
+  "params": {
+   "self": "UI part (entity id at +0)",
+   "record": "0x1c-byte animation record (+8 id, +0x10 flag)"
+  },
+  "summary": "Reduced single-record form of 0x00645FB8: when the record is flagged active, returns whether the entity's action state differs from the record's id.",
+  "confidence": 0.45,
+  "evidence": "`if (record->f_10 != 0) { uVar2 = func_0035EB98(ctx,*self); result = func_00629348(uVar2, *(u16*)(record+8)) ^ 1; }` - callers include Ui_Part_SetupFromAnimRecord and Ui_MessagePage_ExecuteCommand."
+ },
+ {
+  "address": "0x00646148",
+  "name": "maybe_Ui_Part_CheckAnimConditions",
+  "signature": "u32 maybe_Ui_Part_CheckAnimConditions(Ui_Part* self, AnimRecord* record)",
+  "params": {
+   "self": "UI part: condition index table at +0, allowed ids at +0xa0, entity id at +0",
+   "record": "0x1c-byte animation record whose 6 condition slots are checked"
+  },
+  "summary": "Checks the six animation-condition slots of an anim record against the part's allowed-id list and the entity state, requiring at least one match (or four when the entity is in the default state).",
+  "confidence": 0.4,
+  "evidence": "`for (i = 0; i < 6; i++) { iVar3 = *(char*)(record + condOffsets[i]); if (iVar3 > 0) { id = *(u16*)(self->f_4 + iVar3*0x1c + 8); if (func_00629988(entity,id)==0 && id in self+0xa0 list) ... } }` ending in `if (func_00629348(entity, record->f_8) != 1) return iVar9 < 4 ? 0 : 1; return iVar9 < 1 ? 0 : 1;`"
+ },
+ {
+  "address": "0x00646ACC",
+  "name": "maybe_Ui_Part_GetAnimSlotMask",
+  "signature": "u32 maybe_Ui_Part_GetAnimSlotMask(Ui_Part* self, AnimRecord* record, int includeState3, u32 unused)",
+  "params": {
+   "self": "UI part",
+   "record": "0x1c-byte animation record",
+   "includeState3": "when non-zero also sets bits for state 3"
+  },
+  "summary": "Builds a 6-bit mask of the animation slots that are currently usable: for each of the record's six slot indices present in the part's own record array it asks 0x00647A88 for the slot state and sets the bit for states 2/5 (plus state 3 when requested).",
+  "confidence": 0.42,
+  "evidence": "`for (i=0;i<6;i++) { iVar3 = *(char*)(record + offsets[i]); if (iVar3 > 0) { if (found in self->f_4 array) { iVar3 = func_00647A88(self); if (iVar3 == 5 || iVar3 == 2) result |= 1 << i; } if (includeState3 && iVar3 == 3) result |= 1 << i; } }`"
+ },
+ {
+  "address": "0x00646C4C",
+  "name": "maybe_Ui_Part_BuildAnimSlotList",
+  "signature": "void maybe_Ui_Part_BuildAnimSlotList(u8* out, Ui_PartList* list, u32 groupId)",
+  "params": {
+   "out": "7-byte output array of anim slot ids",
+   "list": "part list object (0x1c-byte records)",
+   "groupId": "record group id at +0x18"
+  },
+  "summary": "Builds the 7-entry list of animation slot ids that belong to a part group: scans the part-list records for the requested group id, keeps those whose 0x1c record is used by at least one entry of the list, and stores their +0x19 slot ids.",
+  "confidence": 0.4,
+  "evidence": "`func_00672364(&local_54,0xff)` init, outer loop over the global 0x20-byte record table (`iVar1->f_18 != local_28` filters the group), inner loop over the list records calling `func_0064733C(arg2,iVar7)` and `func_003AA574(*arg2, *(u16*)(iVar7+8), local_4c)`, then `((u8*)&local_54)[local_3c] = iVar1->f_19;` for up to 7 entries. Callers: Ui_MessagePage_Build, maybe_Ui_BagCategory_FilterAvailable."
+ },
+ {
+  "address": "0x00646E00",
+  "name": "maybe_Ui_Part_GetRemainingAnimTime",
+  "signature": "int maybe_Ui_Part_GetRemainingAnimTime(Ui_Part* self)",
+  "params": {
+   "self": "UI part with a 0x3c-entry u16 slot table at +0xa0"
+  },
+  "summary": "Returns the part's total animation duration (0x00629280) minus the durations of all slots whose u16 entry at +0xa0 resolves to a record (0x0063CF74), i.e. the remaining play time.",
+  "confidence": 0.45,
+  "evidence": "`iVar4 = func_00629280(entity); for (i = 0; i < 0x3c; i++) { uVar1 = *(u16*)(self + i*2 + 0xa0); if (uVar1 == g_00646e7c) break; iVar5 = func_0063CF74(singleton,uVar1); if (iVar5) iVar7 += *(u8*)(iVar5+6); } return iVar4 - iVar7;` - the +0xa0/+0x118 slot id table also used by 0x00646148/0x00647A88."
+ },
+ {
+  "address": "0x0064733C",
+  "name": "maybe_Ui_Part_MatchAnimRecord",
+  "signature": "u8 maybe_Ui_Part_MatchAnimRecord(Ui_Part* self, AnimRecord* record)",
+  "params": {
+   "self": "UI part (entity id at +0)",
+   "record": "0x1c-byte animation record to test"
+  },
+  "summary": "Tests whether an animation record applies to this part: it walks the global 0x20-byte record table, matches the part slot id and the four condition lists (byte, byte, u16 and u16-list variants) and finally checks the record's two trailing condition ids against the current work flags.",
+  "confidence": 0.45,
+  "evidence": "Very long body: `if (*(u16*)(record+8) == g_00647720) return 1;` then `iVar6 = func_0063CF74(singleton, record->f_8)`; loop `piVar20 = piVar7 + 8` over 0x20-byte entries checking `(char)piVar7[6] == *self` and the +0x1a flag; condition searches over `piVar7[1]` (byte list) and `piVar7[3]` (u16 list) with `*(u8*)(iVar6+1)/+2`; finally `*(u16*)(iVar6+8)/+10` vs work+0x27508 flags."
+ },
+ {
+  "address": "0x00647A88",
+  "name": "maybe_Ui_Part_GetAnimState",
+  "signature": "bool maybe_Ui_Part_GetAnimState(Ui_Part* self, AnimRecord* record, u32 unused)",
+  "params": {
+   "self": "UI part (entity id at +0, slot ids at +0xa0)",
+   "record": "0x1c-byte animation record"
+  },
+  "summary": "Classifies an animation record for this part: 5 = unset id, 4 = record has no force flags, 2 = already playing (0x00629988), 3 = slot id is in the part's own slot list, otherwise 0/1 from the condition check 0x00646148.",
+  "confidence": 0.49,
+  "evidence": "`if (*(u16*)(record+8) == g_00647bc4) return 5;` `if (*self == 1 && func_0063CF74(...) != 0) { ...f_10/f_8 flags... return 4; }` `if (func_00629988(entity,id) == 0) { if (id < g_00647bc8 && id in [self+0xa0,self+0x118)) return 3; return func_00646148(self,record) != 0; } return 2;` - states 2/3/5 are exactly the values tested by 0x00646ACC."
+ },
+ {
+  "address": "0x00647E38",
+  "name": "maybe_Ui_Part_CountMatchingParts",
+  "signature": "int maybe_Ui_Part_CountMatchingParts(u32 self, AnimRecord* record)",
+  "params": {
+   "self": "unused slot 0 (entity id read from record)",
+   "record": "animation record: +0x11 entity id, six byte slots at +0x54"
+  },
+  "summary": "Counts how many of the record's six slot bytes (+0x54..+0x59) match any of the entity's current animation ids (0x006298D0), i.e. how many sub-parts the record affects.",
+  "confidence": 0.42,
+  "evidence": "`f11 = record->f_11; uVar5 = func_0035EB98(ctx,f11); result = func_006291A8(entity); for (j=0;j<6;j++) { uVar2 = *(u8*)(record + 0x54 + j); for (i=0;i<result;i++) { uVar7 = func_006298D0(entity,i); if (func_003AA574(f11,uVar7,uVar2) != 0) local[j] = 1; } }` then counts the set flags (0..6), unrolled 2-at-a-time."
+ },
+ {
+  "address": "0x00648080",
+  "name": "maybe_Ui_PokerCard_SetSpriteFrame",
+  "signature": "void maybe_Ui_PokerCard_SetSpriteFrame(PokerCardSprites* self, UiPart* part, u32 suitAndRank)",
+  "params": {
+   "self": "poker card sprite table (4 rows x 0xe entries at +0x11c)",
+   "part": "card sprite part (+0x44 flag byte)",
+   "suitAndRank": "low byte = suit, next byte = rank"
+  },
+  "summary": "Binds the sprite frame for a poker card: looks the frame up in the 4x14 sprite table, copies the sprite rectangle from 0x0065DBC8 into the card part and sets/clears the 'visible' bit 0 of its +0x44 flags.",
+  "confidence": 0.49,
+  "evidence": "`uVar1 = (arg3 & 0xffff) >> 8; if ((arg3 & 0xff) < 4 && uVar1 < 0xe) { iVar3 = *(int*)(*arg1 + (arg3 & 0xff)*0x38 + uVar1*4 + 0x11c); func_0065DBC8(iVar3,&rect); iVar3 = func_0065D448(arg2); func_0053E220(iVar3->f_78,&rect); iVar3->f_7c &= 0xf7; arg2->f_44 = arg2->f_44 & 0xfe | 1; }` - callers Ui_Poker_SetCardSprite/SetCardSpritePair."
+ },
+ {
+  "address": "0x006481AC",
+  "name": "maybe_Item_ConsumeForCraft",
+  "signature": "u32 maybe_Item_ConsumeForCraft(u32 unused, ItemRefList* items)",
+  "params": {
+   "items": "list of item references (each entry is a pointer to a u16 id + count byte)"
+  },
+  "summary": "Consumes the given materials from the inventory: for each referenced item id it decrements the stored count in a 10-slot working table, fails when a slot underflows, and returns 0/1 accordingly.",
+  "confidence": 0.45,
+  "evidence": "`local_60..uStack_3c = g_00648340[0..9]` (10 prepared slot records), `uVar1 = func_00643504(ctx)` for the party count, then for each entry `func_0061BD4C(&pair,*id)`; only ids with `0x68 < id-0xa19` are processed: find slot in the 10-entry array (or one holding g_00648344), fill it with `*puVar7` and `99 - func_0066AC7C(work+0x24acc,id)`, subtract the entry's count byte and fail when negative. Caller list is craft/shop code."
+ },
+ {
+  "address": "0x0064893C",
+  "name": "maybe_Ui_Result_AdvanceToValidRow",
+  "signature": "u32 maybe_Ui_SetResultFlags(UiResult* self)",
+  "params": {
+   "self": "result/cursor object with a u16 id at +0x4a and current index at +0xd0"
+  },
+  "summary": "Advances the result/cursor index until it reaches a row whose virtual predicate returns the expected value, used to skip to the next valid entry after an action; returns the new index.",
+  "confidence": 0.4,
+  "evidence": "`func_0061BD4C(&pair,self->f_4a); if (!record || (id in 0xa4..0xa7 or 0xb19..0xb1c)) return self->f_d0;` then a loop over 10 entries of 0x1c bytes at g_00648a58 calling `(*pcVar4)()` (vtable-based predicate) and comparing the float result to 1.0; caller 0x003B5F14 (maybe_Ui_Row_OnValueChanged) and 0x003B650C."
+ },
+ {
+  "address": "0x00648BEC",
+  "name": "maybe_Party_GetRowCountPlusTwo",
+  "signature": "int maybe_Party_GetRowCountPlusTwo(void)",
+  "params": {},
+  "summary": "Returns the active party member count plus one (the trailing summary/blank row index).",
+  "confidence": 0.49,
+  "evidence": "`iVar1 = Party_GetActiveMemberCount(); return iVar1 + 1;` - same helper family as 0x0063B590 (+3) and 0x00643BFC (+1)."
+ },
+ {
+  "address": "0x00648C3C",
+  "name": "maybe_Ui_ListCursor_IsPastPartyRows",
+  "signature": "bool maybe_Ui_ListCursor_IsPastPartyRows(UiListCursor* self)",
+  "params": {
+   "self": "list cursor object; nested list at +0x410"
+  },
+  "summary": "Returns true when the active member count is at or before the current page's last row, i.e. the party rows still fit into the page.",
+  "confidence": 0.45,
+  "evidence": "`iVar1 = func_0063A794(self); iVar2 = Party_GetActiveMemberCount(self+0x410); return iVar2 <= iVar1;` - caller Ui_TsuyosaWindow_OnInput."
+ },
+ {
+  "address": "0x006491DC",
+  "name": "maybe_Item_CountMatchingFilter",
+  "signature": "int maybe_Item_CountMatchingFilter(ItemRefRange* self)",
+  "params": {
+   "self": "object with a list of u16 ids at +4/+8 and a filter descriptor at +0x14"
+  },
+  "summary": "Counts how many item ids in the range [self+4, self+8) pass the category filter stored at self+0x14 (see 0x0064923C).",
+  "confidence": 0.49,
+  "evidence": "`iVar3 = *(int*)(arg1+4); unaff_r6 = *(int*)(arg1+8); for (; iVar3 != unaff_r6; iVar3 += 4) if (func_0064923C(&local_18,iVar3) != 0) result++;` - local_18 is filled from `arg1->f_14` (the filter byte); the list is bound by 0x00459FE0/0x0045A5C8 (message text builders)."
+ },
+ {
+  "address": "0x0064923C",
+  "name": "maybe_Item_MatchesCategoryFilter",
+  "signature": "u32 maybe_Item_MatchesCategoryFilter(u8* filter, const u16* itemId)",
+  "params": {
+   "filter": "filter descriptor: byte 0 = filter kind 0..0x10",
+   "itemId": "u16 item id to test"
+  },
+  "summary": "Category filter predicate used by the message/text list builders: kind 0..2 accept items/ids in given ranges, kind 3 accepts the equipment id ranges, kinds 4..0xd match the item record's category byte (+0x29) against 0..9, kind 0xe accepts consumables, 0xf text/name ids and 0x10 a final predicate.",
+  "confidence": 0.49,
+  "evidence": "`switch (*filter) { case 0/1/2: record->f_c not in {0x25,0x27,0x26} and id range checks (0x32..0xa3 / 0xa19..0xa81 / 0xb19..0xb1c / 0xa4..); case 3: ranges; case 4..0xd: record->f_29 == 0..9; case 0xe: func_0066C5A8 || func_0066C5CC; case 0xf: func_0066CCEC || func_0066C978 || func_0066C950; case 0x10: func_0066C184; }`"
+ },
+ {
+  "address": "0x0064A45C",
+  "name": "maybe_Item_GetNameTagByCategory",
+  "signature": "void maybe_Item_GetNameTagByCategory(u32* out, u32 unused, u16 itemId)",
+  "params": {
+   "out": "receives a pointer (or tag) from the g_0064a4c4 table",
+   "unused": "not used",
+   "itemId": "item id to classify"
+  },
+  "summary": "Stores a name/label tag for an item: consumes/uses the item's special predicate (0x0066BE98) and the category lookup 0x00381938 to choose between the table's default entry and its category-specific entry.",
+  "confidence": 0.4,
+  "evidence": "`if (!record || func_0066BE98(&pair) != 0) { iVar2 = func_00381938(itemId); *out = (iVar2 == 0xffff) ? puVar1[2] : *puVar1; } else *out = puVar1[2];` - a 3-word static tag table."
+ },
+ {
+  "address": "0x0064C408",
+  "name": "maybe_Ui_BagList_GetSelectedItemId",
+  "signature": "u32 maybe_Ui_BagList_GetSelectedItemId(UiBagList* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "bag/equipment list (+0x49 = member id, +0x38 = page object)"
+  },
+  "summary": "Returns the item id equipped/selected in the list's current column: for a valid member id and a column < 6 it returns the equipment id for that slot (0x006292F0), else the default constant g_0064c464.",
+  "confidence": 0.45,
+  "evidence": "`if (self->f_49 < 0x1f) { func_0035EB98(ctx,self->f_49); uVar3 = self->f_38 ? self->f_38->f_c : 0; if ((uVar3 & 0xff) < 6) return func_006292F0(); } return g_0064c464;` - callers Ui_EquipWindow_InitPanes/HandleInput."
+ },
+ {
+  "address": "0x0064C7E0",
+  "name": "maybe_Ui_BagList_GetRowState",
+  "signature": "u32 maybe_Ui_BagList_GetRowState(BagRow* self, u32 unused, u32 unused2, u32 unused3)",
+  "params": {
+   "self": "bag row (+0x298 = row index)"
+  },
+  "summary": "Returns 0 when the row's per-index state byte at work+0x2a4e6 is 1 or 4, otherwise 3 - the row's enabled/disabled state for the bag list.",
+  "confidence": 0.4,
+  "evidence": "`cVar1 = *(char*)((u32)self->f_298 + *func_006F20C0(&tmp) + 0x2a4e6); if (cVar1 == 1 || cVar1 == 4) result = 0; else result = 3;` - caller 0x00634A58 (inside the equipment list chain)."
+ },
+ {
+  "address": "0x0064C8E8",
+  "name": "maybe_Item_ValidateAndCompactStorage",
+  "signature": "void maybe_Item_ValidateAndCompactStorage(void)",
+  "params": {},
+  "summary": "Rebuilds the item storage from scratch: validates/removes the 300 slot entries and 101 category entries whose backing record is gone, recounts every stored item id (0x138 records with per-id counters) and replays the counts into the live inventory.",
+  "confidence": 0.45,
+  "evidence": "Phase 1: `for (uVar10 < 300) { iVar3 = func_0063E4C4(singleton,uVar10); if (!iVar3 || iVar3->f_16 == 0) func_00613504(work,uVar10); }`; phase 2 zeroes a 1053-entry int table, walks `0x138` entries of `func_0063F1E0` and accumulates `local_109c[id] += count`; phase 3 calls `func_00612A94(work,id)` count-times; phase 4 clears bitmap bits for ids >= 0x9bf; phase 5 removes empty 0x65 category entries via func_0063E3C8/func_006132CC."
+ },
+ {
+  "address": "0x0064CB24",
+  "name": "maybe_Save_ApplyRecordToWork",
+  "signature": "void maybe_Save_ApplyRecordToWork(WorkRecord* rec, u32 mode, int* table)",
+  "params": {
+   "rec": "save/work record with mode byte at +0x1d and 0x1f category blocks",
+   "mode": "value handed to 0x00100A50",
+   "table": "tag used to fetch the category table (0x0063F648)"
+  },
+  "summary": "Applies a saved work record to the live game: copies all 31 per-category equipment/item blocks from the record into the actor tables, re-applies the party's slot ids, refreshes the list model and finally restores the per-category rows and flags.",
+  "confidence": 0.45,
+  "evidence": "`piVar3 = func_0063F648(singleton, table); ... for (uVar14 < 0x1f) { ... func_0035F384(ctx, uVar14, func_0063F8F0(...), func_0063F25C(...)); }` then `func_00100A50(entity, mode)`, `work->f_27c64 = 1`, `func_00611FA8(&work->f_24acc)`, then loops over `piVar3[6]/[7]` and `[8]/[9]` id lists calling func_0061346C / func_00612A00 / func_00613DE4, and `func_00613FC0(work, g_0064d120)` / `func_00613140(work, piVar3[0xe])`. Caller: 0x0064D144."
+ },
+ {
+  "address": "0x0064D144",
+  "name": "maybe_Save_LoadWorkData",
+  "signature": "void maybe_Save_LoadWorkData(SaveLoadRequest* self)",
+  "params": {
+   "self": "load request: +0xc record, +0x1c mode, +0x20 kind, +0x24 repeat count, +0x28 party id, +0x2c..+0x3c five slot ids"
+  },
+  "summary": "Top-level 'load work data' entry: validates/compacts the inventory, applies the record (0x0064CB24), replays the pending HP/member deltas a number of times, resets the actor lists and finally re-applies the five saved equipment ids and the trailing id list.",
+  "confidence": 0.45,
+  "evidence": "`f1c = self->f_1c; func_0064C8E8(); func_0064CB24(self,&self->f_c,f1c); j = self->f_24 - 1;` then `for (i<j) func_00190A7C(entity, hpDelta)` with `entity = func_0035EB98(ctx,0)`, `func_00613FC0(work,self->f_28)`, `for (i<5) { uVar5 = *(u32*)(self + 0x2c + i*4); if (uVar5 < 100) func_0035EBB0(ctx, *func_0063F8B4(...), ...,1); }`, and a final loop over `self->f_40..f_44` u16 ids calling func_0035EBB0."
+ }
+]

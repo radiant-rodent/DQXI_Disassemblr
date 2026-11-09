@@ -1,0 +1,333 @@
+[
+ {
+  "class": "Fs_Cache",
+  "type": "FsCache",
+  "summary": "32-byte cache-pool object of the streaming resource cache: a vtable, a per-slot data size and a slot count, plus the slot table and data buffer its constructors allocate; the same header is shared by the 0x54/0x58-byte slot pools, the pool-group handle array and the pass-through pool.",
+  "size": 32,
+  "base": "",
+  "confidence": 0.5,
+  "evidence": "Five constructors store a vtable at +0x00 (0x0078230C handle array, 0x0078233C pass-through, 0x0078236C 0x58-byte pool, 0x0078239C 0x54-byte pool) and every one is allocated with Mem_AllocAligned_2(0x20,...) in Fs_CacheSet_Initialize (0x00103724), which registers the pools by name ('sound','cmn_cache','weapon','PL_256','PL_400','F_PLmotion','F_Cache','Cache1','Cache2','B_PLsound','B_PLmotion','B_ENsound','B_ENmodel','B_ENmotion'). The vtable slots are the Font_GlyphCache_*/Font_GlyphPage_* functions (0x0056D028 AddGlyph, 0x0056CF18 FreeSpan, 0x0056D138 FindGlyph, 0x0056D8C4 AllocSlot, 0x0056D1E4 FillTexels), so the same pool class also backs the glyph atlas. The handle-array variant is allocated with 0x18 bytes, the pools with 0x20.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Every ctor stores a literal vtable pointer at +0x00 (str r0,[r4] in 0x00108574, 0x00108624, 0x00108750); the four vtables are 0x0078230C (handle array), 0x0078233C (pass-through), 0x0078236C (0x58-byte pool), 0x0078239C (0x54-byte pool)"
+   },
+   {
+    "offset": 8,
+    "name": "maybe_refCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Set to 1 by all five ctors (str r5,[r4,#8] in 0x00108750; strd r0=1,r1=-1 at +0x08 in 0x00108574/0x00108624) and re-set to 1 after the slot-table zero-fill in 0x00108750; no reader appears in this batch, so 'reference count' vs 'ready state' is unproven"
+   },
+   {
+    "offset": 12,
+    "name": "maybe_byteLimit",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Initialised to -1 (0xFFFFFFFF = none) by every ctor; CreateSlotPool54 (0x00108750) then overwrites it with the per-slot data size and Fs_CacheSet_Initialize (0x00103724) sets 0x50000 on the 'cmn_cache' pool, so it is a mutable limit/id rather than the slot size held at +0x10"
+   },
+   {
+    "offset": 16,
+    "name": "slotDataSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "CreateSlotPool54/58 allocate bufferSize*slotCount bytes for the data buffer (mul r1,r1,r2 before the 0x80-aligned allocation) and 0x0066522C computes bufferBase + slotDataSize*slotCount as the pool end; in the handle-array variant (0x00108574) the same word is the handle count and in the pass-through variant (0x0078233C) it is the allocator pointer"
+   },
+   {
+    "offset": 20,
+    "name": "slotCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "CreateSlotPool54/58 allocate slotCount*0x54 (or *0x58) bytes for the slot table and zero-fill exactly that; 0x00108624 reads it back with ldrh (u16) to store it in slot[0]+0x54; in the handle-array variant (0x00108574) the same word is the allocated handle-array pointer"
+   }
+  ]
+ },
+ {
+  "class": "Fs_Worker",
+  "type": "FsWorker",
+  "summary": "File-system worker thread object: owns the two request queues, the recycled-request ring buffer, the per-type byte counters and the 3-entry array at +0x2C40; its thread body pops requests, completes them and recycles them.",
+  "size": 11364,
+  "base": "",
+  "confidence": 0.6,
+  "evidence": "Fs_Worker_Dtor (0x0056FF4C) stores two vtable pointers (0x007824A4 at +0x00, 0x007824BC at +0x04) and destroys std_destroy_range(self+0x2C40, 0x006F43E4, 0xC, 3), the ring buffer at +0x2000, the queue at +0x1BCC, the ring buffer at +0x790 and the queue at +0x35C, so the object is at least 0x2C64 bytes (the batch size 0x2004 is only the highest field). Fs_Worker_ProcessQueue (0x0056FDD0) is the thread body and calls Fs_NamedObject_Open (0x0056F7A4) with the worker as its archive.",
+  "fields": [
+   {
+    "offset": 768,
+    "name": "unknown_stateBlock",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Not a real field: Fs_Worker_ProcessQueue only computes worker+0x300 to reach the stop flag (add r0,r0,#0x300; ldrb r0,[r0,#0x58]); the region +0x1C..+0x33C is a 20-entry 0x28-byte array destroyed by std_destroy_range(self+0x1C, 0x00570050, 0x28, 0x14) in the dtor"
+   },
+   {
+    "offset": 856,
+    "name": "isStopRequested",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "ldrb r0,[r0,#0x58] with r0 = worker+0x300 at the top of Fs_Worker_ProcessQueue (0x0056FDD0); when non-zero the thread body returns immediately, so it is the 'stop the worker' flag"
+   },
+   {
+    "offset": 860,
+    "name": "openQueue",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Os_QueueTryPop(&worker->f_35c, &req) in Fs_Worker_ProcessQueue (0x0056FDD0); the popped request is opened by Fs_NamedObject_Open (0x0056F7A4); the dtor tears the queue down through 0x0012032C/0x00120368. First word of an embedded 3DS OS queue (0x1C bytes), no Os_Queue type exists in structs.json"
+   },
+   {
+    "offset": 7116,
+    "name": "requestQueue",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "Os_QueueTryPop(&worker->f_1bcc, &req) in Fs_Worker_ProcessQueue (0x0056FDD0); each popped request is completed (state 6 -> 7) and pushed to the ring buffer at +0x2000. First word of an embedded 3DS OS queue"
+   },
+   {
+    "offset": 8192,
+    "name": "freeRequestRing",
+    "type": "Container_RingBuffer",
+    "size": 844,
+    "confidence": 0.6,
+    "evidence": "Container_RingBuffer_Push(&worker->f_2000, req) recycles completed requests (0x006E74AC); the dtor closes the kernel handle at +0x2014 with Os_Handle_CloseField (0x006E75A0), which is the semaphore the push blocks on when the ring is full"
+   }
+  ]
+ },
+ {
+  "class": "Fs_Channel",
+  "type": "FsChannel",
+  "summary": "One GPU transfer channel of the engine's big heap object (the object is at least 0xE11C bytes, so 'Fs_Channel' is only the generated name): a Gfx command buffer at +0xE0F8, its completion-callback pointer at +0xE104, the transfer source at +0xE114 and the completion light event at +0xE118.",
+  "size": 57628,
+  "base": "",
+  "confidence": 0.4,
+  "evidence": "maybe_Fs_Channel_InitFields (0x00103544) is called from Engine_Initialize (0x00101B74) and InitHeaps (0x00102EF8) and only touches the +0xE0F8..+0xE118 block: str r1,[r5,#0x114]; Os_LightEvent_Init(self+0xE118,0,arg3,arg4,arg4); str r1,[r0,#0xc] with r0 = self+0xE0F8 and r1 = self+4; Gfx_CommandBuffer_Submit(self+0xE0F8, self->f_e114, 0x2000, 0x11, -1). All four offsets are marked weak in the batch because the owning object is the engine heap, not an Fs channel.",
+  "fields": [
+   {
+    "offset": 57592,
+    "name": "commandBuffer",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Gfx_CommandBuffer_Submit(&self->f_e0f8, self->f_e114, 0x2000, 0x11, 0xfffffffe) in 0x00103544; first word of the embedded Gfx_CommandBuffer (0x0010EAB0), kept as u32 so it does not overlap the +0xE104 word of the same buffer"
+   },
+   {
+    "offset": 57604,
+    "name": "commandBufferCallback",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "The command buffer's +0x0C word: str r1,[r0,#0xc] with r0 = self+0xE0F8 and r1 = self+4 in 0x00103544; the transfer thread entry 0x001150DC loads *(cmd+0x0C) and calls its vtable slot +0x08 when the transfer completes"
+   },
+   {
+    "offset": 57620,
+    "name": "transferSource",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Stored from arg2 (str r1,[r5,#0x114]) and then passed to Gfx_CommandBuffer_Submit as the source pointer in 0x00103544"
+   },
+   {
+    "offset": 57624,
+    "name": "completionEvent",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Os_LightEvent_Init(&self->f_e118, 0, arg3, arg4, arg4) in 0x00103544; first word of an embedded Os light event (no Os_LightEvent type exists in structs.json)"
+   }
+  ]
+ },
+ {
+  "class": "Fs_ArcHeader",
+  "type": "FsArcHeader",
+  "summary": "Result of parsing a 'CGRP' archive header: three pointers to the archive's sections (ids 0x7800, 0x7801, 0x7802), each already advanced past its 8-byte section header.",
+  "size": 12,
+  "base": "",
+  "confidence": 0.65,
+  "evidence": "maybe_Fs_ArcHeader_Parse (0x00114DD0) zeroes all three words, checks magic 0x50524743 ('CGRP') and a size field in 0x01000000..0x01000100, then stores section+8 for each of the three resolvers: 0x0011BB70 (u16 id 0x7800), 0x0011BB08 (id 0x7801), 0x0011BBDC (id 0x7802). Callers Container_ForEachPair (0x0010E08C) and Sound_WaveArchive_LoadAndCache (0x0054A3B8) read the triple.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "pairTable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Section id 0x7800 (resolver 0x0011BB70); Container_ForEachPair reads its first word as the entry count and 0x00115D78 walks 8-byte {key, offset} entries from it"
+   },
+   {
+    "offset": 4,
+    "name": "dataBlob",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Section id 0x7801 (resolver 0x0011BB08); 0x00115D78 adds the pair-table offsets to this pointer to produce each value (out[1] = out3[1] + entryOffset)"
+   },
+   {
+    "offset": 8,
+    "name": "subTable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Section id 0x7802 (resolver 0x0011BBDC); 0x0065F138 reads its first word as a count and 0x0065F148 walks 8-byte entries from it (Sound_WaveArchive_LoadAndCache enumerates banks through it); Parse leaves it 0 when the section is absent"
+   }
+  ]
+ },
+ {
+  "class": "Fs_FileJob",
+  "type": "FsFileJob",
+  "summary": "24-byte asynchronous file-read job: an owner pointer at +0x04, a state at +0x08, a result code at +0x0C and the 8-byte async request result at +0x10; Fs_FileJob_Update drives it through six states.",
+  "size": 24,
+  "base": "",
+  "confidence": 0.6,
+  "evidence": "Fs_FileJob_Update (0x002EB658) switches on *(u32*)(job+8) over states 0..5, calls Fs_Request_Build(&local_30, *(u32*)(job+4)) and stores the 8-byte result at job+0x10, then polls it with 0x00655398/0x006552AC/0x006552BC/0x00655304 and records the outcome in job+0x0C. Fs_FileJob_UpdateAlt (0x00408D38) is the same machine with an extra request parameter.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "resultCode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "Written 12 times by Fs_FileJob_Update/UpdateAlt with 1 (aborted), 2 (read request failed), 3 (result error), 4 (invoke failed), 8 (success) and 9 (open failed); the state itself lives at +0x08"
+   },
+   {
+    "offset": 16,
+    "name": "requestResult",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Low word of the 8-byte async result: job->f_10 = local_30 right after Fs_Request_Build(&local_30, ...) (0x001D0218 writes *out = local_30), and 0x00655398 reads the pair back as a 64-bit nn::Result"
+   },
+   {
+    "offset": 20,
+    "name": "requestResultHigh",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "High word of the same 8-byte result (job->f_14 = uStack_2c); 0x006552AC tests it for non-zero to detect a failed request and Fs_ReportFatalError receives it as the nn::Result code"
+   }
+  ]
+ },
+ {
+  "class": "Fs_FileRequest",
+  "type": "FsFileRequest",
+  "summary": "24-byte asynchronous file request: an owner pointer at +0x04, a phase at +0x08, a result code at +0x0C and the 8-byte async request result at +0x10; Fs_FileRequest_Update drives it through phases 0..4.",
+  "size": 24,
+  "base": "",
+  "confidence": 0.6,
+  "evidence": "Fs_FileRequest_Update (0x0032F5BC) is a phase machine on *(u32*)(self+8) (0..4) that builds the request with Fs_BuildRequestHeader, stores the 8-byte result at self+0x10 and records result codes 1..9 in self+0x0C. The batch base 'Os_SyncObject' is wrong: struct_db built that class from Fs_FileRequest_Init (0x001D0134), which is called as Fs_FileRequest_Init(*(u32*)(self+4), self) and initialises the *owner* object (fields +0x0C/+0x48/+0x4C), not a base of this 24-byte record.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "resultCode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "Set to 1 (aborted), 2 (read request failed), 3 (result error), 4 (invoke failed), 5/6/7 (specific result codes), 8 (success) and 9 (open failed) by the phase machine in Fs_FileRequest_Update (0x0032F5BC)"
+   },
+   {
+    "offset": 16,
+    "name": "requestResult",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Low word of the 8-byte async result: self->f_10 = local_38 right after Fs_BuildRequestHeader(&local_38, ...), then polled with 0x00655398(&self->f_10)"
+   },
+   {
+    "offset": 20,
+    "name": "requestResultHigh",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "High word of the same 8-byte result (self->f_14 = uStack_34); 0x006552AC tests it for non-zero and Fs_ReportFatalError receives it as the nn::Result code"
+   }
+  ]
+ },
+ {
+  "class": "Fs_AsyncIo",
+  "type": "FsAsyncIo",
+  "summary": "68-byte async-IO transfer context: a Gfx command buffer at +0x00, a completion-callback pointer at +0x0C and the embedded callback object at +0x40 whose first word is its vtable.",
+  "size": 68,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "maybe_Fs_AsyncIo_Register (0x001D0378) marks the per-object byte in the global array at 0x009C55, stores io+0x40 at +0x0C, then calls Gfx_CommandBuffer_Submit(io, 0x001D0170(), 0x1000, 0x10, -1). The transfer thread entry 0x001150DC loads *(cmd+0x0C) and calls its vtable slot +0x08, so +0x40 is the embedded callback object and the real object extends past the batch size 0x44.",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "completionCallback",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "str r0,[r4,#0xc] with r0 = io+0x40 in 0x001D0378; 0x001150DC (the transfer thread entry) loads this word and calls (*(*word+8))() when the transfer completes. The sibling Fs_FileRequest_Init (0x001D0134) sets the same word to self+0x44"
+   },
+   {
+    "offset": 64,
+    "name": "maybe_callbackVtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "First word of the embedded completion-callback object that +0x0C points at; 0x001150DC dereferences it as a vtable and calls slot +0x08, so the object continues past the batch's 68-byte size"
+   }
+  ]
+ },
+ {
+  "class": "Fs_Request",
+  "type": "FsRequest",
+  "summary": "8-byte async file-request result block (a 64-bit nn::Result-style cookie) filled by Fs_Request_Build and cleared by Fs_Request_WaitForService; the file jobs embed it at +0x10.",
+  "size": 8,
+  "base": "",
+  "confidence": 0.45,
+  "evidence": "Fs_Request_Build (0x001D0218) ends with *out = local_30; out[1] = puStack_2c, and both callers (Fs_FileJob_Update 0x002EB658, Fs_FileJob_UpdateAlt 0x00408D38) store the pair at job+0x10. maybe_Fs_Request_WaitForService (0x00502128) clears the first word (*req = 0) before spinning on the service reply. The batch's third function, 0x001D033C, is Fs_ReportFatalError and does not touch this block.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "resultLow",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Low word of the 64-bit result: *out = local_30 in Fs_Request_Build (0x001D0218) and *req = 0 in 0x00502128; 0x00655398 reads the pair as one 64-bit value"
+   },
+   {
+    "offset": 4,
+    "name": "resultHigh",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "High word of the same 64-bit result: out[1] = puStack_2c in Fs_Request_Build; 0x006552AC returns (resultHigh != 0) as the 'request failed' test"
+   }
+  ]
+ },
+ {
+  "class": "Fs_ResourceHandle",
+  "type": "FsResourceHandle",
+  "summary": "64-byte file-system resource object header: a vtable at +0x00 and the pack handle at +0x3C that Pack_ReleaseHandle releases; Fs_Resource (164 bytes) has the same +0x3C slot plus the remaining fields, so this is the base part of a resource.",
+  "size": 64,
+  "base": "",
+  "confidence": 0.7,
+  "evidence": "Fs_Resource_Dtor (0x005F951C) is `str r1,[r0],#0x3c; bl 0x12416C (Pack_ReleaseHandle); sub r0,r0,#0x3c` - it installs the incoming vtable at +0x00 and releases the handle at +0x3C, then returns the object base. The same +0x3C slot is released by Fs_Resource_Release (0x005F9138) and Fs_Resource_Reset (0x005F9428). The batch name 'ResourceHandle_Init' described a constructor, but a constructor does not release a live handle.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Fs_Resource_Dtor (0x005F951C) stores the vtable argument with `str r1,[r0],#0x3c`, i.e. at +0x00"
+   },
+   {
+    "offset": 60,
+    "name": "packHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "Pack_ReleaseHandle(self+0x3C) in Fs_Resource_Dtor (0x005F951C); Pack_ReleaseHandle (0x0012416C) masks the word by a generation field and overwrites it with the 'null' encoding, so it is a 32-bit generation-tagged handle"
+   }
+  ]
+ }
+]

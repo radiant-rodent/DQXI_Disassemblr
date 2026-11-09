@@ -1,0 +1,3426 @@
+[
+ {
+  "class": "Sound_SeqPlayer",
+  "type": "SoundSeqPlayer",
+  "summary": "Sequence (BRSEQ) player: owns the 16 Sound_SeqChannel objects, the loaded bank and wave-archive handles, the async file request and the loaded sequence data, and drives the per-frame tempo/note update. Embedded in a Sound_Player slot.",
+  "size": 8700,
+  "base": null,
+  "confidence": 0.7,
+  "evidence": "Vtable 0x00781C38 (5 slots, all Sound_SeqPlayer_*/Sound_Track_* methods). The class is the \"sequence player\" half of the sound library: Sound_SeqPlayer_Update (0x00555308) runs the open->load->play state machine, PlayFrame (0x00555878) and ComputeTempoStep (0x005549EC) advance the 16 channels, and BindChannels (0x005551F8) fills the channel array from the owning Sound_Player. Size 0x21FC comes from the highest strong field (+0x21F8, u16).",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Written by the constructor 0x00555B60 and by Sound_SeqPlayer_InitVoiceMap (0x0054FADC); the five slots at 0x00781C38 are 0x00552830, Sound_Track_ResetAllChannels, maybe_Sound_SeqPlayer_ApplyChannelMap, maybe_Sound_SeqPlayer_StopVoices and 0x00553F5C."
+   },
+   {
+    "offset": 4,
+    "name": "unknown_f32_04",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Sound_SeqPlayer_InitVoiceMap stores 0.0f here (vstr s0,[r0,#4]; the literal at 0x0054FBE8 is 0x00000000). No reader anywhere in the recovered corpus, so the purpose is unknown."
+   },
+   {
+    "offset": 8,
+    "name": "unknown_f32_08",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Sound_SeqPlayer_InitVoiceMap stores the same 0.0f literal here (vstr s0,[r0,#8]). Write-only in the recovered corpus."
+   },
+   {
+    "offset": 12,
+    "name": "isOpen",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.8,
+    "evidence": "InitVoiceMap clears it; Sound_SeqPlayer_GetPosition (0x00661730) returns -1 while it is 0; Shutdown (0x00555794) unregisters the player and clears it."
+   },
+   {
+    "offset": 13,
+    "name": "isActive",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "ReleaseChannels (0x00554C34) and StopVoices (0x00553EEC) clear it after unregistering from the driver queue; StartMultiVoiceNote (0x00552914) returns early while it is 0."
+   },
+   {
+    "offset": 14,
+    "name": "maybe_allNotesOff",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Sound_SeqPlayer_SetAllChannelNotesFlag (0x005551B8) stores the value here and forwards it to all 16 channels; Sound_SeqPlayer_Update (0x00555308) skips ComputeTempoStep while it is 0."
+   },
+   {
+    "offset": 15,
+    "name": "isFinished",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Set to 1 by PlayFrame (0x00555878), ComputeTempoStep (0x005549EC), Shutdown and StartMultiVoiceNote when the sequence stops or is restarted."
+   },
+   {
+    "offset": 28,
+    "name": "sampleRate",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "PrepareBank (0x0054FC00) passes it to the sequence-parameter init func_00549EC0 and as the sampleRate argument of Sound_Bank_FindWave (0x0054C5C0)."
+   },
+   {
+    "offset": 40,
+    "name": "bankId",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "PrepareBank compares it with -1 (no bank) and passes it as bankId to Sound_WaveArchive_LoadBank (0x0054ADBC)."
+   },
+   {
+    "offset": 44,
+    "name": "bank",
+    "type": "SoundBank*",
+    "size": 4,
+    "confidence": 0.7,
+    "evidence": "Sound_Bank_FindWave(self->f_2c, ...) in PrepareBank; 0 means \"not loaded yet\"; copied into +0x34 once the wave is found."
+   },
+   {
+    "offset": 46,
+    "name": "outputMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "BindChannels (0x005551F8) copies it into every newly created channel (channel+0x79), and Sound_SeqChannel_StartNote passes channel+0x79 to Sound_Voice_SetOutputMode."
+   },
+   {
+    "offset": 48,
+    "name": "waveId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Second argument of Sound_Bank_FindWave (waveId) in PrepareBank."
+   },
+   {
+    "offset": 52,
+    "name": "loadedBank",
+    "type": "SoundBank*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "PrepareBank stores the resolved bank pointer here (self->f_34 = self->f_2c) after the wave lookup succeeds."
+   },
+   {
+    "offset": 56,
+    "name": "wave",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "PrepareBank stores the Sound_Bank_FindWave result here (self->f_38 = iVar3)."
+   },
+   {
+    "offset": 60,
+    "name": "waveArchive",
+    "type": "SoundWaveArchive*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "PrepareBank sets its +0x18 state byte to 2 when the bank load finishes and passes it to Sound_WaveArchive_LoadBank."
+   },
+   {
+    "offset": 64,
+    "name": "isBankReady",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "PrepareBank writes 0 on the failure path and 1 after the bank and wave are resolved."
+   },
+   {
+    "offset": 68,
+    "name": "driverNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Address of a driver list node: registered with func_00555BF0 and unregistered with func_00555C00 (Shutdown) / func_0011FCB0 (StopVoices)."
+   },
+   {
+    "offset": 80,
+    "name": "driverLinkNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Second driver list node: registered with func_0054DEBC (SetParamBlock) and unregistered with func_0011FCB0 (ReleaseChannels); its first byte is tested as the \"linked\" flag by StartMultiVoiceNote."
+   },
+   {
+    "offset": 81,
+    "name": "isPlaying",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "GetPlaybackInfo (0x006616BC) and GetPosition (0x00661730) return 0 while it is 0."
+   },
+   {
+    "offset": 83,
+    "name": "maybe_pauseFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "StartMultiVoiceNote skips the note when this byte is set."
+   },
+   {
+    "offset": 84,
+    "name": "maybe_playMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Compared with 1 and assigned from a computed value in the recovered code; purpose not established."
+   },
+   {
+    "offset": 85,
+    "name": "maybe_loopFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Set to 1 and tested in the recovered code; purpose not established."
+   },
+   {
+    "offset": 87,
+    "name": "maybe_oneshotFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Set to 1 and tested in the recovered code; purpose not established."
+   },
+   {
+    "offset": 88,
+    "name": "maybe_tickAccumulator",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Accumulated as *(int*)(self+0x58) += *(int*)(self + idx*8 + 0x20FC) in the recovered code."
+   },
+   {
+    "offset": 92,
+    "name": "maybe_frameCounter",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Reset to 0 and incremented once per queued stream work item in StartMultiVoiceNote."
+   },
+   {
+    "offset": 96,
+    "name": "streamWork",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Passed to Sound_Stream_QueueWorkItem and Sound_Stream_CancelWorkByOwnerA (StopVoices); its +0x1C/+0x24/+0x26/+0x28/+0x2C are written from +0xF0/+0xF1/+0xF4/+0xF8 and +0x21F8."
+   },
+   {
+    "offset": 100,
+    "name": "maybe_voice",
+    "type": "Sound_Voice*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "func_00550940(player[0x19]) and Sound_Voice_CalculatePitch(player[0x19], ...) in StartMultiVoiceNote; also read as *(u32*)(f_64+8)."
+   },
+   {
+    "offset": 104,
+    "name": "maybe_voiceCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Loop bound over the voice slot table in StartMultiVoiceNote."
+   },
+   {
+    "offset": 108,
+    "name": "maybe_voiceIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Reset to 0 and incremented while filling the voice slot table in StartMultiVoiceNote."
+   },
+   {
+    "offset": 112,
+    "name": "frameAccumulator",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "PlayFrame accumulates 1/(samples*rate) into it and clears it when it reaches 1.0f; ComputeTempoStep also resets it."
+   },
+   {
+    "offset": 116,
+    "name": "playPosition",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "GetPosition returns it when the caller asks for position 0."
+   },
+   {
+    "offset": 117,
+    "name": "maybe_channelCount",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Multiplied with +0x76 to form the sample-frame size in ComputeTempoStep and PlayFrame."
+   },
+   {
+    "offset": 118,
+    "name": "maybe_sampleBlockSize",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Multiplied with +0x75 to form the sample-frame size in ComputeTempoStep and PlayFrame."
+   },
+   {
+    "offset": 120,
+    "name": "playPositionAlt",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "GetPosition returns it when the caller asks for a non-zero position selector."
+   },
+   {
+    "offset": 122,
+    "name": "maybe_lastTrackIndex",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "The track index at +0x7C is incremented while it is below this value (PlayFrame, ComputeTempoStep)."
+   },
+   {
+    "offset": 124,
+    "name": "maybe_trackIndex",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Current track index: read, incremented up to +0x7A and stored back in PlayFrame/ComputeTempoStep."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_channelCount2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "BindChannels stores channelSource[2] here; StartMultiVoiceNote reads and clears it."
+   },
+   {
+    "offset": 132,
+    "name": "ownerPlayer",
+    "type": "SoundPlayer*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "BindChannels stores *channelSource here; vtable slot +0xC is called on it with a channel to destroy that channel (ReleaseChannels, PlayFrame, ComputeTempoStep)."
+   },
+   {
+    "offset": 136,
+    "name": "maybe_channelGroupMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Compared with 0 and 1 and copied into a local in the recovered code."
+   },
+   {
+    "offset": 140,
+    "name": "maybe_channelGroupId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read as player[0x23] in StartMultiVoiceNote; purpose not established."
+   },
+   {
+    "offset": 144,
+    "name": "channels",
+    "type": "SoundSeqChannel*",
+    "size": 4,
+    "confidence": 0.85,
+    "evidence": "Start of a 16-entry array of Sound_SeqChannel pointers at +0x90..+0xCC: ReleaseChannels, PlayFrame, ComputeTempoStep, CallChannelsSlot0 and FadeChannelNotes all walk *(int*)(self + i*4 + 0x90) for i < 0x10."
+   },
+   {
+    "offset": 148,
+    "name": "maybe_startTick",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "GetPlaybackInfo copies it into out+8."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_totalTicks",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "GetPlaybackInfo copies it into out+0xC."
+   },
+   {
+    "offset": 156,
+    "name": "maybe_loopStart",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read in the recovered code; purpose not established."
+   },
+   {
+    "offset": 160,
+    "name": "maybe_loopEnd",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read in the recovered code; purpose not established."
+   },
+   {
+    "offset": 168,
+    "name": "maybe_tickScale",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Multiplied with +0x6C in StartMultiVoiceNote."
+   },
+   {
+    "offset": 180,
+    "name": "maybe_voiceLimit",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Read as player[0x2D] in StartMultiVoiceNote; purpose not established."
+   },
+   {
+    "offset": 240,
+    "name": "maybe_frameCounter2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Incremented once per played frame in PlayFrame and ComputeTempoStep."
+   },
+   {
+    "offset": 241,
+    "name": "maybe_volume",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Copied into *(streamWork+0x26) in the recovered code."
+   },
+   {
+    "offset": 244,
+    "name": "maybe_pan",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Copied into *(streamWork+0x28) in the recovered code."
+   },
+   {
+    "offset": 248,
+    "name": "maybe_priority",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Copied into *(streamWork+0x2C) in the recovered code."
+   },
+   {
+    "offset": 356,
+    "name": "loadState",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.8,
+    "evidence": "Sound_SeqPlayer_Update state machine: 1 = waiting for the async file open, 2 = data ready, 3 = playing; SetParamBlock also forces 1."
+   },
+   {
+    "offset": 357,
+    "name": "maybe_registered",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Shutdown calls func_005507F4 and clears it while it is set."
+   },
+   {
+    "offset": 358,
+    "name": "driverLinked",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Set by SetParamBlock and Update, cleared by ReleaseChannels after unregistering the driver link node."
+   },
+   {
+    "offset": 360,
+    "name": "paramTriple0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock (0x00554BC4) stores triple[0] here (sound command 0x0E parameter block)."
+   },
+   {
+    "offset": 364,
+    "name": "paramTriple1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores triple[1] here."
+   },
+   {
+    "offset": 368,
+    "name": "paramTriple2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores triple[2] here."
+   },
+   {
+    "offset": 372,
+    "name": "fileRequest",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Async file-read request: Update reads its +0x14 state and +0x18 data pointer; Shutdown passes it to func_0011FCF8."
+   },
+   {
+    "offset": 376,
+    "name": "seqData",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Loaded sequence data: Update reads its +0x14 state, +0x24 voice pool, +0x50..+0x77 four track parameter sets and +0x78 voice; assigned from the read request data pointer minus 0x80."
+   },
+   {
+    "offset": 380,
+    "name": "paramBlock0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[0] here (first word of the 13-word sound command 0x0E block)."
+   },
+   {
+    "offset": 384,
+    "name": "paramBlock1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[1] here."
+   },
+   {
+    "offset": 388,
+    "name": "paramBlock2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[2] here."
+   },
+   {
+    "offset": 392,
+    "name": "paramBlock3",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[3] here."
+   },
+   {
+    "offset": 396,
+    "name": "paramBlock4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[4] here."
+   },
+   {
+    "offset": 400,
+    "name": "paramBlock5",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[5] here."
+   },
+   {
+    "offset": 404,
+    "name": "paramBlock6",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[6] here."
+   },
+   {
+    "offset": 408,
+    "name": "paramBlock7",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[7] here."
+   },
+   {
+    "offset": 412,
+    "name": "paramBlock8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[8] here."
+   },
+   {
+    "offset": 416,
+    "name": "paramBlock9",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[9] here."
+   },
+   {
+    "offset": 420,
+    "name": "paramBlock10",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[10] here."
+   },
+   {
+    "offset": 424,
+    "name": "paramBlock11",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[0xB] here."
+   },
+   {
+    "offset": 428,
+    "name": "paramBlock12",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "SetParamBlock stores block13[0xC] here."
+   },
+   {
+    "offset": 540,
+    "name": "maybe_pendingVoiceCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Zeroed in the teardown path and read as a pointer by maybe_Sound_SeqPlayer_OnEvent; purpose not established."
+   },
+   {
+    "offset": 544,
+    "name": "activeVoiceCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Number of voice slots actually started: StartMultiVoiceNote stores the clamped count here and both it and StopVoices loop over it."
+   },
+   {
+    "offset": 548,
+    "name": "maybe_streamGroupCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Loop bound for the per-group output-mode/loop-flag pass in StartMultiVoiceNote."
+   },
+   {
+    "offset": 556,
+    "name": "maybe_voiceSlotTable",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Indexed as player[i*0xF2 + 0x8B] (stride 0x3C8) in StopVoices and StartMultiVoiceNote; each entry is passed to Sound_Voice_StopStreams / func_0054CC20."
+   },
+   {
+    "offset": 8696,
+    "name": "noteId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "StartMultiVoiceNote compares it with the expected note id of the sound command and copies it into *(streamWork+0x24)."
+   }
+  ]
+ },
+ {
+  "class": "Sound_SeqChannel",
+  "type": "SoundSeqChannel",
+  "summary": "One MIDI-style sequence channel of a Sound_SeqPlayer: owns a linked list of Sound_SeqNote objects, five interpolation envelopes (volume, expression, pan, pitch, key shift), the per-channel DSP parameter block that is copied onto every note, and the output mode.",
+  "size": 308,
+  "base": null,
+  "confidence": 0.65,
+  "evidence": "Vtable stored by Sound_SeqChannel_Dtor (0x0054EE94) from DAT_0054EF08; Sound_SeqPlayer_BindChannels (0x005551F8) creates one per set bit of the channel mask and stores it in the player's 16-entry channel array at +0x90. Sound_SeqChannel_ApplyMixParams (0x0054E37C) reads the five envelope pairs and copies +0xAC..+0xEF onto every note, Sound_SeqChannel_Tick (0x0054E130) advances the envelope positions. Size 0x134 = highest strong field +0x130 (note list head) + 4.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Sound_SeqChannel_Dtor (0x0054EE94) stores DAT_0054EF08 here; slot +8 is the per-frame Tick called from Sound_SeqPlayer_PlayFrame/ComputeTempoStep."
+   },
+   {
+    "offset": 12,
+    "name": "volumeScale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "ApplyMixParams multiplies the interpolated volume by it together with the owning track's +0x18."
+   },
+   {
+    "offset": 16,
+    "name": "panBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "ApplyMixParams adds it to the track's +0x1C and the interpolated pan value."
+   },
+   {
+    "offset": 20,
+    "name": "pitchBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "ApplyMixParams adds it to the track's +0x20 and the interpolated pitch value."
+   },
+   {
+    "offset": 24,
+    "name": "panScale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "ApplyMixParams multiplies the pan term by it and by the track's +0x60."
+   },
+   {
+    "offset": 32,
+    "name": "maybe_noteActive",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Sound_SeqChannel_Tick clears it when the note list at +0x130 is empty and keeps looping while it is set."
+   },
+   {
+    "offset": 39,
+    "name": "maybe_noteReuseMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqChannel_StartNote only takes the \"reuse the first note\" path when this byte is non-zero."
+   },
+   {
+    "offset": 121,
+    "name": "outputMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "Sound_SeqChannel_StartNote calls Sound_Voice_SetOutputMode(note->voice, channel->f_79); Sound_SeqPlayer_BindChannels copies the player's +0x2E into it."
+   },
+   {
+    "offset": 122,
+    "name": "pauseMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Sound_SeqChannel_SetPauseMode stores 0 or 1 here (mode 2/3 also store 1)."
+   },
+   {
+    "offset": 123,
+    "name": "maybe_noteMuteFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "StartNote writes 0xFF into the note gate when it is 0 and 0 when it is set."
+   },
+   {
+    "offset": 124,
+    "name": "maybe_tickCountdown",
+    "type": "s32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_SeqChannel_Tick decrements it and keeps calling vtable slot +8 while it is non-zero."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_hasPendingNote",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqChannel_Tick clears it once the note list is empty."
+   },
+   {
+    "offset": 129,
+    "name": "maybe_keyShiftEnabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "StartNote adds (channel->f_F6 - note) to the pitch offset only when this byte is set."
+   },
+   {
+    "offset": 130,
+    "name": "maybe_disableNoteTimeout",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqChannel_UpdateNoteTimeouts skips Sound_SeqNote_FinishIfDone while this byte is set."
+   },
+   {
+    "offset": 131,
+    "name": "maybe_noteAllocMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Passed to func_005552D0 (the note allocator) in Sound_SeqChannel_StartNote."
+   },
+   {
+    "offset": 132,
+    "name": "maybe_noteAllocParam",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "First word of the note-allocation parameter block that StartNote passes to func_005552D0."
+   },
+   {
+    "offset": 136,
+    "name": "maybe_pitchOffset",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "StartNote adds the key shift to it before converting the note length."
+   },
+   {
+    "offset": 140,
+    "name": "volumeEnvStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Start value of the volume envelope: Sound_SeqChannel_ApplyMixParams interpolates from it towards +0x8D."
+   },
+   {
+    "offset": 141,
+    "name": "volumeEnvEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "End value of the volume envelope (interpolation target)."
+   },
+   {
+    "offset": 142,
+    "name": "volumeEnvLength",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Length of the volume envelope; Sound_SeqChannel_Tick increments the position while it is below this value."
+   },
+   {
+    "offset": 144,
+    "name": "volumeEnvPosition",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Current position of the volume envelope; incremented by Sound_SeqChannel_Tick and used as the interpolation factor."
+   },
+   {
+    "offset": 146,
+    "name": "maybe_expressionEnvStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Start value of the expression envelope: Sound_SeqChannel_ApplyMixParams interpolates from it towards +0x93."
+   },
+   {
+    "offset": 147,
+    "name": "maybe_expressionEnvEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "End value of the expression envelope (interpolation target)."
+   },
+   {
+    "offset": 148,
+    "name": "maybe_expressionEnvLength",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Length of the expression envelope; Sound_SeqChannel_Tick increments the position while it is below this value."
+   },
+   {
+    "offset": 150,
+    "name": "maybe_expressionEnvPosition",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Current position of the expression envelope; incremented by Sound_SeqChannel_Tick and used as the interpolation factor."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_panEnvStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Start value of the pan envelope: Sound_SeqChannel_ApplyMixParams interpolates from it towards +0x99."
+   },
+   {
+    "offset": 153,
+    "name": "maybe_panEnvEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "End value of the pan envelope (interpolation target)."
+   },
+   {
+    "offset": 154,
+    "name": "maybe_panEnvLength",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Length of the pan envelope; Sound_SeqChannel_Tick increments the position while it is below this value."
+   },
+   {
+    "offset": 156,
+    "name": "maybe_panEnvPosition",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Current position of the pan envelope; incremented by Sound_SeqChannel_Tick and used as the interpolation factor."
+   },
+   {
+    "offset": 158,
+    "name": "maybe_pitchEnvStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Start value of the pitch envelope: Sound_SeqChannel_ApplyMixParams interpolates from it towards +0x9F."
+   },
+   {
+    "offset": 159,
+    "name": "maybe_pitchEnvEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "End value of the pitch envelope (interpolation target)."
+   },
+   {
+    "offset": 160,
+    "name": "maybe_pitchEnvLength",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Length of the pitch envelope; Sound_SeqChannel_Tick increments the position while it is below this value."
+   },
+   {
+    "offset": 162,
+    "name": "maybe_pitchEnvPosition",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Current position of the pitch envelope; incremented by Sound_SeqChannel_Tick and used as the interpolation factor."
+   },
+   {
+    "offset": 164,
+    "name": "maybe_keyShiftEnvStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Start value of the keyShift envelope: Sound_SeqChannel_ApplyMixParams interpolates from it towards +0xA5."
+   },
+   {
+    "offset": 165,
+    "name": "maybe_keyShiftEnvEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "End value of the keyShift envelope (interpolation target)."
+   },
+   {
+    "offset": 166,
+    "name": "maybe_keyShiftEnvLength",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Length of the keyShift envelope; Sound_SeqChannel_Tick increments the position while it is below this value."
+   },
+   {
+    "offset": 168,
+    "name": "maybe_keyShiftEnvPosition",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Current position of the keyShift envelope; incremented by Sound_SeqChannel_Tick and used as the interpolation factor."
+   },
+   {
+    "offset": 172,
+    "name": "maybe_dspParamAC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "ApplyMixParams copies it verbatim into note+0xB4 (first word of the first DSP parameter group)."
+   },
+   {
+    "offset": 176,
+    "name": "maybe_dspParamB0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xB8."
+   },
+   {
+    "offset": 180,
+    "name": "maybe_dspParamB4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xBC."
+   },
+   {
+    "offset": 184,
+    "name": "maybe_dspParamB8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xC0."
+   },
+   {
+    "offset": 188,
+    "name": "maybe_dspParamBC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xD4 (first word of the second DSP parameter group)."
+   },
+   {
+    "offset": 192,
+    "name": "maybe_dspParamC0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xD8."
+   },
+   {
+    "offset": 196,
+    "name": "maybe_dspParamC4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xDC."
+   },
+   {
+    "offset": 204,
+    "name": "maybe_dspParamCC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xF4 (first word of the third DSP parameter group)."
+   },
+   {
+    "offset": 208,
+    "name": "maybe_dspParamD0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xF8."
+   },
+   {
+    "offset": 212,
+    "name": "maybe_dspParamD4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0xFC."
+   },
+   {
+    "offset": 216,
+    "name": "maybe_dspParamD8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x100."
+   },
+   {
+    "offset": 220,
+    "name": "maybe_dspParamDC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x114 (first word of the fourth DSP parameter group)."
+   },
+   {
+    "offset": 224,
+    "name": "maybe_dspParamE0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x118."
+   },
+   {
+    "offset": 228,
+    "name": "maybe_dspParamE4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x11C."
+   },
+   {
+    "offset": 232,
+    "name": "maybe_dspParamE8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x120."
+   },
+   {
+    "offset": 236,
+    "name": "maybe_dspParamEC",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x134."
+   },
+   {
+    "offset": 237,
+    "name": "maybe_dspParamED",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x135."
+   },
+   {
+    "offset": 238,
+    "name": "maybe_dspParamEE",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x136."
+   },
+   {
+    "offset": 239,
+    "name": "maybe_dspParamEF",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Copied verbatim into note+0x137."
+   },
+   {
+    "offset": 240,
+    "name": "velocityScale",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Sound_SeqChannel_StartNote multiplies the incoming note velocity by it (channel->f_F0 * velocity)."
+   },
+   {
+    "offset": 241,
+    "name": "maybe_expressionScale",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Converted to float and multiplied into the pitch term of ApplyMixParams."
+   },
+   {
+    "offset": 242,
+    "name": "maybe_noteParamF2",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Copied into the note-allocation parameter block (local_38) in StartNote."
+   },
+   {
+    "offset": 245,
+    "name": "maybe_noteParamF5",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Added to the owning track's +0x74 in the note-allocation parameter block."
+   },
+   {
+    "offset": 246,
+    "name": "lastNoteNumber",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "StartNote stores the note number here and uses it for the key shift of the next note."
+   },
+   {
+    "offset": 247,
+    "name": "maybe_portamentoDepth",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Squared and multiplied into the note length in StartNote."
+   },
+   {
+    "offset": 248,
+    "name": "maybe_paramF8",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "StartNote calls func_00547370 when it is below 0x80."
+   },
+   {
+    "offset": 249,
+    "name": "maybe_paramF9",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "StartNote calls func_005472F8 when it is below 0x80."
+   },
+   {
+    "offset": 250,
+    "name": "maybe_noteVolume",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "StartNote copies it into note+0xB0 when it is below 0x80."
+   },
+   {
+    "offset": 251,
+    "name": "maybe_paramFB",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "StartNote calls func_00547134 on the note when it is below 0x80."
+   },
+   {
+    "offset": 252,
+    "name": "maybe_paramFC",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.3,
+    "evidence": "StartNote calls func_005472D8 on the note when it is below 0x80."
+   },
+   {
+    "offset": 254,
+    "name": "maybe_defaultPriority",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "ApplyMixParams uses it unless the owning track's +0x2C is not -1."
+   },
+   {
+    "offset": 255,
+    "name": "maybe_paramFF",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Converted to float and used as the start of the expression ramp in ApplyMixParams."
+   },
+   {
+    "offset": 260,
+    "name": "maybe_trackPitchOffset",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqChannel_ApplyMixParams adds it to the owning track's +0x24 (the sibling +0x88 is added to the track's +0x20)."
+   },
+   {
+    "offset": 304,
+    "name": "noteList",
+    "type": "Sound_SeqNote*",
+    "size": 4,
+    "confidence": 0.8,
+    "evidence": "Head of the note linked list: StartNote pushes new notes here, KillNotes/Stop clear it, and every note chains through note+0x1AC."
+   }
+  ]
+ },
+ {
+  "class": "Sound_Player",
+  "type": "SoundPlayer",
+  "summary": "Wave player: plays one CWAV wave (or a looped stream) through a single Sound_SeqNote, with its own async file-open state machine, volume/pan/pitch/expression bases and a six-word volume block. Sound_SeqPlayer keeps a pointer to it at +0x84 and calls its vtable slot +0xC to destroy channels.",
+  "size": 648,
+  "base": null,
+  "confidence": 0.65,
+  "evidence": "Sound_Player_InitVoiceSlots (0x0054EDF4) stores the vtable and zeroes the note-parameter block at +0x8C..+0xA6; Sound_Player_Play (0x005504D0) and SetParams (0x0054FDD0) fill +0x6C/+0x70/+0x74 and +0xAC..+0xC0; Sound_Player_Update (0x00550254) runs the open->load->play state machine at +0xA0; Sound_Player_StartWave (0x0054FE18) creates the note and copies +0x8C..+0x90 onto it. Size 0x288 = highest strong field +0x284 + 4.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Sound_Player_InitVoiceSlots (0x0054EDF4) stores its vtable argument here; maybe_Sound_Player_Ctor (0x00550744) stores DAT_0055077C."
+   },
+   {
+    "offset": 12,
+    "name": "isPlaying",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.7,
+    "evidence": "Sound_Player_Play (0x005504D0) and Update (0x00550254) stop the previous wave while it is set, then set it to 1 when a new wave starts."
+   },
+   {
+    "offset": 13,
+    "name": "isActive",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Cleared when the player is unregistered from the driver queue (Play, Update)."
+   },
+   {
+    "offset": 14,
+    "name": "maybe_paused",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Sound_Player_Update calls UpdateVolumePan instead of StartWave while it is set."
+   },
+   {
+    "offset": 15,
+    "name": "isFinished",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Set to 1 whenever the wave stops, fails to start or the player is reset."
+   },
+   {
+    "offset": 16,
+    "name": "maybe_retryCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Incremented while it is below +0xC in the recovered code."
+   },
+   {
+    "offset": 20,
+    "name": "maybe_fadeTimer",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Initialised by FUN_006EF854 and read as a 64-bit value that becomes the note's +0x140."
+   },
+   {
+    "offset": 24,
+    "name": "volumeScale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Multiplied with the wave-info sample rate (+0x88) to scale the note volume (note+0x144)."
+   },
+   {
+    "offset": 28,
+    "name": "volumeBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Added to +0x60 * pan term to form the note volume (note+0x148)."
+   },
+   {
+    "offset": 32,
+    "name": "panBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Added to the interpolated pan value (note+0x14C)."
+   },
+   {
+    "offset": 36,
+    "name": "pitchBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Added to the pitch term (note+0x150)."
+   },
+   {
+    "offset": 44,
+    "name": "maybe_priorityOverride",
+    "type": "s8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Compared with -1; when set it overrides +0x97 as the note priority."
+   },
+   {
+    "offset": 46,
+    "name": "outputMode",
+    "type": "s8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Passed to Sound_Voice_SetOutputMode in Sound_Player_StartWave (0x0054FE18)."
+   },
+   {
+    "offset": 48,
+    "name": "expressionBase",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Added to the expression term (note+0x158)."
+   },
+   {
+    "offset": 52,
+    "name": "maybe_panLeft",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Passed to func_0054C75C on the note voice in UpdateVolumePan."
+   },
+   {
+    "offset": 53,
+    "name": "maybe_panRight",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Passed to func_0054C82C on the note voice in UpdateVolumePan."
+   },
+   {
+    "offset": 68,
+    "name": "driverNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Driver list node registered with func_00555BF0 and unregistered with func_00555C00."
+   },
+   {
+    "offset": 80,
+    "name": "driverLinkNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Second driver list node registered with func_0054DEBC and unregistered with func_0011FCB0."
+   },
+   {
+    "offset": 84,
+    "name": "maybe_fadeTimer2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Address passed to func_0011FCF8 together with +0x58."
+   },
+   {
+    "offset": 88,
+    "name": "maybe_fadeTimer3",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Second word of the pair passed to func_0011FCF8."
+   },
+   {
+    "offset": 92,
+    "name": "isWaveStarted",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.55,
+    "evidence": "Sound_Player_StartWave sets it to 1; Update calls StartWave while it is 0."
+   },
+   {
+    "offset": 93,
+    "name": "maybe_noteFlags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Copied into note+0x13C by StartWave."
+   },
+   {
+    "offset": 94,
+    "name": "noteNumber",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "StartWave starts the note at (f_5E + 0x40)."
+   },
+   {
+    "offset": 95,
+    "name": "maybe_channelIndex",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Passed to Sound_Cwav_Open as the channel index and cleared when the stream starts."
+   },
+   {
+    "offset": 96,
+    "name": "maybe_volumeScale2",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Multiplied with the pan term to form the note volume."
+   },
+   {
+    "offset": 104,
+    "name": "maybe_waveDataOffset",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Second word of the wave reference (waveRef[1]); passed to Sound_Cwav_Open."
+   },
+   {
+    "offset": 108,
+    "name": "waveId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "params[0]; passed to Sound_WaveInfo_ReadHeader as the channel id."
+   },
+   {
+    "offset": 112,
+    "name": "loopMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "params[1]: 0 = play once, 1 = loop for a duration."
+   },
+   {
+    "offset": 116,
+    "name": "loopDuration",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "params[2]: loop length in milliseconds when +0x70 == 1."
+   },
+   {
+    "offset": 120,
+    "name": "maybe_dspParam78",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied into note+0xB4 by UpdateVolumePan."
+   },
+   {
+    "offset": 124,
+    "name": "maybe_dspParam7C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied into note+0xB8."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_dspParam80",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied into note+0xBC."
+   },
+   {
+    "offset": 132,
+    "name": "maybe_dspParam84",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copied into note+0xC0."
+   },
+   {
+    "offset": 136,
+    "name": "waveInfoSampleRate",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Sound_WaveInfo_ReadHeader (0x006605B4) writes the parsed CWAV header at +0x88; its first word is the sample rate (returned in s0) and is multiplied with +0x18 to scale the note volume."
+   },
+   {
+    "offset": 140,
+    "name": "maybe_noteParam8C",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Read as a byte (ldrb [r4,#0x8c]) and passed to func_00547370(note+0x98, ...) in StartWave."
+   },
+   {
+    "offset": 141,
+    "name": "maybe_noteParam8D",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Read as a byte and passed to func_005472F8(note+0x98, ...)."
+   },
+   {
+    "offset": 142,
+    "name": "maybe_noteParam8E",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Read as a byte and stored into note+0xB0."
+   },
+   {
+    "offset": 143,
+    "name": "maybe_noteParam8F",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Read as a byte and passed to func_005472D8(note+0x98, ...)."
+   },
+   {
+    "offset": 144,
+    "name": "maybe_noteParam90",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Read as a byte and passed to func_00547134(note+0x98, ...)."
+   },
+   {
+    "offset": 145,
+    "name": "maybe_panValue",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "0..127 pan: UpdateVolumePan converts it to -1..1 (values below 2 are offset by 0x3F, others by 0x40)."
+   },
+   {
+    "offset": 146,
+    "name": "maybe_volumeValue",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "0..127 volume: UpdateVolumePan scales it by 1/127."
+   },
+   {
+    "offset": 147,
+    "name": "maybe_expressionValue",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Scaled by 1/127 and added to +0x30 in UpdateVolumePan."
+   },
+   {
+    "offset": 148,
+    "name": "maybe_rampStart",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.35,
+    "evidence": "First byte of the two-value ramp that UpdateVolumePan interpolates."
+   },
+   {
+    "offset": 149,
+    "name": "maybe_rampEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Second byte of the two-value ramp."
+   },
+   {
+    "offset": 150,
+    "name": "maybe_pitchValue",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Signed value offset by 0x40 and scaled by 1/64 to form the note pitch."
+   },
+   {
+    "offset": 151,
+    "name": "maybe_priority",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Used as the note priority unless +0x2C overrides it."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_expressionRamp",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Converted to float in UpdateVolumePan."
+   },
+   {
+    "offset": 153,
+    "name": "maybe_param99",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 154,
+    "name": "maybe_param9A",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 156,
+    "name": "note",
+    "type": "Sound_SeqNote*",
+    "size": 4,
+    "confidence": 0.75,
+    "evidence": "The note created by StartWave; UpdateVolumePan writes its mix fields (+0x140..+0x160, +0xB4..+0xC0) and Update waits for it to disappear."
+   },
+   {
+    "offset": 158,
+    "name": "maybe_param9E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 159,
+    "name": "maybe_param9F",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 160,
+    "name": "loadState",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.7,
+    "evidence": "Sound_Player_Update state machine: 1 = waiting for the async file open, 2 = data ready, 3 = playing."
+   },
+   {
+    "offset": 161,
+    "name": "maybe_paramA1",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Cleared in the recovered code; purpose not established."
+   },
+   {
+    "offset": 162,
+    "name": "isDriverLinked",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Set when the player is registered with the driver queue and cleared when it is unregistered (Play, SetParams, Update)."
+   },
+   {
+    "offset": 163,
+    "name": "maybe_muteMode",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Passed to Sound_SeqNote_UpdateChannelMute in UpdateVolumePan."
+   },
+   {
+    "offset": 164,
+    "name": "fileRequest",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Async file request: Update reads its +0x14 state and +0x18 data pointer."
+   },
+   {
+    "offset": 165,
+    "name": "maybe_paramA5",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 166,
+    "name": "maybe_paramA6",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.3,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 168,
+    "name": "waveData",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Loaded wave data: Update reads its +0x14 state, +0x24 voice pool, +0x34, +0x3C voice and +0x40 flag."
+   },
+   {
+    "offset": 172,
+    "name": "maybe_volume0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "First of six volume words copied into the loaded wave data at -0x28 by Update."
+   },
+   {
+    "offset": 176,
+    "name": "maybe_volume1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Second volume word (loaded data -0x24)."
+   },
+   {
+    "offset": 180,
+    "name": "maybe_volume2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Third volume word (loaded data -0x20)."
+   },
+   {
+    "offset": 184,
+    "name": "maybe_volume3",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Fourth volume word (loaded data -0x1C)."
+   },
+   {
+    "offset": 188,
+    "name": "maybe_volume4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Fifth volume word (loaded data -0x18)."
+   },
+   {
+    "offset": 192,
+    "name": "maybe_volume5",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sixth volume word (loaded data -0x14)."
+   },
+   {
+    "offset": 640,
+    "name": "maybe_reserved280",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.2,
+    "evidence": "Zeroed by the constructor; no other access in the recovered corpus."
+   },
+   {
+    "offset": 644,
+    "name": "maybe_reserved284",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.2,
+    "evidence": "Zeroed by the constructor; no other access in the recovered corpus."
+   }
+  ]
+ },
+ {
+  "class": "Sound_Emitter",
+  "type": "SoundEmitter",
+  "summary": "Per-actor sound emitter: holds the actor transform (local, world and listener-space copies), the model node used for 3D positioning, the effect handles for the looping/landing effects and the SE handles for voice, horse, step and loop sounds, plus the enable flag that gates every Play* call.",
+  "size": 836,
+  "base": null,
+  "confidence": 0.6,
+  "evidence": "Vtable 0x00758B34 stored by Sound_Emitter_Dtor (0x001946B8). The class is game-level (0x0036xxxx), not part of the SDK sound library: Sound_Emitter_PlaySe/PlaySeAt/PlayVoice/PlayStepSe/PlayLandSe/UpdateHorseSe all call Sound_PlaySeById through the vtable slot +0xCC, Sound_Emitter_UpdateTransform (0x003669FC) maintains the three transform copies, and Sound_Emitter_UpdateVoices (0x00367C6C) re-applies the volume of the four SE handles. Size 0x344 = highest strong field +0x340 + 4.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.95,
+    "evidence": "Sound_Emitter_Dtor (0x001946B8) stores 0x00758B34 here; slots +0xCC (get SE id for a slot) and +0xD0 (per-frame update) are called from PlaySe/PlayVoice/Update."
+   },
+   {
+    "offset": 40,
+    "name": "maybe_ownerNode",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Its vtable slots +0x54 and +0x88 are called by Sound_Emitter_StopHandleSlot (0x00367240) to stop the attached effect."
+   },
+   {
+    "offset": 68,
+    "name": "maybe_effectSlot",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Zeroed by Sound_Emitter_StopHandleSlot; purpose not established."
+   },
+   {
+    "offset": 96,
+    "name": "maybe_work60",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Sub-object initialised by func_005647F8 in the constructor and in Sound_Emitter_Dtor."
+   },
+   {
+    "offset": 136,
+    "name": "maybe_scale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "First component of the local transform; copied to +0x228 by Sound_Emitter_UpdateTransform (0x003669FC)."
+   },
+   {
+    "offset": 140,
+    "name": "maybe_rotationX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Local rotation quaternion X; copied to +0x22C and used in the quaternion-to-matrix conversion in UpdateTransform."
+   },
+   {
+    "offset": 144,
+    "name": "maybe_rotationY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Local rotation quaternion Y (copied to +0x230)."
+   },
+   {
+    "offset": 148,
+    "name": "maybe_rotationZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Local rotation quaternion Z (copied to +0x234)."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_rotationW",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Local rotation quaternion W (copied to +0x238)."
+   },
+   {
+    "offset": 156,
+    "name": "positionX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Set from position[0] by Sound_Emitter_SetPositionAndDirection (0x003674D4); copied to +0x23C and used as the 3D sound position."
+   },
+   {
+    "offset": 160,
+    "name": "positionY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Set from position[1]; copied to +0x240."
+   },
+   {
+    "offset": 164,
+    "name": "positionZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Set from position[2]; copied to +0x244."
+   },
+   {
+    "offset": 280,
+    "name": "maybe_isTransformDirty",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Sound_Emitter_SetPositionAndDirection sets it to 1 after storing a new position."
+   },
+   {
+    "offset": 368,
+    "name": "maybe_effectId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.4,
+    "evidence": "Set to 0x2B4 by Sound_Emitter_UpdateLoopingEffect (0x00366FF0) when bit 2 of +0x2CC is set."
+   },
+   {
+    "offset": 516,
+    "name": "effectHandle0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Effect handle slot 0: Sound_Emitter_SetEffectSlot (0x00367A80) releases the old handle through Effect_ReleaseHandle and stores the new one; ReleaseEffect/ReleaseEffectSlot release it."
+   },
+   {
+    "offset": 520,
+    "name": "effectHandle1",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Effect handle slot 1 (SetEffectSlot with slot=1); released by Sound_Emitter_Update when the looping effect is disabled."
+   },
+   {
+    "offset": 544,
+    "name": "model",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Model/actor node: Model_GetNodeIdByName(emitter->f_220, \"N_ALL\") and func_00633DCC(emitter->f_220, nodeId, matrix) in PlayStepSe; UpdateTransform only builds the listener transform while it is non-zero."
+   },
+   {
+    "offset": 552,
+    "name": "maybe_worldScale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copy of +0x88 written by Sound_Emitter_UpdateTransform."
+   },
+   {
+    "offset": 556,
+    "name": "maybe_worldRotationX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Copy of +0x8C (world rotation quaternion X)."
+   },
+   {
+    "offset": 560,
+    "name": "maybe_worldRotationY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Copy of +0x90."
+   },
+   {
+    "offset": 564,
+    "name": "maybe_worldRotationZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Copy of +0x94."
+   },
+   {
+    "offset": 568,
+    "name": "maybe_worldRotationW",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Copy of +0x98."
+   },
+   {
+    "offset": 572,
+    "name": "worldPositionX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Copy of +0x9C (world position X)."
+   },
+   {
+    "offset": 576,
+    "name": "worldPositionY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Copy of +0xA0."
+   },
+   {
+    "offset": 580,
+    "name": "worldPositionZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Copy of +0xA4."
+   },
+   {
+    "offset": 588,
+    "name": "maybe_listenerScale",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Copy of +0x228 written by UpdateTransform when the model exists."
+   },
+   {
+    "offset": 592,
+    "name": "maybe_listenerRotationX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "First component of the listener-space quaternion produced by func_00573144(&local_20,&local_30,0x007E7024) in UpdateTransform."
+   },
+   {
+    "offset": 596,
+    "name": "maybe_listenerRotationY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Second component of the listener-space quaternion."
+   },
+   {
+    "offset": 604,
+    "name": "maybe_listenerRotationW",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Fourth component of the listener-space quaternion (the third lives at +0x258, which the batch does not list)."
+   },
+   {
+    "offset": 608,
+    "name": "maybe_listenerPositionX",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copy of +0x23C written by UpdateTransform."
+   },
+   {
+    "offset": 612,
+    "name": "maybe_listenerPositionY",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copy of +0x240."
+   },
+   {
+    "offset": 616,
+    "name": "maybe_listenerPositionZ",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Copy of +0x244."
+   },
+   {
+    "offset": 620,
+    "name": "maybe_transformWork",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Address passed to func_0017D1A0 by Sound_Emitter_Update (0x00367ED4) unless +0x30D is set."
+   },
+   {
+    "offset": 632,
+    "name": "maybe_horseSpeed",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Converted to float by Sound_Emitter_UpdateHorseSe (0x00366CE8); the horse SE plays when it or +0x27C is non-zero."
+   },
+   {
+    "offset": 636,
+    "name": "maybe_horseSpeedAlt",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Second value tested by UpdateHorseSe when +0x278 is zero."
+   },
+   {
+    "offset": 661,
+    "name": "maybe_effectSlotState",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Copied to +0x2C9 by Sound_Emitter_ReleaseEffectSlot (0x00367C10)."
+   },
+   {
+    "offset": 664,
+    "name": "maybe_occlusionParam",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Third argument of Camera_TestOcclusionByIndex in Sound_Emitter_UpdateLoopingEffect."
+   },
+   {
+    "offset": 668,
+    "name": "maybe_occlusionResult",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "In/out argument of Camera_TestOcclusionByIndex in UpdateLoopingEffect."
+   },
+   {
+    "offset": 672,
+    "name": "maybe_occlusionPosition",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Receives the position X after the occlusion test in UpdateLoopingEffect."
+   },
+   {
+    "offset": 713,
+    "name": "maybe_effectSlotStateCopy",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Receives +0x295 in Sound_Emitter_ReleaseEffectSlot."
+   },
+   {
+    "offset": 716,
+    "name": "maybe_effectFlags",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Bit 2 selects effect id 0x2B4 instead of 0x2F7 in UpdateLoopingEffect."
+   },
+   {
+    "offset": 754,
+    "name": "effectId",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.6,
+    "evidence": "Current looping-effect id: PlayLoopingEffect (0x00366EBC) stores the id here and skips the work when it already matches; 0xFFFF means none."
+   },
+   {
+    "offset": 756,
+    "name": "maybe_loopingEffectEnabled",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_Emitter_Update tests its low byte to choose between releasing the effect and calling PlayLoopingEffect."
+   },
+   {
+    "offset": 757,
+    "name": "isSoundEnabled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Every Play* method returns immediately while it is 0; Sound_Emitter_ClearHandles (0x00366930) stores the enabled argument here."
+   },
+   {
+    "offset": 760,
+    "name": "maybe_voiceCountdown",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Set to -1 or 8 by PlayVoice and decremented by UpdateVoices before the next voice SE starts."
+   },
+   {
+    "offset": 764,
+    "name": "voiceHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Voice SE handle: PlayVoice stores the Sound_PlaySeById result here, UpdateVoices re-applies its volume and clears it when the handle is stale."
+   },
+   {
+    "offset": 768,
+    "name": "horseSeHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Horse SE handle: UpdateHorseSe stores the Sound_PlaySeById result here and UpdateVoices re-applies its volume."
+   },
+   {
+    "offset": 772,
+    "name": "stepSeHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Step SE handle: cleared by ClearHandles and UpdateHorseSe, volume re-applied by UpdateVoices."
+   },
+   {
+    "offset": 776,
+    "name": "loopSeHandle",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Loop SE handle: set by UpdateVoices when bit 30 of +0xB3 is set, cleared when the bit is clear."
+   },
+   {
+    "offset": 780,
+    "name": "maybe_loopSeActive",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Bit 30 of +0xB3 is mirrored into its low byte by UpdateVoices."
+   },
+   {
+    "offset": 781,
+    "name": "maybe_skipTransformUpdate",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Sound_Emitter_Update skips func_0017D1A0(&+0x26C) while it is set."
+   },
+   {
+    "offset": 816,
+    "name": "unknown_vtableSlotCC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Not a data field: the evidence is the vtable slot offset *param_1 + 0xCC (0xCC*4 = 0x330) called by PlaySe/PlaySeAt/PlayVoice/UpdateVoices to fetch the SE id for a slot."
+   },
+   {
+    "offset": 832,
+    "name": "unknown_vtableSlotD0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Not a data field: the evidence is the vtable slot offset *param_1 + 0xD0 (0xD0*4 = 0x340) called at the end of Sound_Emitter_Update."
+   }
+  ]
+ },
+ {
+  "class": "Sound_StreamPlayer",
+  "type": "SoundStreamPlayer",
+  "summary": "Stream (BGM/voice) player: owns the archive stream, the stream decoder, the header and decode buffers, the playback state and five fixed-size object pools (streams, channels, requests, tracks, voices) with their free lists, plus the ring buffers that feed the DSP.",
+  "size": 8984,
+  "base": "Sound_Stream_Request",
+  "confidence": 0.5,
+  "evidence": "The batch groups the stream classes: Sound_StreamPlayer_Setup (0x005EA734) allocates the archive stream, decoder, buffers and playback state, Sound_StreamPlayer_Release (0x005EA950) tears them down, Sound_StreamPlayer_Shutdown (0x00546220) destroys the five pools and re-initialises their lists, and Sound_StreamPlayer_Ctor (0x00547E40) initialises the ring buffers at +0x2314 through Sound_Stream_InitBuffers. The three constructors store three different vtables (0x00781B20, 0x00784218, 0x0078182C), so this entry covers more than one concrete class; the base is the batch's Sound_Stream_Request (296 bytes), which covers +0x00..+0x127.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "Three constructors store three different vtables here: Sound_StreamPlayer_AllocateBuffers (0x0054BFF4) stores 0x00781B20, Sound_StreamPlayer_Dtor (0x005EB31C) stores 0x00784218 and Sound_StreamPlayer_Ctor (0x00547E40) stores its owner argument, so the batch merges several closely related stream classes."
+   },
+   {
+    "offset": 4,
+    "name": "archiveStream",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Sound_StreamPlayer_Setup (0x005EA734) stores the Fs_ArchiveStream here; Sound_StreamPlayer_Release (0x005EA950) closes it and calls its vtable slot +4."
+   },
+   {
+    "offset": 8,
+    "name": "decoder",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Setup stores the func_005466AC result here; Release calls Sound_StreamPlayer_Shutdown on it and then its vtable slot +4."
+   },
+   {
+    "offset": 12,
+    "name": "stream",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Setup stores the func_005434E4 result here; Release calls Sound_Stream_QueueTeardown on it and then its vtable slot +4."
+   },
+   {
+    "offset": 16,
+    "name": "headerBuffer",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Setup stores the Mem_AllocAligned header buffer here; Release frees it."
+   },
+   {
+    "offset": 20,
+    "name": "decodeBuffer",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Setup stores the decode/ADPCM work buffer here; Release frees it."
+   },
+   {
+    "offset": 24,
+    "name": "maybe_bufferListCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_StreamPlayer_Shutdown (0x00546220) loops i < f_18 calling Sound_Stream_FreeBufferList(f_1C + i*0x5C)."
+   },
+   {
+    "offset": 28,
+    "name": "maybe_bufferList",
+    "type": "Sound_Stream*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Array of 0x5C-byte buffer-list entries freed by Shutdown; the pointer is cleared afterwards."
+   },
+   {
+    "offset": 32,
+    "name": "maybe_streamPool",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Base of an array of 0x2D8-byte objects; Shutdown destroys each one through its vtable slot +4."
+   },
+   {
+    "offset": 36,
+    "name": "maybe_streamPoolSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Byte size of the stream pool: Shutdown divides it by 0x2D8 to get the element count."
+   },
+   {
+    "offset": 40,
+    "name": "maybe_streamListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_28, f_2C, &f_2C) in Shutdown."
+   },
+   {
+    "offset": 44,
+    "name": "maybe_streamListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0x28."
+   },
+   {
+    "offset": 48,
+    "name": "maybe_field30",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.2,
+    "evidence": "Cleared by the constructor (`puVar2[0xc] = 0`); no other access in this batch."
+   },
+   {
+    "offset": 52,
+    "name": "maybe_freeStreamListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_34, f_38, &f_38) in Sound_StreamPlayer_Shutdown."
+   },
+   {
+    "offset": 56,
+    "name": "maybe_freeStreamListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the free-stream list at +0x34: func_0051CF4C(&f_34, f_38, &f_38) in Sound_StreamPlayer_Shutdown, and cleared by the constructor (`puVar2[0xe] = 0`)."
+   },
+   {
+    "offset": 64,
+    "name": "maybe_driverNode",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Driver deferred-release node: registered with Sound_Driver_AddDeferredRelease and removed with Sound_Driver_RemoveDeferredRelease in Shutdown."
+   },
+   {
+    "offset": 68,
+    "name": "maybe_param44",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 72,
+    "name": "maybe_param48",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.25,
+    "evidence": "Zeroed by the constructor; purpose not established."
+   },
+   {
+    "offset": 76,
+    "name": "maybe_channelPool",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Base of an array of 0x88-byte objects destroyed by func_0054C040 in Shutdown."
+   },
+   {
+    "offset": 80,
+    "name": "maybe_channelPoolSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Byte size of the channel pool: Shutdown divides it by 0x88."
+   },
+   {
+    "offset": 84,
+    "name": "maybe_channelListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_54, f_58, &f_58) in Shutdown."
+   },
+   {
+    "offset": 88,
+    "name": "maybe_channelListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0x54."
+   },
+   {
+    "offset": 104,
+    "name": "maybe_requestCount",
+    "type": "s16",
+    "size": 2,
+    "confidence": 0.35,
+    "evidence": "Positive count tested in the recovered code; purpose not established."
+   },
+   {
+    "offset": 108,
+    "name": "requests",
+    "type": "Sound_Stream_Request*",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Sound_Stream_Request_AllocInit (0x00556EC8) fills it; Shutdown destroys each 0x1E8-byte request through its vtable slot +4."
+   },
+   {
+    "offset": 112,
+    "name": "maybe_requestPoolSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Byte size of the request pool: Shutdown divides it by 0x1E8."
+   },
+   {
+    "offset": 116,
+    "name": "maybe_requestListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_74, f_78, &f_78) in Shutdown."
+   },
+   {
+    "offset": 120,
+    "name": "maybe_requestListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0x74."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_freeRequestListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_80, f_84, &f_84) in Shutdown."
+   },
+   {
+    "offset": 132,
+    "name": "maybe_freeRequestListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0x80."
+   },
+   {
+    "offset": 140,
+    "name": "maybe_driverNode2",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Second driver deferred-release node: added with func_0054DED0 and removed with Sound_Driver_RemoveDeferredRelease in Shutdown."
+   },
+   {
+    "offset": 152,
+    "name": "maybe_trackPool",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Base of an array of 0x4C-byte objects destroyed by func_0054C040 in Shutdown."
+   },
+   {
+    "offset": 156,
+    "name": "maybe_trackPoolSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Byte size of the track pool: Shutdown divides it by 0x4C."
+   },
+   {
+    "offset": 160,
+    "name": "maybe_trackListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_a0, f_a4, &f_a4) in Shutdown."
+   },
+   {
+    "offset": 164,
+    "name": "maybe_trackListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0xA0."
+   },
+   {
+    "offset": 184,
+    "name": "maybe_voicePool",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Base of an array of 0x3298-byte objects destroyed through their vtable slot +4 in Shutdown."
+   },
+   {
+    "offset": 188,
+    "name": "maybe_voicePoolSize",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Byte size of the voice pool: Shutdown divides it by 0x3298."
+   },
+   {
+    "offset": 192,
+    "name": "maybe_voiceListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_c0, f_c4, &f_c4) in Shutdown."
+   },
+   {
+    "offset": 196,
+    "name": "maybe_voiceListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0xC0."
+   },
+   {
+    "offset": 204,
+    "name": "maybe_freeVoiceListHead",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "List head re-initialised by func_0051CF4C(&f_cc, f_d0, &f_d0) in Shutdown."
+   },
+   {
+    "offset": 208,
+    "name": "maybe_freeVoiceListTail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Tail of the list at +0xCC."
+   },
+   {
+    "offset": 216,
+    "name": "maybe_workD8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Initialised by func_005509F4 in the constructor and torn down by the same function in Shutdown."
+   },
+   {
+    "offset": 240,
+    "name": "maybe_paramF0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Zeroed by Shutdown; purpose not established."
+   },
+   {
+    "offset": 244,
+    "name": "maybe_listF4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "First argument of func_00556BFC(&f_f4, f_104, f_108) in the constructor and in Shutdown."
+   },
+   {
+    "offset": 260,
+    "name": "maybe_listF4Head",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Second argument of func_00556BFC; cleared by Shutdown."
+   },
+   {
+    "offset": 264,
+    "name": "maybe_listF4Tail",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Third argument of func_00556BFC; cleared by Shutdown."
+   },
+   {
+    "offset": 8980,
+    "name": "ringBuffers",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Sound_Stream_InitBuffers(&f_2314) initialises the stream ring buffer (32 x 0x58-byte entries) from Sound_StreamPlayer_Ctor."
+   }
+  ]
+ },
+ {
+  "class": "Sound_System",
+  "type": "SoundSystem",
+  "summary": "Game-level sound manager object (0x1AB0 bytes) that owns the BGM track array, the voice, the effect list and the stream and is torn down by Sound_System_Teardown (0x001EE09C); the batch also merges the constructor at 0x00550808, which stores a SoundStream vtable, so the low offsets are ambiguous.",
+  "size": 6832,
+  "base": null,
+  "confidence": 0.35,
+  "evidence": "Sound_System_Teardown (0x001EE09C) releases the 0x14-byte track array at +0x7C, the voice at +0x78 and the effect list at +0x1A9C, then calls Sound_System_Shutdown (0x00542580); the constructor at 0x00550808 stores vtable 0x00781BD0, whose slots 16/21 are Sound_Stream_DispatchDma (0x005517D0) and Sound_Stream_SubmitDmaCommand (0x005518F4), so the two functions may describe different objects. Size is max_strong_field+width, not an allocation.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "vtable",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.9,
+    "evidence": "The constructor at 0x00550808 stores 0x00781BD0 here; that vtable's slots 16 and 21 are Sound_Stream_DispatchDma (0x005517D0) and Sound_Stream_SubmitDmaCommand (0x005518F4)."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_lightEvent",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Os_LightEvent_Init(self+4, 1) initialises the 8-byte nn::os::LightEvent here: the state word at +0x04 is set to -2 (0xFFFFFFFE, CLEARED_STICKY manual reset) and the LightLock gate at +0x08 to 1; Os_MutexLock(self+4) then waits on it. Sound_System_Teardown gates on bit 0 of this word, which is 0 while the state is -2 and 1 once the event has been signalled."
+   },
+   {
+    "offset": 8,
+    "name": "maybe_lightEventGate",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "LightLock gate word of the 8-byte LightEvent at +0x04 (Os_LightEvent_Init doc: struct {s32 state, LightLock gate}); the constructor sets it to 1 through func_00117C40 (LightLock::Initialize), not to 0."
+   },
+   {
+    "offset": 13,
+    "name": "maybe_flag0D",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; no reader in this batch, purpose not established."
+   },
+   {
+    "offset": 14,
+    "name": "maybe_flag0E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; no reader in this batch, purpose not established."
+   },
+   {
+    "offset": 15,
+    "name": "maybe_flag0F",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; no reader in this batch, purpose not established."
+   },
+   {
+    "offset": 20,
+    "name": "maybe_streamBuffer",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Conflict: the constructor at 0x00550808 stores 1.0f (0x3F800000) here, while Sound_System_Teardown (0x001EE09C) frees it with func_0010F69C and clears it - the two functions probably describe different objects."
+   },
+   {
+    "offset": 24,
+    "name": "maybe_subObject",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_System_Teardown destroys it through its vtable slot +4 and clears the pointer."
+   },
+   {
+    "offset": 28,
+    "name": "unknown_field1C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 32,
+    "name": "unknown_field20",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 36,
+    "name": "unknown_field24",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 40,
+    "name": "unknown_field28",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 44,
+    "name": "maybe_maxLevel",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Constructor initialises it to 0xFF (maximum); no reader in this batch."
+   },
+   {
+    "offset": 46,
+    "name": "maybe_flag2E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; purpose not established."
+   },
+   {
+    "offset": 48,
+    "name": "unknown_field30",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 52,
+    "name": "maybe_flag34",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; purpose not established."
+   },
+   {
+    "offset": 53,
+    "name": "maybe_flag35",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.2,
+    "evidence": "Byte cleared by the constructor; purpose not established."
+   },
+   {
+    "offset": 56,
+    "name": "unknown_field38",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 60,
+    "name": "unknown_field3C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by the constructor; no reader in this batch."
+   },
+   {
+    "offset": 120,
+    "name": "maybe_voice",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_System_Teardown destroys it through its vtable slot +4 and clears the pointer."
+   },
+   {
+    "offset": 124,
+    "name": "trackArray",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Sound_System_Teardown walks it as an array of 0x14-byte entries and releases each with func_0011AE20."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_trackCapacity",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Cleared by Sound_System_Teardown next to the track array at +0x7C; the release loop uses +0x84 as its bound."
+   },
+   {
+    "offset": 132,
+    "name": "maybe_trackCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Loop bound when Sound_System_Teardown releases the 0x14-byte entries at +0x7C."
+   },
+   {
+    "offset": 136,
+    "name": "unknown_field88",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 140,
+    "name": "unknown_field8C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 144,
+    "name": "unknown_field90",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 148,
+    "name": "unknown_field94",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 152,
+    "name": "unknown_field98",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 156,
+    "name": "unknown_field9C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 160,
+    "name": "unknown_fieldA0",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 164,
+    "name": "unknown_fieldA4",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 168,
+    "name": "unknown_fieldA8",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 172,
+    "name": "unknown_fieldAC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   },
+   {
+    "offset": 6812,
+    "name": "maybe_effectList",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Sound_System_Teardown destroys it through its vtable slot +4 and clears the pointer."
+   },
+   {
+    "offset": 6816,
+    "name": "maybe_effectArray",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Pointer walked up to the count at +0x1AA8 by Sound_System_Teardown."
+   },
+   {
+    "offset": 6820,
+    "name": "maybe_effectCapacity",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Cleared by Sound_System_Teardown next to the array at +0x1AA0; the walk uses +0x1AA8 as its bound."
+   },
+   {
+    "offset": 6824,
+    "name": "maybe_effectCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Loop bound for the array at +0x1AA0 in Sound_System_Teardown."
+   },
+   {
+    "offset": 6828,
+    "name": "unknown_field1AAC",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_System_Teardown; no reader in this batch."
+   }
+  ]
+ },
+ {
+  "class": "Sound_Channel",
+  "type": "SoundChannel",
+  "summary": "Bucket class: the batch groups every Sound_Channel_* function, which operate on four different objects - the 24-slot channel pool (mask/head/tail/count/monitor at 0x00..0x10), the per-slot channel node (DSP index, stream id, buffer queue, monitors, wave buffer), the DSP unit manager (per-unit decode hooks at 0x14+sub*4, active flags at 0x30+sub, mixer states at 0x34+sub*8, monitors at 0x34/0x44) and the wave definition read by Sound_Channel_SetupWaveParams (data at 0x00, size at 0x08, format at 0x0D). Field names follow the channel-node reading where the evidence allows.",
+  "size": 212,
+  "base": "Sound_WaveBuffer",
+  "confidence": 0.3,
+  "evidence": "Sound_Channel_InitSlot (0x00518860) initialises the node (state byte +4, monitor +0x1C, buffer list +0x30, wave buffer +0x68); Sound_Channel_Allocate (0x00516F1C) instead treats param_1 as a pool (24-bit mask at +0, head +4, tail +8, count +0xC, monitor +0x10) and Sound_Channel_SetActive/MixBuffers (0x005185E4/0x005174F8) as a DSP unit manager (monitors +0x34/+0x44, per-unit hooks +0x14+sub*4). Size 212 is max_strong_field+width and comes from the phantom 0xD0 offset, not from an allocation.",
+  "fields": [
+   {
+    "offset": 0,
+    "name": "maybe_dspChannelIndex",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Sound_Channel_Refill passes `*self & 0xff` as the DSP channel number to Sound_DspChannel_Pause/SetupSample/SetWaveBuffer; the channel-pool functions in this batch (Sound_Channel_Allocate/Free/ReleaseSlot) use the same word as a 24-bit slot-allocation mask, and Sound_Channel_SetupWaveParams uses it as the wave data pointer."
+   },
+   {
+    "offset": 4,
+    "name": "maybe_streamId",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Sound_Channel_ApplyCommand compares `*(u16*)(self+4)` with the packet stream id; Sound_Channel_FlushBuffers increments it. The pool functions use the same word as the list head."
+   },
+   {
+    "offset": 8,
+    "name": "maybe_streamWord",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Sound_Channel_ApplyCommand stores the byte-swapped packet word here. The pool functions use it as the list tail and Sound_Channel_SetupWaveParams as the wave data size."
+   },
+   {
+    "offset": 12,
+    "name": "maybe_isRunning",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Sound_Channel_ApplyCommand sets `self->f_c = (*packet & 0xff) == 1`; the pool functions use the same word as a s16 slot count."
+   },
+   {
+    "offset": 13,
+    "name": "maybe_state",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Compared with -1, assigned from a parameter and gated by `< 2` in the Sound_Channel_SetWaveBuffer*/ApplyMasked* family; Sound_Channel_SetupWaveParams reads it as the wave format."
+   },
+   {
+    "offset": 14,
+    "name": "maybe_flag0E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.25,
+    "evidence": "Byte flag set from a parameter and tested for 0/1; purpose not established."
+   },
+   {
+    "offset": 15,
+    "name": "maybe_flag0F",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.25,
+    "evidence": "Copied from `*(u8*)(DAT_xxx + 0x1d)` (a global sound setting) by the Sound_Channel_SetWaveBuffer*/ApplyMasked* family."
+   },
+   {
+    "offset": 16,
+    "name": "maybe_poolMonitor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Os_UnlockMonitor(param_1 + 0x10) in the channel-pool functions (Sound_Channel_Allocate locks pool+4 = +0x10); 12-byte monitor."
+   },
+   {
+    "offset": 24,
+    "name": "unknown_field18",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Sound_Channel_InitSlot stores 0x7FD8 here; no reader in this batch."
+   },
+   {
+    "offset": 28,
+    "name": "maybe_bufferMonitor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.35,
+    "evidence": "Os_UnlockMonitor(&self->f_1c) in Sound_Channel_Refill; Sound_Channel_InitSlot stores 1.0f here, so the two functions may describe different objects."
+   },
+   {
+    "offset": 30,
+    "name": "waveFormat",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.6,
+    "evidence": "`(*(u16*)(self+0x1e) & 0xf) >> 2 == 2` selects the ADPCM branch in Sound_Channel_Refill and the value is passed to Sound_DspChannel_SetupSample."
+   },
+   {
+    "offset": 32,
+    "name": "maybe_monitorOwner",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Second word of the 12-byte monitor at +0x1C (Os_LockMonitor records the owning thread at monitor+4); cleared by Sound_Channel_InitSlot."
+   },
+   {
+    "offset": 36,
+    "name": "maybe_monitorRecursion",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Third word of the 12-byte monitor at +0x1C (Os_LockMonitor increments monitor+8); cleared by Sound_Channel_InitSlot."
+   },
+   {
+    "offset": 40,
+    "name": "unknown_field28",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 44,
+    "name": "unknown_field2C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 48,
+    "name": "bufferListHead",
+    "type": "void*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Head of the queued wave-buffer list: Sound_Channel_Refill/ApplyCommand/FlushBuffers walk it, each buffer has state at +0x11, id at +0x12 and next at +0x14."
+   },
+   {
+    "offset": 52,
+    "name": "bufferCount",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "`(short)self[0xd]`: number of queued buffers, decremented as they are consumed and used as the loop bound in Sound_Channel_Refill/ApplyCommand."
+   },
+   {
+    "offset": 54,
+    "name": "waveBufferSlot",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.55,
+    "evidence": "Rotating 0..3 slot index passed to Sound_DspChannel_SetWaveBuffer and reset to 0 in Sound_Channel_Refill."
+   },
+   {
+    "offset": 56,
+    "name": "maybe_volume",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Sound_Channel_InitSlot stores 1.0f here; no reader in this batch."
+   },
+   {
+    "offset": 60,
+    "name": "unknown_field3C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 64,
+    "name": "unknown_field40",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 68,
+    "name": "maybe_mixerMonitor",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Os_LockMonitor(self + 0x44) in Sound_Channel_MixBuffers/ReleaseBuffers; the same word is cleared by Sound_Channel_InitSlot."
+   },
+   {
+    "offset": 72,
+    "name": "unknown_field48",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 76,
+    "name": "unknown_field4C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 80,
+    "name": "unknown_field50",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 84,
+    "name": "unknown_field54",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 88,
+    "name": "unknown_field58",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 92,
+    "name": "unknown_field5C",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 96,
+    "name": "unknown_field60",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Cleared by Sound_Channel_InitSlot; no reader in this batch."
+   },
+   {
+    "offset": 104,
+    "name": "maybe_volume2",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Sound_Channel_InitSlot stores 1.0f here; no reader in this batch."
+   },
+   {
+    "offset": 108,
+    "name": "waveBuffer",
+    "type": "Sound_WaveBuffer*",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Sound_Channel_InitSlot calls Sound_WaveBuffer_Reset(node->f_68) and Sound_Channel_SetState calls Sound_Channel_FlushBuffers(self->f_68)."
+   },
+   {
+    "offset": 110,
+    "name": "flags",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Sound_Channel_FlushBuffers sets bit 0x8000 (`self->f_6c |= 0x8000`) as a lock-out flag."
+   },
+   {
+    "offset": 111,
+    "name": "maybe_flag6E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Set to 1 in Sound_Channel_Refill when the ADPCM branch has a buffer; purpose not established."
+   },
+   {
+    "offset": 112,
+    "name": "maybe_queueMonitor",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Sound_Channel_Refill tests it, pauses the DSP channel and clears it; set elsewhere as a deferred-pause request."
+   },
+   {
+    "offset": 208,
+    "name": "unknown_monitorAlias",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.0,
+    "evidence": "Batch artefact: the evidence lines are `FUN_00117E50(param_1 + 0x34)` / `FUN_00117ed0(param_1 + 0x34)` with param_1 an int, i.e. byte 0x34, not 0xD0; no function touches 0xD0."
+   }
+  ]
+ },
+ {
+  "class": "Sound_SeqNote",
+  "type": "SoundSeqNote",
+  "summary": "One playing sequencer note: owns a Sound_Voice, a four-entry 0x20-byte envelope array at +0xB4, the volume/fade ramp and a completion callback; filled from a note record by Sound_SeqNote_SetupVoices and driven per frame by Sound_SeqNote_Update.",
+  "size": 428,
+  "base": "Sound_Voice",
+  "confidence": 0.55,
+  "evidence": "Sound_SeqNote_SetupVoices (0x00555EE4) copies the record timing/scale into +0x78..+0x84 and installs per-voice buffers; Sound_SeqNote_Start (0x005561BC) resets the four 0x20-byte envelopes at +0xB4, sets +0x139 and calls Sound_Voice_SetupStreams(note->f_1a8); Sound_SeqNote_Update (0x0055624C) interpolates the volume ramp at +0x180..+0x18C and the fade at +0x164..+0x170; Sound_SeqNote_Release (0x0055614C) stops the voice and invokes the callback at +0x1A0. Size 428 is max_strong_field+width (+0x1A8 + 4).",
+  "fields": [
+   {
+    "offset": 12,
+    "name": "maybe_ownerNote",
+    "type": "Sound_SeqNote*",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqNote_FindNoteInRange reads `note->f_c->f_1a8` (voice), `f_1a0` (callback) and `f_1a4`, and walks a 0x30-byte sub-note record array at the pointed-to object; the field is probably inherited from the Sound_Voice base."
+   },
+   {
+    "offset": 120,
+    "name": "sampleCount",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Sound_SeqNote_SetupVoices stores its sampleCount argument here (`self->f_78 = sampleCount`)."
+   },
+   {
+    "offset": 124,
+    "name": "maybe_recordLength",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqNote_SetupVoices stores the converted note-record length `rec->f_c` here; the per-voice buffer length is `rec->f_10 - self->f_7c`."
+   },
+   {
+    "offset": 128,
+    "name": "maybe_recordValue80",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.3,
+    "evidence": "Sound_SeqNote_SetupVoices copies `rec->f_14` from the note record here; no other reader in this batch."
+   },
+   {
+    "offset": 132,
+    "name": "maybe_dualVoiceFlag",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Sound_SeqNote_SetupVoices copies record byte 1 here; when that byte is non-zero it also installs a second buffer per voice."
+   },
+   {
+    "offset": 152,
+    "name": "state",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Note state machine: func_005471AC(&note->f_98) initialises it in Sound_SeqNote_Start, func_005471C8(&note->f_98, 5) advances it, and value 4 means finished in Sound_SeqNote_MarkFinished/Update."
+   },
+   {
+    "offset": 312,
+    "name": "maybe_isHeld",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "Sound_SeqNote_Update forces `force = 0` when it is set; cleared by Sound_SeqNote_MarkFinished and Sound_SeqNote_Release."
+   },
+   {
+    "offset": 313,
+    "name": "isPlaying",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.6,
+    "evidence": "Set to 1 by Sound_SeqNote_Start, cleared by Sound_SeqNote_Release/Update, and gates the whole per-frame Sound_SeqNote_Update."
+   },
+   {
+    "offset": 314,
+    "name": "maybe_isPooled",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "When set, Sound_SeqNote_Release/Update recycle the note into the voice pool (Sound_Voice_RecycleToPool) and clear the flag."
+   },
+   {
+    "offset": 315,
+    "name": "maybe_isFadeOnForce",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.35,
+    "evidence": "When set, a forced Sound_SeqNote_Update advances the fade counter at +0x16C by 5."
+   },
+   {
+    "offset": 316,
+    "name": "maybe_isPaused",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Sound_SeqNote_MarkFinished only calls Sound_Voice_SetPauseMode when this byte is 0."
+   },
+   {
+    "offset": 317,
+    "name": "maybe_flag13D",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.25,
+    "evidence": "Tested for 0 in the note update path; purpose not established."
+   },
+   {
+    "offset": 318,
+    "name": "maybe_voiceParam13E",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.3,
+    "evidence": "Passed to func_0054CC94(voice, note->f_13e) in Sound_SeqNote_Update as a per-voice parameter."
+   },
+   {
+    "offset": 356,
+    "name": "maybe_volumeOffset",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Added to the computed note volume in Sound_SeqNote_Update (`fVar6 = fVar7 + note->f_164`)."
+   },
+   {
+    "offset": 360,
+    "name": "maybe_fadeStep",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Fade multiplier in Sound_SeqNote_Update: `(fVar6 * note->f_168) / fVar7`; compared with 0.0 to decide whether a fade is active."
+   },
+   {
+    "offset": 364,
+    "name": "fadeCounter",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Fade progress: reset to 0 by Sound_SeqNote_Start, advanced by 5 on a forced update and compared with the fade length at +0x170."
+   },
+   {
+    "offset": 368,
+    "name": "fadeLength",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.5,
+    "evidence": "Fade target compared with the counter at +0x16C in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 384,
+    "name": "maybe_volumeStart",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "Start value of the volume ramp interpolated in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 385,
+    "name": "maybe_volumeEnd",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.45,
+    "evidence": "End value of the volume ramp interpolated in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 386,
+    "name": "maybe_volumeRampLength",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.45,
+    "evidence": "Ramp length: Sound_SeqNote_Update increments the position at +0x184 while it is below this value."
+   },
+   {
+    "offset": 388,
+    "name": "volumeRampPosition",
+    "type": "u16",
+    "size": 2,
+    "confidence": 0.5,
+    "evidence": "Ramp position incremented each frame up to the length at +0x182 in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 392,
+    "name": "maybe_lastVolume",
+    "type": "f32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Cached volume: Sound_SeqNote_Update recomputes the volume and only pushes it when it differs from this value."
+   },
+   {
+    "offset": 396,
+    "name": "maybe_lastVolumeFixed",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.45,
+    "evidence": "Fixed-point copy of the cached volume (`(int)(volume * 0x43800000)`), stored next to +0x188."
+   },
+   {
+    "offset": 404,
+    "name": "maybe_volumeBase",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "`(u32)note->f_194 - (u32)note->f_195` is added to the note volume in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 405,
+    "name": "maybe_volumeAttenuation",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.4,
+    "evidence": "Subtracted from the base value at +0x194 when computing the note volume in Sound_SeqNote_Update."
+   },
+   {
+    "offset": 407,
+    "name": "muteMask",
+    "type": "u8",
+    "size": 1,
+    "confidence": 0.5,
+    "evidence": "Passed to Sound_Voice_SetStreamMute(voice, note->f_197) by Sound_SeqNote_Start."
+   },
+   {
+    "offset": 416,
+    "name": "completionCallback",
+    "type": "void (*)(void)",
+    "size": 4,
+    "confidence": 0.6,
+    "evidence": "Called as `(*note->f_1a0)(note, reason, note->f_1a4)` with reason 0 on release and 3 on a range hit in Sound_SeqNote_FindNoteInRange."
+   },
+   {
+    "offset": 420,
+    "name": "callbackArg",
+    "type": "u32",
+    "size": 4,
+    "confidence": 0.55,
+    "evidence": "Third argument passed to the completion callback at +0x1A0."
+   },
+   {
+    "offset": 424,
+    "name": "voice",
+    "type": "Sound_Voice*",
+    "size": 4,
+    "confidence": 0.65,
+    "evidence": "The note's voice: Sound_Voice_Stop, Sound_Voice_StopStreams, Sound_Voice_SetStreamMute, Sound_Voice_SetPauseMode and Sound_Voice_RecycleToPool all take it; cleared on release."
+   }
+  ]
+ }
+]

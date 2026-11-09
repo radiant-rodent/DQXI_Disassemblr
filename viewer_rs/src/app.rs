@@ -151,7 +151,7 @@ impl Data {
 // ---------------------------------------------------------------------------
 // sections
 // ---------------------------------------------------------------------------
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Section {
     Overview,
     Search,
@@ -165,9 +165,10 @@ pub enum Section {
     Dialogues,
     Maps,
     Editor,
+    Playtest,
 }
 
-pub const SECTIONS: [Section; 12] = [
+pub const SECTIONS: [Section; 13] = [
     Section::Overview,
     Section::Search,
     Section::Textures,
@@ -180,9 +181,52 @@ pub const SECTIONS: [Section; 12] = [
     Section::Dialogues,
     Section::Maps,
     Section::Editor,
+    Section::Playtest,
 ];
 
+/// Godot-style top-level workspaces; each groups the sections that belong together.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Workspace {
+    Home,
+    World,
+    Assets,
+    Data,
+    Play,
+}
+
+pub const WORKSPACES: [Workspace; 5] = [Workspace::Home, Workspace::World, Workspace::Assets, Workspace::Data, Workspace::Play];
+
+impl Workspace {
+    pub fn title(self) -> &'static str {
+        match self {
+            Workspace::Home => "Home",
+            Workspace::World => "World",
+            Workspace::Assets => "Assets",
+            Workspace::Data => "Data",
+            Workspace::Play => "Play",
+        }
+    }
+
+    pub fn sections(self) -> &'static [Section] {
+        match self {
+            Workspace::Home => &[Section::Overview, Section::Search],
+            Workspace::World => &[Section::Editor, Section::Maps],
+            Workspace::Assets => &[Section::Models, Section::Textures, Section::Layouts, Section::Audio],
+            Workspace::Data => &[Section::Tables, Section::Dialogues, Section::Scripts, Section::Code],
+            Workspace::Play => &[Section::Playtest],
+        }
+    }
+}
+
 impl Section {
+    pub fn workspace(self) -> Workspace {
+        WORKSPACES
+            .iter()
+            .copied()
+            .find(|w| w.sections().contains(&self))
+            .unwrap_or(Workspace::Home)
+    }
+
     pub fn title(self) -> &'static str {
         match self {
             Section::Overview => "Overview",
@@ -197,6 +241,7 @@ impl Section {
             Section::Dialogues => "Dialogues",
             Section::Maps => "Maps",
             Section::Editor => "Level Editor",
+            Section::Playtest => "Export & Play",
         }
     }
 
@@ -286,6 +331,16 @@ impl Section {
                 painter.add(line(&[(1.5, -3.5), (3.5, -1.5)]));
                 let _ = vec2(0.0, 0.0);
             }
+            Section::Playtest => {
+                // triangle + launch arrow: export and boot
+                painter.add(egui::Shape::convex_polygon(
+                    vec![pos2(c.x - 6.0, c.y - 6.5), pos2(c.x - 6.0, c.y + 1.0), pos2(c.x - 0.5, c.y - 2.8)],
+                    color,
+                    Stroke::NONE,
+                ));
+                painter.add(line(&[(0.5, 2.5), (6.0, 2.5)]));
+                painter.add(line(&[(3.5, 0.0), (6.0, 2.5), (3.5, 5.0)]));
+            }
         }
     }
 }
@@ -299,6 +354,8 @@ pub struct ViewerApp {
     pub thumbs: ImageCache,
     pub preview: ImageCache,
     pub layout_tex: ImageCache,
+    /// Game font glyph sheets (full size: glyphs are a few pixels each).
+    pub font_tex: ImageCache,
     pub data: Option<Box<Data>>,
     pub boot_rx: Receiver<BootMsg>,
     pub boot_step: (usize, &'static str),
@@ -310,6 +367,14 @@ pub struct ViewerApp {
     pub renderer: Arc<Mutex<GlRenderer>>,
     pub renderer_error: Option<String>,
     pub focus_search: bool,
+    pub tour: crate::ui::tour::Tour,
+    pub shell: crate::ui::shell::Shell,
+    /// resources opened since the shell last looked (it turns them into document tabs)
+    pub opened: Vec<crate::ui::shell::Target>,
+    /// the unsaved-changes dialog is up (window close was requested)
+    pub quit_prompt: bool,
+    /// the user confirmed leaving; the next close request goes through
+    pub quit_ok: bool,
 }
 
 impl ViewerApp {
@@ -337,6 +402,7 @@ impl ViewerApp {
             "dialogues" => Section::Dialogues,
             "maps" => Section::Maps,
             "editor" => Section::Editor,
+            "playtest" => Section::Playtest,
             _ => Section::Overview,
         };
         let start_query = std::env::var("DQXI_START_QUERY").unwrap_or_default();
@@ -353,6 +419,7 @@ impl ViewerApp {
                 Section::Dialogues => panels.dialogues.request(&start_query, None),
                 Section::Maps => panels.maps.request(&start_query),
                 Section::Editor => {}
+                Section::Playtest => {}
                 _ => panels.search.request(&start_query),
             }
         }
@@ -360,6 +427,7 @@ impl ViewerApp {
             thumbs,
             preview: ImageCache::new(None, 8, None),
             layout_tex: ImageCache::new(Some(512), 240, None),
+            font_tex: ImageCache::new(None, 8, None),
             dirs,
             pool: Pool::new(6),
             data,
@@ -373,6 +441,13 @@ impl ViewerApp {
             renderer: Arc::new(Mutex::new(renderer)),
             renderer_error: None,
             focus_search: section == Section::Overview,
+            shell: Default::default(),
+            opened: Vec::new(),
+            quit_prompt: false,
+            quit_ok: false,
+            tour: crate::ui::tour::Tour {
+                step: std::env::var("DQXI_TOUR").ok().filter(|v| v == "1").map(|_| 0),
+            },
         }
     }
 
@@ -516,87 +591,36 @@ impl ViewerApp {
         self.section = Section::Search;
     }
 
-    // -- rendering -------------------------------------------------------
-    fn header(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label(
-                    egui::RichText::new("DQXI Explorer & Editor")
-                        .color(theme::ACCENT)
-                        .size(16.0)
-                        .strong(),
-                );
-                ui.label(theme::faint_label("Dragon Quest XI (3DS) \u{b7} project browser and level editor"));
-            });
-            ui.add_space(14.0);
-            let entry = ui.add(
-                egui::TextEdit::singleline(&mut self.search_text)
-                    .hint_text("Search everything\u{2026}  (Ctrl+F)")
-                    .desired_width(f32::INFINITY),
-            );
-            if self.focus_search {
-                entry.request_focus();
-                self.focus_search = false;
-            }
-            if entry.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                let query = self.search_text.clone();
-                self.open_search(&query);
-            }
-            if ui.button("Search").clicked() {
-                let query = self.search_text.clone();
-                self.open_search(&query);
-            }
-            if ui.button("Project folder").clicked() {
-                let _ = std::process::Command::new("explorer")
-                    .arg(&self.dirs.root)
-                    .spawn();
-            }
-        });
+    // -- shell helpers -----------------------------------------------------
+    pub fn boot_label_pub(&mut self) -> String {
+        self.boot_label()
     }
 
-    fn sidebar(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(6.0);
-        ui.label(
-            egui::RichText::new("DQXI")
-                .color(theme::ACCENT)
-                .size(22.0)
-                .strong(),
-        );
-        ui.label(theme::faint_label("Dragon Quest XI \u{b7} 3DS"));
-        ui.separator();
-        ui.add_space(4.0);
-        for section in SECTIONS {
-            let selected = section == self.section;
-            // room on the left for the painted icon
-            let text = format!("        {}", section.title());
-            let label = if selected {
-                egui::RichText::new(text).color(theme::ACCENT).strong()
-            } else {
-                egui::RichText::new(text).color(theme::TEXT_DIM)
-            };
-            let button = egui::Button::new(label)
-                .fill(if selected { theme::BG_SELECT } else { theme::BG_PANEL })
-                .min_size(egui::vec2(ui.available_width(), 26.0));
-            let response = ui.add(button);
-            let color = if selected { theme::ACCENT } else { theme::TEXT_DIM };
-            section.paint_icon(ui.painter(), egui::pos2(response.rect.left() + 18.0, response.rect.center().y), color);
-            if response.clicked() {
-                self.go(section);
-            }
-        }
-        ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-            ui.add_space(6.0);
-            ui.label(theme::faint_label(self.boot_label()));
-            let progress = self.boot_step.0.min(BOOT_STEPS) as f32 / BOOT_STEPS as f32;
-            ui.add(egui::ProgressBar::new(progress).desired_height(4.0));
-            ui.separator();
-        });
+    pub fn boot_progress(&self) -> f32 {
+        self.boot_step.0.min(BOOT_STEPS) as f32 / BOOT_STEPS as f32
     }
 
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
+    /// Next / previous section in workspace order (Ctrl+Tab).
+    pub fn cycle_section(&mut self, forward: bool) {
+        let all: Vec<Section> = WORKSPACES.iter().flat_map(|w| w.sections().iter().copied()).collect();
+        let at = all.iter().position(|s| *s == self.section).unwrap_or(0);
+        let to = if forward { (at + 1) % all.len() } else { (at + all.len() - 1) % all.len() };
+        self.go(all[to]);
+    }
+
+    pub fn status_bar_ui(&mut self, ui: &mut egui::Ui, shell: &mut crate::ui::shell::Shell) {
         ui.horizontal(|ui| {
             ui.label(theme::dim_label(self.status.clone()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let unsaved = self.unsaved();
+                if !unsaved.is_empty() {
+                    ui.label(egui::RichText::new(format!("\u{25cf} {} unsaved", unsaved.len())).color(theme::ACCENT).size(12.0))
+                        .on_hover_text(unsaved.join("\n"));
+                }
+                let output = if shell.show_output { "Output \u{25be}" } else { "Output \u{25b4}" };
+                if ui.add(egui::Button::new(theme::faint_label(output)).frame(false)).on_hover_text("Ctrl+J").clicked() {
+                    shell.show_output = !shell.show_output;
+                }
                 let right = if self.section == Section::Search {
                     self.panels.search.summary()
                 } else if self.data.is_some() {
@@ -610,6 +634,9 @@ impl ViewerApp {
     }
 
     fn section_detail(&mut self) -> String {
+        if self.section == Section::Playtest {
+            return self.panels.playtest.summary();
+        }
         if self.section == Section::Editor {
             return format!("{} decoded maps", human_count(self.panels.editor.map_count()));
         }
@@ -651,8 +678,48 @@ impl eframe::App for ViewerApp {
         if !self.booted() && self.boot_error.is_none() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
-        if self.thumbs.poll(&ctx) | self.preview.poll(&ctx) | self.layout_tex.poll(&ctx) {
+        if self.thumbs.poll(&ctx) | self.preview.poll(&ctx) | self.layout_tex.poll(&ctx) | self.font_tex.poll(&ctx) {
             // new images arrived; a repaint is already queued
+        }
+
+        // closing the window with edits that are not on disk asks first
+        if ctx.input(|i| i.viewport().close_requested()) && !self.quit_ok {
+            let unsaved = self.unsaved();
+            if !unsaved.is_empty() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.quit_prompt = true;
+            }
+        }
+        if self.quit_prompt {
+            let unsaved = self.unsaved();
+            egui::Window::new("Unsaved changes")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(&ctx, |ui| {
+                    ui.label("These edits are not saved:");
+                    for line in unsaved.iter().take(8) {
+                        ui.label(theme::faint_label(line.clone()));
+                    }
+                    if unsaved.len() > 8 {
+                        ui.label(theme::faint_label(format!("... and {} more", unsaved.len() - 8)));
+                    }
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Save all and quit").clicked() {
+                            self.save_all();
+                            self.quit_ok = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                        if ui.button("Quit without saving").clicked() {
+                            self.quit_ok = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.quit_prompt = false;
+                        }
+                    });
+                });
         }
 
         // shortcuts
@@ -661,6 +728,18 @@ impl eframe::App for ViewerApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.panels.refresh(self.section);
+        }
+        {
+            let (next, prev) = ctx.input(|i| {
+                let ctrl = i.modifiers.command;
+                (
+                    ctrl && !i.modifiers.shift && (i.key_pressed(egui::Key::Tab) || i.key_pressed(egui::Key::PageDown)),
+                    ctrl && (i.key_pressed(egui::Key::PageUp) || (i.modifiers.shift && i.key_pressed(egui::Key::Tab))),
+                )
+            });
+            if next || prev {
+                self.cycle_section(next);
+            }
         }
         for (index, section) in SECTIONS.iter().enumerate() {
             let key = match index {
@@ -680,22 +759,14 @@ impl eframe::App for ViewerApp {
             }
         }
 
-        egui::Panel::top("header")
-            .frame(egui::Frame::new().fill(theme::BG_RAISED).inner_margin(egui::Margin::symmetric(12, 8)))
-            .show(ui, |ui| self.header(ui));
-        egui::Panel::bottom("status")
-            .frame(egui::Frame::new().fill(theme::BG_RAISED).inner_margin(egui::Margin::symmetric(12, 4)))
-            .show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("sidebar")
-            .exact_size(212.0)
-            .frame(egui::Frame::new().fill(theme::BG_PANEL).inner_margin(egui::Margin::symmetric(10, 6)))
-            .show(ui, |ui| self.sidebar(ui));
+        crate::ui::shell::show(self, ui);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin::same(8)))
             .show(ui, |ui| {
                 self.central(ui);
             });
+        self.tour.show(&ctx, &mut self.section);
 
         if let Some(renderer) = self.renderer.lock().ok().and_then(|r| r.error.clone()) {
             self.renderer_error = Some(renderer);
@@ -721,6 +792,7 @@ impl ViewerApp {
             Section::Dialogues => panels::dialogues::show(self, ui),
             Section::Maps => panels::maps::show(self, ui),
             Section::Editor => panels::editor::show(self, ui),
+            Section::Playtest => panels::playtest::show(self, ui),
         }
     }
 }
@@ -732,6 +804,37 @@ pub fn paint_mesh_viewport(
     camera: &crate::render::camera::Camera,
     opts: crate::render::gpu::RenderOptions,
     mesh: Option<(u64, Arc<crate::render::mesh::Mesh>)>,
+) -> egui::Response {
+    paint_mesh_viewport_posed(ui, renderer, camera, opts, mesh, None)
+}
+
+/// Like `paint_mesh_viewport`, with an optional animated vertex set (a nonzero
+/// serial plus a full GPU vertex array) drawn in place of the uploaded vertices.
+pub fn paint_mesh_viewport_posed(
+    ui: &mut egui::Ui,
+    renderer: Arc<Mutex<GlRenderer>>,
+    camera: &crate::render::camera::Camera,
+    opts: crate::render::gpu::RenderOptions,
+    mesh: Option<(u64, Arc<crate::render::mesh::Mesh>)>,
+    pose: Option<(u64, Arc<Vec<f32>>)>,
+) -> egui::Response {
+    paint_mesh_viewport_scene(ui, renderer, camera, opts, mesh, pose, None)
+}
+
+/// Models to draw besides the main mesh: new ones to upload, and this frame's placements.
+pub struct Instances {
+    pub uploads: Vec<(String, Arc<crate::render::mesh::Mesh>)>,
+    pub draws: Vec<(String, [f32; 16])>,
+}
+
+pub fn paint_mesh_viewport_scene(
+    ui: &mut egui::Ui,
+    renderer: Arc<Mutex<GlRenderer>>,
+    camera: &crate::render::camera::Camera,
+    opts: crate::render::gpu::RenderOptions,
+    mesh: Option<(u64, Arc<crate::render::mesh::Mesh>)>,
+    pose: Option<(u64, Arc<Vec<f32>>)>,
+    instances: Option<Instances>,
 ) -> egui::Response {
     let size = ui.available_size();
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
@@ -749,6 +852,27 @@ pub fn paint_mesh_viewport(
                         Ok(()) => r.error = None,
                         Err(e) => r.error = Some(e),
                     }
+                }
+            }
+            if let Some(inst) = &instances {
+                for (key, m) in &inst.uploads {
+                    if !r.has_model(key) {
+                        if let Err(e) = r.upload_model(key, m) {
+                            eprintln!("upload_model {key}: {e}");
+                        }
+                        if std::env::var("DQXI_DEBUG_MODELS").is_ok() {
+                            eprintln!("uploaded {key}: {} verts floats, {} idx, {} groups", m.vertices.len(), m.indices.len(), m.groups.len());
+                        }
+                    }
+                }
+                if std::env::var("DQXI_DEBUG_MODELS").is_ok() && !inst.draws.is_empty() {
+                    eprintln!("draws {} first {:?}", inst.draws.len(), inst.draws[0].1);
+                }
+                r.set_instances(inst.draws.clone());
+            }
+            if let Some((serial, data)) = &pose {
+                if *serial != r.pose_serial {
+                    r.update_vertices(*serial, data);
                 }
             }
             r.paint([vp.left_px, vp.from_bottom_px, vp.width_px, vp.height_px], &camera, &opts);

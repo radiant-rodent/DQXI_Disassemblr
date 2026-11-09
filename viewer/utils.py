@@ -46,7 +46,7 @@ BUILD_DIR = PROJECT_ROOT / "build"
 ORIGINAL_DIR = PROJECT_ROOT / "original"
 
 # read-only reference (translation workspace) ------------------------------
-REFERENCE_ROOT = Path(r"..\reference project")
+REFERENCE_ROOT = Path(r"..\3DS_Translate")
 DIALOGUE_DB = REFERENCE_ROOT / "workspace" / "project.db"
 LEVEL2D_DIR = REFERENCE_ROOT / "workspace" / "extracted" / "romfs" / "level2d"
 LEVEL3D_DIR = REFERENCE_ROOT / "workspace" / "extracted" / "romfs" / "level3d"

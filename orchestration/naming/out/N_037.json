@@ -1,0 +1,1818 @@
+[
+  {
+    "address": "0x00100150",
+    "name": "std_tolower",
+    "signature": "int std_tolower(int c)",
+    "params": {
+      "c": "single character code (byte value 0..255)"
+    },
+    "summary": "ctype tolower: returns c+0x20 when the locale ctype mask for c has bit 4 (the 'upper' class) set, otherwise c. Used by the Squirrel native that lowercases a script string.",
+    "confidence": 0.88,
+    "evidence": "Body is `p = ctype_table(); return (table[c] & 0x10) ? c + 0x20 : c` (assembly: ldrb, lsls #0x1b, bpl, adds #0x20) via the table accessor 0x002FF68C. Only non-self caller 0x0014F008 walks the 4-byte string it obtained from 0x005B5C6C and stores the converted bytes through 0x00245CF0/0x006111A4, i.e. a script-visible string transform; 0x0014F10C is the matching toupper native."
+  },
+  {
+    "address": "0x0010016A",
+    "name": "std_toupper",
+    "signature": "int std_toupper(int c)",
+    "params": {
+      "c": "single character code (byte value 0..255)"
+    },
+    "summary": "ctype toupper: returns c-0x20 when the ctype mask has bit 3 (the 'lower' class) set and c is not 0xDF (Latin-1 sharp s, which has no single-byte uppercase), otherwise c.",
+    "confidence": 0.88,
+    "evidence": "`(table[c] & 0x08) && c != 0xdf ? c - 0x20 : c` (lsls #0x1c, cmp #0xdf). Callers 0x0014F10C (script string uppercaser, mirror of 0x0014F008) and 0x005FB388."
+  },
+  {
+    "address": "0x0010018A",
+    "name": "maybe_std_ThrowNarrowRange",
+    "signature": "void maybe_std_ThrowNarrowRange(const char* msg, int len)",
+    "params": {
+      "msg": "message/range start",
+      "len": "range length; 0 means the range is empty"
+    },
+    "summary": "C++ runtime throw helper: builds the [msg, msg+len) range in a local exception object and hands it to the throw primitive 0x002FF6AA together with a fixed per-function message literal. One of four sibling wrappers that differ only in that literal (i.e. in the error class they report).",
+    "confidence": 0.3,
+    "evidence": "local_18=msg; local_14 = len ? msg+len-1 : msg; then `func_002FF6AA(in_stack, &local_18, &stack0xc, DAT_001001C0+0x10019E)`; 0x002FF6AA builds a stack exception record ({vtable=g_002FF6CC+.., arg2, arg1, arg4}) and calls 0x00300420 (the throw), and 0x002FF6D0 is the noreturn cleanup tail. No direct callers - reached through the parameterised sibling 0x001001C4."
+  },
+  {
+    "address": "0x001001C4",
+    "name": "maybe_std_ThrowNarrowRangeEx",
+    "signature": "void maybe_std_ThrowNarrowRangeEx(const char* msg, int len, void* kind, void* typeinfo)",
+    "params": {
+      "msg": "message start",
+      "len": "message length",
+      "kind": "exception kind/object handed to the throw primitive",
+      "typeinfo": "extra descriptor forwarded to the throw primitive"
+    },
+    "summary": "Generic narrow-character throw helper: takes the exception kind and typeinfo as parameters instead of hard-coding them, builds the [msg,msg+len) range and throws. 21 call sites, all in the C++ library layer (the 0x6F09xx/0x6F0Axx string constructors, 0x51D040, 0x5B3DA8).",
+    "confidence": 0.32,
+    "evidence": "`func_002FF6AA(param_3, &local_18, param_4, DAT_001001F8+0x1001DA)`. Callers 0x006F0998/0x006F09D8/.../0x006F0C18 (a contiguous block of functions that write a vtable into arg1 then call this) plus 0x0051D040/0x005B3DA8 which pass a freshly received script string."
+  },
+  {
+    "address": "0x001001FC",
+    "name": "maybe_std_ThrowWideRange",
+    "signature": "void maybe_std_ThrowWideRange(const u16* msg, u32 len, void* kind, void* typeinfo)",
+    "params": {
+      "msg": "UTF-16 message start",
+      "len": "message length in u16 units",
+      "kind": "exception kind",
+      "typeinfo": "extra descriptor"
+    },
+    "summary": "Wide-character (UTF-16) variant of the throw helpers: same shape as 0x001001C4 but the range end is msg + 2*len - 2, it throws through 0x002FF6E6 and returns 0xFFFFFFFF when the throw reported a length. Used by the std::basic_string<wchar_t> layer.",
+    "confidence": 0.32,
+    "evidence": "`local_14 = len*2 + msg - 2`; `uVar1 = func_002FF6E6(kind, &local_18, typeinfo, DAT_00100240+0x100214)`; `if (len <= uVar1) return 0xffffffff`; cleanup via 0x002FF70C. 18 callers, all inside the 0x006F0Cxx-0x006F0Fxx wide-string block."
+  },
+  {
+    "address": "0x00100246",
+    "name": "maybe_std_ThrowNarrowFixed",
+    "signature": "void maybe_std_ThrowNarrowFixed(const void* obj, u32 unused, u32 unused2, u32 unused3, void* kind, void* typeinfo)",
+    "params": {
+      "obj": "pre-built message object",
+      "kind": "5th argument forwarded as the exception kind",
+      "typeinfo": "6th argument forwarded as the descriptor"
+    },
+    "summary": "Throw helper with a fixed, already-built message: it takes no length, wraps the single object in a local range and throws without a cleanup call afterwards. Sibling of 0x0010018A with a different literal.",
+    "confidence": 0.3,
+    "evidence": "`local_10 = param_1; uStack_c = param_4; func_002FF6AA(param_6, &local_10, &stack0x8, DAT_0010026C+0x100250); func_002FF6D0(0, &local_10);` - the same throw primitive and message-pointer idiom as the other five wrappers, with the length implicit."
+  },
+  {
+    "address": "0x00100272",
+    "name": "maybe_std_ThrowNarrowRange2",
+    "signature": "void maybe_std_ThrowNarrowRange2(const char* msg, int len)",
+    "params": {
+      "msg": "message start",
+      "len": "message length"
+    },
+    "summary": "Identical body to 0x0010018A but with a different fixed message literal, so the pair reports two different error classes (the classic length-error / out-of-range couple of the string and vector code).",
+    "confidence": 0.3,
+    "evidence": "Byte-for-byte the same sequence as 0x0010018A (`local_14 = param_1 + (param_2 ? param_2-1 : 0)`, `func_002FF6AA(in_stack, &local_18, &stack0xc, DAT_001002A8+0x100286)`, cleanup 0x002FF6D0); only DAT_001002A8 differs from DAT_001001C0."
+  },
+  {
+    "address": "0x001002AE",
+    "name": "maybe_std_ThrowWideRange2",
+    "signature": "void maybe_std_ThrowWideRange2(const u16* msg, u32 len)",
+    "params": {
+      "msg": "UTF-16 message start",
+      "len": "length in u16 units"
+    },
+    "summary": "Wide-character twin of 0x00100272: the same message plumbing as 0x001001FC with its own literal, throwing through 0x002FF6E6.",
+    "confidence": 0.3,
+    "evidence": "`local_14 = param_2*2 + param_1 - 2`, `func_002FF6E6(in_stack, &local_18, &stack0xc, DAT_001002F4+0x1002C4)`, `if (param_2 <= result) result = 0xffffffff`, cleanup 0x002FF70C - exactly 0x001001FC with a different literal."
+  },
+  {
+    "address": "0x00100468",
+    "name": "std_strtol",
+    "signature": "long std_strtol(const char* s, char** endptr, int base)",
+    "params": {
+      "s": "NUL-terminated string",
+      "endptr": "optional out: first unconsumed character",
+      "base": "numeric base (0 = auto)"
+    },
+    "summary": "strtol: skips leading ctype-space bytes, consumes an optional '+'/'-', delegates the digits to 0x002FF91A, restores *endptr = s when no digit was consumed, sets errno (via 0x002FF9C4) to 2 (ERANGE) on overflow and negates the magnitude for '-'. Returns the value in the low half of the Ghidra u64.",
+    "confidence": 0.9,
+    "evidence": "Skip loop `while (ctype_table()[*p] & 1)`; sign characters 0x2b/0x2d; `*__errno_location() = 2` plus the classic 0x80000000 clamp on positive overflow (LONG_MIN); `if (endptr && *endptr == digits) *endptr = s`. Caller 0x00165004 (Squirrel standard library)."
+  },
+  {
+    "address": "0x00100578",
+    "name": "std_strtoul",
+    "signature": "unsigned long std_strtoul(const char* s, char** endptr, int base)",
+    "params": {
+      "s": "NUL-terminated string",
+      "endptr": "optional out: first unconsumed character",
+      "base": "numeric base"
+    },
+    "summary": "strtoul: same skip/sign/errno front end as strtol but it saves and restores errno around the conversion and negates the magnitude for a leading '-', which is exactly the strtoul unsigned-wraparound contract.",
+    "confidence": 0.8,
+    "evidence": "Saves `*__errno_location()` into iVar2 and restores it unless the callee set 2, then `if (sign_flag) result = -result`; otherwise byte-identical to 0x00100468. Called from 0x005FBAC0 (script string->number)."
+  },
+  {
+    "address": "0x001006F0",
+    "name": "std_qsort_internal_quicksort",
+    "signature": "void std_qsort_internal_quicksort(void* base, u32 unused, size_t count, size_t size, int (*cmp)(const void*, const void*))",
+    "params": {
+      "base": "array base",
+      "count": "element count",
+      "size": "element size in bytes",
+      "cmp": "three-way comparator"
+    },
+    "summary": "The recursive half of the C library qsort: median-of-three quicksort over byte-sized elements with an explicit 32-entry stack, swapping whole elements with 4-byte-word copies when both pointers are aligned and byte copies otherwise, recursing only into partitions larger than 10 elements.",
+    "confidence": 0.85,
+    "evidence": "Element swaps are `size` bytes wide with a word fast path when `(size|ptr)&3 == 0`; median-of-three pivot; partition loop compares with `(*cmp)(a,b) > 0`; the larger partition is pushed on auStack_134/auStack_b4 and the smaller iterated; `if (uVar3 < 0xb)` is the 10-element cut-off that matches 0x00100906; element index arithmetic goes through 0x0011CFAC."
+  },
+  {
+    "address": "0x00100906",
+    "name": "std_qsort",
+    "signature": "void std_qsort(void* base, size_t count, size_t size, int (*cmp)(const void*, const void*))",
+    "params": {
+      "base": "array base",
+      "count": "element count",
+      "size": "element size in bytes",
+      "cmp": "three-way comparator"
+    },
+    "summary": "qsort entry point: for 10 elements or fewer it runs the inlined insertion sort (shifting each element while the comparator says it is smaller), otherwise it hands the array to the quicksort at 0x001006F0.",
+    "confidence": 0.9,
+    "evidence": "`if (count > 10) func_001006F0(...)` then the textbook insertion sort `while (base <= p && cmp(p, p+size) > 0) p -= size;` with element moves as 4-byte or byte copies; 23 callers spread over the whole program, which is what a libc qsort looks like."
+  },
+  {
+    "address": "0x001009B4",
+    "name": "std_strstr",
+    "signature": "char* std_strstr(const char* haystack, const char* needle)",
+    "params": {
+      "haystack": "NUL-terminated string to search",
+      "needle": "NUL-terminated pattern"
+    },
+    "summary": "strstr: returns a pointer to the first occurrence of needle in haystack (haystack itself for an empty needle) or NULL. Naive restart-at-next-character loop.",
+    "confidence": 0.9,
+    "evidence": "Nested compare; on mismatch it restarts at `pcVar4` (candidate+1), returns the candidate when the needle byte is NUL and returns 0 when the haystack byte is NUL. 15 callers (0x00165004, 0x004B3604, 0x00576CC0, ...) all string handling."
+  },
+  {
+    "address": "0x00100BCC",
+    "name": "std_operator_delete_array",
+    "signature": "void std_operator_delete_array(void* p, void (*dtor)(void*))",
+    "params": {
+      "p": "array pointer; an 8-byte cookie precedes it",
+      "dtor": "element destructor"
+    },
+    "summary": "operator delete[] for arrays of class objects: destroys the elements through the array cookie (size at p-8, count at p-4) using 0x00100BE0 and then releases the allocation with 0x0010F69C.",
+    "confidence": 0.75,
+    "evidence": "`func_00101A80(p, dtor)` (= destroy through the cookie) followed by `func_0010F69C()` (heap free). 24 callers, all object teardowns; e.g. Ui_ListWindow_Teardown 0x0029ED50 does `func_00100BCC(self->f_3c, g_0029EEF0); self->f_3c = 0;`."
+  },
+  {
+    "address": "0x00100BE0",
+    "name": "std_destroy_range",
+    "signature": "void* std_destroy_range(void* first, void (*dtor)(void*), size_t elemSize, int count)",
+    "params": {
+      "first": "first element",
+      "dtor": "element destructor",
+      "elemSize": "element stride",
+      "count": "element count"
+    },
+    "summary": "Destroys an array of class objects backwards (i = count-1 .. 0 calling dtor(first + i*elemSize)) and returns first-8, the allocation pointer behind the 8-byte array cookie. This is the 4-argument form the compiler emits for every array destruction; 239 call sites.",
+    "confidence": 0.8,
+    "evidence": "`iVar1 = arg4*arg3 + arg1; do { iVar1 -= arg3; (*arg2)(iVar1); } while (arg1 != iVar1); return arg1-8;`. Typical call 0x0017CF60: `func_00100BE0(arg1+3, g_0017D040, 0x24, 5)`."
+  },
+  {
+    "address": "0x00100C6C",
+    "name": "maybe_std_FormatSinkPutNarrow",
+    "signature": "void maybe_std_FormatSinkPutNarrow(void* self, const u16* src, int count)",
+    "params": {
+      "self": "narrow output sink {+4 putc(char,ctx), +8 ctx, +0x18 remaining width, +0x1c limit, +0x20 written}",
+      "src": "UTF-16 source run",
+      "count": "number of u16 units"
+    },
+    "summary": "Copies a UTF-16 run into a narrow character sink: converts through the locale codecvt (0x003005A8), flushes when the sink budget (f_18) or hard limit (f_1c) would be exceeded, emits each byte through the sink callback and charges the budget.",
+    "confidence": 0.4,
+    "evidence": "Emit callback `(**(code**)(self+4))(byte, *(u32*)(self+8))`; `self->f_18 -= n`, `self->f_20 += n`; conversion `func_003005A8(buf, src[i], &state)` returning -1 for an unmappable unit; 0x002FF71C/0x002FF748 are the fill/wrap helpers (0x002FF71C writes 0x30 when bit 4 of the sink flags is set, else 0x20, i.e. '0' or blank field fill). Only caller 0x00100FB4."
+  },
+  {
+    "address": "0x00100E88",
+    "name": "std_strtod",
+    "signature": "double std_strtod(const char* s, char** endptr)",
+    "params": {
+      "s": "NUL-terminated string",
+      "endptr": "optional out: first unconsumed character"
+    },
+    "summary": "strtod: skips ctype-space, handles '+'/'-', calls the floating-point scanner 0x00101026, sets *endptr back to s when nothing was consumed, sets errno = 2 (ERANGE) on overflow and negates for '-'.",
+    "confidence": 0.85,
+    "evidence": "Same skip/sign/errno front end as 0x00100468/0x00100578 but the payload call is 0x00101026, which uses 0x003006F0 and 0x00300940 (the soft-float double helpers), and the result is returned as a double. Caller 0x001005EE."
+  },
+  {
+    "address": "0x00100F10",
+    "name": "std_isspace",
+    "signature": "int std_isspace(int c)",
+    "params": {
+      "c": "byte value 0..255"
+    },
+    "summary": "ctype isspace: returns bit 0 of the locale ctype mask, the whitespace class - the exact predicate the strtol/strtoul/strtod front ends use to skip leading blanks.",
+    "confidence": 0.85,
+    "evidence": "`return ctype_table()[c] & 1;` using the same accessor 0x002FF68C whose bit 4 = upper (0x00100150) and bit 3 = lower (0x0010016A); the skip loops of 0x00100468/0x00100578/0x00100E88 test exactly this bit."
+  },
+  {
+    "address": "0x00100FB4",
+    "name": "maybe_std_FormatSinkPutString",
+    "signature": "u32 maybe_std_FormatSinkPutString(void* self, const u16* src, int count)",
+    "params": {
+      "self": "output sink; f_14 selects the conversion path",
+      "src": "UTF-16 source",
+      "count": "unit count"
+    },
+    "summary": "Entry point of the character sink: dispatches to the locale-converting writer (0x00100C6C) when the sink's f_14 is zero and to the direct writer (0x00100DB8) otherwise, always reporting success.",
+    "confidence": 0.4,
+    "evidence": "`if (self->f_14 == 0) func_00100C6C(); else func_00100DB8(); return 1;` - a two-line dispatcher whose only callees are the two writers, both of which use the {f_4 callback, f_8 ctx, f_18 budget, f_20 written, f_1c limit} sink layout."
+  },
+  {
+    "address": "0x00101026",
+    "name": "std_strtod_core",
+    "signature": "double std_strtod_core(const char* digits, char** endptr, int unused)",
+    "params": {
+      "digits": "first digit (sign already consumed)",
+      "endptr": "out: first unconsumed character"
+    },
+    "summary": "The actual decimal/hex floating-point scanner behind strtod: accumulates the mantissa and binary exponent and scales with the soft-float double helpers, returning the double; the wrapper 0x00100E88 applies the sign and errno.",
+    "confidence": 0.55,
+    "evidence": "Called with the character after the sign by 0x00100E88 (strtod); writes `*__errno_location()` itself and calls the soft-float double routines in 0x0030xxxx (0x003006F0, 0x00300940), returning a value in r0/r1 (double)."
+  },
+  {
+    "address": "0x00101A54",
+    "name": "std_uninitialized_copy",
+    "signature": "void* std_uninitialized_copy(void* dst, const void* src, size_t stride, int count, void (*ctor)(void*, const void*))",
+    "params": {
+      "dst": "destination first element",
+      "src": "source first element",
+      "stride": "element size",
+      "count": "element count",
+      "ctor": "element copy-constructor"
+    },
+    "summary": "Copy-constructs count elements from src to dst: calls the element constructor for each pair and advances both pointers by the stride, returning dst. The compiler's uninitialized_copy loop for non-trivial element types.",
+    "confidence": 0.55,
+    "evidence": "`while (count--) { (*ctor)(dst, src); src += stride; dst += stride; } return dst;` - the (dst, src, stride, count, ctor) signature and the two-pointer walk are the standard shape; single caller 0x0058FF38 (script engine)."
+  },
+  {
+    "address": "0x00101A82",
+    "name": "std_vec_delete_from_cookie",
+    "signature": "void std_vec_delete_from_cookie(void* p, void (*dtor)(void*))",
+    "params": {
+      "p": "array pointer whose 8-byte cookie holds size/count",
+      "dtor": "element destructor"
+    },
+    "summary": "Readable-C fragment of the vector-delete helper: destroys the elements of an array using the size/count pair stored immediately before the array (the ARMCC array cookie) and leaves the raw deallocation to the caller.",
+    "confidence": 0.6,
+    "evidence": "`func_00100BE0(arg1, arg2, *(u32*)(arg1-8), *(u32*)(arg1-4))` - the two words in front of the array are element size (p-8) and element count (p-4); only reachable from 0x00100BCC, which adds the free."
+  },
+  {
+    "address": "0x0010DF00",
+    "name": "maybe_Fs_SubmitAsyncTransfer",
+    "signature": "int maybe_Fs_SubmitAsyncTransfer(void* self, void** handle, u32 a3, u32 a4)",
+    "params": {
+      "self": "object whose vtable slot +8 performs the transfer",
+      "handle": "in/out resource handle; released when the submit fails",
+      "a3": "transfer descriptor",
+      "a4": "extra argument"
+    },
+    "summary": "Submits one asynchronous transfer through the object's vtable slot +8 and, when that fails while a handle was produced, releases the half-built handle (0x00114CF0); returns the transfer status.",
+    "confidence": 0.35,
+    "evidence": "`result = (**(code**)(*arg1+8))(arg1,arg2,arg3,0,arg4); if (!result) { if (*arg2) func_00114CF0(); result = 0; }`. Callers 0x00105584 (the handle-table sweep that frees 0x24-byte entries), 0x00105ACE, 0x00105AFC, 0x001EBC68 - all on the async I/O command path."
+  },
+  {
+    "address": "0x0010EFC4",
+    "name": "maybe_Os_QueueHasNewData",
+    "signature": "bool maybe_Os_QueueHasNewData(void* self, u32 unused)",
+    "params": {
+      "self": "queue descriptor; the 16-bit producer/consumer indices are at f_6c/f_6e",
+      "unused": "unused"
+    },
+    "summary": "Returns whether a producer/consumer queue has data: enters the critical section, checks the handle, compares the two 16-bit indices at f_6c/f_6e when the cached generation word does not already match, then leaves the critical section.",
+    "confidence": 0.35,
+    "evidence": "`svc 0x24` / `svc 0x14` are the CTR Ctrl critical-section enter/leave wrappers (0x00118100 is the kernel-result fault path); the comparison is `self->f_6c != self->f_6e` after the `g_0010F034 == iVar1*0x400000` early-out. Callers 0x00105584, 0x0019FE04, 0x001A04A4."
+  },
+  {
+    "address": "0x0010F0C8",
+    "name": "maybe_Os_QueueHasNewDataAlt",
+    "signature": "bool maybe_Os_QueueHasNewDataAlt(void* self)",
+    "params": {
+      "self": "queue descriptor; the compared indices are f_6a and f_6e"
+    },
+    "summary": "Variant of 0x0010EFC4: the same critical-section-guarded producer/consumer index comparison, but it loads both indices inside the section and compares f_6a with f_6e.",
+    "confidence": 0.35,
+    "evidence": "`svc 0x24`; reads f_6a and f_6e; `svc 0x14`; returns `f6a != f6e`. Same three callers as 0x0010EFC4 (0x00105584, 0x0019FE04, 0x001A04A4), i.e. the pair is always used together to test two different queues."
+  },
+  {
+    "address": "0x0011FF8C",
+    "name": "maybe_Gfx_SetFrameColorParam",
+    "signature": "void maybe_Gfx_SetFrameColorParam(void* self, const u8* param)",
+    "params": {
+      "self": "renderer object (f_10 = device, f_b0 = current frame)",
+      "param": "5-byte record {mode=3, 0xFF, 0xFF, b4, b5}"
+    },
+    "summary": "Sets a colour/attribute word on the current frame object: calls the device vtable slot +0x14 with (self->f_10, 2) and then copies the 5-byte record into frame+0x126/+0x12a, i.e. the per-frame tint/clear colour used by menu transitions.",
+    "confidence": 0.4,
+    "evidence": "`(**(code**)(*self->f_10+0x14))(self->f_10, 2); fb0 = self->f_b0; fb0->f_126 = *(u32*)arg2; fb0->f_12a = arg2[4];`. Caller 0x00310680 builds the record as {3, 0xFF, 0xFF, obj->f_12d, obj->f_12e} in the fade/filter case of a UI sequence switch; 0x00382B08 is Ui_MessageWindow_UpdateInput."
+  },
+  {
+    "address": "0x00126EF4",
+    "name": "maybe_Video_ConvertBlocks32_A",
+    "signature": "void* maybe_Video_ConvertBlocks32_A(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src buffer, +8 byte size, +0xc outer count, +0x10 byte param A, +0x14 byte param B}"
+    },
+    "summary": "In-place 32-byte-block colour/format conversion (variant A of three). Reads 8 packed bytes per step from four lanes 0x400 bytes apart starting at src+0x2000, converts them with saturating 8-bit difference/average arithmetic and two caller-supplied per-channel constants (f_10/f_14), and writes the result backwards into the same buffer at four lanes 0x408/0x808/0xc08. Called from the class dispatcher 0x0012A84C.",
+    "confidence": 0.42,
+    "evidence": "`iVar57 = *(int*)(self+8); iVar58 = iVar57 - 0x20; ... uVar65 = f10|f10<<8; uVar65|uVar65<<0x10` (byte-splat of the parameter), loop reads `iVar55->f_404/f_408/f_804/f_808/f_c04/f_c08` and stores at `iVar56+7/iVar56+8/f_407/f_408/f_807/f_808/f_c07/f_c08`; `local_c = self->f_c` outer iterations and `iVar55 = &iVar56->f_1008 - iVar57` rebase. Byte-identical twins at 0x0012AC6C and 0x0012E9E4."
+  },
+  {
+    "address": "0x0012762C",
+    "name": "maybe_Video_ConvertBlocks16_A",
+    "signature": "void* maybe_Video_ConvertBlocks16_A(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 byte size, +0xc outer count, +0x10/f_14 byte params}"
+    },
+    "summary": "Same conversion as 0x00126EF4 but on 16-byte blocks and with an outer count of f_c-8, i.e. the 16-bit-per-pixel variant of the same in-place block converter. Dispatcher 0x0012A81C selects it when the two pointers in the class header differ.",
+    "confidence": 0.42,
+    "evidence": "`local_c = self->f_c + -8; iVar58 = *(int*)(self+8) + -0x10;` then the same lane layout and the same `UnsignedSaturate(...)` colour maths as 0x00126EF4. Twin at 0x0012B3A4."
+  },
+  {
+    "address": "0x001281E0",
+    "name": "maybe_Video_ConvertBlocks32B_A",
+    "signature": "void* maybe_Video_ConvertBlocks32B_A(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 byte size, +0xc outer count, +0x10/f_14 byte params}"
+    },
+    "summary": "Third 32-byte-block member of the same conversion family (variant of 0x00126EF4 with the outer loop counted from f_c instead of f_c-8 and a different byte-parameter unpack). Always invoked by the dispatcher 0x0012A81C.",
+    "confidence": 0.4,
+    "evidence": "`local_c = self->f_c; iVar55 = *(int*)(self+8) + -0x20;` then the same four-lane read/write pattern and the same 1:2:1-style averaged colour arithmetic as 0x00126EF4. Twin at 0x0012BF58."
+  },
+  {
+    "address": "0x001290A0",
+    "name": "maybe_Video_ConvertPlanes4_A",
+    "signature": "void* maybe_Video_ConvertPlanes4_A(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}; four planes are processed per call"
+    },
+    "summary": "Plane-oriented member of the conversion class: takes an explicit descriptor array instead of the +4/+8/+0xc fields, loops four times over the plane pointers (`iVar81 = 4`) and converts each plane with the same saturating colour arithmetic. Selected by dispatcher 0x0012A81C.",
+    "confidence": 0.4,
+    "evidence": "`iVar81 = 4; puVar55 = (u32*)*arg1; puVar57 = (u32*)arg1[1]; iVar59 = arg1[2];` then the 0x00126EF4 body. Twin at 0x0012CE18."
+  },
+  {
+    "address": "0x00129EF4",
+    "name": "maybe_Video_ConvertPlanes3_A",
+    "signature": "void* maybe_Video_ConvertPlanes3_A(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}"
+    },
+    "summary": "Sibling of 0x001290A0 with the same three-field descriptor and the 4x-unrolled plane loop; selected by the second dispatcher 0x0012A84C (the 'pointers are equal' branch).",
+    "confidence": 0.4,
+    "evidence": "Same prologue and inner loop as 0x001290A0 (`iVar81 = 4; puVar59 = (u32*)*arg1; puVar61 = (u32*)arg1[1]; iVar62 = arg1[2];`). Twin at 0x0012DC6C."
+  },
+  {
+    "address": "0x0012A81C",
+    "name": "maybe_Video_ConvertSelect_A",
+    "signature": "void maybe_Video_ConvertSelect_A(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context; the first two words decide the path"
+    },
+    "summary": "Class dispatcher: when the context's two leading words differ it runs the plane variant 0x001290A0, otherwise the 16-byte block variant 0x0012762C, and then always runs the common 32-byte stage 0x001281E0. Effectively 'convert source to destination if they are separate buffers, else convert in place'.",
+    "confidence": 0.45,
+    "evidence": "`pcVar1 = func_0012762C; if (*arg1 != arg1[1]) pcVar1 = func_001290A0; (*pcVar1)(); func_001281E0();` - an indirect call through a two-entry selector, the compiler's shared-tail construct for the two data layouts. Twin at 0x0012E594 and 0x0013230C."
+  },
+  {
+    "address": "0x0012A84C",
+    "name": "maybe_Video_ConvertSelectB_A",
+    "signature": "void maybe_Video_ConvertSelectB_A(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context"
+    },
+    "summary": "Second class dispatcher: selects the 8-byte block variant 0x00126B0C or the three-plane variant 0x00129EF4 on the same 'pointers differ' test and then always runs the 32-byte stage 0x00126EF4. Its literal pool at 0x0012A87C holds its own address, confirming it is a table-dispatched entry point.",
+    "confidence": 0.45,
+    "evidence": "`pcVar1 = func_00126B0C; if (*arg1 != arg1[1]) pcVar1 = func_00129EF4; (*pcVar1)(); func_00126EF4();`; the words at 0x0012A87C/0x0012A880 are 0x0012A81C/0x0012A84C, i.e. the pair is published together. Twin at 0x0012E5C4 and 0x0013233C."
+  },
+  {
+    "address": "0x0012A884",
+    "name": "maybe_Video_ConvertBlocks8_B",
+    "signature": "void* maybe_Video_ConvertBlocks8_B(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 byte size, +0xc outer count, +0x10/f_14 byte params}"
+    },
+    "summary": "8-byte-block variant of the in-place converter (copy B). Processes src+0x1800..0x1c00 lanes at the same 0x400 spacing, 8 bytes per step, with an outer count of f_c-8; the smallest member of the family. Called from dispatcher 0x0012E5C4.",
+    "confidence": 0.42,
+    "evidence": "`uVar61 = *(int*)(self+8) - 8; local_c = self->f_c + -8; puVar59 = (u32*)(*(int*)(self+4) + 0x2000);` and reads `puVar58[-0x200]/[-0x100]/[0x100]/[0]` (= the four lanes 0x800/0x400 apart), with `~uVar64` inverting one lane. Constants come from g_0012AC64/g_0012AC68. Copy A's twin is 0x00126B0C (outside this batch), copy C's is 0x0012E5FC."
+  },
+  {
+    "address": "0x0012AC6C",
+    "name": "maybe_Video_ConvertBlocks32_B",
+    "signature": "void* maybe_Video_ConvertBlocks32_B(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy B of the 32-byte-block in-place colour converter (see 0x00126EF4): same four 0x400-spaced lanes, same saturating average/difference arithmetic, different constant pool (g_0012AC64/g_0012AC68) and different destination layout parameters. Called from 0x0012E5C4.",
+    "confidence": 0.42,
+    "evidence": "Structurally identical to 0x00126EF4 (`iVar57 = *(int*)(self+8); iVar58 = iVar57 - 0x20;` + the `f_404/f_804/f_c04` lane reads and `f_407/...` stores); only the parameter globals and the caller differ."
+  },
+  {
+    "address": "0x0012B3A4",
+    "name": "maybe_Video_ConvertBlocks16_B",
+    "signature": "void* maybe_Video_ConvertBlocks16_B(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy B of the 16-byte-block converter (see 0x0012762C). Called from dispatcher 0x0012E594.",
+    "confidence": 0.42,
+    "evidence": "Same `local_c = self->f_c + -8; size + -0x10` prologue and inner loop as 0x0012762C, with the g_0012AC64/g_0012AC68 constant pool."
+  },
+  {
+    "address": "0x0012BF58",
+    "name": "maybe_Video_ConvertBlocks32B_B",
+    "signature": "void* maybe_Video_ConvertBlocks32B_B(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy B of the second 32-byte-block converter (see 0x001281E0), always run by dispatcher 0x0012E594 after its selector.",
+    "confidence": 0.4,
+    "evidence": "Same `local_c = self->f_c` / `size - 0x20` structure and lane layout as 0x001281E0; constant pool g_0012CE10/g_0012CE14."
+  },
+  {
+    "address": "0x0012CE18",
+    "name": "maybe_Video_ConvertPlanes4_B",
+    "signature": "void* maybe_Video_ConvertPlanes4_B(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}"
+    },
+    "summary": "Copy B of the four-plane converter (see 0x001290A0), selected by dispatcher 0x0012E594.",
+    "confidence": 0.4,
+    "evidence": "`iVar81 = 4` unrolled plane loop over `*arg1`/`arg1[1]` with the same body as 0x001290A0; constant pool g_0012CE10/g_0012CE14."
+  },
+  {
+    "address": "0x0012DC6C",
+    "name": "maybe_Video_ConvertPlanes3_B",
+    "signature": "void* maybe_Video_ConvertPlanes3_B(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}"
+    },
+    "summary": "Copy B of the three-plane converter (see 0x00129EF4), selected by the second dispatcher 0x0012E5C4.",
+    "confidence": 0.4,
+    "evidence": "Same `iVar81 = 4; puVar59 = (u32*)*arg1;` prologue and inner loop as 0x00129EF4; constant pool g_0012CE10/g_0012CE14."
+  },
+  {
+    "address": "0x0012E594",
+    "name": "maybe_Video_ConvertSelect_B",
+    "signature": "void maybe_Video_ConvertSelect_B(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context"
+    },
+    "summary": "Copy B of the first class dispatcher (see 0x0012A81C): picks 0x0012B3A4 or 0x0012CE18 on the 'pointers differ' test and then runs 0x0012BF58.",
+    "confidence": 0.45,
+    "evidence": "`pcVar1 = func_0012B3A4; if (*arg1 != arg1[1]) pcVar1 = func_0012CE18; (*pcVar1)(); func_0012BF58();` - same shape as 0x0012A81C with the B-copy addresses."
+  },
+  {
+    "address": "0x0012E5C4",
+    "name": "maybe_Video_ConvertSelectB_B",
+    "signature": "void maybe_Video_ConvertSelectB_B(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context"
+    },
+    "summary": "Copy B of the second class dispatcher (see 0x0012A84C): picks the 8-byte converter 0x0012A884 or the three-plane converter 0x0012DC6C and then runs 0x0012AC6C.",
+    "confidence": 0.45,
+    "evidence": "`pcVar1 = func_0012A884; if (*arg1 != arg1[1]) pcVar1 = func_0012DC6C; (*pcVar1)(); func_0012AC6C();`; the literal pool at 0x0012AC64.. belongs to this class, confirming the pairing."
+  },
+  {
+    "address": "0x0012E5FC",
+    "name": "maybe_Video_ConvertBlocks8_C",
+    "signature": "void* maybe_Video_ConvertBlocks8_C(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy C of the 8-byte-block converter (see 0x0012A884), reached from the merged dispatcher/blob 0x0013233C. This is the copy that the game actually exercises: its class is driven by 0x00132D80, which the tile loop at 0x006B8C38 calls.",
+    "confidence": 0.45,
+    "evidence": "`*(int*)(self+8) - 8`, `local_c = self->f_c + -8`, four lanes at 0x800/0x400 spacing and the `~lane` inversion, identical to 0x0012A884; constant pool g_0012E9DC/g_0012E9E0."
+  },
+  {
+    "address": "0x0012E9E4",
+    "name": "maybe_Video_ConvertBlocks32_C",
+    "signature": "void* maybe_Video_ConvertBlocks32_C(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy C of the 32-byte-block in-place colour converter (see 0x00126EF4), the variant used by the game's live conversion path.",
+    "confidence": 0.45,
+    "evidence": "Structurally identical to 0x00126EF4 (`self+8 - 0x20`, the f_404/f_804/f_c04 lane reads, f_407/... stores); constant pool g_0012E9DC/g_0012E9E0; reached via 0x0013233C."
+  },
+  {
+    "address": "0x0012F11C",
+    "name": "maybe_Video_ConvertBlocks16_C",
+    "signature": "void* maybe_Video_ConvertBlocks16_C(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy C of the 16-byte-block converter (see 0x0012762C), selected by dispatcher 0x0013230C.",
+    "confidence": 0.45,
+    "evidence": "`local_c = self->f_c + -8; size + -0x10` plus the identical lane maths and the g_0012E9DC/g_0012E9E0 pool."
+  },
+  {
+    "address": "0x0012FCD0",
+    "name": "maybe_Video_ConvertBlocks32B_C",
+    "signature": "void* maybe_Video_ConvertBlocks32B_C(ConvertCtx* self)",
+    "params": {
+      "self": "context {+4 src, +8 size, +0xc outer count, +0x10/f_14 params}"
+    },
+    "summary": "Copy C of the second 32-byte-block converter (see 0x001281E0), always run by dispatcher 0x0013230C after its selector.",
+    "confidence": 0.42,
+    "evidence": "Same `local_c = self->f_c` / `size - 0x20` structure and lane layout as 0x001281E0; pool g_00130B88/g_00130B8C."
+  },
+  {
+    "address": "0x00130B90",
+    "name": "maybe_Video_ConvertPlanes4_C",
+    "signature": "void* maybe_Video_ConvertPlanes4_C(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}"
+    },
+    "summary": "Copy C of the four-plane converter (see 0x001290A0).",
+    "confidence": 0.42,
+    "evidence": "`iVar81 = 4` unrolled plane loop over `*arg1`/`arg1[1]` with the same body as 0x001290A0; pool g_00130B88/g_00130B8C."
+  },
+  {
+    "address": "0x001319E4",
+    "name": "maybe_Video_ConvertPlanes3_C",
+    "signature": "void* maybe_Video_ConvertPlanes3_C(ConvertArg* arg1)",
+    "params": {
+      "arg1": "descriptor array {+0 plane0, +4 plane1, +8 count}"
+    },
+    "summary": "Copy C of the three-plane converter (see 0x00129EF4), selected by the merged blob 0x0013233C.",
+    "confidence": 0.42,
+    "evidence": "Same `iVar81 = 4; puVar59 = (u32*)*arg1;` prologue and inner loop as 0x00129EF4; pool g_00130B88/g_00130B8C."
+  },
+  {
+    "address": "0x0013230C",
+    "name": "maybe_Video_ConvertSelect_C",
+    "signature": "void maybe_Video_ConvertSelect_C(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context"
+    },
+    "summary": "Copy C of the first class dispatcher (see 0x0012A81C): picks 0x0012F11C or 0x00130B90 and then runs 0x0012FCD0. This copy is the one wired to real game code.",
+    "confidence": 0.48,
+    "evidence": "`pcVar1 = func_0012F11C; if (*arg1 != arg1[1]) pcVar1 = func_00130B90; (*pcVar1)(); func_0012FCD0();`; its literal pool at 0x0013236C/0x00132370 holds its own address and 0x0013230C/0x0013233C."
+  },
+  {
+    "address": "0x0013233C",
+    "name": "maybe_Video_ConvertSelectB_C",
+    "signature": "void maybe_Video_ConvertSelectB_C(ConvertCtx* self)",
+    "params": {
+      "self": "conversion context"
+    },
+    "summary": "Copy C of the second class dispatcher plus the 8-byte converter that follows it: Ghidra merged 0x0013233C (selector) and the adjacent 0x00132374 (8-byte block converter) into one 0xA44-byte body because they are contiguous. It picks 0x0012E5FC or 0x001319E4 and then runs 0x0012E9E4, and the tail contains the 8-byte lane loop.",
+    "confidence": 0.45,
+    "evidence": "`pcVar1 = func_0012E5FC; if (*arg1 != arg1[1]) pcVar1 = func_001319E4; (*pcVar1)(); func_0012E9E4();` at the head, and the 0xA44-byte span is larger than the 0x38 + 0x3E8 that the copy-A layout would need (0x0012A84C + 0x0012A884), so Ghidra merged at least one more block into it. Literal pool words 0x0013230C/0x0013233C sit inside it."
+  },
+  {
+    "address": "0x00132D80",
+    "name": "maybe_Video_ConvertStripTo16bpp",
+    "signature": "void maybe_Video_ConvertStripTo16bpp(ConvertStrip* self)",
+    "params": {
+      "self": "per-column work item {+0 source strip, +4 destination pointer, ...}; 0x1D0 bytes long"
+    },
+    "summary": "Converts one source strip into the destination frame buffer: the only member of this class with an external caller. 0x006B8C38 walks a frame as `arg1[5]` columns of 0x1D0-byte work items, gives each one a source pointer advancing by 0x28 bytes and a destination pointer of 0x200-byte rows advancing by 2 bytes per column, and calls this; 16 bpp output is implied by that 2-byte column step.",
+    "confidence": 0.45,
+    "evidence": "Caller 0x006B8C38: `*(int*)(*arg1 + i*0x1d0) = arg2; *(int*)(*arg1 + i*0x1d0 + 4) = iVar5 + i*2; func_00132D80(*arg1 + i*0x1d0); arg2 += 0x28;` with `iVar5 += arg1[5]*0x200` per row, and the frame size computed as `((arg3*K>>32)>>4)*0x200`. Callees 0x001325F8 and 0x00132BA4 both live inside 0x0013233C."
+  },
+  {
+    "address": "0x001336E4",
+    "name": "maybe_Video_McFilterOffsetTable",
+    "signature": "void maybe_Video_McFilterOffsetTable(void)",
+    "params": {
+      "_": "not code - a data table; the entry point scanner mistook it for a function"
+    },
+    "summary": "NOT a function: 0x001336E4-0x00133890 is a table of 32-bit PC-relative offsets (the luma/chroma interpolation filter phases; the block of tables is preceded by an ASCII 5-VXS2 marker at 0x0013380C). Ghidra stops at the first word with `halt_baddata`. Named so the merger/editor can stop presenting it as a callable routine.",
+    "confidence": 0.48,
+    "evidence": "Raw bytes at 0x001336E4 are `01 b5 ff ff 00 d3 ff ff 00 f1 ff ff 00 0f 00 00 ...` i.e. -0x4AFF, -0x2D00, -0x0F00, +0x0F00 style offsets, and the next code (`push {r4,r5,r6,r11,lr}`) starts at 0x00133890. The neighbouring table at 0x00133810 is consumed by `&LAB_00133810 + *(int*)(&LAB_00133810 + idx*4)` in 0x00133890. Ghidra emits only `halt_baddata()` for it."
+  },
+  {
+    "address": "0x00133890",
+    "name": "maybe_Video_McPredict1ReadMv",
+    "signature": "void* maybe_Video_McPredict1ReadMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context; f_3bc/f_3c0 hold the predicted motion vector",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Motion compensation, step 1: adds the motion-vector delta read from the bitstream (0x0013587C) to the predictor at self->f_3bc/f_3c0, stores the resulting MV through the caller's out pointer, then filters the luma block (16 phases from the table at 0x00133810 indexed by (x&7)+((y&1)<<3)) and the two chroma blocks (table 0x00133850, one 0x200 bytes further on) into the reference frame with a 0x400-byte row pitch.",
+    "confidence": 0.48,
+    "evidence": "`result = func_0013587C(); iVar3 = unaff_r6 + iVar1->f_3bc; uVar4 = unaff_r6 + f_3c0; *unaff_r4 = iVar3; unaff_r4[1] = uVar4;` then `(*(&LAB_00133810 + table[(iVar3 + r11*2 & 7) + (uVar4 & 1)*8]))(src + r11 + (uVar4>>1)*0x400 + (iVar3>>1), dst + r11, r6)` and the same with `(iVar1 add 0x24)` / `>>2` for chroma. 0x0013587C is the 'get current bitstream position' helper also used by the MC filter routines."
+  },
+  {
+    "address": "0x00133A08",
+    "name": "maybe_Video_McPredict1ApplyMv",
+    "signature": "void* maybe_Video_McPredict1ApplyMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context; f_3bc/f_3c0 hold the already decoded MV",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Same prediction as 0x00133890 but without reading a new MV: it reuses the vector already stored at self->f_3bc/f_3c0, writes it to the caller's out pair and filters luma (table 0x00133810) and both chroma planes (table 0x00133850, second copy at +0x200) through the quarter-pel filter bank.",
+    "confidence": 0.48,
+    "evidence": "Byte-identical body to 0x00133890 minus the `func_0013587C()` prefix (`iVar2 = self->f_3bc; f3c0 = self->f_3c0; *unaff_r4 = iVar2; ...`). The identical body is emitted again at 0x00134210, which is why both addresses exist (two block-size paths)."
+  },
+  {
+    "address": "0x00133B44",
+    "name": "maybe_Video_McPredict2ReadMv",
+    "signature": "void* maybe_Video_McPredict2ReadMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Second motion-compensation variant: identical to 0x00133890 but the luma filters come from the table at 0x00133850 and the chroma filters from 0x00133B04 - i.e. the same interpolation with a different filter/rounding bank (the second of the four banks in this module).",
+    "confidence": 0.45,
+    "evidence": "`func_0013587C(); ... *unaff_r4 = iVar3;` with dispatch `&LAB_00133850 + table[...]` for luma and `&g_00133B04 + table[...]` for chroma; the table bases are the only difference from 0x00133890."
+  },
+  {
+    "address": "0x00133C94",
+    "name": "maybe_Video_McPredict2ApplyMv",
+    "signature": "void* maybe_Video_McPredict2ApplyMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Apply-only counterpart of 0x00133B44: reuses the stored MV and filters with the 0x00133850/0x00133B04 banks. Its chroma stage indexes an 8-entry table ((x>>1)&3, (y>>1)&1) rather than 16, i.e. half-pel chroma.",
+    "confidence": 0.45,
+    "evidence": "Body = 0x00133B44 without the bitstream read; note `iVar2 = ((iVar2 + r11*2) >> 1 & 3) + ((f3c0 >> 1) & 1)*4` in 0x00133ECC, the 4x2-entry chroma variant, and 0x00133C94 is its read-free sibling."
+  },
+  {
+    "address": "0x00133D8C",
+    "name": "maybe_Video_McPredict3ReadMv",
+    "signature": "void* maybe_Video_McPredict3ReadMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Third motion-compensation variant: reads the MV delta, adds the predictor, then filters luma with the 0x00133B04 bank and chroma with the 0x00133D6C bank.",
+    "confidence": 0.45,
+    "evidence": "`func_0013587C()` + the `*unaff_r4 = ...` MV store followed by dispatch through `&g_00133B04` (luma, 16 phases) and `&g_00133D6C` (chroma); identical to 0x00133890 apart from the table bases."
+  },
+  {
+    "address": "0x00133ECC",
+    "name": "maybe_Video_McPredict3ApplyMv",
+    "signature": "void* maybe_Video_McPredict3ApplyMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Apply-only counterpart of 0x00133D8C (0x00133B04 luma bank, 0x00133D6C chroma bank, 4x2 chroma phases).",
+    "confidence": 0.45,
+    "evidence": "Same body as 0x00133D8C without the bitstream read; chroma phase index `((x + r11*2) >> 1 & 3) + ((y >> 1) & 1)*4` = 8 entries, half the luma resolution."
+  },
+  {
+    "address": "0x00133FB4",
+    "name": "maybe_Video_McPredict4ReadMv",
+    "signature": "void* maybe_Video_McPredict4ReadMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Fourth motion-compensation variant: reads the MV delta and filters with the 0x00133D6C luma bank and the 0x00133FA4 chroma bank.",
+    "confidence": 0.45,
+    "evidence": "`func_0013587C()` + MV store, dispatch `&g_00133D6C` / `&g_00133FA4`; the chroma index is `((x + r11*2) >> 1 & 1) + ((y >> 1) & 1)*2` = 4 entries, i.e. the coarsest chroma filter."
+  },
+  {
+    "address": "0x001340F4",
+    "name": "maybe_Video_McPredict4ApplyMv",
+    "signature": "void* maybe_Video_McPredict4ApplyMv(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Apply-only counterpart of 0x00133FB4 (0x00133D6C / 0x00133FA4 banks, 4-entry chroma phases).",
+    "confidence": 0.45,
+    "evidence": "Same body as 0x00133FB4 without the bitstream read; `iVar2 = ((x + r11*2) >> 1 & 1) + ((y >> 1) & 1)*2` selects one of four chroma filters."
+  },
+  {
+    "address": "0x00134210",
+    "name": "maybe_Video_McPredict1ApplyMv2",
+    "signature": "void* maybe_Video_McPredict1ApplyMv2(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of 0x00133A08: the compiler wrote the same prediction body out again (same filter banks, same MV fields) because the decoder calls it from a second block-size path.",
+    "confidence": 0.48,
+    "evidence": "The readable C of 0x00134210 is textually identical to 0x00133A08 (same `iVar2 = self->f_3bc; f3c0 = self->f_3c0; *unaff_r4 = iVar2;` prologue, same two `&LAB_00133810` / `&LAB_00133850` dispatches, same `iVar1 + 0x200` chroma tail)."
+  },
+  {
+    "address": "0x00134334",
+    "name": "maybe_Video_McPredict1ApplyMv3",
+    "signature": "void* maybe_Video_McPredict1ApplyMv3(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Third emission of 0x00133A08 / 0x00134210 with the same 0x00133810 + 0x00133850 filter banks.",
+    "confidence": 0.48,
+    "evidence": "Textually identical to 0x00133A08 and 0x00134210, including the chroma second call at `iVar1 + 0x200`."
+  },
+  {
+    "address": "0x00134458",
+    "name": "maybe_Video_McPredict1ApplyMv4",
+    "signature": "void* maybe_Video_McPredict1ApplyMv4(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Fourth emission of the same prediction body as 0x00133A08 (0x00133810 luma bank / 0x00133850 chroma bank).",
+    "confidence": 0.48,
+    "evidence": "Textually identical to 0x00133A08; only the address differs, which is why the batch contains four copies of this shape."
+  },
+  {
+    "address": "0x00134564",
+    "name": "maybe_Video_McPredict2ApplyMv2",
+    "signature": "void* maybe_Video_McPredict2ApplyMv2(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of 0x00133C94: 0x00133850 luma bank, 0x00133B04 chroma bank.",
+    "confidence": 0.45,
+    "evidence": "`&LAB_00133850` luma dispatch and `&g_00133B04` chroma dispatch, same as 0x00133C94; the tail chroma call is at `iVar1 + 0x200`."
+  },
+  {
+    "address": "0x00134698",
+    "name": "maybe_Video_McPredict2ApplyMv3",
+    "signature": "void* maybe_Video_McPredict2ApplyMv3(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Third emission of 0x00133C94 (0x00133850 / 0x00133B04).",
+    "confidence": 0.45,
+    "evidence": "Same dispatch pair as 0x00133C94; identical readable C."
+  },
+  {
+    "address": "0x001347BC",
+    "name": "maybe_Video_McPredict2ApplyMv4",
+    "signature": "void* maybe_Video_McPredict2ApplyMv4(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Fourth emission of 0x00133C94 (0x00133850 / 0x00133B04).",
+    "confidence": 0.45,
+    "evidence": "Same dispatch pair as 0x00133C94; identical readable C."
+  },
+  {
+    "address": "0x001348D8",
+    "name": "maybe_Video_McPredict3ApplyMv2",
+    "signature": "void* maybe_Video_McPredict3ApplyMv2(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of 0x00133ECC (0x00133B04 luma / 0x00133D6C chroma, 4x2 chroma phases).",
+    "confidence": 0.45,
+    "evidence": "`&g_00133B04` + `&g_00133D6C` dispatches and the 8-entry chroma index, identical to 0x00133ECC."
+  },
+  {
+    "address": "0x001349FC",
+    "name": "maybe_Video_McPredict3ApplyMv3",
+    "signature": "void* maybe_Video_McPredict3ApplyMv3(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Third emission of 0x00133ECC (0x00133B04 / 0x00133D6C).",
+    "confidence": 0.45,
+    "evidence": "Same dispatch pair and 8-entry chroma index as 0x00133ECC."
+  },
+  {
+    "address": "0x00134B20",
+    "name": "maybe_Video_McPredict3ApplyMv4",
+    "signature": "void* maybe_Video_McPredict3ApplyMv4(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Fourth emission of 0x00133ECC (0x00133B04 / 0x00133D6C).",
+    "confidence": 0.45,
+    "evidence": "Same dispatch pair and 8-entry chroma index as 0x00133ECC."
+  },
+  {
+    "address": "0x00134C2C",
+    "name": "maybe_Video_McPredict4ApplyMv2",
+    "signature": "void* maybe_Video_McPredict4ApplyMv2(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of 0x001340F4: 0x00133D6C luma bank, 0x00133FA4 chroma bank, 4-entry chroma phases.",
+    "confidence": 0.45,
+    "evidence": "`&g_00133D6C` + `&g_00133FA4` dispatches with `iVar2 = ((x + r11*2) >> 1 & 1) + ((y >> 1) & 1)*2`, identical to 0x001340F4."
+  },
+  {
+    "address": "0x00134D38",
+    "name": "maybe_Video_McPredict4ApplyMv3",
+    "signature": "void* maybe_Video_McPredict4ApplyMv3(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Third emission of 0x001340F4 (0x00133D6C / 0x00133FA4).",
+    "confidence": 0.45,
+    "evidence": "Same dispatch pair and 4-entry chroma index as 0x001340F4."
+  },
+  {
+    "address": "0x00134E3C",
+    "name": "maybe_Video_McPredict4ApplyMv4",
+    "signature": "void* maybe_Video_McPredict4ApplyMv4(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Fourth emission of 0x001340F4 (0x00133D6C / 0x00133FA4, coarsest chroma filter).",
+    "confidence": 0.45,
+    "evidence": "`&g_00133D6C` luma dispatch and `&g_00133FA4` chroma dispatch with the 4-entry chroma index - the smallest member of the prediction family (0xA8 bytes)."
+  },
+  {
+    "address": "0x00134EE4",
+    "name": "maybe_Video_DecodeCoefficientBlock",
+    "signature": "int maybe_Video_DecodeCoefficientBlock(u32* st)",
+    "params": {
+      "st": "bitstream/coefficient state; st[1]/st[2] are the remaining block dimensions, st+0x3c/0x40 the DC predictors"
+    },
+    "summary": "Decodes one block of transform coefficients: determines the DC predictor from the block type bits, then loops over the block in 16-coefficient rows feeding each bit through the two interleaved VLC decoders 0x00135104/0x001351C8 (bit set -> 0x001351C8, clear -> 0x00135104), refilling the bit reservoir with 0x00135868. Returns the new bit position.",
+    "confidence": 0.48,
+    "evidence": "`uVar5 = (u32)*(u16*)*arg1; if (CARRY4(uVar5*0x10000,...)) {...}` selects the predictor word (arg1[0xf] vs arg1[0x10]) and stores it in arg1[0xee]; inner loop `bVar18 = CARRY4(uVar5,uVar5); uVar5 *= 2; pcVar7 = bVar18 ? switchD_00133b00::func_001351C8 : switchD_00133b00::func_00135104; if (iVar1 < 1) func_00135868(); (*pcVar7)();` and `iVar9 -= 0x10` / `iVar17 -= 0x10` outer counters; returns `(bitpos - *result) - 2`. Ghidra attributes the callees to `switchD_00133b00`, i.e. they are case bodies of the big switch at 0x00133B00."
+  },
+  {
+    "address": "0x00135104",
+    "name": "maybe_Video_DecodeCoefficientGroupEven",
+    "signature": "void maybe_Video_DecodeCoefficientGroupEven(u32 a1, u32 a2, int bitcount, u32 bits)",
+    "params": {
+      "bitcount": "valid bits left in the reservoir",
+      "bits": "bit reservoir word"
+    },
+    "summary": "VLC case body: decodes up to four coefficients of one interleaved group, each time taking the top three bits (or, for the special code, a remapped index) of the reservoir and jumping through the 16-entry table at 0x00135418; a per-subblock flag byte at g_001350C4 decides whether a further coefficient or a block termination follows, and each decoded coefficient is added through 0x001358BC (luma) or 0x00135DCC (chroma).",
+    "confidence": 0.45,
+    "evidence": "`uVar8 = arg4 >> 0x1d; arg4 <<= 3; if (arg3 < 3) func_00135868();` = take 3 bits, refill; `(&g_001350c4)[unaff_r6]` flag byte tested with 1/2/4/8/0x10; `(*(&g_00135418 + *(int*)(&g_00135418 + uVar8*4)))()` = relative-offset jump table; `if (uVar8 == 2) { uVar8 = 9; func_001358BC(); }` = escape code; coefficient offsets `+8`, `+0x2000`, `+0x2008` show it walks a block laid out as four 0x2000-spaced quadrants."
+  },
+  {
+    "address": "0x001351C8",
+    "name": "maybe_Video_DecodeCoefficientGroupOdd",
+    "signature": "void maybe_Video_DecodeCoefficientGroupOdd(u32 a1, u32 a2, int bitcount, u32 bits)",
+    "params": {
+      "bitcount": "valid bits left in the reservoir",
+      "bits": "bit reservoir word"
+    },
+    "summary": "The other half of the interleaved coefficient decoder: takes 4-bit prefixes (`arg4 >> 0x1c`), clamps the code index against the subblock's remaining counts (f_51/f_58), rewrites the four 'current code' bytes f_59/f_5a/f_61/f_62 and jumps through the same 0x00135418 table. Selected when the leading bit of the block is set.",
+    "confidence": 0.45,
+    "evidence": "`if (((&g_001350c4)[unaff_r6] & 1) == 0) { uVar6 = min(iVar2->f_51, iVar2->f_58); if (uVar6 == 9) uVar6 = 3; arg4 >>= 0x1c; if (uVar6 <= arg4) arg4++; if (arg4 < 9) { i = 4; uVar6 = arg4; } else i = 1; iVar2->f_59 = f_5a = f_61 = f_62 = uVar6; iVar2 = g_00135418[uVar6]; if (arg3 < i) func_00135868(); (*(&g_00135418 + iVar2))(); }`"
+  },
+  {
+    "address": "0x001352A0",
+    "name": "maybe_Video_DecodeSubblockMask",
+    "signature": "void maybe_Video_DecodeSubblockMask(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock index) and r12 (code index) registers"
+    },
+    "summary": "Decodes the per-subblock 'which coefficients are present' mask: reads the mask byte from g_00135260 for the current subblock and, for every set bit, recurses into 0x0013562C. This is the loop that walks a subblock's coefficient slots before the actual VLC decoding.",
+    "confidence": 0.45,
+    "evidence": "`uVar1 = (&g_00135260)[unaff_r6]; if (uVar1 & 1) func_0013562C(); if (uVar1 & 2) func_0013562C(); ... if (uVar1 & 0x20) func_0013562C();` plus `func_00135838()` (get reservoir) at the head; 0x0013562C is the per-slot decoder. Ghidra truncated the body at 0x001352A0+0x294."
+  },
+  {
+    "address": "0x00135534",
+    "name": "maybe_Video_VlcDispatchEntry",
+    "signature": "void maybe_Video_VlcDispatchEntry(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock) and r12 (code) registers"
+    },
+    "summary": "Another VLC case body: fetches the reservoir, calls 0x001354DC (coefficient store) and then tail-jumps through the 0x00135418 table - the 'advance to the next code' step of the coefficient loop. The flag byte at g_001355F4 chooses between two direct jumps.",
+    "confidence": 0.4,
+    "evidence": "`func_00135838(); bVar1 = (&g_001355f4)[unaff_r6]; func_001354DC(); if ((bVar1 & 1) == 0) { (*(&g_00135418 + *(int*)(&g_00135418 + in_r12*4)))(); return; } (*(...))();` with a 'Could not recover jumptable' warning at 0x00135568."
+  },
+  {
+    "address": "0x00135618",
+    "name": "maybe_Video_VlcJumpStub1",
+    "signature": "void maybe_Video_VlcJumpStub1(void)",
+    "params": {
+      "_": "uses the caller's r12 as the code index"
+    },
+    "summary": "Three-instruction dispatch stub: jumps through the relative table at 0x00135418 using the code index left in r12 by its caller. Not a standalone routine; it is the shared 'next case' tail of the coefficient switch.",
+    "confidence": 0.45,
+    "evidence": "`(*(code*)((u32)(&g_00135418 + *(int*)(&g_00135418 + in_r12*4)) & 0xfffffffc))(); ` and nothing else (36 bytes). Same construct appears at 0x00135728."
+  },
+  {
+    "address": "0x0013563C",
+    "name": "maybe_Video_ResidualBlockAdd",
+    "signature": "void maybe_Video_ResidualBlockAdd(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Adds one decoded residual block into the destination plane: reads the four neighbouring samples at -1/+0x3FF/+0x7FF/+0xBFF (the four 0x400-spaced lanes) and writes the 1:2:1 averaged, packed result to *r11; delegates the row tail to 0x001377A0.",
+    "confidence": 0.45,
+    "evidence": "`uVar9 = *(u8*)(r11 + 0x3ff); uVar7 = *(u8*)(r11 + 0x7ff); uVar4 = *(u8*)(r11 + 0xbff);` then `*r11 = (*(u8*)(r11 + -1) + uVar9 + 1) >> 1 | ...`; tail call `func_001377A0()`. 0x001377A0 is the packed-RGB recombination helper."
+  },
+  {
+    "address": "0x001356D4",
+    "name": "maybe_Video_DecodeSignedMask",
+    "signature": "void maybe_Video_DecodeSignedMask(void)",
+    "params": {
+      "_": "uses the caller's r6 as the subblock index"
+    },
+    "summary": "Reads the per-subblock flag byte g_001356C4[i] and calls 0x001357E8 once per set bit (bits 1,2,4,8), i.e. it materialises the four sign/coefficient flags of a subblock before the residual is added.",
+    "confidence": 0.45,
+    "evidence": "`uVar1 = (u8)(&g_001356c4)[unaff_r6]; if (uVar1 & 1) func_001357E8(); if (uVar1 & 2) func_001357E8(); if (uVar1 & 4) func_001357E8(); if (uVar1 & 8) func_001357E8();` preceded by `func_00135838()`."
+  },
+  {
+    "address": "0x00135728",
+    "name": "maybe_Video_VlcJumpStub2",
+    "signature": "void maybe_Video_VlcJumpStub2(void)",
+    "params": {
+      "_": "uses the caller's r12 as the code index"
+    },
+    "summary": "Same three-instruction relative-table jump as 0x00135618 but with a different table base (0x00135418 still, resolved through a different pool word), i.e. the second shared 'next case' tail.",
+    "confidence": 0.45,
+    "evidence": "`(*(code*)((u32)(&g_00135418 + *(int*)(&g_00135418 + in_r12*4)) & 0xfffffffc))();` only, 24 bytes."
+  },
+  {
+    "address": "0x00135740",
+    "name": "maybe_Video_VlcDispatchEntry2",
+    "signature": "void maybe_Video_VlcDispatchEntry2(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock) and r12 (code) registers"
+    },
+    "summary": "Second 'advance to next code' body: like 0x00135534 but it indexes g_001355F4 with the code index and jumps directly through 0x00135418 without the extra 0x001354DC store.",
+    "confidence": 0.4,
+    "evidence": "`func_00135838(); ... (&g_001355f4)[...]; (*(&g_00135418 + *(int*)(&g_00135418 + idx*4)))();` - same table, different flag source than 0x00135534."
+  },
+  {
+    "address": "0x001357E8",
+    "name": "maybe_Video_ResidualBlockAdd2",
+    "signature": "void maybe_Video_ResidualBlockAdd2(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second residual-add routine: same four-lane read pattern as 0x0013563C but with the sign of the filter taps flipped (it subtracts where the other adds), i.e. the negative-sign variant of the 1:2:1 residual blend; tail call into 0x001377A0.",
+    "confidence": 0.45,
+    "evidence": "`func_001377A0()` tail call plus the same `r11 + -1 / +0x3ff / +0x7ff / +0xbff` lane reads and packed byte stores as 0x0013563C; the difference is the order of the averaged terms."
+  },
+  {
+    "address": "0x001358BC",
+    "name": "maybe_Video_InterpolateBlock4x4",
+    "signature": "void maybe_Video_InterpolateBlock4x4(void)",
+    "params": {
+      "_": "uses the caller's r6 (stride/phase), r11 (destination) and the state block"
+    },
+    "summary": "Fully unrolled sub-pixel interpolator: for each of 16 output pixels it takes four neighbouring source pixels (the row 0x400 above plus the byte at +0x3BFF), runs a fixed-point DDA at 6-bit precision per channel (`+0x40 >> 7` rounding) and packs the four channels into one 32-bit word written to the destination. This is the kernel behind the luma motion-compensation filter bank.",
+    "confidence": 0.48,
+    "evidence": "`uVar5 = unaff_r11[-0x100]; ... uVar9 = *(u8*)((int)unaff_r11 + 0x3bff); local_a0 = (uVar5 & 0xff) << 6;` then per-channel `local_a0 += ((iVar10 + c*-8 + 1) >> 1)` DDA steps and `*unaff_r11 = local_a0 + iVar29 + 0x40 >> 7 | (local_98 + iVar30 + 0x40 >> 7) << 8 | ... << 0x18;` looped `iVar39 = 0x10` times; the packed-RGBA output and the 0x400 row pitch identify it as the luma interpolation kernel."
+  },
+  {
+    "address": "0x00135DCC",
+    "name": "maybe_Video_InterpolateBlock2x2",
+    "signature": "void maybe_Video_InterpolateBlock2x2(void)",
+    "params": {
+      "_": "uses the caller's r6 (stride/phase), r11 (destination) and the state block"
+    },
+    "summary": "Chroma counterpart of 0x001358BC: the same fixed-point 6-bit DDA interpolator, but it runs over the half-resolution chroma planes (0x200 offsets, two output pixels per step), which is why it is roughly the same size while covering a quarter of the samples.",
+    "confidence": 0.48,
+    "evidence": "Same structure as 0x001358BC (`... + 0x40 >> 7` packing, DDA accumulators, `iVar39 = 0x10` loop) with the chroma offsets (`+0x200` steps, `>> 1` coordinates) used by the second chroma call in the prediction routines; called from 0x00135104/0x00134EE4 when the escape code selects chroma."
+  },
+  {
+    "address": "0x0013626C",
+    "name": "maybe_Video_BlendPlanesDiag",
+    "signature": "void maybe_Video_BlendPlanesDiag(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Blends the four 0x400-spaced sample lanes at a diagonal offset: reads +0x3FF/+0x7FF/+0xBFF and -1, averages pairs with rounding (`(a+b+1)>>1`) and the diagonal pairs with `(a+2b+c+2)>>2`, then stores the packed result at *r11.",
+    "confidence": 0.45,
+    "evidence": "`uVar9 = *(u8*)(r11 + 0x3ff); uVar7 = *(u8*)(r11 + 0x7ff); uVar4 = *(u8*)(r11 + 0xbff); uVar6 = (uVar9 + uVar7 + 1) >> 1; iVar1 = (uVar4 + uVar9 + uVar7*2 + 2) >> 2; *r11 = (*(u8*)(r11 + -1) + uVar9 + 1) >> 1 | ...` - the 1:2:1 kernel over the four lanes."
+  },
+  {
+    "address": "0x00136410",
+    "name": "maybe_Video_BlendPlanesRow",
+    "signature": "void maybe_Video_BlendPlanesRow(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Horizontal blend variant: takes the two packed words one lane up (r11-0x400, r11-0x3FC) plus the byte at -1 and produces the 1:2:1 averaged packed word at *r11.",
+    "confidence": 0.45,
+    "evidence": "`uVar10 = unaff_r11[-0x100]; uVar15 = unaff_r11[-0xff]; uVar7 = *(u8*)(r11 + -1);` then the same `(a + 2b + c + 2) >> 2` averaging and packed store pattern as 0x0013626C."
+  },
+  {
+    "address": "0x00136668",
+    "name": "maybe_Video_BlendPlanesRow2",
+    "signature": "void maybe_Video_BlendPlanesRow2(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Third blend variant (largest of the 0x1A4..0x3A4 group): same 1:2:1 averaging over the 0x400-spaced lanes, unrolled over a full row of packed pixels.",
+    "confidence": 0.42,
+    "evidence": "Same lane-read/average/store idiom as 0x0013626C/0x00136410 (`>> 1`, `>> 2` with +1/+2 rounding, packed `| <<8 | <<0x10 | <<0x18` stores), 0x354 bytes long."
+  },
+  {
+    "address": "0x001369BC",
+    "name": "maybe_Video_BlendPlanesRow3",
+    "signature": "void maybe_Video_BlendPlanesRow3(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Fourth blend variant of the same family (0x238 bytes), averaging the 0x400-spaced lanes and the horizontally adjacent packed words.",
+    "confidence": 0.42,
+    "evidence": "`uVar11 = unaff_r11[-0x100];` plus the same rounding averages and packed stores as 0x00136410."
+  },
+  {
+    "address": "0x00136BF4",
+    "name": "maybe_Video_BlendPlanesBlock",
+    "signature": "void maybe_Video_BlendPlanesBlock(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Largest of the unrolled blend kernels (0x3A4 bytes): the same 1:2:1 lane averaging expanded over a whole block so the compiler could keep every intermediate in registers.",
+    "confidence": 0.42,
+    "evidence": "Same rounding-average and packed-store idiom as 0x0013626C-0x001369BC, with the lane offsets +0x3FF/+0x7FF/+0xBFF and -1."
+  },
+  {
+    "address": "0x00136F98",
+    "name": "maybe_Video_BlendPlanesFromStream",
+    "signature": "void maybe_Video_BlendPlanesFromStream(void)",
+    "params": {
+      "_": "uses the caller's r11 and calls the bitstream helper 0x0013587C"
+    },
+    "summary": "Blend kernel that first advances the bitstream (0x0013587C) before averaging the four lanes, i.e. the 'prediction read from the stream' variant of the 1:2:1 kernel used inside the coefficient loop.",
+    "confidence": 0.42,
+    "evidence": "Calls 0x0013587C (the same 'current bitstream position' helper as the motion-compensation routines) and then uses the identical lane-average/packed-store sequence as 0x0013626C."
+  },
+  {
+    "address": "0x001372C0",
+    "name": "maybe_Video_BlendPlanesCorner1",
+    "signature": "void maybe_Video_BlendPlanesCorner1(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Corner-prediction kernel: averages the up-left byte (-0x401), the left byte (-1) and the two packed words one lane up, then stores the packed result at *r11.",
+    "confidence": 0.45,
+    "evidence": "`uVar6 = *(u8*)(r11 + -0x401); uVar5 = *(u8*)(r11 + -1); uVar7 = unaff_r11[-0x100]; uVar2 = (uVar6 + uVar5 + 1) >> 1; iVar3 = (uVar5 + uVar6*2 + uVar8 + 2) >> 2; *r11 = uVar2 | iVar3 << 8 | ((uVar6 + uVar8*2 + uVar1 + 2) >> 2) << 0x10 | ...`"
+  },
+  {
+    "address": "0x001373C4",
+    "name": "maybe_Video_BlendPlanesCorner2",
+    "signature": "void maybe_Video_BlendPlanesCorner2(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second corner kernel: the same -0x401 / -1 / lane-up terms with a different tap order, giving the mirrored corner prediction.",
+    "confidence": 0.42,
+    "evidence": "`uVar11 = unaff_r11[-0x100]; uVar10 = *(u8*)(r11 + -0x401); uVar3 = (uVar10 + uVar9 + 1) >> 1;` plus the same rounding averages and packed store as 0x001372C0."
+  },
+  {
+    "address": "0x001374CC",
+    "name": "maybe_Video_BlendPlanesCorner3",
+    "signature": "void maybe_Video_BlendPlanesCorner3(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Third corner kernel (smallest of the three, 0xE8 bytes): same inputs as 0x001372C0 with the simplest tap set.",
+    "confidence": 0.42,
+    "evidence": "`uVar6 = unaff_r11[-0x100]; uVar8 = *(u8*)(r11 + -0x401); uVar7 = *(u8*)(r11 + -1); uVar3 = (uVar7 + uVar8*2 + uVar9 + 2) >> 2;` - same family as 0x001372C0."
+  },
+  {
+    "address": "0x001375B4",
+    "name": "maybe_Video_FilterRgbaRow",
+    "signature": "void maybe_Video_FilterRgbaRow(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Packed-RGBA row filter (largest single-pass kernel here, 0xD70 bytes): unpacks the four lanes of a pixel, applies the 1:2:1 averaging per byte lane and repacks, walking a whole scanline. Used to resample/soften a decoded frame.",
+    "confidence": 0.45,
+    "evidence": "`uVar13 = unaff_r11[-0x100]; uVar1 = (uVar13 & 0xffff) >> 8; uVar2 = (uVar13 & 0xffffff) >> 0x10; uVar3 = uVar13 >> 0x18; uVar5 = (uVar1 + uVar2 + 1) >> 1; ... *unaff_r11 = (uVar13 & 0xff) + uVar1 + 1 >> 1 | uVar5 << 8 | iVar6 << 0x10 | iVar7 << 0x18; iVar8 = (uVar2 + uVar3*2 + uVar11 + 2) >> 2;` - per-byte-lane filtering of packed RGBA."
+  },
+  {
+    "address": "0x00138324",
+    "name": "maybe_Video_FilterRgbaWord4",
+    "signature": "void maybe_Video_FilterRgbaWord4(u32* arg1)",
+    "params": {
+      "arg1": "four packed RGBA words"
+    },
+    "summary": "Four-word packed-RGBA filter: masks each of the four input words with the byte mask g_00138DB4, shifts them down by one bit (halving), then recombines with cross-word carries - a SIMD-style horizontal add of four pixels.",
+    "confidence": 0.45,
+    "evidence": "`uVar1 = g_00138db4; uVar2 = uVar1 & *arg1 >> 1; uVar3 = uVar1 & arg1[1] >> 1; uVar4 = uVar1 & arg1[2] >> 1; uVar5 = uVar1 & arg1[3] >> 1; uVar2 = uVar1 & (uVar2 + (uVar2 >> 8) + uVar3*0x1000000) >> 1;` - g_00138DB4 is the 0x7F7F7F7F-style per-byte mask used to keep lanes from carrying."
+  },
+  {
+    "address": "0x0013849C",
+    "name": "maybe_Video_FilterRgbaWord4b",
+    "signature": "void maybe_Video_FilterRgbaWord4b(u32* arg1)",
+    "params": {
+      "arg1": "four packed RGBA words"
+    },
+    "summary": "Second four-word packed-RGBA filter, same mask-and-average scheme as 0x00138324 with the words taken in the opposite order.",
+    "confidence": 0.42,
+    "evidence": "Same `g_00138db4 & *arg1 >> 1` / `mask & (sum) >> 1` sequence as 0x00138324; identical size (0x178 bytes)."
+  },
+  {
+    "address": "0x00138614",
+    "name": "maybe_Video_FilterRgbaWord4c",
+    "signature": "void maybe_Video_FilterRgbaWord4c(void* self)",
+    "params": {
+      "self": "address of the pixel block; reads self-1, self+3, self+7 and f_b"
+    },
+    "summary": "Third packed-RGBA filter, operating on unaligned byte offsets (-1, +3, +7, +0xB) so that it filters diagonally neighbouring pixels with the same per-byte-lane average.",
+    "confidence": 0.42,
+    "evidence": "`uVar3 = g_00138db4 & *(u32*)(self - 1) >> 1; uVar4 = g_00138db4 & *(u32*)(self + 3) >> 1; uVar5 = g_00138db4 & *(u32*)(self + 7) >> 1; uVar6 = g_00138db4 & self->f_b >> 1;` - the unaligned twins of 0x00138324."
+  },
+  {
+    "address": "0x001387F0",
+    "name": "maybe_Video_FilterRgbaWord4d",
+    "signature": "void maybe_Video_FilterRgbaWord4d(void* self)",
+    "params": {
+      "self": "pixel block base"
+    },
+    "summary": "Fourth packed-RGBA filter of the same unaligned family (0x174 bytes).",
+    "confidence": 0.42,
+    "evidence": "Same `g_00138db4 & *(u32*)(self + odd_offset) >> 1` masking and recombining as 0x00138614."
+  },
+  {
+    "address": "0x00138964",
+    "name": "maybe_Video_FilterRgbaBlock",
+    "signature": "void maybe_Video_FilterRgbaBlock(void)",
+    "params": {
+      "_": "operates on several pointer arguments; the readable C is a partial view"
+    },
+    "summary": "Packed-RGBA block filter over several rows: keeps 15 pointers/accumulators live (puVar13..) and applies the mask-and-average scheme to a whole block, not just four words.",
+    "confidence": 0.4,
+    "evidence": "`u16* puVar1; u32* puVar3..puVar15;` plus the `g_00138db4` masking sequence; 0x1CC bytes."
+  },
+  {
+    "address": "0x00138B30",
+    "name": "maybe_Video_FilterRgbaBlock2",
+    "signature": "void maybe_Video_FilterRgbaBlock2(void)",
+    "params": {
+      "_": "operates on several pointer arguments; the readable C is a partial view"
+    },
+    "summary": "Smaller sibling of 0x00138964 (0x14C bytes): the same multi-pointer packed-RGBA filtering with fewer live accumulators.",
+    "confidence": 0.4,
+    "evidence": "Same pointer-heavy prologue (`u8* pbVar1; u32* puVar3..`) and the same g_00138DB4 masking idiom as 0x00138964."
+  },
+  {
+    "address": "0x00138C7C",
+    "name": "maybe_Video_FilterRgbaFrame",
+    "signature": "void maybe_Video_FilterRgbaFrame(void)",
+    "params": {
+      "_": "operates on self->f_401/f_801/... i.e. the four 0x400-spaced lanes; 0x1214 bytes"
+    },
+    "summary": "The largest routine in the module and the real entry point of this filter family: it applies the packed-RGBA mask-and-average filter over a whole frame, walking the four 0x400-spaced pixel lanes (self+1, self+0x401, self+0x801, self+0xC01) and using g_00138DB4 as the per-byte lane mask so no lane carries into the next.",
+    "confidence": 0.45,
+    "evidence": "`uVar6 = g_00138db4 & *(u32*)(self + 1) >> 1; uVar7 = g_00138db4 & *(u32*)(self + 5) >> 1; uVar8 = g_00138db4 & *(u32*)(self + 9) >> 1; uVar5 = g_00138db4 & ((g_00138db4 & *self >> 1) + uVar6*0x101) >> 1;` with `puVar3 = (u32*)&self->f_401;` - the frame walk over the 0x400-byte lane pitch; 6.4 KB of code, all inlined, no calls."
+  },
+  {
+    "address": "0x00139E90",
+    "name": "maybe_Video_McPredict1ReadMv_B",
+    "signature": "void* maybe_Video_McPredict1ReadMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context; f_3bc/f_3c0 hold the predicted motion vector",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133890; addresses quoted in the description refer to copy 1). Motion compensation, step 1: adds the motion-vector delta read from the bitstream (0x0013587C) to the predictor at self->f_3bc/f_3c0, stores the resulting MV through the caller's out pointer, then filters the luma block (16 phases from the table at 0x00133810 indexed by (x&7)+((y&1)<<3)) and the two chroma blocks (table 0x00133850, one 0x200 bytes further on) into the reference frame with a 0x400-byte row pitch.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00133890: same code size (0x178) and only 7 of 0x178 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E10/g_00139E50; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013A008",
+    "name": "maybe_Video_McPredict1ApplyMv_B",
+    "signature": "void* maybe_Video_McPredict1ApplyMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context; f_3bc/f_3c0 hold the already decoded MV",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133A08; addresses quoted in the description refer to copy 1). Same prediction as 0x00133890 but without reading a new MV: it reuses the vector already stored at self->f_3bc/f_3c0, writes it to the caller's out pair and filters luma (table 0x00133810) and both chroma planes (table 0x00133850, second copy at +0x200) through the quarter-pel filter bank.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00133A08: same code size (0x13C) and only 2 of 0x13C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E10/g_00139E50."
+  },
+  {
+    "address": "0x0013A144",
+    "name": "maybe_Video_McPredict2ReadMv_B",
+    "signature": "void* maybe_Video_McPredict2ReadMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133B44; addresses quoted in the description refer to copy 1). Second motion-compensation variant: identical to 0x00133890 but the luma filters come from the table at 0x00133850 and the chroma filters from 0x00133B04 - i.e. the same interpolation with a different filter/rounding bank (the second of the four banks in this module).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00133B44: same code size (0x150) and only 7 of 0x150 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E50/g_0013A104; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013A294",
+    "name": "maybe_Video_McPredict2ApplyMv_B",
+    "signature": "void* maybe_Video_McPredict2ApplyMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133C94; addresses quoted in the description refer to copy 1). Apply-only counterpart of 0x00133B44: reuses the stored MV and filters with the 0x00133850/0x00133B04 banks. Its chroma stage indexes an 8-entry table ((x>>1)&3, (y>>1)&1) rather than 16, i.e. half-pel chroma.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00133C94: same code size (0xF8) and only 2 of 0xF8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E50/g_0013A104."
+  },
+  {
+    "address": "0x0013A38C",
+    "name": "maybe_Video_McPredict3ReadMv_B",
+    "signature": "void* maybe_Video_McPredict3ReadMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133D8C; addresses quoted in the description refer to copy 1). Third motion-compensation variant: reads the MV delta, adds the predictor, then filters luma with the 0x00133B04 bank and chroma with the 0x00133D6C bank.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00133D8C: same code size (0x140) and only 7 of 0x140 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A104/g_0013A36C; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013A4CC",
+    "name": "maybe_Video_McPredict3ApplyMv_B",
+    "signature": "void* maybe_Video_McPredict3ApplyMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133ECC; addresses quoted in the description refer to copy 1). Apply-only counterpart of 0x00133D8C (0x00133B04 luma bank, 0x00133D6C chroma bank, 4x2 chroma phases).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00133ECC: same code size (0xE8) and only 2 of 0xE8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A104/g_0013A36C."
+  },
+  {
+    "address": "0x0013A5B4",
+    "name": "maybe_Video_McPredict4ReadMv_B",
+    "signature": "void* maybe_Video_McPredict4ReadMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "bitstream state"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00133FB4; addresses quoted in the description refer to copy 1). Fourth motion-compensation variant: reads the MV delta and filters with the 0x00133D6C luma bank and the 0x00133FA4 chroma bank.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00133FB4: same code size (0x140) and only 7 of 0x140 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A36C/g_0013A5A4; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013A6F4",
+    "name": "maybe_Video_McPredict4ApplyMv_B",
+    "signature": "void* maybe_Video_McPredict4ApplyMv_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001340F4; addresses quoted in the description refer to copy 1). Apply-only counterpart of 0x00133FB4 (0x00133D6C / 0x00133FA4 banks, 4-entry chroma phases).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001340F4: same code size (0x11C) and only 2 of 0x11C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A36C/g_0013A5A4."
+  },
+  {
+    "address": "0x0013A810",
+    "name": "maybe_Video_McPredict1ApplyMv2_B",
+    "signature": "void* maybe_Video_McPredict1ApplyMv2_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134210; addresses quoted in the description refer to copy 1). Second emission of 0x00133A08: the compiler wrote the same prediction body out again (same filter banks, same MV fields) because the decoder calls it from a second block-size path.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00134210: same code size (0x124) and only 2 of 0x124 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E10/g_00139E50."
+  },
+  {
+    "address": "0x0013A934",
+    "name": "maybe_Video_McPredict1ApplyMv3_B",
+    "signature": "void* maybe_Video_McPredict1ApplyMv3_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134334; addresses quoted in the description refer to copy 1). Third emission of 0x00133A08 / 0x00134210 with the same 0x00133810 + 0x00133850 filter banks.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00134334: same code size (0x124) and only 2 of 0x124 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E10/g_00139E50."
+  },
+  {
+    "address": "0x0013AA58",
+    "name": "maybe_Video_McPredict1ApplyMv4_B",
+    "signature": "void* maybe_Video_McPredict1ApplyMv4_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134458; addresses quoted in the description refer to copy 1). Fourth emission of the same prediction body as 0x00133A08 (0x00133810 luma bank / 0x00133850 chroma bank).",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00134458: same code size (0x10C) and only 0 of 0x10C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E10/g_00139E50."
+  },
+  {
+    "address": "0x0013AB64",
+    "name": "maybe_Video_McPredict2ApplyMv2_B",
+    "signature": "void* maybe_Video_McPredict2ApplyMv2_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134564; addresses quoted in the description refer to copy 1). Second emission of 0x00133C94: 0x00133850 luma bank, 0x00133B04 chroma bank.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134564: same code size (0x134) and only 2 of 0x134 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E50/g_0013A104."
+  },
+  {
+    "address": "0x0013AC98",
+    "name": "maybe_Video_McPredict2ApplyMv3_B",
+    "signature": "void* maybe_Video_McPredict2ApplyMv3_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134698; addresses quoted in the description refer to copy 1). Third emission of 0x00133C94 (0x00133850 / 0x00133B04).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134698: same code size (0x124) and only 2 of 0x124 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E50/g_0013A104."
+  },
+  {
+    "address": "0x0013ADBC",
+    "name": "maybe_Video_McPredict2ApplyMv4_B",
+    "signature": "void* maybe_Video_McPredict2ApplyMv4_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001347BC; addresses quoted in the description refer to copy 1). Fourth emission of 0x00133C94 (0x00133850 / 0x00133B04).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001347BC: same code size (0x11C) and only 0 of 0x11C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_00139E50/g_0013A104."
+  },
+  {
+    "address": "0x0013AED8",
+    "name": "maybe_Video_McPredict3ApplyMv2_B",
+    "signature": "void* maybe_Video_McPredict3ApplyMv2_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001348D8; addresses quoted in the description refer to copy 1). Second emission of 0x00133ECC (0x00133B04 luma / 0x00133D6C chroma, 4x2 chroma phases).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001348D8: same code size (0x124) and only 2 of 0x124 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A104/g_0013A36C."
+  },
+  {
+    "address": "0x0013AFFC",
+    "name": "maybe_Video_McPredict3ApplyMv3_B",
+    "signature": "void* maybe_Video_McPredict3ApplyMv3_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001349FC; addresses quoted in the description refer to copy 1). Third emission of 0x00133ECC (0x00133B04 / 0x00133D6C).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001349FC: same code size (0x124) and only 2 of 0x124 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A104/g_0013A36C."
+  },
+  {
+    "address": "0x0013B120",
+    "name": "maybe_Video_McPredict3ApplyMv4_B",
+    "signature": "void* maybe_Video_McPredict3ApplyMv4_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134B20; addresses quoted in the description refer to copy 1). Fourth emission of 0x00133ECC (0x00133B04 / 0x00133D6C).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134B20: same code size (0x10C) and only 0 of 0x10C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A104/g_0013A36C."
+  },
+  {
+    "address": "0x0013B22C",
+    "name": "maybe_Video_McPredict4ApplyMv2_B",
+    "signature": "void* maybe_Video_McPredict4ApplyMv2_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134C2C; addresses quoted in the description refer to copy 1). Second emission of 0x001340F4: 0x00133D6C luma bank, 0x00133FA4 chroma bank, 4-entry chroma phases.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134C2C: same code size (0x10C) and only 2 of 0x10C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A36C/g_0013A5A4."
+  },
+  {
+    "address": "0x0013B338",
+    "name": "maybe_Video_McPredict4ApplyMv3_B",
+    "signature": "void* maybe_Video_McPredict4ApplyMv3_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134D38; addresses quoted in the description refer to copy 1). Third emission of 0x001340F4 (0x00133D6C / 0x00133FA4).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134D38: same code size (0x104) and only 2 of 0x104 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A36C/g_0013A5A4."
+  },
+  {
+    "address": "0x0013B43C",
+    "name": "maybe_Video_McPredict4ApplyMv4_B",
+    "signature": "void* maybe_Video_McPredict4ApplyMv4_B(McCtx* self, u32 chroma_flag, u32 a3, u32 a4)",
+    "params": {
+      "self": "decoder context",
+      "chroma_flag": "selects the chroma path",
+      "a3": "block descriptor",
+      "a4": "unused"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134E3C; addresses quoted in the description refer to copy 1). Fourth emission of 0x001340F4 (0x00133D6C / 0x00133FA4, coarsest chroma filter).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00134E3C: same code size (0xA8) and only 0 of 0xA8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013A36C/g_0013A5A4."
+  },
+  {
+    "address": "0x0013B4E4",
+    "name": "maybe_Video_DecodeCoefficientBlock_B",
+    "signature": "int maybe_Video_DecodeCoefficientBlock_B(u32* st)",
+    "params": {
+      "st": "bitstream/coefficient state; st[1]/st[2] are the remaining block dimensions, st+0x3c/0x40 the DC predictors"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00134EE4; addresses quoted in the description refer to copy 1). Decodes one block of transform coefficients: determines the DC predictor from the block type bits, then loops over the block in 16-coefficient rows feeding each bit through the two interleaved VLC decoders 0x00135104/0x001351C8 (bit set -> 0x001351C8, clear -> 0x00135104), refilling the bit reservoir with 0x00135868. Returns the new bit position.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x00134EE4: same code size (0x220) and only 2 of 0x220 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013E4D4/g_0013E654/g_0013E694/g_0013E6F4; it calls 0x0013A0D0, 0x0013B704, 0x0013B7C8, 0x0013BE68, 0x0013BE7C, 0x0013E770; the two interleaved VLC case bodies are 0x0013B704 / 0x0013B7C8 and the bit reservoir refill is 0x0013BE68."
+  },
+  {
+    "address": "0x0013B704",
+    "name": "maybe_Video_DecodeCoefficientGroupEven_B",
+    "signature": "void maybe_Video_DecodeCoefficientGroupEven_B(u32 a1, u32 a2, int bitcount, u32 bits)",
+    "params": {
+      "bitcount": "valid bits left in the reservoir",
+      "bits": "bit reservoir word"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135104; addresses quoted in the description refer to copy 1). VLC case body: decodes up to four coefficients of one interleaved group, each time taking the top three bits (or, for the special code, a remapped index) of the reservoir and jumping through the 16-entry table at 0x00135418; a per-subblock flag byte at g_001350C4 decides whether a further coefficient or a block termination follows, and each decoded coefficient is added through 0x001358BC (luma) or 0x00135DCC (chroma).",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00135104: same code size (0xC4) and only 2 of 0xC4 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013B6C4/g_0013B754/g_0013BA18/g_0013BBF4; it calls 0x0013BE38, 0x0013BE68, 0x0013BEBC; the chroma interpolation kernel it calls is 0x0013BEBC (copy of 0x001358BC)."
+  },
+  {
+    "address": "0x0013B7C8",
+    "name": "maybe_Video_DecodeCoefficientGroupOdd_B",
+    "signature": "void maybe_Video_DecodeCoefficientGroupOdd_B(u32 a1, u32 a2, int bitcount, u32 bits)",
+    "params": {
+      "bitcount": "valid bits left in the reservoir",
+      "bits": "bit reservoir word"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001351C8; addresses quoted in the description refer to copy 1). The other half of the interleaved coefficient decoder: takes 4-bit prefixes (`arg4 >> 0x1c`), clamps the code index against the subblock's remaining counts (f_51/f_58), rewrites the four 'current code' bytes f_59/f_5a/f_61/f_62 and jumps through the same 0x00135418 table. Selected when the leading bit of the block is set.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001351C8: same code size (0xD8) and only 2 of 0xD8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013B6C4/g_0013BA18/g_0013BBF4; it calls 0x0013BADC, 0x0013BC18, 0x0013BE38, 0x0013BE68."
+  },
+  {
+    "address": "0x0013B8A0",
+    "name": "maybe_Video_DecodeSubblockMask_B",
+    "signature": "void maybe_Video_DecodeSubblockMask_B(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock index) and r12 (code index) registers"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001352A0; addresses quoted in the description refer to copy 1). Decodes the per-subblock 'which coefficients are present' mask: reads the mask byte from g_00135260 for the current subblock and, for every set bit, recurses into 0x0013562C. This is the loop that walks a subblock's coefficient slots before the actual VLC decoding.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001352A0: same code size (0x294) and only 18 of 0x294 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013B860; it calls 0x0013BC2C, 0x0013BE38."
+  },
+  {
+    "address": "0x0013BB34",
+    "name": "maybe_Video_VlcDispatchEntry_B",
+    "signature": "void maybe_Video_VlcDispatchEntry_B(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock) and r12 (code) registers"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135534; addresses quoted in the description refer to copy 1). Another VLC case body: fetches the reservoir, calls 0x001354DC (coefficient store) and then tail-jumps through the 0x00135418 table - the 'advance to the next code' step of the coefficient loop. The flag byte at g_001355F4 chooses between two direct jumps.",
+    "confidence": 0.37,
+    "evidence": "Copy 2 of 0x00135534: same code size (0xE4) and only 2 of 0xE4 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013BA18/g_0013BBF4; it calls 0x0013BADC, 0x0013BE38."
+  },
+  {
+    "address": "0x0013BC18",
+    "name": "maybe_Video_VlcJumpStub1_B",
+    "signature": "void maybe_Video_VlcJumpStub1_B(void)",
+    "params": {
+      "_": "uses the caller's r12 as the code index"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135618; addresses quoted in the description refer to copy 1). Three-instruction dispatch stub: jumps through the relative table at 0x00135418 using the code index left in r12 by its caller. Not a standalone routine; it is the shared 'next case' tail of the coefficient switch.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00135618: same code size (0x24) and only 0 of 0x24 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013BA18."
+  },
+  {
+    "address": "0x0013BC3C",
+    "name": "maybe_Video_ResidualBlockAdd_B",
+    "signature": "void maybe_Video_ResidualBlockAdd_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x0013563C; addresses quoted in the description refer to copy 1). Adds one decoded residual block into the destination plane: reads the four neighbouring samples at -1/+0x3FF/+0x7FF/+0xBFF (the four 0x400-spaced lanes) and writes the 1:2:1 averaged, packed result to *r11; delegates the row tail to 0x001377A0.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x0013563C: same code size (0x98) and only 0 of 0x98 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; it calls 0x0013DDA0; the packed-RGB recombination helper is 0x0013DDA0 (copy of 0x001377A0)."
+  },
+  {
+    "address": "0x0013BCD4",
+    "name": "maybe_Video_DecodeSignedMask_B",
+    "signature": "void maybe_Video_DecodeSignedMask_B(void)",
+    "params": {
+      "_": "uses the caller's r6 as the subblock index"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001356D4; addresses quoted in the description refer to copy 1). Reads the per-subblock flag byte g_001356C4[i] and calls 0x001357E8 once per set bit (bits 1,2,4,8), i.e. it materialises the four sign/coefficient flags of a subblock before the residual is added.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001356D4: same code size (0x54) and only 2 of 0x54 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013BCC4; it calls 0x0013BDE8, 0x0013BE38."
+  },
+  {
+    "address": "0x0013BD28",
+    "name": "maybe_Video_VlcJumpStub2_B",
+    "signature": "void maybe_Video_VlcJumpStub2_B(void)",
+    "params": {
+      "_": "uses the caller's r12 as the code index"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135728; addresses quoted in the description refer to copy 1). Same three-instruction relative-table jump as 0x00135618 but with a different table base (0x00135418 still, resolved through a different pool word), i.e. the second shared 'next case' tail.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00135728: same code size (0x18) and only 0 of 0x18 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013BA18."
+  },
+  {
+    "address": "0x0013BD40",
+    "name": "maybe_Video_VlcDispatchEntry2_B",
+    "signature": "void maybe_Video_VlcDispatchEntry2_B(void)",
+    "params": {
+      "_": "uses the caller's r6 (subblock) and r12 (code) registers"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135740; addresses quoted in the description refer to copy 1). Second 'advance to next code' body: like 0x00135534 but it indexes g_001355F4 with the code index and jumps directly through 0x00135418 without the extra 0x001354DC store.",
+    "confidence": 0.37,
+    "evidence": "Copy 2 of 0x00135740: same code size (0xA8) and only 2 of 0xA8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; its dispatch/filter tables are the relocated ones at g_0013BA18/g_0013BBF4; it calls 0x0013BE38."
+  },
+  {
+    "address": "0x0013BDE8",
+    "name": "maybe_Video_ResidualBlockAdd2_B",
+    "signature": "void maybe_Video_ResidualBlockAdd2_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001357E8; addresses quoted in the description refer to copy 1). Second residual-add routine: same four-lane read pattern as 0x0013563C but with the sign of the filter taps flipped (it subtracts where the other adds), i.e. the negative-sign variant of the 1:2:1 residual blend; tail call into 0x001377A0.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001357E8: same code size (0xD4) and only 0 of 0xD4 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; it calls 0x0013DDA0."
+  },
+  {
+    "address": "0x0013BEBC",
+    "name": "maybe_Video_InterpolateBlock4x4_B",
+    "signature": "void maybe_Video_InterpolateBlock4x4_B(void)",
+    "params": {
+      "_": "uses the caller's r6 (stride/phase), r11 (destination) and the state block"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001358BC; addresses quoted in the description refer to copy 1). Fully unrolled sub-pixel interpolator: for each of 16 output pixels it takes four neighbouring source pixels (the row 0x400 above plus the byte at +0x3BFF), runs a fixed-point DDA at 6-bit precision per channel (`+0x40 >> 7` rounding) and packs the four channels into one 32-bit word written to the destination. This is the kernel behind the luma motion-compensation filter bank.",
+    "confidence": 0.47,
+    "evidence": "Copy 2 of 0x001358BC: same code size (0x510) and only 22 of 0x510 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013C3CC",
+    "name": "maybe_Video_InterpolateBlock2x2_B",
+    "signature": "void maybe_Video_InterpolateBlock2x2_B(void)",
+    "params": {
+      "_": "uses the caller's r6 (stride/phase), r11 (destination) and the state block"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00135DCC; addresses quoted in the description refer to copy 1). Chroma counterpart of 0x001358BC: the same fixed-point 6-bit DDA interpolator, but it runs over the half-resolution chroma planes (0x200 offsets, two output pixels per step), which is why it is roughly the same size while covering a quarter of the samples.",
+    "confidence": 0.45,
+    "evidence": "Copy 2 of 0x00135DCC: same code size (0x4A0) and only 56 of 0x4A0 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013C86C",
+    "name": "maybe_Video_BlendPlanesDiag_B",
+    "signature": "void maybe_Video_BlendPlanesDiag_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x0013626C; addresses quoted in the description refer to copy 1). Blends the four 0x400-spaced sample lanes at a diagonal offset: reads +0x3FF/+0x7FF/+0xBFF and -1, averages pairs with rounding (`(a+b+1)>>1`) and the diagonal pairs with `(a+2b+c+2)>>2`, then stores the packed result at *r11.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x0013626C: same code size (0x1A4) and only 22 of 0x1A4 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013CA10",
+    "name": "maybe_Video_BlendPlanesRow_B",
+    "signature": "void maybe_Video_BlendPlanesRow_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00136410; addresses quoted in the description refer to copy 1). Horizontal blend variant: takes the two packed words one lane up (r11-0x400, r11-0x3FC) plus the byte at -1 and produces the 1:2:1 averaged packed word at *r11.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00136410: same code size (0x258) and only 21 of 0x258 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013CC68",
+    "name": "maybe_Video_BlendPlanesRow2_B",
+    "signature": "void maybe_Video_BlendPlanesRow2_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00136668; addresses quoted in the description refer to copy 1). Third blend variant (largest of the 0x1A4..0x3A4 group): same 1:2:1 averaging over the 0x400-spaced lanes, unrolled over a full row of packed pixels.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x00136668: same code size (0x354) and only 10 of 0x354 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013CFBC",
+    "name": "maybe_Video_BlendPlanesRow3_B",
+    "signature": "void maybe_Video_BlendPlanesRow3_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001369BC; addresses quoted in the description refer to copy 1). Fourth blend variant of the same family (0x238 bytes), averaging the 0x400-spaced lanes and the horizontally adjacent packed words.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x001369BC: same code size (0x238) and only 21 of 0x238 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013D1F4",
+    "name": "maybe_Video_BlendPlanesBlock_B",
+    "signature": "void maybe_Video_BlendPlanesBlock_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00136BF4; addresses quoted in the description refer to copy 1). Largest of the unrolled blend kernels (0x3A4 bytes): the same 1:2:1 lane averaging expanded over a whole block so the compiler could keep every intermediate in registers.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x00136BF4: same code size (0x3A4) and only 23 of 0x3A4 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013D598",
+    "name": "maybe_Video_BlendPlanesFromStream_B",
+    "signature": "void maybe_Video_BlendPlanesFromStream_B(void)",
+    "params": {
+      "_": "uses the caller's r11 and calls the bitstream helper 0x0013587C"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00136F98; addresses quoted in the description refer to copy 1). Blend kernel that first advances the bitstream (0x0013587C) before averaging the four lanes, i.e. the 'prediction read from the stream' variant of the 1:2:1 kernel used inside the coefficient loop.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x00136F98: same code size (0x328) and only 36 of 0x328 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine; it calls 0x0013BE7C."
+  },
+  {
+    "address": "0x0013D8C0",
+    "name": "maybe_Video_BlendPlanesCorner1_B",
+    "signature": "void maybe_Video_BlendPlanesCorner1_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001372C0; addresses quoted in the description refer to copy 1). Corner-prediction kernel: averages the up-left byte (-0x401), the left byte (-1) and the two packed words one lane up, then stores the packed result at *r11.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001372C0: same code size (0x104) and only 9 of 0x104 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013D9C4",
+    "name": "maybe_Video_BlendPlanesCorner2_B",
+    "signature": "void maybe_Video_BlendPlanesCorner2_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001373C4; addresses quoted in the description refer to copy 1). Second corner kernel: the same -0x401 / -1 / lane-up terms with a different tap order, giving the mirrored corner prediction.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x001373C4: same code size (0x108) and only 6 of 0x108 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013DACC",
+    "name": "maybe_Video_BlendPlanesCorner3_B",
+    "signature": "void maybe_Video_BlendPlanesCorner3_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001374CC; addresses quoted in the description refer to copy 1). Third corner kernel (smallest of the three, 0xE8 bytes): same inputs as 0x001372C0 with the simplest tap set.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x001374CC: same code size (0xE8) and only 9 of 0xE8 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013DBB4",
+    "name": "maybe_Video_FilterRgbaRow_B",
+    "signature": "void maybe_Video_FilterRgbaRow_B(void)",
+    "params": {
+      "_": "uses the caller's r11 as the destination pointer"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001375B4; addresses quoted in the description refer to copy 1). Packed-RGBA row filter (largest single-pass kernel here, 0xD70 bytes): unpacks the four lanes of a pixel, applies the 1:2:1 averaging per byte lane and repacks, walking a whole scanline. Used to resample/soften a decoded frame.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x001375B4: same code size (0xD70) and only 21 of 0xD70 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013E924",
+    "name": "maybe_Video_FilterRgbaWord4_B",
+    "signature": "void maybe_Video_FilterRgbaWord4_B(u32* arg1)",
+    "params": {
+      "arg1": "four packed RGBA words"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00138324; addresses quoted in the description refer to copy 1). Four-word packed-RGBA filter: masks each of the four input words with the byte mask g_00138DB4, shifts them down by one bit (halving), then recombines with cross-word carries - a SIMD-style horizontal add of four pixels.",
+    "confidence": 0.42,
+    "evidence": "Copy 2 of 0x00138324: same code size (0x178) and only 7 of 0x178 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013EA9C",
+    "name": "maybe_Video_FilterRgbaWord4b_B",
+    "signature": "void maybe_Video_FilterRgbaWord4b_B(u32* arg1)",
+    "params": {
+      "arg1": "four packed RGBA words"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x0013849C; addresses quoted in the description refer to copy 1). Second four-word packed-RGBA filter, same mask-and-average scheme as 0x00138324 with the words taken in the opposite order.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x0013849C: same code size (0x178) and only 7 of 0x178 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013EC14",
+    "name": "maybe_Video_FilterRgbaWord4c_B",
+    "signature": "void maybe_Video_FilterRgbaWord4c_B(void* self)",
+    "params": {
+      "self": "address of the pixel block; reads self-1, self+3, self+7 and f_b"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00138614; addresses quoted in the description refer to copy 1). Third packed-RGBA filter, operating on unaligned byte offsets (-1, +3, +7, +0xB) so that it filters diagonally neighbouring pixels with the same per-byte-lane average.",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x00138614: same code size (0x1DC) and only 7 of 0x1DC bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013EDF0",
+    "name": "maybe_Video_FilterRgbaWord4d_B",
+    "signature": "void maybe_Video_FilterRgbaWord4d_B(void* self)",
+    "params": {
+      "self": "pixel block base"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x001387F0; addresses quoted in the description refer to copy 1). Fourth packed-RGBA filter of the same unaligned family (0x174 bytes).",
+    "confidence": 0.39,
+    "evidence": "Copy 2 of 0x001387F0: same code size (0x174) and only 7 of 0x174 bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013EF64",
+    "name": "maybe_Video_FilterRgbaBlock_B",
+    "signature": "void maybe_Video_FilterRgbaBlock_B(void)",
+    "params": {
+      "_": "operates on several pointer arguments; the readable C is a partial view"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00138964; addresses quoted in the description refer to copy 1). Packed-RGBA block filter over several rows: keeps 15 pointers/accumulators live (puVar13..) and applies the mask-and-average scheme to a whole block, not just four words.",
+    "confidence": 0.37,
+    "evidence": "Copy 2 of 0x00138964: same code size (0x1CC) and only 7 of 0x1CC bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  },
+  {
+    "address": "0x0013F130",
+    "name": "maybe_Video_FilterRgbaBlock2_B",
+    "signature": "void maybe_Video_FilterRgbaBlock2_B(void)",
+    "params": {
+      "_": "operates on several pointer arguments; the readable C is a partial view"
+    },
+    "summary": "Second emission of the same routine (copy 1 is 0x00138B30; addresses quoted in the description refer to copy 1). Smaller sibling of 0x00138964 (0x14C bytes): the same multi-pointer packed-RGBA filtering with fewer live accumulators.",
+    "confidence": 0.37,
+    "evidence": "Copy 2 of 0x00138B30: same code size (0x14C) and only 7 of 0x14C bytes differ (the relocated literal-pool / branch words), so this is a literal re-emission of the same routine."
+  }
+]

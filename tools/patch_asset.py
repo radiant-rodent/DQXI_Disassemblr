@@ -93,9 +93,10 @@ def _rebuild_compressed(original: bytes, p, member: str, replacement: Path, out_
     plain = bytearray(blz.decompress(original))
     for entry in entries:
         plain[entry.payload_offset:entry.payload_offset + len(data)] = data
-    # the decompressed stream already starts with "PACA" + size: BLZ keeps that
-    # prefix uncompressed, so compress the whole buffer as-is
-    built = blz.compress(bytes(plain), allow_overlap=True)
+    # "PACA" + decompressed size stay literal, then the BLZ stream of the rest:
+    # pack.Pack.build uses the same encoder, so a pack that only needs a
+    # same-size member swap still comes out as a PACA the loader recognises.
+    built = pack._compress_paca(bytes(plain))
     if built[:4] != b"PACA":
         raise ValueError("recompressed pack lost its PACA magic")
     if blz.decompress(built) != bytes(plain):

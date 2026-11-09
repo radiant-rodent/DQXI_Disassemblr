@@ -31,7 +31,7 @@ A regression test reads `BGM_B01.dspadpcm.wav` and asserts the known 59.87-secon
 channels and path. Regenerate it with:
 
 ```powershell
-python tools/audio_catalog.py
+python -m tools.audio_catalog
 ```
 
 The machine-readable version is `game_assets/audio/ost.json`.
@@ -44,14 +44,17 @@ player that displays its own timeline.
 ## Replacing a stream
 
 `tools/bcstm_encode.py` rebuilds a BCSTM around an existing stream template. It keeps the
-template INFO/channel tables, switches the stream to linear PCM16, updates sample counts and the
-DATA section size, and resamples the replacement WAV if the rate differs.
+template INFO/channel tables, encodes the replacement WAV into the template's stream layout,
+updates sample counts and the DATA section size, and resamples if the rate differs. The default
+codec is **DSP-ADPCM** (retail bandwidth, 4-bit lossy); pass `--codec pcm16` for a larger lossless
+stream. In the Studio, use **Replace stream** in the Audio panel.
 
 ```powershell
-python tools/bcstm_encode.py --template game_data/romfs/sound/str/BGM_B01.dspadpcm.bcstm \
-  --wav my_replace.wav --out build/BGM_B01.bcstm
+python -m tools.bcstm_encode --template game_data/romfs/sound/str/BGM_B01.dspadpcm.bcstm \
+  --wav my_replace.wav --out build/BGM_B01.bcstm --codec dspadpcm
 ```
 
-The replacement WAV must have the same channel count as the template. The tool refuses templates
-whose DATA section is not last (all DQXI streams checked so far are). A round-trip test encodes a
-1-second stereo tone and verifies `decode_bcstm` returns the exact PCM.
+The replacement WAV must have the same channel count as the template, and a longer track enlarges
+the BCSTM (fine for LayeredFS; see [EXPORT.md](EXPORT.md)). The tool refuses templates whose DATA
+section is not last (all DQXI streams checked so far are). A round-trip test encodes a 1-second
+stereo tone and verifies the decoded PCM.

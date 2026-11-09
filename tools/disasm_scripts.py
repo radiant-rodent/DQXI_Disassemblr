@@ -24,10 +24,10 @@ SCRIPTS_OUT = PROJECT_ROOT / "game_scripts"
 
 def read_romfs_files(romfs_path: Path):
     """Parse RomFS IVFC filesystem to read files."""
-    # Using the extraction utility or reference project open_image
-    sys.path.insert(0, "../reference project")
+    # Using the extraction utility or 3DS_Translate open_image
+    sys.path.insert(0, "../3DS_Translate")
     from dq11tool.ctr.formats import open_image
-    f, ncsd, ncch = open_image(r"..\reference project\DQXI.3ds")
+    f, ncsd, ncch = open_image(r"..\3DS_Translate\DQXI.3ds")
     romfs = ncch.romfs()
     return f, romfs
 

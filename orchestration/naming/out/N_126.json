@@ -1,0 +1,1781 @@
+[
+  {
+    "address": "0x00123508",
+    "name": "Os_IpcQueryCommand18",
+    "signature": "u32 Os_IpcQueryCommand18(u32* session, u32* out8)",
+    "params": {
+      "param_1": "session",
+      "param_2": "out8"
+    },
+    "summary": "Leaf IPC query on the SDK's shared session: writes command header 0x00180000 (command 0x18, no parameters) into the thread's IPC buffer and issues SVC 0x32 (SendSyncRequest); on success it copies the eight response words out and returns the reply result code. Used by the date/time query path.",
+    "confidence": 0.68,
+    "evidence": "mrc p15,0,r4,c13,c0,3 (TPIDRURO) then str 0x180000,[r4,#0x80] (IPC buffer at TLS+0x80), svc #0x32 = SendSyncRequest per 3dbrew SVC table, result at TLS+0x84, 8 words TLS+0x88..0xA4 copied to arg2. Caller 0x0011F5C0 ('Os_QueryTime') parses the 8 words as a calendar value and 0x00119B4C re-exports them."
+  },
+  {
+    "address": "0x00123664",
+    "name": "std_Strncmp",
+    "signature": "int std_Strncmp(const u8* a, const u8* b, u32 len, u32 aligned)",
+    "params": {
+      "param_1": "a",
+      "param_2": "b",
+      "param_3": "len",
+      "param_4": "aligned"
+    },
+    "summary": "Bounded string compare. While four or more bytes remain it compares whole words, using a saturating per-byte subtract against the 0x01010101 constant to detect a NUL terminator, and falls back to a byte loop for the tail; returns the difference of the first mismatching bytes (or +-1 after a byte-swapped ordering compare).",
+    "confidence": 0.8,
+    "evidence": "Word loop compares 4 bytes, UQSUB8 (UnsignedSaturate) against literal 0x0012374C = 0x01010101 detects 0x00, returns (word_a&0xff)-(word_b&0xff) etc.; the differing-word path compares bswap(a)<bswap(b) i.e. memory byte order; tail loop advances 2 bytes at a time while bytes are equal and non-zero; arg4 bit0..1 selects the aligned fast path."
+  },
+  {
+    "address": "0x00123c54",
+    "name": "Os_IpcSendCommand0E",
+    "signature": "u32 Os_IpcSendCommand0E(void* buffer, u32 value)",
+    "params": {
+      "param_1": "buffer",
+      "param_2": "value"
+    },
+    "summary": "Two-parameter IPC request: command 0x0E with two normal words (value, 0xA|value<<4) and one translate buffer descriptor (buffer). Returns the reply result code.",
+    "confidence": 0.66,
+    "evidence": "Header literal 0x00123C94 = 0x000E0042 (cmd 0x0E, 2 normal + 1 translate parameter), TLS+0x84 = value, TLS+0x88 = 0xA|(value<<4) buffer descriptor, TLS+0x8C = buffer, svc #0x32 SendSyncRequest on the handle in *0x007B2D2C (same session as 0x00123D68/0x00123508)."
+  },
+  {
+    "address": "0x00123d68",
+    "name": "Os_IpcSendCommand0D",
+    "signature": "u32 Os_IpcSendCommand0D(void* buffer, u32 value)",
+    "params": {
+      "param_1": "buffer",
+      "param_2": "value"
+    },
+    "summary": "Two-parameter IPC request: command 0x0D with two normal words (value, 0x2|value<<14) and one translate buffer descriptor (buffer). Sibling of 0x00123C54; 0x001228AC picks between the two.",
+    "confidence": 0.66,
+    "evidence": "Header literal 0x00123DAC = 0x000D0042 (cmd 0x0D, 2 normal + 1 translate), TLS+0x84 = value, TLS+0x88 = 2|(value<<14), TLS+0x8C = buffer, svc #0x32. Caller 0x001228AC compares a value and branches to 0x00123C54 (0x0E) or this one (0x0D)."
+  },
+  {
+    "address": "0x00123fae",
+    "name": "maybe_Os_TranslateMainRamRangeB",
+    "signature": "u32 maybe_Os_TranslateMainRamRangeB(u32 addr)",
+    "params": {
+      "param_1": "addr"
+    },
+    "summary": "Interior continuation of the main-RAM address translator 0x00123E18: range-checks an address against the application memory block and returns the physical/main-RAM alias (base from g_00123E68+4) or 0. Not a separate entry point.",
+    "confidence": 0.4,
+    "evidence": "Address 0x00123FAE lies 0x196 bytes into 0x00123E18 ('maybe_Os_TranslateMainRamAddress') and has the same shape: bounds compare using func_001180E0 (memory block size) and return *(g_00123E68+4)+addr. No branch target or data pointer points here; it appeared in the batch only because a 0xB5xx halfword matched the Thumb-push scan."
+  },
+  {
+    "address": "0x00125098",
+    "name": "maybe_std_UnwindPersonalityRoutine",
+    "signature": "u32 maybe_std_UnwindPersonalityRoutine(void* state, void* ucb, void* context)",
+    "params": {
+      "param_1": "state",
+      "param_2": "ucb",
+      "param_3": "context"
+    },
+    "summary": "ARM EHABI personality/trampoline routine: calls the unwind bytecode interpreter at 0x001250BC (which reads the inline opcode words that follow the call) and returns an unwind reason code. The region 0x00125098-0x00125738 is the C++ exception-unwinding support code, not game code.",
+    "confidence": 0.45,
+    "evidence": "push {r4,lr}; bl 0x001250BC; .word 0x806DB6DB right after the call (inline unwind opcodes), then mov r1,#0/mov r0,#0/bx lr. 0x001250BC is a bytecode dispatcher (ldr r4,[lr],#4; tst cond bits; add pc,pc,ip,lsl #2; pop {r4,lr}; bx ip). Also called from 0x00723E7C / 0x00723EF0 at the end of .text, which are further personality-routine fragments. Ghidra merged the whole block into one 'function'."
+  },
+  {
+    "address": "0x00125738",
+    "name": "std_MemcpyForward32",
+    "signature": "void* std_MemcpyForward32(void* dst, const void* src, u32 size)",
+    "params": {
+      "param_1": "dst",
+      "param_2": "src",
+      "param_3": "size"
+    },
+    "summary": "Aligned forward memcpy: moves 32 bytes per iteration with ldm/stm plus a pld prefetch, then handles 16/8/4/2/1-byte tails. Returns the end pointers (src_end in r1, dst_end in r0).",
+    "confidence": 0.82,
+    "evidence": "ldm r1!,{r4-r7}; ldm r1!,{r8,sb,sl,lr}; pld [r1,#0x40]; stm r0!,{...}; subs r2,#0x20 loop, then 16/8/4/2/1 tails. Companion of the shifted variants 0x001257C4/0x00125860/0x001258FC and of the backward family 0x00125AD4..0x00125C90."
+  },
+  {
+    "address": "0x001257c4",
+    "name": "std_MemcpyForwardShift8",
+    "signature": "void* std_MemcpyForwardShift8(void* dst, const void* src, u32 size)",
+    "params": {
+      "param_1": "dst",
+      "param_2": "src",
+      "param_3": "size"
+    },
+    "summary": "Forward memcpy for a destination one byte past word alignment: reads 8 words and re-emits them shifted by 8 bits, carrying the top byte into the next word; same 32/16/8/4/2/1 tail structure as std_MemcpyForward32.",
+    "confidence": 0.78,
+    "evidence": "in_r12|uVar6<<8, arg1[n]=uVar6>>24|uVar7<<8 ... exactly a byte-shift-8 word stream; loop count 0x20 at a time; returns (src_end,dst_end). Sits in the unrolled memcpy family after 0x00125738 and before 0x00125860 (shift 16) / 0x001258FC (shift 24)."
+  },
+  {
+    "address": "0x00125860",
+    "name": "std_MemcpyForwardShift16",
+    "signature": "void* std_MemcpyForwardShift16(void* dst, const void* src, u32 size)",
+    "params": {
+      "param_1": "dst",
+      "param_2": "src",
+      "param_3": "size"
+    },
+    "summary": "Forward memcpy for a destination two bytes off word alignment: shifts the source words by 16 bits while copying, with the usual 32/16/8/4/2/1 tails.",
+    "confidence": 0.78,
+    "evidence": "Word stream `in_r12|uVar6<<0x10` and `uVar6>>0x10|uVar7<<0x10`; sibling of 0x001257C4 (<<8) and 0x001258FC (>>8), all returning end pointers."
+  },
+  {
+    "address": "0x001258fc",
+    "name": "std_MemcpyForwardShift24",
+    "signature": "void* std_MemcpyForwardShift24(void* dst, const void* src, u32 size)",
+    "params": {
+      "param_1": "dst",
+      "param_2": "src",
+      "param_3": "size"
+    },
+    "summary": "Forward memcpy for a destination three bytes off word alignment: shifts the source words by 24 bits while copying (the last unaligned case of the family).",
+    "confidence": 0.78,
+    "evidence": "`in_r12|uVar6<<0x18` and `uVar6>>8|uVar7<<0x18`; 0x20-byte loop plus 4/2/1 tails; called from 0x00125DF2 inside the pointer-list copy helper."
+  },
+  {
+    "address": "0x00125ad4",
+    "name": "std_MemmoveBackward32",
+    "signature": "void* std_MemmoveBackward32(void* dst_end, const void* src_end, u32 size)",
+    "params": {
+      "param_1": "dst_end",
+      "param_2": "src_end",
+      "param_3": "size"
+    },
+    "summary": "Aligned backward (overlap-safe) memmove: walks down in 32-byte steps with ldmdb/stmdb and a pld prefetch, then the 16/8/4/2/1 tails.",
+    "confidence": 0.8,
+    "evidence": "ldmdb r1!,{r4-r7}; ldmdb r1!,{r8,sb,sl,lr}; pld [r1,#-0x40]; stmdb r0!,{...}; subs r2,#0x20; tails from arg3. Mirror image of std_MemcpyForward32 (0x00125738)."
+  },
+  {
+    "address": "0x00125b58",
+    "name": "std_MemmoveBackwardShift8",
+    "signature": "void* std_MemmoveBackwardShift8(void* dst_end, const void* src_end, u32 size)",
+    "params": {
+      "param_1": "dst_end",
+      "param_2": "src_end",
+      "param_3": "size"
+    },
+    "summary": "Backward memmove for a destination one byte off word alignment: shifts the descending word stream by 8 bits, then finishes with the 4/2/1 tails.",
+    "confidence": 0.75,
+    "evidence": "Descending `in_r12|uVar12>>0x18` / `uVar12<<8|uVar11>>0x18` word stream; mirror of std_MemcpyForwardShift8; same tail bit tests as the other members."
+  },
+  {
+    "address": "0x00125bf4",
+    "name": "std_MemmoveBackwardShift16",
+    "signature": "void* std_MemmoveBackwardShift16(void* dst_end, const void* src_end, u32 size)",
+    "params": {
+      "param_1": "dst_end",
+      "param_2": "src_end",
+      "param_3": "size"
+    },
+    "summary": "Backward memmove with a 16-bit shift between source and destination words, used when the destination is two bytes off alignment.",
+    "confidence": 0.75,
+    "evidence": "ldmdbge r1!,{r4-r8,sb,sl,lr} then `lslge r3,lr,#0x10; orrge lr,ip,lr,lsr #16` - the byte-shift-16 tail of the backward family (0x00125AD4 aligned, 0x00125B58 <<8, 0x00125C90 >>8)."
+  },
+  {
+    "address": "0x00125c90",
+    "name": "std_MemmoveBackwardShift24",
+    "signature": "void* std_MemmoveBackwardShift24(void* dst_end, const void* src_end, u32 size)",
+    "params": {
+      "param_1": "dst_end",
+      "param_2": "src_end",
+      "param_3": "size"
+    },
+    "summary": "Backward memmove with a 24-bit shift between source and destination words (destination three bytes off alignment); last member of the overlap-safe copy family.",
+    "confidence": 0.75,
+    "evidence": "Descending `in_r12|uVar12>>8` / `uVar12<<0x18|uVar11>>8` word stream plus 4/2/1 tails; mirrors std_MemcpyForwardShift24."
+  },
+  {
+    "address": "0x00125d84",
+    "name": "maybe_std_CopyPointerListAndSync",
+    "signature": "u32 maybe_std_CopyPointerListAndSync(u32* desc, u32* out)",
+    "params": {
+      "param_1": "desc",
+      "param_2": "out"
+    },
+    "summary": "Copies a count-driven array of double-dereferenced pointers (desc[+4] holds an array of object pointers, desc[+8] the count) into a caller buffer; when the count is 1 it instead stores 0 and issues SVC 0x24 (WaitSynchronization1). Looks like a resource-handle snapshot helper with a wait-for-completion path.",
+    "confidence": 0.4,
+    "evidence": "Reads [r0,#4] array, [r0,#8] count; out[i] = **(void***)(array[i]); count==1 path stores 0 and svc #0x24; otherwise calls 0x001169DC with (desc[0], out, count, flag, desc[4][0], desc[4][1]). No caller in the decompiled tree."
+  },
+  {
+    "address": "0x00126268",
+    "name": "std_VfpSaveRestoreState",
+    "signature": "void std_VfpSaveRestoreState(u32* buffer)",
+    "params": {
+      "param_1": "buffer"
+    },
+    "summary": "Compiler VFP context helper (two entry labels): saves d8-d15 into a caller buffer / restores them, used by the soft-float and exception-support code. Ghidra merged the save and restore halves into one 'function' because the save half ends in bx lr but the restore half follows immediately.",
+    "confidence": 0.72,
+    "evidence": "0x00126268: push {r0,lr}; mov r0,r0; pop {r1,lr}; stm r1!,{r0}; movs r0,#0; vstmia r1!,{d8,d9,d10}; vstmia r1!,{d11}; vstmia r1!,{d12,d13,d14}; vstmia r1!,{d15}; bx lr. 0x00126290 is the matching restore (vldmia + ldmdb + bx lr). The 12 bytes at the front are the ARM 'mov r0,r0' NOP padding used by the toolchain's VFP helper."
+  },
+  {
+    "address": "0x001263e4",
+    "name": "std_DoubleDivideCore",
+    "signature": "u64 std_DoubleDivideCore(u32 q_lo, u32 n_hi, u32 n_lo, u32 d_hi, u32 d_lo)",
+    "params": {
+      "param_1": "q_lo",
+      "param_2": "n_hi",
+      "param_3": "n_lo",
+      "param_4": "d_hi",
+      "param_5": "d_lo"
+    },
+    "summary": "Software double-precision division core: normalises the operands with a reciprocal byte table, runs the Newton-Raphson quotient refinement and the four 16-bit long-division steps, then assembles the result exponent/mantissa. Only reachable from the soft-float helpers around it.",
+    "confidence": 0.55,
+    "evidence": "ldrb from table 0x00126610 (indexed by the divisor's top byte), `rsb r7,r7,#0x800000; mul r6,r7,r6; lsr r6,#0x13` Newton step, then repeated 16-bit limb multiply/subtract with the carry flags, returning CONCAT44(exponent, arg1). Neighbour 0x00126848 is already named std_DoubleDivide and 0x00126878 std_DoubleMultiply, which hand off to this core family."
+  },
+  {
+    "address": "0x00126728",
+    "name": "std_ScalbnDouble",
+    "signature": "double std_ScalbnDouble(u32 lo, u32 hi, u32 mant, int exponent)",
+    "params": {
+      "param_1": "lo",
+      "param_2": "hi",
+      "param_3": "mant",
+      "param_4": "exponent"
+    },
+    "summary": "Double-precision scalbn/ldexp: shifts the mantissa by the requested exponent and rebuilds the IEEE-754 word, returning the input unchanged when the resulting exponent field stays inside the normal range (0x000-0x7FF).",
+    "confidence": 0.55,
+    "evidence": "Calls 0x0012676C with (lo, hi>>0xb, mant, exponent-1) then checks `((result & 0x7fffffff)+1) < 0x800` - the 11-bit IEEE double exponent range - and adds the delta into the exponent with a 0x100000 mantissa shift. Overflow path returns the constant g_00126768."
+  },
+  {
+    "address": "0x0012677c",
+    "name": "maybe_std_ScalbnRoundTail",
+    "signature": "double maybe_std_ScalbnRoundTail(u32 sign, u32 hi, u32 mant, int exponent)",
+    "params": {
+      "param_1": "sign",
+      "param_2": "hi",
+      "param_3": "mant",
+      "param_4": "exponent"
+    },
+    "summary": "Rounding/overflow tail of the double scalbn helper: increments the exponent, propagates a carry into the mantissa and sets the sign bit, saturating to infinity. Reached by branch from the scalbn code, not a stand-alone API.",
+    "confidence": 0.42,
+    "evidence": "Uses the incoming flags (unaff_r11, in_CY) to detect mantissa overflow, adds 1 to the exponent (`arg2+1`), saturates to 0x80000000, and returns CONCAT44(hi, exponent+(0|1) | sign&0x80000000). Branch target 0x001267CC lies inside 0x00126728's range."
+  },
+  {
+    "address": "0x001268d4",
+    "name": "std_DoubleMultiplyCore",
+    "signature": "u64 std_DoubleMultiplyCore(u32 p_lo, u32 a_hi, u32 a_lo, u32 b_hi, u32 b_lo)",
+    "params": {
+      "param_1": "p_lo",
+      "param_2": "a_hi",
+      "param_3": "a_lo",
+      "param_4": "b_hi",
+      "param_5": "b_lo"
+    },
+    "summary": "Software double-precision multiply core: splits both operands into 16-bit limbs, accumulates the cross products with carry propagation, applies the sign correction and returns the normalised 64-bit product. Companion of std_DoubleDivideCore.",
+    "confidence": 0.52,
+    "evidence": "Six 16-bit limb multiplies with `CARRY4` carry fix-ups (`uVar8*uVar14`, `uVar6*uVar8`, `uVar12*uVar6` ...), then subtracts the two signs (`arg2-arg3`, `unaff_r4-unaff_r5`) and returns CONCAT44(mantissa_hi, arg1). Branch target 0x001265CE is inside 0x001263E4's divide core, so the two are the mul/div halves of the same soft-double unit."
+  },
+  {
+    "address": "0x00126b0c",
+    "name": "maybe_Video_ConvertBlocks32_SamePlane",
+    "signature": "u64 maybe_Video_ConvertBlocks32_SamePlane(ConvertCtx* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "In-place 32-byte-block colour converter, the variant used when the two plane pointers in the context are equal (0x0012A84C selects it over the three-plane variant 0x00129EF4). Reads four lanes 0x400 bytes apart, averages/saturates neighbouring bytes with the per-channel constants in self+0x10/self+0x14, and writes the result back.",
+    "confidence": 0.45,
+    "evidence": "Dispatcher 0x0012A84C: `pcVar1 = 0x00126B0C; if (*arg1 != arg1[1]) pcVar1 = 0x00129EF4; (*pcVar1)(); 0x00126EF4();` - so this is the 'planes identical' path. Same saturating UQSUB8/avg arithmetic, lane offsets -0x200/-0x100/0/+0x100 and globals g_00126EEC/g_00126EF0 as 0x00126EF4 ('maybe_Video_ConvertBlocks32_A')."
+  },
+  {
+    "address": "0x001f909c",
+    "name": "maybe_Ui_Screen_GetFirstRowParam",
+    "signature": "u32 maybe_Ui_Screen_GetFirstRowParam(UiScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "UI screen base-class virtual: asks the derived class for row 0 through the pure virtual at vtable+0x48 and returns that row object's +0x110 field (its bound record/param id); 0 if the getter returns null.",
+    "confidence": 0.44,
+    "evidence": "`ldr r2,[r0]; ldr r2,[r2,#0x48]; blx r2; ldr r0,[r0,#0x110]; pop` - identical body stored in 93 vtables (0x75B4xx..0x75CExx) next to the FieldParty/Ui_Balloon methods, i.e. a base method inherited by every screen class. Same +0x48 row getter as 0x001F953C/0x001F96D4."
+  },
+  {
+    "address": "0x001f953c",
+    "name": "maybe_Ui_Screen_GetFirstRowKind",
+    "signature": "u32 maybe_Ui_Screen_GetFirstRowKind(UiScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "UI screen base-class virtual: returns the row-type byte (+0x10) of row 0 obtained through the vtable+0x48 getter, or 0 when there is no row.",
+    "confidence": 0.44,
+    "evidence": "`iVar1 = (*(*arg1+0x48))(arg1,0); result = iVar1 ? iVar1->f_10 : 0;` Installed in 93 screen vtables; sibling 0x001F9A88 ('maybe_Battle_Ui_GetMemberBalloon') uses the same row objects and f_10 kind byte."
+  },
+  {
+    "address": "0x001f96d4",
+    "name": "maybe_Ui_Screen_MarkRowsFlag",
+    "signature": "void maybe_Ui_Screen_MarkRowsFlag(UiScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "UI screen base-class virtual: marks the screen dirty (self+0xD2 = 1) and then sets the +0x108 flag on every row returned by the vtable+0x48 getter, up to the row count from 0x00630DC8.",
+    "confidence": 0.44,
+    "evidence": "`*(u8*)(arg1+0xd2)=1; n=func_00630DC8(); for i<n: row=(*(*arg1+0x48))(arg1,i); if row: row->f_108=1;` Installed in 93 screen vtables. 0x00630DC8 is the 'count non-null container slots' helper located at 0x00630DC8 inside 0x00630CDC."
+  },
+  {
+    "address": "0x001fb1a4",
+    "name": "maybe_Ui_Screen_CheckRowsReady",
+    "signature": "u32 maybe_Ui_Screen_CheckRowsReady(UiScreen* self, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg"
+    },
+    "summary": "UI screen base-class virtual: walks all rows; for each visible row (kind byte +0x10 == 0) whose model pointer resolves through 0x00279C14, calls 0x00604424(self+0x122C, row, arg) and returns 0 as soon as that check fails, else 1.",
+    "confidence": 0.4,
+    "evidence": "Loop over func_00630DC8() rows with the vtable+0x48 getter; conditions `row->f_10==0` and `func_00279C14(row)!=0`; calls 0x00604424(self[0x48b], row, arg2) which reads row->f_768 (u16 id) and looks the id up in the data manager. Installed in 93 screen vtables next to the other row helpers."
+  },
+  {
+    "address": "0x001fc7ec",
+    "name": "maybe_Ui_Screen_GetRow0Param",
+    "signature": "u32 maybe_Ui_Screen_GetRow0Param(UiScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "UI screen base-class virtual: returns row 0's +0x110 param id using the non-virtual row getter 0x001F9B58 (which bounds-checks the index against 16 and lazily creates the row). Vtable slot 0x1FC7E8 is a 4-byte thunk (`mov r2,#0`) that falls into this body.",
+    "confidence": 0.45,
+    "evidence": "0x001FC7E8: `mov r2,#0` then falls through to 0x001FC7EC: `bl 0x001F9B58; ldr r0,[r0,#0x110]; pop {r4,pc}`. 0x001F9B58 is the 16-slot row getter used by 'maybe_Battle_Ui_GetMemberBalloon' (0x001F9A88)."
+  },
+  {
+    "address": "0x001fe184",
+    "name": "maybe_Ui_Screen_ApplyRowCondition",
+    "signature": "void maybe_Ui_Screen_ApplyRowCondition(UiScreen* self, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg"
+    },
+    "summary": "UI screen base-class virtual: for every visible row (kind +0x10 == 0) whose model pointer resolves through 0x00279C14, calls 0x00604B14(self+0x122C, row, arg) to apply the condition/effect.",
+    "confidence": 0.4,
+    "evidence": "Same loop as 0x001FB1A4 but without the early-out: calls 0x00604B14(arg1[0x48b], row, arg2) after checking row->f_10==0 and func_00279C14(row)!=0. Installed in the same 93 screen vtables."
+  },
+  {
+    "address": "0x002500ec",
+    "name": "Script_BindTableSlot_GetPartyMemberMaxHP",
+    "signature": "ScriptNative* Script_BindTableSlot_GetPartyMemberMaxHP(void)",
+    "params": {},
+    "summary": "Not a function: this address is the code-pointer field of the Squirrel native-binding table entry 'GetPartyMemberMaxHP'. It holds 0x006FB5F0, the native stub that the script VM calls when a .nut script invokes GetPartyMemberMaxHP. The batch scanner mistook the bytes f0 b5 for a Thumb push.",
+    "confidence": 0.88,
+    "evidence": "Table layout at 0x2500DC: name pointer 0x00158548, inline string 'GetPartyMemberMaxHP', then the word 0x006FB5F0 at 0x2500EC. Neighbouring records map the same way (e.g. 0x00152DDC 'SetRiremitoPoint' -> 0x006FCBC0, 0x00151390 'GetRiremitoPoint' -> 0x006F6990). The 0x006Fxxxx targets are the Script_Bind_* stubs."
+  },
+  {
+    "address": "0x0025063c",
+    "name": "Script_BindTableSlot_GetPlayableMemberNumber",
+    "signature": "ScriptNative* Script_BindTableSlot_GetPlayableMemberNumber(void)",
+    "params": {},
+    "summary": "Not a function: this address is the code-pointer field of the Squirrel native-binding entry 'GetPlayableMemberNumber' (inline string at 0x250644). It holds 0x006FB540, the native stub bound to that script function.",
+    "confidence": 0.88,
+    "evidence": "At 0x25063C the word 0x006FB540 follows the 4-byte-aligned string 'GetPlayableMemberNumber' (0x250644) and precedes the next name pointer 0x0015A0AC ('PartyAdd' area). Same 8-byte record shape as the rest of the 0x2500xx binding table."
+  },
+  {
+    "address": "0x00256cc4",
+    "name": "Ui_Window_DeletingDtor",
+    "signature": "void Ui_Window_DeletingDtor(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Deleting destructor (C++ D0) of the UI window class: runs the destructor body at 0x00256CD4, then tail-calls operator delete (0x0010F6CC).",
+    "confidence": 0.62,
+    "evidence": "push {r4,lr}; bl 0x00256CD4; pop {r4,lr}; b 0x0010F6CC. 0x00256CD4 sets the vptr at self+0x838 and runs the list/teardown body that is also the destructor 0x00256CD8 ('maybe_Ui_Window_DestroyLists'). 0x0010F6CC is the operator delete called by every deleting destructor in this tree."
+  },
+  {
+    "address": "0x00256e7c",
+    "name": "Ui_Window_SetupTitleTexts",
+    "signature": "void Ui_Window_SetupTitleTexts(UiWindow* self, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg"
+    },
+    "summary": "Sets the four title strings of a window: the title plus three translation texts, each addressed by a control id composed from self+0x10 shifted into the high half and 0..3.",
+    "confidence": 0.62,
+    "evidence": "Calls 0x003828B8 four times with the literals 'txt_title' (0x00256EF8), 'st_txt_tr1' (0x00256F04), 'st_txt_tr3' (0x00256F10), 'st_txt_tr4' (0x00256F1C) and ids (self->f_10<<16)|0..3."
+  },
+  {
+    "address": "0x002583a4",
+    "name": "Ui_Window_SetupValueText",
+    "signature": "void Ui_Window_SetupValueText(UiWindow* self, u32 arg)",
+    "params": {
+      "param_1": "self",
+      "param_2": "arg"
+    },
+    "summary": "Sets the single 'txt_x' label of a small value window and pushes a numeric value into its parameter slot (control id self+0x10 in the high half).",
+    "confidence": 0.55,
+    "evidence": "0x003828B8(self, 'txt_x' 0x002583DC, self->f_10<<16, arg) followed by 0x00382A80(self, self->f_10<<16, &g_002583E4) - the same text/parameter pair used by Ui_Window_SetupTitleTexts (0x00256E7C)."
+  },
+  {
+    "address": "0x0025841c",
+    "name": "maybe_Ui_Window_SetRecordValue",
+    "signature": "void maybe_Ui_Window_SetRecordValue(UiWindow* self, u32 owner, UiRecord* record)",
+    "params": {
+      "param_1": "self",
+      "param_2": "owner",
+      "param_3": "record"
+    },
+    "summary": "Stores a record pointer/value pair into the window's child list and links it: copies record[+8] and record[+0xC] into self+0x2C/0x30/0x34 and inserts the node at owner+0x4A8. Does nothing for an all-zero record.",
+    "confidence": 0.42,
+    "evidence": "Reads arg3[2] (record+8) and arg3[3] (record+0xc); early-out when both are zero; calls 0x001235A4(arg2+0x4a8, arg2+0x4a8, &self->f_20) then writes self->f_34/f_2c/f_30."
+  },
+  {
+    "address": "0x00259550",
+    "name": "maybe_Ui_Window_InsertChildByVirtual",
+    "signature": "void maybe_Ui_Window_InsertChildByVirtual(u32* self, u32* link, u32* parent)",
+    "params": {
+      "param_1": "self",
+      "param_2": "link",
+      "param_3": "parent"
+    },
+    "summary": "Inserts a child through the container's virtual insert at slot +0x24: temporarily parks link+4 in parent[0x183], calls the virtual with (parent, link[1], self+0x98), stores the returned handle back into link[1] and clears the temporary.",
+    "confidence": 0.4,
+    "evidence": "`arg3[0x183]=arg2+4; uVar1=(*(*arg3+0x24))(arg3,*(arg2+4),arg1+0x98); *(arg2+4)=uVar1; arg3[0x183]=0;` - the same vtable+0x24 insert used by 0x0026108C."
+  },
+  {
+    "address": "0x00259918",
+    "name": "maybe_Ui_Object_DeletingDtor",
+    "signature": "void maybe_Ui_Object_DeletingDtor(void* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Deleting destructor of a UI sub-object: calls the destructor body 0x002C3234 and then operator delete.",
+    "confidence": 0.55,
+    "evidence": "func_002C3234(); func_0010F6CC(); - the same D0 shape as 0x00256CC4/0x00264CE0. 0x0010F6CC is operator delete."
+  },
+  {
+    "address": "0x00259ef0",
+    "name": "maybe_Ui_LoadScreen_Update",
+    "signature": "void maybe_Ui_LoadScreen_Update(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Per-frame update of the load/save screen: advances the animation player at self+0x718 and then asks the screen's state dispatcher for transition 0 through the virtual at f_11C.",
+    "confidence": 0.45,
+    "evidence": "func_006722D8(self+0x718) then `piVar2=self+0x11c; (*(*piVar2+0x14))(piVar2,0); if nonzero (*(*piVar2+0x10))(piVar2);` - the standard transition-request pattern of the Ui_LoadScreen states (see 0x0025A97C etc.)."
+  },
+  {
+    "address": "0x0025a8ac",
+    "name": "maybe_Ui_LoadScreen_SetAnim18",
+    "signature": "void maybe_Ui_LoadScreen_SetAnim18(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Puts the load screen's animation state machine (self+0x918) into animation 0x18, clears self+0x2600 and clears bit 0 of the current object's +0x44 flags.",
+    "confidence": 0.5,
+    "evidence": "`uVar1 = func_001F0BE4(0x18); func_001DAB30(&self->f_918,uVar1); self->f_2600=0; if (self->f_25f0 && self->f_25f0->f_10) self->f_25f0->f_10->f_44 &= 0xfe;` 0x001F0BE4/0x001DAB30 are the anim-descriptor lookup and state-machine setter used by all the EnterState helpers."
+  },
+  {
+    "address": "0x0025af7c",
+    "name": "maybe_Ui_LoadScreen_EnterState15B",
+    "signature": "void maybe_Ui_LoadScreen_EnterState15B(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen state helper: sets the animation state machine to animation 0x15 with no secondary values and requests transition 0.",
+    "confidence": 0.5,
+    "evidence": "`uVar1=func_001F0BE4(0x15); self->f_940=uVar1; self->f_944=0; self->f_948=0; (*self->f_918->f_14)(&self->f_918,0);` Identical shape to 0x0025D8B4 (0x1A), 0x0025E694 (0x11), 0x0025C2D0 (0x0D)."
+  },
+  {
+    "address": "0x0025b740",
+    "name": "maybe_Ui_LoadScreen_CloseAndFlush",
+    "signature": "void maybe_Ui_LoadScreen_CloseAndFlush(UiLoadScreen* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Closes the load screen: releases the event payload at ev+0xA8 through 0x00123594 and flushes the pending animation group at self+0x25A0.",
+    "confidence": 0.45,
+    "evidence": "func_00123594(arg1, arg2+0xa8); func_0029126C(arg1+0x25a0, 1); - 0x0029126C is the 'play/flush state machine' called at the end of the load-screen state handlers."
+  },
+  {
+    "address": "0x0025b768",
+    "name": "maybe_Ui_LoadScreen_State37Or39",
+    "signature": "u32 maybe_Ui_LoadScreen_State37Or39(UiLoadScreen* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Load-screen state handler: when the event carries no cancel flag it requests transition 0x37 for multi-slot modes (f_72C->f_14 in 5..7) or 0x39 otherwise; when ev+0x30 is set it clears self+0x730 and runs the teardown 0x0018F96C.",
+    "confidence": 0.48,
+    "evidence": "Conditions on arg2->f_30, self->f_72c->f_11, func_00629104(); then `(*self->f_11c->f_14)(...,0x37)` or `(...,0x39)`; teardown func_0018F96C and `self->f_730=0`. Same skeleton as 0x0025C4F4 and 0x0025CF2C."
+  },
+  {
+    "address": "0x0025bb2c",
+    "name": "maybe_Ui_LoadScreen_State3C",
+    "signature": "u32 maybe_Ui_LoadScreen_State3C(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen state handler (real ARM code that Ghidra mis-decoded as Thumb): checks the screen/message state via 0x00249074 and 0x0062F680, advances the page player at self+0x718 through 0x003D2CD0, and requests transition 0x3C (or 0x1D when 0x006496A0 reports the alternate mode).",
+    "confidence": 0.45,
+    "evidence": "Raw ARM: bl 0x00249074; bl 0x0062F680; bl 0x003D2CD0(self+0x718, self+0x810); bl 0x006496A0; then `(*(*self->f_11c->f_14))(...,0x3c)` or `...,0x1d`; the index lists it as thumb, which is why Ghidra emitted halt_baddata."
+  },
+  {
+    "address": "0x0025bbc8",
+    "name": "maybe_Ui_LoadScreen_SetPaneAnimation",
+    "signature": "void maybe_Ui_LoadScreen_SetPaneAnimation(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Advances the pane animation player for the load screen and tail-calls the layout helper 0x00248870 with (self+0x810, sign-extended byte from a per-screen table).",
+    "confidence": 0.4,
+    "evidence": "Raw ARM: bl 0x006722D8(self+0x718); ldr r0,[pc,#0xc]; ldrsb r1,[r0,r4]; add r0,r4,#0x810; pop {r4,lr}; b 0x00248870. Merged entry point: the batch path is decomp/ghidra/functions_index.json (Ghidra folded it into a neighbour)."
+  },
+  {
+    "address": "0x0025c114",
+    "name": "maybe_Ui_LoadScreen_State23",
+    "signature": "u32 maybe_Ui_LoadScreen_State23(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen input gate: if the key mask (u16 at a per-instance table + self) has the confirm/cancel bits and the pending-object field at self+0x124 is active, sets self+0x726 and requests transition 0x23.",
+    "confidence": 0.45,
+    "evidence": "`if ((iRam0025c188 & self->f_124) && ((*(u16*)(iRam0025c18c+self) & 0x142) || (... & 4))) { func_0010EBD8(self); self->f_726=1; transition 0x23 }` - the standard Ui_LoadScreen input mask check."
+  },
+  {
+    "address": "0x0025c238",
+    "name": "maybe_Ui_LoadScreen_SetAnim19",
+    "signature": "void maybe_Ui_LoadScreen_SetAnim19(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Sets the load screen's animation state machine (self+0x918) to animation 0x19 through 0x001F0BE4/0x001DAB30.",
+    "confidence": 0.5,
+    "evidence": "Raw ARM: `mov r0,#0x19; bl 0x001F0BE4; mov r1,r0; add r0,r4,#0x800; pop {r4,lr}; add r0,r0,#0x118; b 0x001DAB30` - identical shape to 0x0025E694 (0x11)."
+  },
+  {
+    "address": "0x0025c25c",
+    "name": "maybe_Ui_LoadScreen_State4Alt",
+    "signature": "u32 maybe_Ui_LoadScreen_State4Alt(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen input gate that requests transition 4 when the confirm/cancel mask and the pending-object field at self+0x124 are active (alternate of the 0x0025A97C state-4 handler).",
+    "confidence": 0.45,
+    "evidence": "Same guard as 0x0025C114 (`f_124` active plus key mask 0x142/4) but the transition id is 4; calls func_0010EBD8(self) first."
+  },
+  {
+    "address": "0x0025c2d0",
+    "name": "maybe_Ui_LoadScreen_EnterState0D",
+    "signature": "void maybe_Ui_LoadScreen_EnterState0D(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen state helper: sets the animation state machine (self+0x918) to animation 0x0D and flushes the group at self+0x4754.",
+    "confidence": 0.5,
+    "evidence": "`uVar1=func_001F0BE4(0xd); func_001DAB30(arg1+0x918,uVar1); func_0029126C(arg1+0x4754,1);` Branch target 0x0025C06E reaches it from the state dispatcher."
+  },
+  {
+    "address": "0x0025c4f4",
+    "name": "maybe_Ui_LoadScreen_State39Or34B",
+    "signature": "u32 maybe_Ui_LoadScreen_State39Or34B(UiLoadScreen* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Load-screen state handler: like 0x0025B768 but the non-multi-slot branch requests 0x39 or 0x34 depending on f_72C->f_18, and the teardown is 0x0018F894.",
+    "confidence": 0.45,
+    "evidence": "Same skeleton as 0x0025B768/0x0025CF2C; the only differences are the transition ids and the teardown call (func_0018F894 instead of 0x0018F96C)."
+  },
+  {
+    "address": "0x0025ce04",
+    "name": "maybe_Ui_LoadScreen_State35To38",
+    "signature": "u32 maybe_Ui_LoadScreen_State35To38(UiLoadScreen* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Load-screen input handler: confirm calls the child action at self+0x295C and cancel requests transition 4; a scroll/side key maps the result of 0x00465B84 to transitions 0x35/0x36/0x38.",
+    "confidence": 0.42,
+    "evidence": "`f14 = ev->f_14; if (~0x142) { if (f14&4) transition 4; else if (f14&1) (*(self->f_295c->f_3c))(self->f_295c, ev->f_16..18); } else { i=func_00465B84(); i==0->0x35, i==1->0x36, i==2->0x38; self->f_726=1 }`"
+  },
+  {
+    "address": "0x0025cf2c",
+    "name": "maybe_Ui_LoadScreen_State39Or34",
+    "signature": "u32 maybe_Ui_LoadScreen_State39Or34(UiLoadScreen* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Load-screen state handler: same decision tree as 0x0025C4F4 (transition 0x39 or 0x34 from f_72C->f_18) with teardown 0x0018F734.",
+    "confidence": 0.45,
+    "evidence": "Identical conditions and transition ids to 0x0025C4F4; the teardown branch calls func_0018F734 and clears self+0x730."
+  },
+  {
+    "address": "0x0025cff4",
+    "name": "maybe_Ui_LoadScreen_State3BOr17",
+    "signature": "void maybe_Ui_LoadScreen_State3BOr17(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen input handler for the detail page: confirm calls the sub-action at self+0x15A8, a select key requests 0x3B (or 4), a cancel key requests 0x17 and restores the saved object; finally flushes the group at self+0x1928.",
+    "confidence": 0.42,
+    "evidence": "Uses self->f_48b4 key mask, self->f_15a8->f_3c action pointer, self->f_1608 saved object, self->f_1919 flag, transitions 0x3b/4/0x17 and func_0029126C(&self->f_1928, flag)."
+  },
+  {
+    "address": "0x0025d3fc",
+    "name": "maybe_Ui_LoadScreen_EnterState0D_B",
+    "signature": "void maybe_Ui_LoadScreen_EnterState0D_B(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Exact duplicate of 0x0025C2D0: set animation 0x0D on the state machine at self+0x918 and flush the group at self+0x4754.",
+    "confidence": 0.55,
+    "evidence": "Byte-for-byte equivalent to 0x0025C2D0: `func_001F0BE4(0xd); func_001DAB30(self+0x918,...); func_0029126C(self+0x4754,1);`"
+  },
+  {
+    "address": "0x0025d8b4",
+    "name": "maybe_Ui_LoadScreen_EnterState1AAlt",
+    "signature": "void maybe_Ui_LoadScreen_EnterState1AAlt(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen state helper: set animation 0x1A on the state machine and request transition 0.",
+    "confidence": 0.5,
+    "evidence": "`func_001F0BE4(0x1a)` -> self->f_940 with f_944/f_948 cleared, then `(*self->f_918->f_14)(&self->f_918,0)`; same template as 0x0025AF7C."
+  },
+  {
+    "address": "0x0025e694",
+    "name": "maybe_Ui_LoadScreen_EnterState11",
+    "signature": "void maybe_Ui_LoadScreen_EnterState11(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Load-screen state helper: set animation 0x11 on the state machine at self+0x918.",
+    "confidence": 0.5,
+    "evidence": "`mov r0,#0x11; bl 0x001F0BE4; add r0,r4,#0x918; b 0x001DAB30`."
+  },
+  {
+    "address": "0x0025e7b0",
+    "name": "maybe_Ui_LoadScreen_EnterState11B",
+    "signature": "void maybe_Ui_LoadScreen_EnterState11B(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Second copy of the animation-0x11 state helper (identical code at a different vtable slot).",
+    "confidence": 0.5,
+    "evidence": "Identical instruction sequence to 0x0025E694 (`mov r0,#0x11; bl 0x001F0BE4; add r0,r4,#0x800; add r0,#0x118; b 0x001DAB30`)."
+  },
+  {
+    "address": "0x0025e7d4",
+    "name": "maybe_Ui_LoadScreen_EnterState11C",
+    "signature": "void maybe_Ui_LoadScreen_EnterState11C(UiLoadScreen* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Third copy of the animation-0x11 state helper (another vtable slot of the same screen family).",
+    "confidence": 0.5,
+    "evidence": "Identical to 0x0025E694/0x0025E7B0; the three copies are installed in different transition tables."
+  },
+  {
+    "address": "0x002609cc",
+    "name": "maybe_Ui_TrainingWindow_DeletingDtor",
+    "signature": "void maybe_Ui_TrainingWindow_DeletingDtor(void* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Deleting destructor of the training-window part: runs the destructor body at 0x002609DC then operator delete.",
+    "confidence": 0.55,
+    "evidence": "func_002609DC(); func_0010F6CC(); - D0 shape; 0x002609E0 is named 'maybe_Ui_Window_ConstructParts' and 0x00260E90 'Ui_TrainingWindow_MemberRow_Ctor', fixing the neighbourhood."
+  },
+  {
+    "address": "0x0026108c",
+    "name": "maybe_Ui_TrainingWindow_UpdateSlotParts",
+    "signature": "void maybe_Ui_TrainingWindow_UpdateSlotParts(UiTrainingWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Walks the training window's 4 rows x 3 slots and calls the per-slot update virtual (+0x24) on each part, after letting the window update its own parts through f_98->f_2C.",
+    "confidence": 0.45,
+    "evidence": "`(*arg1->f_98->f_2c)(); for j<4 { for i<3 { (*(*(arg1+j*800+i*0x104+0x138)+0x24))(); } }` - 4 rows of stride 800 (0x320) and 3 slots of stride 0x104, the training window's grid."
+  },
+  {
+    "address": "0x002610ec",
+    "name": "maybe_Ui_TrainingWindow_SetSlotParam",
+    "signature": "void maybe_Ui_TrainingWindow_SetSlotParam(UiTrainingWindow* self, u32 value)",
+    "params": {
+      "param_1": "self",
+      "param_2": "value"
+    },
+    "summary": "Stores a value into the window and into all 12 slot parts (4 rows x 3 slots), and re-applies the slot animation via 0x00318F48.",
+    "confidence": 0.45,
+    "evidence": "`self->f_dc0=arg2; for j<4 for i<3 { p=self+j*800+i*0x104; p->f_22c=self->f_dc0; func_00318F48(&p->f_138,i); }`"
+  },
+  {
+    "address": "0x002614c8",
+    "name": "maybe_Ui_TrainingWindow_StoreRowRecord",
+    "signature": "void maybe_Ui_TrainingWindow_StoreRowRecord(UiTrainingWindow* self, u32 owner, UiRecord* rec)",
+    "params": {
+      "param_1": "self",
+      "param_2": "owner",
+      "param_3": "rec"
+    },
+    "summary": "Stores a row record into the training-window row object: copies rec[0]/rec[1] into self+0xDCC/0xDD8/0xDD4 and links the node into owner+0x80.",
+    "confidence": 0.42,
+    "evidence": "Same pattern as 0x0025841C but with the fields at self+0xdc8..0xdd8 and 0x001235A4(arg2+0x80,...)."
+  },
+  {
+    "address": "0x002621a4",
+    "name": "maybe_Ui_TrainingWindow_SetScriptValue",
+    "signature": "void maybe_Ui_TrainingWindow_SetScriptValue(UiTrainingWindow* self, u32 value, u8 flag, u32 slot)",
+    "params": {
+      "param_1": "self",
+      "param_2": "value",
+      "param_3": "flag",
+      "param_4": "slot"
+    },
+    "summary": "Writes a value into the window at a caller-chosen slot offset, sets self+0xFE0 and then calls the assert/report helper 0x00100B74 with the message id obtained from 0x00636E54.",
+    "confidence": 0.35,
+    "evidence": "`*(u32*)(arg4+self)=arg2; self->f_fe0=arg3; uVar1=func_00636E54(self->f_11e8,0x10); func_00100B74(uVar1);` 0x00100B74 is the noreturn script/assert reporter also used by the table loaders."
+  },
+  {
+    "address": "0x00263680",
+    "name": "maybe_Ui_Window_HandleInput06Or08",
+    "signature": "u32 maybe_Ui_Window_HandleInput06Or08(UiWindow* self, UiEvent* ev)",
+    "params": {
+      "param_1": "self",
+      "param_2": "ev"
+    },
+    "summary": "Window input handler: confirm invokes the child action at self+0x9F4, cancel requests transition 6, a select key saves f_A2C->f_C into self+0x11E0 and requests transition 8.",
+    "confidence": 0.42,
+    "evidence": "`f14=ev->f_14; if (!(f14&0x142)) { if (f14&4) transition 6; else if (f14&1) (*(self->f_9f4->f_3c))(self->f_9f4, ev->f_16..18); } else { self->f_11e0=self->f_a2c?self->f_a2c->f_c:0; self->f_11da=1; transition 8; }`"
+  },
+  {
+    "address": "0x00263ae8",
+    "name": "maybe_Ui_Window_ClosePartA",
+    "signature": "void maybe_Ui_Window_ClosePartA(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of the window close/finalize routine that starts at 0x00263A70: stops the sub-state machine at self+0x3A4. Not a separate function.",
+    "confidence": 0.38,
+    "evidence": "Raw ARM at 0x00263AE8: `bl 0x0029126C; mov r1,#0; add r0,r4,#0x3a4` - the tail of a 0x0029126C(self+0x3a4,0) stop call. 0x00263A70 drains messages, calls 0x00123594 and broadcasts to children; the false Thumb entry came from the second halfword of the bl encoding."
+  },
+  {
+    "address": "0x00263af4",
+    "name": "maybe_Ui_Window_ClosePartB",
+    "signature": "void maybe_Ui_Window_ClosePartB(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of the same window close routine: stops the sub-state machine at self+0x584.",
+    "confidence": 0.38,
+    "evidence": "Raw ARM: `bl 0x0029126C; add r0,r4,#0x400; mov r1,#0; add r0,r0,#0x184` - 0x0029126C(self+0x584,0), continuation of 0x00263AE8."
+  },
+  {
+    "address": "0x00263b24",
+    "name": "maybe_Ui_Window_ClosePartC",
+    "signature": "void maybe_Ui_Window_ClosePartC(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of the same window close routine: stops the sub-state machine at self+0xB4C.",
+    "confidence": 0.38,
+    "evidence": "Raw ARM: `bl 0x0029126C; add r0,r4,#0x800; mov r1,#0; add r0,r0,#0x34c` - 0x0029126C(self+0xb4c,0)."
+  },
+  {
+    "address": "0x00263b34",
+    "name": "maybe_Ui_Window_ClosePartD",
+    "signature": "void maybe_Ui_Window_ClosePartD(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of the window close routine: releases the two child objects at self+0x804 and self+0x9D8 via 0x00123594 and stops the state machine at self+0x820.",
+    "confidence": 0.4,
+    "evidence": "Raw ARM: `bl 0x0029126C; add r1,r4,#0x800; add r1,r1,#4; mov r0,r4; bl 0x00123594; add r1,r4,#0x800; add r1,r1,#0x1d8; ...; mov r1,#1; add r0,r4,#0x820` - two 0x00123594 releases."
+  },
+  {
+    "address": "0x00263b6c",
+    "name": "maybe_Ui_Window_ClosePartE",
+    "signature": "void maybe_Ui_Window_ClosePartE(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of the window close routine: clears the text/selection state at self+0x5C and copies the current animation id (+0x6D byte) into the follow-up object.",
+    "confidence": 0.35,
+    "evidence": "Raw ARM: `bl 0x0029126C; mov r1,#0; mov r0,r5; bl 0x001A62C0; ldr r0,[pc,#0x64]; ldr r1,[r0,r4]; add r0,r1,#0x5c; add r5,r1,#0x6d; strb r1,[r0,#0x10]` then 0x00650954/0x0047A0E4/0x00479F18 depending on a comparison with 5."
+  },
+  {
+    "address": "0x00263ce8",
+    "name": "maybe_Ui_RecipeBook_HandleInputBranch",
+    "signature": "u32 maybe_Ui_RecipeBook_HandleInputBranch(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior input-handler label of the recipe-book detail widget (real ARM code, the index wrongly marks it Thumb): runs the state-reset helper 0x0029126C and dispatches on key-mask bits (tst #4 / #2 / #1).",
+    "confidence": 0.38,
+    "evidence": "Raw ARM: `bl 0x0029126C; nop; nop; b 0x00263DB4; tst r1,#4; beq 0x00263D70 ...`; the enclosing function starts at 0x00263BEC ('maybe_Ui_RecipeBook_BuildDetailWidget'), whose C shows the same 0x0029126C and key-bit dispatch."
+  },
+  {
+    "address": "0x00264cd8",
+    "name": "maybe_Ui_Window_AlignGap264CD8",
+    "signature": "void maybe_Ui_Window_AlignGap264CD8(void)",
+    "params": {},
+    "summary": "Not code: eight bytes of alignment padding / literal data between the end of the training-window part constructor (0x0026423C, +0xA9C) and the deleting destructor at 0x00264CE0. It only entered the batch because a data halfword looked like a Thumb push.",
+    "confidence": 0.5,
+    "evidence": "Index size of 0x0026423C is 0xA9C, ending exactly at 0x00264CD8; the raw words at 0x00264CD8 are `rsbseq fp,r2,r0,ror r5; rsbseq fp,r2,r0,lsr #13`, and 0x00264CE0 begins with a real `push {r4,lr}; bl 0x00264CF0`."
+  },
+  {
+    "address": "0x00264ce0",
+    "name": "maybe_Ui_WindowPart_DeletingDtor",
+    "signature": "void maybe_Ui_WindowPart_DeletingDtor(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Deleting destructor of the second window part: runs the destructor body at 0x00264CF0 (which releases all embedded layout references, message page and child objects) and then operator delete.",
+    "confidence": 0.55,
+    "evidence": "push {r4,lr}; bl 0x00264CF0; pop {r4,lr}; b 0x0010F6CC. 0x00264CF0's body is the long teardown 0x00264CF4 ('maybe_Ui_Window_ConstructPartsB' in the decompiler, actually the part destructor) that calls Ui_LayoutRef_Release / Ui_MessagePage_Dtor / std_destroy_range."
+  },
+  {
+    "address": "0x00264fc8",
+    "name": "maybe_Ui_Window_EmbeddedVtableBlock",
+    "signature": "void maybe_Ui_Window_EmbeddedVtableBlock(void)",
+    "params": {},
+    "summary": "Not a function: a 0x11C-byte table of vtable/descriptor pointers in .text immediately after the window-part destructor 0x00264CF4. The destructor reads entries at +0x168..+0x184 from here when it re-binds the part interfaces.",
+    "confidence": 0.5,
+    "evidence": "0x00264CF4 ends at 0x00264FC8 (size 0x2D4); its code does `iVar1 = _FUN_00264FC8; *(x-8)=iVar1->f_180; *(x-4)=iVar1->f_184; ` i.e. loads 4-byte pointers from 0x265148/0x26514C. Raw bytes at 0x00264FC8 (`push {r4,r5,r6,lr}` followed by an invalid Thumb stream) confirm data."
+  },
+  {
+    "address": "0x002650e4",
+    "name": "maybe_Ui_Window_ClearChildState",
+    "signature": "void maybe_Ui_Window_ClearChildState(UiWindow* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Resets one window child object obtained from 0x005360D0: clears its +0x1C byte and the u16 at +0x1D.",
+    "confidence": 0.5,
+    "evidence": "`push {r4,lr}; bl 0x005360D0; mov r1,#0; strb r1,[r0,#0x1c]; strh r1,[r0,#0x1d]; pop {r4,pc}`"
+  },
+  {
+    "address": "0x0026828c",
+    "name": "maybe_Model_GetInstanceBase",
+    "signature": "void* maybe_Model_GetInstanceBase(void)",
+    "params": {},
+    "summary": "Tiny helper returning the object produced by 0x001CF7F8 minus 8 bytes, i.e. the base of an embedded model/instance header.",
+    "confidence": 0.35,
+    "evidence": "`push {r4,lr}; bl 0x001CF7F8; sub r0,r0,#8; pop {r4,pc}`; called through a branch from 0x0026876E. The 0x00268xxx neighbourhood holds model/instance constructors (0x002650FC 'Model_InitInstanceFromDescriptor')."
+  },
+  {
+    "address": "0x002685e0",
+    "name": "maybe_Container_FindObjectByTypeIdK",
+    "signature": "u32 maybe_Container_FindObjectByTypeIdK(Container* self, u32 typeId, u32* out, u32 hash)",
+    "params": {
+      "param_1": "self",
+      "param_2": "typeId",
+      "param_3": "out",
+      "param_4": "hash"
+    },
+    "summary": "Type-id hash lookup in the game's object container: hashes the id into the bucket table, walks the collision chain calling the object's virtual +0, and, when the type matches, stores the id into out[] and dispatches the object's virtual +0x3C with selector 4.",
+    "confidence": 0.5,
+    "evidence": "Same code shape as 0x00630C54 ('Container_FindObjectByTypeIdI') and 0x00630CDC ('Container_FindObjectByTypeIdJ'): `cmp r3,r1,lsr #11; and ip,r1,r3,asr #10; ldr r3,[pc]; add r3,r3,ip,lsl #3; ldr ip,[r3,#4]; cmp ip,r1,lsr #11; ...; str r1,[r0,r2,lsl #2]; ... ldr r2,[r1,#0x3c]; mov r1,#4; bx r2`."
+  },
+  {
+    "address": "0x00336190",
+    "name": "maybe_Gfx_SpriteActor_AppendChildSlot",
+    "signature": "u32 maybe_Gfx_SpriteActor_AppendChildSlot(SpriteActor* self, void* child)",
+    "params": {
+      "param_1": "self",
+      "param_2": "child"
+    },
+    "summary": "Interior tail of Gfx_SpriteActor_AddChildC (0x00336054): inserts the child into the actor's child list, sets the 'has children' byte at +0x220, appends it to the +0x230 array and returns the new index (self+0x250 counter). Not a separate function.",
+    "confidence": 0.42,
+    "evidence": "0x00336054 is named 'maybe_Gfx_SpriteActor_AddChildC' and its size (0x184) ends exactly at 0x003361D8; the code at 0x00336190 is the append tail: bl 0x001235A4, strb 1,[r4,#0x220], ldr r0,[r4,#0x250]; str r5,[r0*4+0x230]; counter++."
+  },
+  {
+    "address": "0x00336ab8",
+    "name": "maybe_Model_Object_DeletingDtor",
+    "signature": "void maybe_Model_Object_DeletingDtor(ModelObject* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Deleting destructor of the model/scene-object class (vtable g_00336B38): sets the vptr, destroys every node of the child list at self+0x224..0x22C through their virtual +4, unlinks the list sentinel twice, runs the base destructor 0x005F8528 and frees the object.",
+    "confidence": 0.58,
+    "evidence": "`*arg1=g_00336b38; for nodes in arg1[0x8a]..arg1[0x89] (*(*node+4))(); unlink sentinels; func_005F8528(arg1); func_0010F6CC();` Neighbour 0x00336B3C is named 'Field_SceneObject_Dtor', so this is the deleting variant of that scene-object class."
+  },
+  {
+    "address": "0x0033df68",
+    "name": "maybe_Field_Actor_BuildFromMapRecord",
+    "signature": "void maybe_Field_Actor_BuildFromMapRecord(FieldScene* self, MapObjectRecord* rec)",
+    "params": {
+      "param_1": "self",
+      "param_2": "rec"
+    },
+    "summary": "Interior block of 'maybe_Field_SceneObject_ApplyRecordModel' (0x0033DEC4): resolves the actor/NPC id from the map record (0x0062B584, 0x0063EB94, 0x0035EB98) and builds its sprite/actor object through 0x001A6680 and Gfx_SpriteActor_InitFromFixedEntry.",
+    "confidence": 0.42,
+    "evidence": "Raw ARM at 0x0033DF68: bl 0x0062B584; ldrh r0,[r5]; bl 0x001C7EA4; bl 0x0011CB38; bl 0x0063EB94; bl 0x006F20C0; bl 0x0035EB98 ... Matches the caller-visible list of 0x0033DEC4 ('maybe_Field_SceneObject_ApplyRecordModel', N_053). Ghidra split the function because of a false Thumb entry."
+  },
+  {
+    "address": "0x0033ed60",
+    "name": "maybe_Field_SceneObject_LinkRecord",
+    "signature": "void maybe_Field_SceneObject_LinkRecord(void* self)",
+    "params": {
+      "param_1": "self"
+    },
+    "summary": "Interior label of 'maybe_Field_SceneObject_InitFromRecord' (0x0033EB5C): calls 0x0062C388 and copies two words off the stack into the new object. Not a function.",
+    "confidence": 0.35,
+    "evidence": "0x0033EB5C ('maybe_Field_SceneObject_InitFromRecord', N_053) has index size 0x204, which ends exactly at the false Thumb entry 0x0033ED60; the real ARM body continues after it until the next prologue at 0x003400B4. Raw ARM at this address: `bl 0x0062C388; add r3,sp,#8; mov r1,r0; ldm r3,{r0,r2}`. The false entry came from the 0xB5xx halfword of the bl encoding."
+  },
+  {
+    "address": "0x00341394",
+    "name": "maybe_Field_SceneSpawnBlock_NpcColorBalloon",
+    "signature": "void maybe_Field_SceneSpawnBlock_NpcColorBalloon(void* scene, void* record)",
+    "params": {
+      "param_1": "scene",
+      "param_2": "record"
+    },
+    "summary": "Interior block, not a function: this address is inside 'maybe_Field_SceneObject_InitFromRecordB' (0x003400B4) and is the NPC branch that creates a colour-balloon HUD object for the NPC (0x002Fxxxx balloon helpers plus a 0x28-byte list node allocated with Mem_AllocAligned). Split out by the batch scanner because an ARM instruction contains the byte pair 0xB5xx.",
+    "confidence": 0.42,
+    "evidence": "Container 0x003400B4 (size 0x1818 in the index, next real prologue 0x003418CC). The block calls maybe_Field_Npc_InitColorBalloonA (0x002F...), maybe_Ui_Message_ResolveSpeakerName, Game_GetWork/Os_GetGameWork, 0x0051B1FC (string hash) and 0x0011CD80 (string compare), then allocates 0x28 bytes at 0x003413F0 and initialises a doubly-linked list head. No branch target or data pointer of its own; the Thumb entry decompiles to halt_baddata while the bytes are coherent ARM from 0x003400B4."
+  },
+  {
+    "address": "0x00343650",
+    "name": "maybe_Field_SceneSpawnBlock_Sprite2D",
+    "signature": "void maybe_Field_SceneSpawnBlock_Sprite2D(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Sprite2D object through Gfx_Sprite2D_InitFromDesc (0x001946E4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Gfx_Sprite2D_InitFromDesc (0x001946E4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00343a5c",
+    "name": "maybe_Field_SceneSpawnBlock_ObjectSpriteEffectSlot",
+    "signature": "void maybe_Field_SceneSpawnBlock_ObjectSpriteEffectSlot(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ObjectSpriteEffectSlot object through Field_ObjectSprite_AcquireEffectSlot (0x0043FE1C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_ObjectSprite_AcquireEffectSlot (0x0043FE1C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00343e28",
+    "name": "maybe_Field_SceneSpawnBlock_MarkerAnimated",
+    "signature": "void maybe_Field_SceneSpawnBlock_MarkerAnimated(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MarkerAnimated object through Field_Marker_SetupAnimatedObject (0x002F2B88). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_Marker_SetupAnimatedObject (0x002F2B88), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034420c",
+    "name": "maybe_Field_SceneSpawnBlock_MarkerSprite",
+    "signature": "void maybe_Field_SceneSpawnBlock_MarkerSprite(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MarkerSprite object through Field_Marker_SetupSpriteObject (0x002F298C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_Marker_SetupSpriteObject (0x002F298C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003445e4",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteFromLayout",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteFromLayout(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteFromLayout object through Field_SceneObject_InitSpriteFromLayout (0x00449D54). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_SceneObject_InitSpriteFromLayout (0x00449D54), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003449c8",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DAnimA",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DAnimA(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DAnimA object through Actor2D_CreateWithAnimInstanceA (0x00218EA8). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateWithAnimInstanceA (0x00218EA8), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00344db4",
+    "name": "maybe_Field_SceneSpawnBlock_TalkPartyMessage",
+    "signature": "void maybe_Field_SceneSpawnBlock_TalkPartyMessage(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one TalkPartyMessage object through maybe_Menu_TalkParty_SetupMessage (0x00218B00). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Menu_TalkParty_SetupMessage (0x00218B00), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00345194",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DAnimB",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DAnimB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DAnimB object through Actor2D_CreateWithAnimInstanceB (0x00219268). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateWithAnimInstanceB (0x00219268), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00345570",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetSpriteGridC",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetSpriteGridC(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetSpriteGridC object through maybe_Field_Gadget_InitSpriteGridC (0x004CA684). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitSpriteGridC (0x004CA684), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003458a8",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetSpriteGridA",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetSpriteGridA(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetSpriteGridA object through maybe_Field_Gadget_InitSpriteGridA (0x004CA008). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitSpriteGridA (0x004CA008), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00345c04",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetSpriteGridB",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetSpriteGridB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetSpriteGridB object through maybe_Field_Gadget_InitSpriteGridB (0x004CA404). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitSpriteGridB (0x004CA404), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00345f44",
+    "name": "maybe_Field_SceneSpawnBlock_TwoPartObject",
+    "signature": "void maybe_Field_SceneSpawnBlock_TwoPartObject(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one TwoPartObject object through maybe_Field_TwoPartObj_InitFromRecord (0x003A3FFC). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_TwoPartObj_InitFromRecord (0x003A3FFC), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00346350",
+    "name": "maybe_Field_SceneSpawnBlock_ModelFromLayout",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelFromLayout(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelFromLayout object through Field_SceneObject_InitModelFromLayout (0x00449560). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_SceneObject_InitModelFromLayout (0x00449560), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00346748",
+    "name": "maybe_Field_SceneSpawnBlock_SymbolFromLayout",
+    "signature": "void maybe_Field_SceneSpawnBlock_SymbolFromLayout(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SymbolFromLayout object through Field_SceneObject_InitSymbolFromLayout (0x0044B5D4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_SceneObject_InitSymbolFromLayout (0x0044B5D4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00346b20",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteSingleQuad",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteSingleQuad(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteSingleQuad object through Gfx_SpriteActor_InitSingleQuad (0x003A11E0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Gfx_SpriteActor_InitSingleQuad (0x003A11E0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00346f04",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteFromRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteFromRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteFromRecord object through Gfx_SpriteActor_InitFromRecord (0x00361AC4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Gfx_SpriteActor_InitFromRecord (0x00361AC4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003472ec",
+    "name": "maybe_Field_SceneSpawnBlock_ModelFromRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelFromRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelFromRecord object through Field_SceneObject_InitModelFromRecord (0x0044F048). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_SceneObject_InitModelFromRecord (0x0044F048), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003476e8",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DFromRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DFromRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DFromRecord object through maybe_Actor2D_InitFromRecord (0x003A2EDC). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Actor2D_InitFromRecord (0x003A2EDC), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00347abc",
+    "name": "maybe_Field_SceneSpawnBlock_Object2DModel",
+    "signature": "void maybe_Field_SceneSpawnBlock_Object2DModel(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Object2DModel object through Field_Object2D_InitModel (0x0040F0F0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_Object2D_InitModel (0x0040F0F0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00347ec0",
+    "name": "maybe_Field_SceneSpawnBlock_Object2DModelVariant",
+    "signature": "void maybe_Field_SceneSpawnBlock_Object2DModelVariant(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Object2DModelVariant object through Field_Object2D_InitModelVariant (0x0040F3C0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_Object2D_InitModelVariant (0x0040F3C0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003482a8",
+    "name": "maybe_Field_SceneSpawnBlock_ModelObjFromRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelObjFromRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelObjFromRecord object through maybe_Field_ModelObj_InitFromRecord (0x003A389C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_ModelObj_InitFromRecord (0x003A389C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00348680",
+    "name": "maybe_Field_SceneSpawnBlock_Effect2D",
+    "signature": "void maybe_Field_SceneSpawnBlock_Effect2D(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Effect2D object through Field_Prop_InitEffect2D (0x004B1708). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_Prop_InitEffect2D (0x004B1708), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00348a54",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetKind1B",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetKind1B(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetKind1B object through maybe_Field_Gadget_InitKind1B (0x004C88C0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitKind1B (0x004C88C0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00348e24",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetKind1C",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetKind1C(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetKind1C object through maybe_Field_Gadget_InitKind1C (0x004C8B18). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitKind1C (0x004C8B18), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00349204",
+    "name": "maybe_Field_SceneSpawnBlock_GadgetKind1D",
+    "signature": "void maybe_Field_SceneSpawnBlock_GadgetKind1D(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one GadgetKind1D object through maybe_Field_Gadget_InitKind1D (0x004C8D70). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Gadget_InitKind1D (0x004C8D70), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003495e4",
+    "name": "maybe_Field_SceneSpawnBlock_SceneObjFromRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_SceneObjFromRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SceneObjFromRecord object through Field_SceneObj_InitFromRecord (0x003A2760). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), Field_SceneObj_InitFromRecord (0x003A2760), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003499c8",
+    "name": "maybe_Field_SceneSpawnBlock_EffectEmitterAndActor",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectEmitterAndActor(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the first field scene-object spawner (0x0034354C, sibling of 0x0034A03C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectEmitterAndActor object through maybe_Effect_Emitter_SetupFromDescriptor (0x0044A050). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034354C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_Emitter_SetupFromDescriptor (0x0044A050), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034a140",
+    "name": "maybe_Field_SceneSpawnBlock_MarkerModel",
+    "signature": "void maybe_Field_SceneSpawnBlock_MarkerModel(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MarkerModel object through maybe_Field_Marker_InitModelMarker (0x002F35B8). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_Marker_InitModelMarker (0x002F35B8), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034a51c",
+    "name": "maybe_Field_SceneSpawnBlock_MarkerFromPlacement",
+    "signature": "void maybe_Field_SceneSpawnBlock_MarkerFromPlacement(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MarkerFromPlacement object through Field_Marker_InitFromPlacement (0x002F33C4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Field_Marker_InitFromPlacement (0x002F33C4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034a8b8",
+    "name": "maybe_Field_SceneSpawnBlock_StaticModelFromLayout",
+    "signature": "void maybe_Field_SceneSpawnBlock_StaticModelFromLayout(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one StaticModelFromLayout object through maybe_Field_SceneObject_InitStaticModelFromLayout (0x0044A63C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_SceneObject_InitStaticModelFromLayout (0x0044A63C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034ac50",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartMeshPair",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartMeshPair(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartMeshPair object through maybe_Gfx_ModelPart_InitMeshPair (0x003A449C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitMeshPair (0x003A449C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034aff0",
+    "name": "maybe_Field_SceneSpawnBlock_EffectSphereEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectSphereEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectSphereEmitter object through maybe_Effect_SphereEmitter_Setup (0x00449B70). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_SphereEmitter_Setup (0x00449B70), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034b388",
+    "name": "maybe_Field_SceneSpawnBlock_ObjectFromLayout",
+    "signature": "void maybe_Field_SceneSpawnBlock_ObjectFromLayout(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ObjectFromLayout object through maybe_Field_SceneObject_InitFromLayout (0x0044BD70). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_SceneObject_InitFromLayout (0x0044BD70), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034b728",
+    "name": "maybe_Field_SceneSpawnBlock_EffectMeshEmitterE",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectMeshEmitterE(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectMeshEmitterE object through maybe_Effect_MeshEmitter_SetupE (0x0044F744). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_MeshEmitter_SetupE (0x0044F744), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034babc",
+    "name": "maybe_Field_SceneSpawnBlock_PropEffectInstance",
+    "signature": "void maybe_Field_SceneSpawnBlock_PropEffectInstance(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one PropEffectInstance object through Field_Prop_ConfigureEffectInstance (0x004B1C4C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Field_Prop_ConfigureEffectInstance (0x004B1C4C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034be54",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartSimple",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartSimple(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartSimple object through maybe_Gfx_ModelPart_InitSimple (0x003A349C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitSimple (0x003A349C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034c20c",
+    "name": "maybe_Field_SceneSpawnBlock_MeshWithColorAnim",
+    "signature": "void maybe_Field_SceneSpawnBlock_MeshWithColorAnim(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MeshWithColorAnim object through maybe_Gfx_CreateMeshWithColorAnim (0x002F4594). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_CreateMeshWithColorAnim (0x002F4594), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034c5d0",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartFromParams",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartFromParams(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartFromParams object through maybe_Gfx_ModelPart_InitFromParams (0x0036299C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitFromParams (0x0036299C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034c988",
+    "name": "maybe_Field_SceneSpawnBlock_EffectMeshEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectMeshEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectMeshEmitter object through maybe_Effect_MeshEmitter_Setup (0x0040DF38). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_MeshEmitter_Setup (0x0040DF38), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034cd20",
+    "name": "maybe_Field_SceneSpawnBlock_EffectBillboardEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectBillboardEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectBillboardEmitter object through maybe_Effect_BillboardEmitter_Setup (0x0040EB90). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_BillboardEmitter_Setup (0x0040EB90), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034d0b8",
+    "name": "maybe_Field_SceneSpawnBlock_EffectMeshEmitterB",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectMeshEmitterB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectMeshEmitterB object through maybe_Effect_MeshEmitter_SetupB (0x0040FBB8). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_MeshEmitter_SetupB (0x0040FBB8), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034d454",
+    "name": "maybe_Field_SceneSpawnBlock_EffectMeshEmitterC",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectMeshEmitterC(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectMeshEmitterC object through maybe_Effect_MeshEmitter_SetupC (0x0040FDA0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_MeshEmitter_SetupC (0x0040FDA0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034d7ec",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartMeshColored",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartMeshColored(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartMeshColored object through maybe_Gfx_ModelPart_InitMeshColored (0x003A3CC8). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitMeshColored (0x003A3CC8), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034db84",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartWithTransforms",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartWithTransforms(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartWithTransforms object through maybe_Gfx_ModelPart_InitWithTransforms (0x003635B0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitWithTransforms (0x003635B0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034df40",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorDescVector",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorDescVector(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorDescVector object through maybe_Gfx_SpriteActor_InitFromDescVector (0x00472474). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitFromDescVector (0x00472474), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034e2d8",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorMinimal",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorMinimal(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorMinimal object through maybe_Gfx_SpriteActor_InitMinimal (0x004E6C38). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitMinimal (0x004E6C38), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034e69c",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorAction1B",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorAction1B(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorAction1B object through maybe_Gfx_SpriteActor_InitAction1B (0x004C9474). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitAction1B (0x004C9474), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034ea40",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorAction1C",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorAction1C(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorAction1C object through maybe_Gfx_SpriteActor_InitAction1C (0x004C96E4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitAction1C (0x004C96E4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034ee04",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorOffMesh",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorOffMesh(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorOffMesh object through Gfx_SpriteActor_InitFromDescOffMesh (0x004C9980). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Gfx_SpriteActor_InitFromDescOffMesh (0x004C9980), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034f1c0",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartRotated",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartRotated(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartRotated object through maybe_Gfx_ModelPart_InitRotated (0x003A2B6C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitRotated (0x003A2B6C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034f574",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartSimpleB",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartSimpleB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartSimpleB object through maybe_Gfx_ModelPart_InitSimpleB (0x003DD974). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitSimpleB (0x003DD974), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034f910",
+    "name": "maybe_Field_SceneSpawnBlock_EffectSpriteEmitterE",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectSpriteEmitterE(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectSpriteEmitterE object through maybe_Effect_SpriteEmitter_SetupE (0x0044FA50). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_SpriteEmitter_SetupE (0x0044FA50), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0034fcb4",
+    "name": "maybe_Field_SceneSpawnBlock_EffectHelixEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectHelixEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectHelixEmitter object through maybe_Effect_HelixEmitter_Setup (0x0044AE10). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_HelixEmitter_Setup (0x0044AE10), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035004c",
+    "name": "maybe_Field_SceneSpawnBlock_MessageRecord",
+    "signature": "void maybe_Field_SceneSpawnBlock_MessageRecord(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one MessageRecord object through Ui_Message_ApplyRecord (0x004E6764). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Ui_Message_ApplyRecord (0x004E6764), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00350408",
+    "name": "maybe_Field_SceneSpawnBlock_Ui3DElement",
+    "signature": "void maybe_Field_SceneSpawnBlock_Ui3DElement(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Ui3DElement object through Ui3D_InitElementFromDef (0x004E5DA0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Ui3D_InitElementFromDef (0x004E5DA0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003507b8",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorReleaseNodes",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorReleaseNodes(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one SpriteActorReleaseNodes object through maybe_Gfx_SpriteActor_InitFromDescReleaseNodes (0x004E60D0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitFromDescReleaseNodes (0x004E60D0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00350b70",
+    "name": "maybe_Field_SceneSpawnBlock_EffectQuadEmitterB",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectQuadEmitterB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectQuadEmitterB object through maybe_Effect_QuadEmitter_SetupB (0x0040D620). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_QuadEmitter_SetupB (0x0040D620), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00350f0c",
+    "name": "maybe_Field_SceneSpawnBlock_EffectQuadEmitterA",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectQuadEmitterA(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectQuadEmitterA object through maybe_Effect_QuadEmitter_SetupA (0x0040D4F8). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_QuadEmitter_SetupA (0x0040D4F8), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003512c8",
+    "name": "maybe_Field_SceneSpawnBlock_EffectNodeFromDesc",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectNodeFromDesc(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one EffectNodeFromDesc object through maybe_Gfx_EffectNode_SetupFromDesc (0x004AF78C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_EffectNode_SetupFromDesc (0x004AF78C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00351660",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DFromParamC",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DFromParamC(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DFromParamC object through Actor2D_CreateFromParamC (0x0021A454). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateFromParamC (0x0021A454), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00351964",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DFromParamB",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DFromParamB(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DFromParamB object through Actor2D_CreateFromParamB (0x0021A03C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateFromParamB (0x0021A03C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00351c64",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DFromParamA",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DFromParamA(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DFromParamA object through Actor2D_CreateFromParamA (0x00219D5C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateFromParamA (0x00219D5C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00351f6c",
+    "name": "maybe_Field_SceneSpawnBlock_Actor2DFromParamD",
+    "signature": "void maybe_Field_SceneSpawnBlock_Actor2DFromParamD(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one Actor2DFromParamD object through Actor2D_CreateFromParamD (0x0021A900). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), Actor2D_CreateFromParamD (0x0021A900), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035226c",
+    "name": "maybe_Field_SceneSpawnBlock_ObjectFromDescAlt",
+    "signature": "void maybe_Field_SceneSpawnBlock_ObjectFromDescAlt(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ObjectFromDescAlt object through maybe_Field_SceneObject_BuildFromDescAlt (0x004CAFA4). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_SceneObject_BuildFromDescAlt (0x004CAFA4), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x00352624",
+    "name": "maybe_Field_SceneSpawnBlock_ObjectFromDesc",
+    "signature": "void maybe_Field_SceneSpawnBlock_ObjectFromDesc(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ObjectFromDesc object through maybe_Field_SceneObject_BuildFromDesc (0x004CAD68). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Field_SceneObject_BuildFromDesc (0x004CAD68), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x003529f8",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartColored",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartColored(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the second field scene-object spawner (0x0034A03C, sibling of 0x0034354C / 0x00352DBC / 0x00353074) and builds the on-stack parameter record, then allocates and initialises one ModelPartColored object through maybe_Gfx_ModelPart_InitColored (0x003A15E0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0034A03C; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitColored (0x003A15E0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035b3a0",
+    "name": "maybe_Field_SceneSpawnBlock_SpriteActorAligned",
+    "signature": "void maybe_Field_SceneSpawnBlock_SpriteActorAligned(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the third field scene-object spawner ('maybe_Field_SceneObject_SpawnByTypeC', 0x0035A1D0) and builds the on-stack parameter record, then allocates and initialises one SpriteActorAligned object through maybe_Gfx_SpriteActor_InitFromDescAligned (0x004F0348). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0035A1D0; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_SpriteActor_InitFromDescAligned (0x004F0348), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035c0e4",
+    "name": "maybe_Field_SceneSpawnBlock_FreeSlot",
+    "signature": "void maybe_Field_SceneSpawnBlock_FreeSlot(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block of 'maybe_Field_SceneObject_SpawnByTypeC' (0x0035A1D0): the code here only walks the free list with 0x00109658 (find-next-node) and branches back into 0x0035C0FC, i.e. it is a fragment of the previous block's teardown, not a spawn case. Not a function.",
+    "confidence": 0.4,
+    "evidence": "Raw ARM at 0x0035C0E4: `bl 0x00109658; nop; nop; b 0x0035C0FC; nop` (the bytes are b5 5b ... only when read as little-endian Thumb). Container is 0x0035A1D0, whose second half starts at 0x0035B3A0 (another false Thumb entry) and whose real body ends at the next prologue 0x0035E478. 0x00109658 is the list 'find next node' helper used all over the object-list code."
+  },
+  {
+    "address": "0x0035c0f8",
+    "name": "maybe_Field_SceneSpawnBlock_ModelSlotEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelSlotEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the third field scene-object spawner ('maybe_Field_SceneObject_SpawnByTypeC', 0x0035A1D0) and builds the on-stack parameter record, then allocates and initialises one ModelSlotEmitter object through Field_ModelSlotEmitter_ApplyDescriptor (0x004B2A6C). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0035A1D0; the block calls Mem_AllocAligned (0x00109DC8), Field_ModelSlotEmitter_ApplyDescriptor (0x004B2A6C), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035c650",
+    "name": "maybe_Field_SceneSpawnBlock_EffectSelectEmitter",
+    "signature": "void maybe_Field_SceneSpawnBlock_EffectSelectEmitter(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the third field scene-object spawner ('maybe_Field_SceneObject_SpawnByTypeC', 0x0035A1D0) and builds the on-stack parameter record, then allocates and initialises one EffectSelectEmitter object through maybe_Effect_SelectEmitterVariant_Setup (0x0044CF94). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0035A1D0; the block calls Mem_AllocAligned (0x00109DC8), maybe_Effect_SelectEmitterVariant_Setup (0x0044CF94), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035c758",
+    "name": "maybe_Field_SceneSpawnBlock_ModelPartMeshOnly",
+    "signature": "void maybe_Field_SceneSpawnBlock_ModelPartMeshOnly(void* owner, void* objectTable)",
+    "params": {
+      "param_1": "owner",
+      "param_2": "objectTable"
+    },
+    "summary": "Interior block, not a function: this address is inside the third field scene-object spawner ('maybe_Field_SceneObject_SpawnByTypeC', 0x0035A1D0) and builds the on-stack parameter record, then allocates and initialises one ModelPartMeshOnly object through maybe_Gfx_ModelPart_InitMeshOnly (0x003DDCD0). The batch scanner split it out because an ARM instruction in the block contains the byte pair 0xB5xx, which its Thumb-push heuristic reads as a prologue.",
+    "confidence": 0.45,
+    "evidence": "Container 0x0035A1D0; the block calls Mem_AllocAligned (0x00109DC8), maybe_Gfx_ModelPart_InitMeshOnly (0x003DDCD0), the list insert 0x001235A4 and the shared tail 0x001C8984/0x0011FFC4; it has no branch target or data pointer of its own. Ghidra's entry at this address is marked Thumb and decompiles either to halt_baddata or to an endless coprocessor/loop artifact, while the same bytes decode as coherent ARM when disassembled from the real container start."
+  },
+  {
+    "address": "0x0035ebb8",
+    "name": "Item_AddToStorage",
+    "signature": "u32 Item_AddToStorage(void* gameWork, u32 storageOffset, u32 count, u32 itemId)",
+    "params": {
+      "param_1": "gameWork",
+      "param_2": "storageOffset",
+      "param_3": "count",
+      "param_4": "itemId"
+    },
+    "summary": "Adds items to one of the player's storage buckets: looks the item record up by id, dispatches on the item's category byte (0x25/0x26/0x27 and the id ranges 0x9BF-0xA19, 0xA19-0xA82, 0xA82-0xAA3, 0xAA3-0xB3B) to the matching per-category add routine, otherwise scans the 24 u16 slot ids at +0xEC for a matching slot and finally calls 0x00612008 to append the remaining count.",
+    "confidence": 0.55,
+    "evidence": "bl 0x0061BD4C (Item_LookupRecord) with {id,count}; category switch on [rec+0xc]: 0x25 -> loop 0x00613B88, 0x26 -> 0x00612D54, 0x27 -> 0x0061251C; id ranges dispatch to 0x006131E4/0x0061346C/0x006120DC/0x006131B0; fallback scans self+0xEC (24 u16 entries, bound 0x18) and calls 0x00612008(self+0x24800+0x2CC, itemId, count). Entry point is a container in functions_index.json (no separate readable C)."
+  }
+]

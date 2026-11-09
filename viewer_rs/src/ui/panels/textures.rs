@@ -25,6 +25,11 @@ pub struct TexturesPanel {
     dirty: bool,
     request: Option<(String, Option<String>)>,
     pane: ImagePaneState,
+    /// Export/Replace workflow state (PNG -> BFLIM -> SARC -> PACK).
+    tools: crate::ui::asset_jobs::AssetTools,
+    /// Decoded preview of the *encoded* BFLIM (what the 3DS will show).
+    preview: Option<egui::TextureHandle>,
+    preview_tag: String,
 }
 
 impl Default for TexturesPanel {
@@ -40,6 +45,9 @@ impl Default for TexturesPanel {
             dirty: true,
             request: None,
             pane: ImagePaneState::default(),
+            tools: Default::default(),
+            preview: None,
+            preview_tag: String::new(),
         }
     }
 }
@@ -227,6 +235,11 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 ("flags", tex.flags.map(|v| v.to_string()).unwrap_or_else(|| "-".into())),
             ];
             crate::ui::kv_rows(ui, &rows);
+            let root = app.dirs.root.clone();
+            let asset = tex.rel.replace('\\', "/");
+            let ctx = ui.ctx().clone();
+            let mut done: Option<String> = None;
+            let panel = &mut app.panels.textures;
             ui.horizontal(|ui| {
                 if ui.button("Open externally").clicked() {
                     let _ = std::process::Command::new("cmd")
@@ -238,9 +251,63 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                     ui.ctx().copy_text(tex.path.to_string_lossy().into_owned());
                 }
                 if ui.button("Fit").clicked() {
-                    app.panels.textures.pane.fit = true;
+                    panel.pane.fit = true;
                 }
             });
+            ui.separator();
+            ui.label(theme::heading("Replace texture"));
+            ui.label(theme::faint_label(
+                "Export the PNG (Export…), edit it in any paint program without changing its size, \
+                 then import it here. The tool re-encodes the original BFLIM format and warns about \
+                 3DS limits (power-of-two padding, ETC1 loss, mips, 2048 px, VRAM).",
+            ));
+            ui.add(
+                egui::TextEdit::singleline(&mut panel.tools.import_path)
+                    .hint_text("edited PNG path (e.g. C:\\art\\icon.png)")
+                    .desired_width(f32::INFINITY),
+            );
+            ui.horizontal(|ui| {
+                if ui.button("Export…").on_hover_text("Copy the PNG + metadata to build/exports").clicked() {
+                    panel.tools.start_export(&root, "texture", &asset);
+                }
+                if ui.button("Replace + preview").clicked() {
+                    panel.tools.start_replace(&root, "texture", &asset, Vec::new(), false);
+                }
+                if ui.button("Replace + save to mod").clicked() {
+                    panel.tools.start_replace(&root, "texture", &asset, Vec::new(), true);
+                }
+            });
+            ui.checkbox(&mut panel.tools.resize, "Scale a differently sized PNG")
+                .on_hover_text("Off by default: stretching a UI texture usually looks wrong. On = LANCZOS resize to the original size.");
+            let fresh = panel.tools.show_status(ui, &root);
+            if fresh {
+                if let Some(path) = panel.tools.preview_path(&root) {
+                    let tag = format!("texture::{}::{}", asset, path.display());
+                    panel.preview_tag = tag.clone();
+                    // A fresh key per replacement so the cached texture is not reused.
+                    let version = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos() as u64)
+                        .unwrap_or(1);
+                    panel.preview = crate::ui::asset_jobs::load_preview(&ctx, &path, version, &tag);
+                }
+                done = Some(match panel.tools.error.clone() {
+                    Some(error) => format!("replace failed: {error}"),
+                    None => panel.tools.message.clone(),
+                });
+            }
+            if let Some(handle) = &panel.preview {
+                ui.add_space(4.0);
+                ui.label(theme::faint_label("Encoded preview (decoded from the BFLIM the game will read)"));
+                let size = handle.size_vec2();
+                let scale = (ui.available_width() / size.x.max(1.0))
+                    .min(260.0 / size.y.max(1.0))
+                    .min(4.0);
+                ui.image(egui::load::SizedTexture::new(handle.id(), size * scale));
+            }
+            if let Some(message) = done {
+                app.status = message;
+            }
         });
 
     egui::CentralPanel::default()
@@ -254,9 +321,63 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let rows = list.len().div_ceil(columns);
             let row_height = cell.y + spacing + 18.0;
             let mut clicked: Option<usize> = None;
-            egui::ScrollArea::vertical()
-                .id_salt("texture_grid")
-                .auto_shrink([false, false])
+            // arrow keys move through the grid; the view follows the selection
+            let view_id = egui::Id::new("texture_grid_view");
+            let (view_offset, view_height): (f32, f32) =
+                ui.ctx().data(|d| d.get_temp(view_id)).unwrap_or((0.0, 0.0));
+            let mut scroll_offset = None;
+            if !list.is_empty() && !ui.ctx().egui_wants_keyboard_input() {
+                let (left, right, up, down, page_up, page_down, home, end) = ui.ctx().input(|i| {
+                    (
+                        i.key_pressed(egui::Key::ArrowLeft),
+                        i.key_pressed(egui::Key::ArrowRight),
+                        i.key_pressed(egui::Key::ArrowUp),
+                        i.key_pressed(egui::Key::ArrowDown),
+                        i.key_pressed(egui::Key::PageUp),
+                        i.key_pressed(egui::Key::PageDown),
+                        i.key_pressed(egui::Key::Home),
+                        i.key_pressed(egui::Key::End),
+                    )
+                });
+                if left || right || up || down || page_up || page_down || home || end {
+                    let last = list.len() - 1;
+                    let visible_rows = ((view_height / row_height).floor() as usize).max(1);
+                    let target = match selected.and_then(|s| list.iter().position(|x| *x == s)) {
+                        None => 0,
+                        Some(c) => {
+                            if home {
+                                0
+                            } else if end {
+                                last
+                            } else if left {
+                                c.saturating_sub(1)
+                            } else if right {
+                                (c + 1).min(last)
+                            } else if up {
+                                c.saturating_sub(columns)
+                            } else if down {
+                                (c + columns).min(last)
+                            } else if page_up {
+                                c.saturating_sub(columns * visible_rows)
+                            } else {
+                                (c + columns * visible_rows).min(last)
+                            }
+                        }
+                    };
+                    clicked = Some(list[target]);
+                    let top = (target / columns) as f32 * row_height;
+                    if top < view_offset {
+                        scroll_offset = Some(top);
+                    } else if top + row_height > view_offset + view_height {
+                        scroll_offset = Some(top + row_height - view_height);
+                    }
+                }
+            }
+            let mut grid = egui::ScrollArea::vertical().id_salt("texture_grid").auto_shrink([false, false]);
+            if let Some(offset) = scroll_offset {
+                grid = grid.vertical_scroll_offset(offset.max(0.0));
+            }
+            let grid_output = grid
                 .show_rows(ui, row_height, rows, |ui, range| {
                     for row in range {
                         ui.horizontal(|ui| {
@@ -331,9 +452,12 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                         });
                     }
                 });
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(view_id, (grid_output.state.offset().y, grid_output.inner_rect.height())));
             if let Some(index) = clicked {
                 app.panels.textures.selected = Some(index);
                 app.panels.textures.pane.fit = true;
+                app.panels.textures.preview = None;
                 app.status = format!(
                     "{} selected",
                     app.data

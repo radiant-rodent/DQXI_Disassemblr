@@ -367,7 +367,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 .unwrap_or_else(|| "All packs".into());
             egui::ComboBox::from_id_salt("layout_pack")
                 .selected_text(crate::utils::elide(&label, 30))
-                .width(f32::INFINITY)
+                .width(ui.available_width())
                 .show_ui(ui, |ui| {
                     if ui.selectable_label(app.panels.layouts.pack.is_none(), "All packs").clicked() {
                         app.panels.layouts.pack = None;

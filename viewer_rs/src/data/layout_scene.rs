@@ -447,7 +447,7 @@ fn emit_window(
         (x0, x0 + fs[0], y0 + fs[3], y1 - fs[2], 0, uvr(0.0, 1.0, 1.0, 1.0), 4),
         (x1 - fs[1], x1, y0 + fs[3], y1 - fs[2], 1, uvr(1.0, 0.0, 1.0, 1.0), 5),
     ];
-    for (ex0, ex1, ey0, ey1, corner, uv, own) in edges {
+    for (k, (ex0, ex1, ey0, ey1, corner, uv, own)) in edges.into_iter().enumerate() {
         if ex1 <= ex0 || ey1 <= ey0 {
             continue;
         }
@@ -455,8 +455,14 @@ fn emit_window(
             let (t, w, flip) = frame(own);
             (t, w, flip_uv(uvr(0.0, 1.0, 0.0, 1.0), flip))
         } else if frames >= 4 {
+            // the edge continues the corner piece as it is drawn (flipped or rotated): stretch the corner's inner
+            // side, i.e. its right side for the top / bottom edge and its bottom side for the left / right edge.
+            // (Flipping a fixed UV instead put the cross-section along the edge for rotated corners: win_talk_3d's
+            // bottom edge came out as grey / white blocks.)
             let (t, w, flip) = frame(corner);
-            (t, w, flip_uv(uv, flip))
+            let [_, tr, bl, br] = flip_uv(uvr(0.0, 1.0, 0.0, 1.0), flip);
+            let _ = uv;
+            (t, w, if k < 2 { [tr, tr, br, br] } else { [bl, br, bl, br] })
         } else {
             let (t, w, _) = frame(0);
             (t, w, uv)

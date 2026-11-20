@@ -100,13 +100,14 @@ impl GameFont {
             };
             let sheet = (g.index / per_sheet) as usize;
             let cell = g.index % per_sheet;
-            let (cx, cy) = ((cell % self.cols) as f32 * (self.cell_w + 1.0), (cell / self.cols) as f32 * (self.cell_h + 1.0));
-            // The DQXI sheets store each glyph with its left bearing already in the cell
-            // (ink spans columns 0..left+glyph_w), so the whole cell goes at the pen position.
+            // Every cell has its one padding pixel in front: column 0 and row 0 of each (cell + 1) step are empty in
+            // all six sheets, and the ink starts in the cell's first column (2D14 "「": left 5, ink in columns 0..3).
+            // So the cell starts one pixel in, and it is drawn at the pen position plus the left bearing.
+            let (cx, cy) = ((cell % self.cols) as f32 * (self.cell_w + 1.0) + 1.0, (cell / self.cols) as f32 * (self.cell_h + 1.0) + 1.0);
             if g.glyph_w > 0.0 {
                 out.push(Placed {
                     sheet,
-                    rect: Rect::from_min_size(Pos2::new(x, 0.0), eframe::egui::vec2(self.cell_w, self.cell_h)),
+                    rect: Rect::from_min_size(Pos2::new(x + g.left, 0.0), eframe::egui::vec2(self.cell_w, self.cell_h)),
                     uv: Rect::from_min_max(
                         Pos2::new(cx / self.sheet_w, cy / self.sheet_h),
                         Pos2::new((cx + self.cell_w) / self.sheet_w, (cy + self.cell_h) / self.sheet_h),

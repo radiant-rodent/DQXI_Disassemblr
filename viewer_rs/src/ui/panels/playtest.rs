@@ -1144,6 +1144,11 @@ fn run_export_job(root: PathBuf, settings: Settings, target: String, play_after:
     if settings.no_rom && matches!(target.as_str(), "3ds" | "all") {
         args.push("--no-rom".to_string());
     }
+    if play_after {
+        // Azahar's LayeredFS cannot apply a Luma code.ips; it needs a whole code.bin (tools/emu refuses the ips).
+        args.push("--code".to_string());
+        args.push("bin".to_string());
+    }
     let _ = tx.send(JobMsg::Line(format!("$ python {}", args.join(" "))));
     let export_code = match run_streaming(&root, "python", &args, &tx) {
         Ok(code) => code,

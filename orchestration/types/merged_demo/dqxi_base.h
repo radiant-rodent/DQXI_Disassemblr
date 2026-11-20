@@ -2,10 +2,13 @@
 #define DQXI_DQXI_BASE_H
 
 /* Fixed-width integer and float types shared by every generated struct.
- * Self-contained (only <stdint.h>) so a generated header can be syntax-checked
- * or included by matching C source without pulling in any SDK header.  The
- * typedefs are identical to include/types.h, so including both is harmless. */
+ * Self-contained (only <stdint.h> and <stdbool.h>) so a generated header can be
+ * syntax-checked or included by matching C source without pulling in any SDK
+ * header.  The typedefs are identical to include/types.h, so including both is
+ * harmless.  `bool` is the engine's one-byte C++ bool, which <stdbool.h> gives
+ * us in C. */
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef uint8_t   u8;
 typedef uint16_t  u16;

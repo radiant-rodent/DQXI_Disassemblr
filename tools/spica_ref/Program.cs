@@ -5,6 +5,11 @@
 //   SpicaRef skin      <list.txt> <out.json> [root]
 //   SpicaRef obj       <file.bch> <out.obj>
 //   SpicaRef matanims  <file.bch> <out.json>
+//   SpicaRef anims     <pairs.txt>           every animation of each BCH as JSON (lines "<in.bch>	<out.json>")
+//   SpicaRef rig       <model.bch> <motion.bch|-> <out.bin>   DQRG rig + baked animations for the viewer
+//   SpicaRef gltf      <model.bch> <out.glb> [anims.txt] [--outlines]   rigged glTF for Blender (Gltf.cs)
+//   SpicaRef compat    <models.txt> <anims.txt> <out.json>     which animations work on which rig (Compat.cs)
+//   SpicaRef compatdiag|chan|posedobj ...                      debugging aids for the pose rules (Compat.cs)
 //
 // Every per-draw entry carries "vbo"/"ibo": the file offsets of the draw's
 // vertex and index buffers. tools/model_tool.py matches draws on that pair, so
@@ -34,6 +39,36 @@ using SixLabors.ImageSharp;
 System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 
+if (args.Length >= 3 && args[0] == "skeletons")
+{
+    return DumpSkeletons(args[1], Path.GetFullPath(args[2]));
+}
+if (args.Length >= 3 && args[0] == "gltf")
+{
+    var rest = args.Skip(3).ToList();
+    bool outlines = rest.Remove("--outlines");
+    return Gltf.Run(args[1], Path.GetFullPath(args[2]), rest.Count > 0 ? rest[0] : null, outlines);
+}
+if (args.Length >= 6 && args[0] == "posedobj")
+{
+    return Compat.PosedObj(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), Path.GetFullPath(args[5]));
+}
+if (args.Length >= 4 && args[0] == "chan")
+{
+    return Compat.Chan(args[1], int.Parse(args[2]), args[3]);
+}
+if (args.Length >= 4 && args[0] == "compatdiag")
+{
+    return Compat.Diag(args[1], args[2], int.Parse(args[3]));
+}
+if (args.Length >= 4 && args[0] == "compat")
+{
+    return Compat.Run(args[1], args[2], Path.GetFullPath(args[3]));
+}
+if (args.Length >= 2 && args[0] == "anims")
+{
+    return DumpAllAnims(args[1]);
+}
 if (args.Length < 3 || (args[0] == "rig" && args.Length < 4) || (args[0] != "textures" && args[0] != "skin" && args[0] != "materials" && args[0] != "obj" && args[0] != "matanims" && args[0] != "rig"))
 {
     Console.Error.WriteLine("usage: SpicaRef textures|materials|skin <list.txt> <out> [root]");
@@ -238,6 +273,10 @@ static int DumpMaterials(string listPath, string outPath, string root)
                                     ["type"] = tc.TransformType.ToString(),
                                     ["mapping"] = tc.MappingType.ToString(),
                                 }).ToArray(),
+                            // per-unit sampler wrap [U, V], e.g. ["Mirror","Repeat"]: mirrored halves of
+                            // faces and bodies use negative U and rely on Mirror to reuse the same texels
+                            ["wrap"] = mat == null ? Array.Empty<string[]>() : Enumerable.Range(0, 3)
+                                .Select(i => new[] { mat.TextureMappers[i].WrapU.ToString(), mat.TextureMappers[i].WrapV.ToString() }).ToArray(),
                         });
                     }
                 }
@@ -402,6 +441,90 @@ static System.Numerics.Matrix4x4 Euler(System.Numerics.Vector3 sc, System.Numeri
     return m;
 }
 
+// One axis of a transform track: an axis without keyframes keeps the bone's rest value. (SPICA's GetFrameValue
+// returns 0 for an empty curve, which zeroed the other rotation axes of every one-axis track: broken poses.)
+static float Axis(SPICA.Formats.CtrH3D.Animation.H3DFloatKeyFrameGroup g, float rest, float frame)
+    => g.KeyFrames.Count == 0 ? rest : g.GetFrameValue(frame);
+
+static (System.Numerics.Vector3, System.Numerics.Vector3, System.Numerics.Vector3) SampleTransform(
+    SPICA.Formats.CtrH3D.Animation.H3DAnimTransform t, SPICA.Formats.CtrH3D.Model.H3DBone bone, float f)
+{
+    var sc = new System.Numerics.Vector3(Axis(t.ScaleX, bone.Scale.X, f), Axis(t.ScaleY, bone.Scale.Y, f), Axis(t.ScaleZ, bone.Scale.Z, f));
+    var ro = new System.Numerics.Vector3(Axis(t.RotationX, bone.Rotation.X, f), Axis(t.RotationY, bone.Rotation.Y, f), Axis(t.RotationZ, bone.Rotation.Z, f));
+    var tr = new System.Numerics.Vector3(Axis(t.TranslationX, bone.Translation.X, f), Axis(t.TranslationY, bone.Translation.Y, f), Axis(t.TranslationZ, bone.Translation.Z, f));
+    return (sc, ro, tr);
+}
+
+// `skeletons`: for every BCH in list.txt, the first model's skeleton (name, parent, rest S/R/T) and, per skeletal
+// animation, which bones it drives and their translation at frame 0 (or null when only rotated/scaled).
+// tools/anim_compat.py decides from this which animations fit which rig.
+static int DumpSkeletons(string listPath, string outPath)
+{
+    var result = new Dictionary<string, object>();
+    int ok = 0, fail = 0;
+    foreach (var raw in File.ReadLines(listPath))
+    {
+        var path = raw.Trim();
+        if (path.Length == 0 || !File.Exists(path)) continue;
+        try
+        {
+            var h3d = H3D.Open(File.ReadAllBytes(path));
+            var entry = new Dictionary<string, object?>();
+            if (h3d.Models.Count > 0 && h3d.Models[0].Skeleton.Count > 0)
+            {
+                var sk = h3d.Models[0].Skeleton;
+                entry["bones"] = sk.Select(b => new Dictionary<string, object>
+                {
+                    ["n"] = b.Name,
+                    ["p"] = b.ParentIndex,
+                    ["t"] = new[] { b.Translation.X, b.Translation.Y, b.Translation.Z },
+                    ["s"] = new[] { b.Scale.X, b.Scale.Y, b.Scale.Z },
+                }).ToList();
+            }
+            var anims = new List<object>();
+            foreach (var a in h3d.SkeletalAnimations)
+            {
+                var tracks = new Dictionary<string, object?>();
+                foreach (var e in a.Elements)
+                {
+                    float[]? t0 = null;
+                    bool rot = false;
+                    switch (e.Content)
+                    {
+                        case SPICA.Formats.CtrH3D.Animation.H3DAnimTransform t:
+                            if (t.TranslationExists)
+                                t0 = new[] { t.TranslationX.KeyFrames.Count > 0 ? t.TranslationX.GetFrameValue(0) : float.NaN,
+                                             t.TranslationY.KeyFrames.Count > 0 ? t.TranslationY.GetFrameValue(0) : float.NaN,
+                                             t.TranslationZ.KeyFrames.Count > 0 ? t.TranslationZ.GetFrameValue(0) : float.NaN };
+                            rot = t.RotationExists;
+                            break;
+                        case SPICA.Formats.CtrH3D.Animation.H3DAnimQuatTransform q:
+                            if (q.HasTranslation) { var v = q.GetTranslationValue(0); t0 = new[] { v.X, v.Y, v.Z }; }
+                            rot = q.HasRotation;
+                            break;
+                        case SPICA.Formats.CtrH3D.Animation.H3DAnimMtxTransform m:
+                            { var mm = m.GetTransform(0); t0 = new[] { mm.M41, mm.M42, mm.M43 }; rot = true; }
+                            break;
+                    }
+                    tracks[e.Name] = new Dictionary<string, object?> { ["t"] = t0?.Select(x => float.IsNaN(x) ? (float?)null : x).ToArray(), ["r"] = rot };
+                }
+                anims.Add(new Dictionary<string, object> { ["name"] = a.Name, ["frames"] = a.FramesCount, ["tracks"] = tracks });
+            }
+            if (anims.Count > 0) entry["anims"] = anims;
+            if (entry.Count > 0) result[path] = entry;
+            ok++;
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"{path}: {e.Message}");
+            fail++;
+        }
+    }
+    File.WriteAllText(outPath, JsonSerializer.Serialize(result));
+    Console.WriteLine($"{ok} BCH read, {fail} failed -> {outPath}");
+    return 0;
+}
+
 static int DumpRig(string modelPath, string motionPath, string outPath)
 {
     var h3d = H3D.Open(File.ReadAllBytes(modelPath));
@@ -473,43 +596,37 @@ static int DumpRig(string modelPath, string motionPath, string outPath)
         w.Write(anim.FramesCount);
         w.Write((byte)((anim.AnimationFlags & SPICA.Formats.CtrH3D.Animation.H3DAnimationFlags.IsLooping) != 0 ? 1 : 0));
         int frames = Math.Max(1, (int)Math.Ceiling(anim.FramesCount) + 1);
-        var tracks = new List<(int bone, System.Numerics.Matrix4x4[] m)>();
+        // Pose with the DQXI rules (Compat.Evaluate: animated bones relative to their nearest animated ancestor,
+        // untracked bones in between aimed at their animated children), then store every bone's resulting local
+        // matrix relative to its plain parent, so the viewer's simple hierarchy walk reproduces the pose.
+        var src = new List<(int bone, object content)>();
         foreach (var e in anim.Elements)
+            if (byName.TryGetValue(e.Name, out int bi) && (e.Content is SPICA.Formats.CtrH3D.Animation.H3DAnimTransform
+                || e.Content is SPICA.Formats.CtrH3D.Animation.H3DAnimQuatTransform || e.Content is SPICA.Formats.CtrH3D.Animation.H3DAnimMtxTransform))
+                src.Add((bi, e.Content));
+        var bonesArr = skel.ToArray();
+        var bindWorld = bonesArr.Select(b => b.GetWorldTransform(skel)).ToArray();
+        var plan = Compat.MakePlan(bonesArr, bindWorld, src.Select(t => t.bone).ToHashSet());
+        var restLocal = Enumerable.Range(0, nb).Select(i => plan.RestLocal(i)).ToArray();
+        var moved = new bool[nb];
+        foreach (var (bi, _) in src) moved[bi] = true;
+        for (int i = 0; i < nb; i++) if (plan.Targets[i].Count > 0) moved[i] = true;   // other bones keep their rest local
+        var all = Enumerable.Range(0, nb).Select(_ => new System.Numerics.Matrix4x4[frames]).ToArray();
+        var local = new System.Numerics.Matrix4x4[nb]; var world = new System.Numerics.Matrix4x4[nb];
+        for (int f = 0; f < frames; f++)
         {
-            if (!byName.TryGetValue(e.Name, out int bi)) continue;
-            var bone = skel[bi];
-            var ms = new System.Numerics.Matrix4x4[frames];
-            bool ok = true;
-            for (int f = 0; f < frames && ok; f++)
+            Array.Copy(restLocal, local, nb);
+            foreach (var (bi, c) in src) { var m = plan.Local(bi, c, f); if (m.HasValue) local[bi] = m.Value; }
+            Compat.Evaluate(plan, bonesArr, local, world);
+            for (int i = 0; i < nb; i++)
             {
-                switch (e.Content)
-                {
-                    case SPICA.Formats.CtrH3D.Animation.H3DAnimTransform t:
-                    {
-                        var sc = bone.Scale; var ro = bone.Rotation; var tr = bone.Translation;
-                        if (t.ScaleExists) sc = new System.Numerics.Vector3(t.ScaleX.GetFrameValue(f), t.ScaleY.GetFrameValue(f), t.ScaleZ.GetFrameValue(f));
-                        if (t.RotationExists) ro = new System.Numerics.Vector3(t.RotationX.GetFrameValue(f), t.RotationY.GetFrameValue(f), t.RotationZ.GetFrameValue(f));
-                        if (t.TranslationExists) tr = new System.Numerics.Vector3(t.TranslationX.GetFrameValue(f), t.TranslationY.GetFrameValue(f), t.TranslationZ.GetFrameValue(f));
-                        ms[f] = Euler(sc, ro, tr); break;
-                    }
-                    case SPICA.Formats.CtrH3D.Animation.H3DAnimQuatTransform q:
-                    {
-                        var sc = q.HasScale ? q.GetScaleValue(f) : bone.Scale;
-                        var tr = q.HasTranslation ? q.GetTranslationValue(f) : bone.Translation;
-                        if (q.HasRotation)
-                            ms[f] = System.Numerics.Matrix4x4.CreateScale(sc) * System.Numerics.Matrix4x4.CreateFromQuaternion(q.GetRotationValue(f)) * System.Numerics.Matrix4x4.CreateTranslation(tr);
-                        else
-                            ms[f] = Euler(sc, bone.Rotation, tr);
-                        break;
-                    }
-                    case SPICA.Formats.CtrH3D.Animation.H3DAnimMtxTransform mt:
-                        ms[f] = mt.GetTransform(f).ToMatrix4x4(); break;
-                    default:
-                        ok = false; break;
-                }
+                int p = skel[i].ParentIndex;
+                if (p >= 0) { System.Numerics.Matrix4x4.Invert(world[p], out var ip); all[i][f] = world[i] * ip; }
+                else all[i][f] = world[i];
             }
-            if (ok) tracks.Add((bi, ms));
         }
+        var tracks = new List<(int bone, System.Numerics.Matrix4x4[] m)>();
+        for (int i = 0; i < nb; i++) if (moved[i]) tracks.Add((i, all[i]));
         w.Write((uint)tracks.Count);
         foreach (var (bi, ms) in tracks)
         {
@@ -519,4 +636,130 @@ static int DumpRig(string modelPath, string motionPath, string outPath)
     }
     Console.WriteLine($"{nb} bones, {verts.Count} vertices, {anims.Count} animations -> {outPath}");
     return 0;
+}
+
+
+// `anims`: every animation of a BCH (skeletal, material, visibility, camera, light, fog) with its raw keyframe
+// curves, plus the names of the scene's static cameras / lights / fogs. Read by tools/export_bch_assets.py.
+static object? Curve(SPICA.Formats.CtrH3D.Animation.H3DFloatKeyFrameGroup? g)
+{
+    if (g == null || g.KeyFrames.Count == 0) return null;
+    return new Dictionary<string, object>
+    {
+        ["interp"] = g.InterpolationType.ToString(),
+        ["start"] = g.StartFrame,
+        ["end"] = g.EndFrame,
+        ["pre"] = g.PreRepeat.ToString(),
+        ["post"] = g.PostRepeat.ToString(),
+        ["keys"] = g.KeyFrames.Select(k => new[] { k.Frame, k.Value, k.InSlope, k.OutSlope }).ToArray(),
+    };
+}
+
+static Dictionary<string, object?> Content(object? c)
+{
+    var d = new Dictionary<string, object?>();
+    switch (c)
+    {
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimTransform t:
+            d["kind"] = "transform";
+            d["scale"] = new[] { Curve(t.ScaleX), Curve(t.ScaleY), Curve(t.ScaleZ) };
+            d["rotation"] = new[] { Curve(t.RotationX), Curve(t.RotationY), Curve(t.RotationZ) };
+            d["translation"] = new[] { Curve(t.TranslationX), Curve(t.TranslationY), Curve(t.TranslationZ) };
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimQuatTransform q:
+            d["kind"] = "quat_transform";
+            d["scales"] = q.Scales.Select(v => new[] { v.X, v.Y, v.Z }).ToArray();
+            d["rotations"] = q.Rotations.Select(v => new[] { v.X, v.Y, v.Z, v.W }).ToArray();
+            d["translations"] = q.Translations.Select(v => new[] { v.X, v.Y, v.Z }).ToArray();
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimMtxTransform m:
+            d["kind"] = "matrix_frames";
+            d["frames"] = m.Frames.Select(f => new[] { f.M11, f.M12, f.M13, f.M21, f.M22, f.M23, f.M31, f.M32, f.M33, f.M41, f.M42, f.M43 }).ToArray();
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimFloat f:
+            d["kind"] = "float";
+            d["value"] = Curve(f.Value);
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimRGBA rgba:
+            d["kind"] = "rgba";
+            d["rgba"] = new[] { Curve(rgba.R), Curve(rgba.G), Curve(rgba.B), Curve(rgba.A) };
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimVector3D v3:
+            d["kind"] = "vector3";
+            d["xyz"] = new[] { Curve(v3.X), Curve(v3.Y), Curve(v3.Z) };
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimVector2D v2:
+            d["kind"] = "vector2";
+            d["xy"] = new[] { Curve(v2.X), Curve(v2.Y) };
+            break;
+        case SPICA.Formats.CtrH3D.Animation.H3DAnimBoolean b:
+            d["kind"] = "bool_frames";
+            d["values"] = b.Values.ToArray();
+            break;
+        default:
+            d["kind"] = c?.GetType().Name ?? "none";
+            break;
+    }
+    return d;
+}
+
+static List<Dictionary<string, object?>> Anims(IEnumerable<SPICA.Formats.CtrH3D.Animation.H3DAnimation> list)
+{
+    var outList = new List<Dictionary<string, object?>>();
+    foreach (var a in list)
+    {
+        outList.Add(new Dictionary<string, object?>
+        {
+            ["name"] = a.Name,
+            ["frames"] = a.FramesCount,
+            ["looping"] = a.AnimationFlags.HasFlag(SPICA.Formats.CtrH3D.Animation.H3DAnimationFlags.IsLooping),
+            ["elements"] = a.Elements.Select(e =>
+            {
+                var d = Content(e.Content);
+                d["target_name"] = e.Name;
+                d["target"] = e.TargetType.ToString();
+                d["primitive"] = e.PrimitiveType.ToString();
+                return d;
+            }).ToList(),
+        });
+    }
+    return outList;
+}
+
+static int DumpAllAnims(string pairsPath)
+{
+    int ok = 0, fail = 0;
+    var opts = new JsonSerializerOptions { WriteIndented = false };
+    foreach (var raw in File.ReadLines(pairsPath))
+    {
+        var parts = raw.Split('	');
+        if (parts.Length < 2 || !File.Exists(parts[0])) continue;
+        try
+        {
+            var h3d = H3D.Open(File.ReadAllBytes(parts[0]));
+            var doc = new Dictionary<string, object?>
+            {
+                ["format"] = "DQXI_BCH_ANIMATIONS",
+                ["skeletal"] = Anims(h3d.SkeletalAnimations),
+                ["material"] = Anims(h3d.MaterialAnimations.Cast<SPICA.Formats.CtrH3D.Animation.H3DAnimation>()),
+                ["visibility"] = Anims(h3d.VisibilityAnimations),
+                ["camera"] = Anims(h3d.CameraAnimations.Cast<SPICA.Formats.CtrH3D.Animation.H3DAnimation>()),
+                ["light"] = Anims(h3d.LightAnimations.Cast<SPICA.Formats.CtrH3D.Animation.H3DAnimation>()),
+                ["fog"] = Anims(h3d.FogAnimations),
+                ["cameras"] = h3d.Cameras.Select(c => c.Name).ToList(),
+                ["lights"] = h3d.Lights.Select(l => l.Name).ToList(),
+                ["fogs"] = h3d.Fogs.Select(f => f.Name).ToList(),
+            };
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(parts[1]))!);
+            File.WriteAllText(parts[1], JsonSerializer.Serialize(doc, opts));
+            ok++;
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"{parts[0]}: {e.Message}");
+            fail++;
+        }
+    }
+    Console.WriteLine($"{ok} animation BCH ok, {fail} failed");
+    return fail == 0 ? 0 : 1;
 }

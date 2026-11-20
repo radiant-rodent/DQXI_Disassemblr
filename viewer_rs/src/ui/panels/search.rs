@@ -206,7 +206,7 @@ impl SearchPanel {
             }
         }
         if wanted(Scope::Tables) {
-            let found = data.tables.search(&query, None);
+            let found = data.tables.search(&query, None, true);
             self.totals.push(("Tables", found.len()));
             for index in found.iter().take(PER_SCOPE) {
                 let table = &data.tables.items[*index];

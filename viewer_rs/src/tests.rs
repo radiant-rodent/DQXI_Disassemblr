@@ -209,6 +209,7 @@ fn editor_rejects_non_finite_transforms() {
         scale: [1.0, 1.0, 1.0],
         rotation: [0.0, 0.0, 0.0],
         record_offset: "0x0".into(),
+        label: String::new(),
         field_offsets: Default::default(),
         shape: 120,
         deleted: false,

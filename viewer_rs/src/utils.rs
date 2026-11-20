@@ -214,6 +214,14 @@ impl Pool {
 // ---------------------------------------------------------------------------
 // image caches (thumbnails + full size previews)
 // ---------------------------------------------------------------------------
+/// Texture filtering for asset previews: nearest-neighbour when enlarged so pixel art (2D sprites, tile sheets, UI)
+/// stays sharp, linear when shrunk so large textures in small thumbnails do not shimmer.
+pub const PREVIEW_FILTER: egui::TextureOptions = egui::TextureOptions {
+    magnification: egui::TextureFilter::Nearest,
+    minification: egui::TextureFilter::Linear,
+    ..egui::TextureOptions::LINEAR
+};
+
 pub fn decode_image(path: &Path, max_px: Option<usize>) -> Result<egui::ColorImage, String> {
     let img = image::open(path).map_err(|e| format!("{path:?}: {e}"))?;
     let img = match max_px {
@@ -327,7 +335,7 @@ impl ImageCache {
             self.queued = self.queued.saturating_sub(1);
             match result {
                 Ok(image) => {
-                    let handle = ctx.load_texture(&key, image, egui::TextureOptions::LINEAR);
+                    let handle = ctx.load_texture(&key, image, PREVIEW_FILTER);
                     self.textures.insert(key.clone(), handle);
                     self.order.push_back(key);
                     self.ready += 1;

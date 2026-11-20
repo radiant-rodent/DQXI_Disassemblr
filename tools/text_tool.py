@@ -483,7 +483,7 @@ class Bank:
 
     def load(self) -> "Bank":
         self.data = self.path.read_bytes()
-        self.entries = extract_entries(self.data, self.kind)
+        self.entries = extract_entries(self.data, self.kind, retail_base(self.path, self.data))
         return self
 
     def as_json(self) -> dict:
@@ -532,13 +532,64 @@ def _walk_for_kind(data: bytes, kind: str) -> dict[int, list[Found]]:
     return _walk_generic(data, known)
 
 
-def extract_entries(data: bytes, kind: str) -> list[Entry]:
-    """Every string block of a bank, with speaker/location where the format has it."""
+def pointer_sources(data: bytes) -> dict[int, set[int]]:
+    """target offset -> positions of the aligned words that point at it (self-relative)."""
+    n = len(data) // 4
+    words = struct.unpack_from(f"<{n}I", data, 0)
+    out: dict[int, set[int]] = {}
+    for i, v in enumerate(words):
+        if v:
+            out.setdefault((4 * i + v) & 0xFFFFFFFF, set()).add(4 * i)
+    return out
+
+
+def retail_base(path: Path, data: bytes) -> bytes | None:
+    """The retail bytes of a bank file when a patched game version is active (else None)."""
+    try:
+        from tools import game_version
+        rel = path.resolve().relative_to(ROOT).as_posix()
+        digest = game_version.load_manifest(game_version.ORIGINAL)["files"].get(rel)
+    except Exception:
+        return None
+    if not digest:
+        return None
+    base = game_version.blob_path(digest).read_bytes()
+    return None if base == data else base
+
+
+def replaced_strings(data: bytes, base: bytes, strings, found) -> set[int]:
+    """Strings a patch replaced: unchanged bytes, but a word that pointed at them in the retail
+    file no longer does (the patch repointed it to its new text). What still points there is not
+    a use (e.g. the string block's own header)."""
+    now, then = pointer_sources(data), pointer_sources(base)
+    out = set()
+    for s in strings:
+        if s.offset in found:
+            continue
+        end = s.offset + len(s.raw) + 2
+        if base[s.offset:end] != data[s.offset:end]:
+            continue
+        if then.get(s.offset, set()) - now.get(s.offset, set()):
+            out.add(s.offset)
+    return out
+
+
+def extract_entries(data: bytes, kind: str, base: bytes | None = None) -> list[Entry]:
+    """Every string block of a bank, with speaker/location where the format has it.
+
+    Dead strings are left out: retail banks have none, but a translation that writes its text
+    as new strings leaves the replaced ones behind (the English patch: ~51,000 Japanese lines
+    the game no longer shows). `base` is the retail file of a patched bank, if any.
+    """
     bxon = Bxon.parse(data)
     found = _walk_for_kind(data, kind)
+    pointed = pointer_sources(data)
+    replaced = replaced_strings(data, base, bxon.strings, found) if base is not None else set()
 
     entries: list[Entry] = []
     for s in bxon.strings:
+        if s.offset not in found and (s.offset not in pointed or s.offset in replaced):
+            continue
         # BxonString.text already went through tools/bxon's own tag renderer;
         # start from the raw UTF-16 payload so our codec stays reversible.
         raw = s.raw.decode("utf-16-le", errors="surrogatepass")
@@ -899,7 +950,17 @@ def cmd_save_mod(args) -> int:
     doc = read_bank_json(args.json)
     texts = texts_from_json(doc, bank)
     built = rebuild_bank(bank.data, texts)
-    edits = pending_conditions(bank.key)
+    structure = {}
+    if bank.key.endswith("/npc_ie"):
+        # characters whose conversations were restructured in the Level Editor (tools/npc_ie_edit.py): their whole
+        # talk tree, texts and conditions included, is written fresh at the end of the bank
+        from tools import npc_ie_edit
+
+        structure = npc_ie_edit.pending(bank.key)
+        if structure:
+            built = npc_ie_edit.apply(built, structure)
+            print(f"rewrote the conversations of {len(structure)} character(s)")
+    edits = [e for e in pending_conditions(bank.key) if str(e.get("char")) not in structure]
     if edits:
         built = patch_conditions(built, edits)
         print(f"applied {len(edits)} conversation condition edit(s)")

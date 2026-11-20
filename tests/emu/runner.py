@@ -95,14 +95,32 @@ def kill_test_emulators(extras) -> None:
 def build_test_code(textlog: bool, path: Path | None = None) -> Path:
     """Retail code + the test-only input hook (+ text logger), cached in build/emu_test."""
     from tools.emu import testhook
-    path = path or (BUILD / ("code_hook_textlog.bin" if textlog else "code_hook.bin"))
+    try:
+        from tools import game_version as _gv
+        _ver = _gv.active()
+    except Exception:
+        _ver = "original"
+    suffix = "" if _ver == "original" else "_" + _ver
+    path = path or (BUILD / (("code_hook_textlog" if textlog else "code_hook") + suffix + ".bin"))
     if path.is_file():
         return path
+    # The base is the active game version's executable: the English patch changes text-layout code, so
+    # English data on the retail executable breaks the text (e.g. "Draconian Quest" wraps in the save list).
     code = RETAIL_CODE.read_bytes()
+    try:
+        from tools import game_version as gv
+        vcode = gv.code_path(gv.active())
+        if vcode is not None and Path(vcode).is_file():
+            code = Path(vcode).read_bytes()
+    except Exception:
+        pass
     code = testhook.apply(code)
     if textlog:
         from tools.emu import textlog as tl
-        code = tl.apply(code)
+        try:
+            code = tl.apply(code)
+        except ValueError:      # the patched executable uses the logger's cave: run without the text log
+            pass
     BUILD.mkdir(parents=True, exist_ok=True)
     path.write_bytes(code)
     return path

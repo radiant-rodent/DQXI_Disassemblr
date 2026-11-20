@@ -108,6 +108,64 @@ public class ExportDQXI extends GhidraScript {
         }
         println("created missing functions=" + made);
 
+        // ---- 2026-11-10: false "Subroutine does not return" (see docs/DECOMPILER_WARNINGS.md) ----
+        // ~1,800 readable-C files were cut off right after a call to a helper that really returns
+        // (std_ConstructArray, strlen-like loops, guard checks ...). Ghidra had marked the helper noreturn,
+        // typically because it was never created as a function in the right ARM/Thumb mode, so every
+        // caller's body stopped at the call. (a) give every call target a function in the mode the call
+        // implies; (b) clear NoReturn on every function whose body contains a return instruction.
+        // NOT run yet: needs a Ghidra install (none on this machine when this was written).
+        int calleesMade = 0;
+        java.util.Set<Address> pending = new java.util.HashSet<>();
+        java.util.Map<Address, Boolean> targetThumb = new java.util.HashMap<>();
+        ghidra.program.model.listing.InstructionIterator it = currentProgram.getListing().getInstructions(true);
+        while (it.hasNext() && !monitor.isCancelled()) {
+            ghidra.program.model.listing.Instruction ins = it.next();
+            if (!ins.getFlowType().isCall()) continue;
+            boolean callerThumb = ins.getLength() == 2 || (tmode != null
+                    && currentProgram.getProgramContext().getRegisterValue(tmode, ins.getAddress()) != null
+                    && currentProgram.getProgramContext().getRegisterValue(tmode, ins.getAddress()).getUnsignedValue().intValue() == 1);
+            boolean isBlx = ins.getMnemonicString().toLowerCase().startsWith("blx");
+            for (Address t : ins.getFlows()) {
+                if (t == null || getFunctionAt(t) != null || pending.contains(t)) continue;
+                // bl keeps the caller's mode, blx (immediate) switches it
+                targetThumb.put(t, isBlx ? !callerThumb : callerThumb);
+                pending.add(t);
+            }
+        }
+        for (Address t : pending) {
+            if (monitor.isCancelled()) break;
+            if (getFunctionAt(t) != null) continue;
+            if (!currentProgram.getMemory().contains(t)) continue;
+            boolean th = targetThumb.get(t);
+            if (th && thumb != null) {
+                clearListing(t, t.add(1));
+                DisassembleCommand cmd = new DisassembleCommand(t, null, true);
+                cmd.setInitialContext(thumb);
+                cmd.applyTo(currentProgram, monitor);
+            } else if (arm != null && currentProgram.getListing().getInstructionAt(t) == null) {
+                disassemble(t);
+            }
+            if (createFunction(t, null) != null) calleesMade++;
+        }
+        println("created call-target functions=" + calleesMade);
+        int noRetCleared = 0;
+        for (Function f : currentProgram.getFunctionManager().getFunctions(true)) {
+            if (monitor.isCancelled()) break;
+            if (!f.hasNoReturn()) continue;
+            boolean returns = false;
+            ghidra.program.model.listing.InstructionIterator fi = currentProgram.getListing().getInstructions(f.getBody(), true);
+            while (fi.hasNext() && !returns) {
+                String s = fi.next().toString().toLowerCase();
+                returns = s.matches("^(pop|ldm\\w*)\\b.*\\bpc\\b.*") || s.matches("^bx\\s+lr\\b.*") || s.matches("^mov\\w*\\s+pc,\\s*lr.*");
+            }
+            if (returns) {
+                f.setNoReturn(false);
+                noRetCleared++;
+            }
+        }
+        println("cleared false NoReturn on functions=" + noRetCleared);
+
         DecompInterface decomp = new DecompInterface();
         DecompileOptions opts = new DecompileOptions();
         decomp.setOptions(opts);

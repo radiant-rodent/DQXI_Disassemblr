@@ -16,4 +16,4 @@ Confidence comes from the worker proposal (0..1); a trailing `conf 0.50` comment
 means "the offset is certain, the *meaning* is a hypothesis". Names beginning
 `maybe_` are explicitly unverified.
 
-Current merge: 0 structs, 0 named fields, 623 globals, 0 functions with renamed locals.
+Current merge: 1649 structs, 26154 named fields, 4490 globals, 15907 functions with renamed locals.

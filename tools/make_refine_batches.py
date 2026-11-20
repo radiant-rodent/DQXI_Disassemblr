@@ -231,7 +231,7 @@ def score_candidates(
     for row in rows:
         if not is_context(row):
             continue
-        text = (row.get("evidence") or "") + " " + (row.get("summary") or "")
+        text = str(row.get("evidence") or "") + " " + str(row.get("summary") or "")
         for v in vtable_evidence(text):
             vtable_owners[v].add(row["address_int"])
         for hex8 in HEX8_RE.findall(text):
@@ -249,7 +249,7 @@ def score_candidates(
         conf_callees = sorted(c & confident for c in [callees.get(addr, set())])
         conf_callers = sorted(c & confident for c in [callers.get(addr, set())])
         const_addrs = {int(hex8, 16) for hex8 in HEX8_RE.findall(body)}
-        own_vtables = vtable_evidence((row.get("evidence") or "") + " " + (row.get("summary") or ""))
+        own_vtables = vtable_evidence(str(row.get("evidence") or "") + " " + str(row.get("summary") or ""))
         sibling_vtables: list[tuple[int, set[int]]] = []
         for v in own_vtables:
             owners = vtable_owners.get(v)

@@ -289,10 +289,27 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
 // ---------------------------------------------------------------------------
 // table index
 // ---------------------------------------------------------------------------
+/// Game-design groups first, the huge per-level / per-model / per-motion groups last.
+pub fn group_rank(group: &str) -> u8 {
+    match group {
+        "Levels" | "Animation" | "Models" | "Resources" => 2,
+        "Text" | "Interface" | "Scripts" | "Regions" | "Audio" => 1,
+        _ => 0,
+    }
+}
+
 #[derive(Clone)]
 pub struct Table {
+    /// Friendly group ("Monsters", "Levels", ...) from `table_titles.json`; the pack folder when absent.
     pub category: String,
+    /// File stem, e.g. `enemy_base`.
     pub name: String,
+    /// Human title, e.g. "Monsters - base stats".
+    pub title: String,
+    /// The game's own type name from the BXON header, e.g. `QuestIDParam`.
+    pub kind: String,
+    /// True when the table has hand-written field names and is meant to be edited.
+    pub editable: bool,
     /// Path relative to `game_assets/tables/packs`, e.g. `syscmn/item.json`.
     pub rel: String,
     pub path: PathBuf,
@@ -304,7 +321,6 @@ pub struct TableIndex {
     pub items: Vec<Table>,
     pub ready: bool,
     pub schemas: SchemaSet,
-    categories: Vec<(String, usize)>,
     cache: HashMap<PathBuf, serde_json::Value>,
     /// id -> label lists for the reference dropdowns, keyed by table path.
     refs: HashMap<String, Vec<(i64, String)>>,
@@ -316,6 +332,10 @@ impl TableIndex {
             return;
         }
         self.schemas.load(&dirs.root);
+        let titles: serde_json::Value = std::fs::read_to_string(dirs.tables.join("table_titles.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(serde_json::Value::Null);
         let root = dirs.tables.clone();
         let base = root.join("packs");
         let mut items = Vec::new();
@@ -325,17 +345,33 @@ impl TableIndex {
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .replace('\\', "/");
-            let category = rel
+            let pack = rel
                 .split('/')
                 .next()
                 .filter(|_| rel.contains('/'))
                 .unwrap_or("root")
                 .to_string();
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let entry = &titles["tables"][rel.as_str()];
+            let text = |key: &str| entry[key].as_str().filter(|t| !t.is_empty()).map(str::to_string);
+            let title = text("title")
+                .or_else(|| self.schemas.get(&rel).map(|s| s.title.clone()).filter(|t| !t.is_empty()))
+                .unwrap_or_else(|| name.clone());
+            let schema = self.schemas.get(&rel);
+            let editable = schema.is_some();
+            let category = schema
+                .map(|s| s.category.clone())
+                .filter(|c| !c.is_empty())
+                .or_else(|| text("group"))
+                .unwrap_or(pack);
             items.push(Table {
-                name: path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
+                editable,
+                kind: text("kind").unwrap_or_default(),
+                title,
+                name,
                 category,
                 rel,
                 size: file_size(&path),
@@ -343,24 +379,28 @@ impl TableIndex {
             });
         }
         items.sort_by(|a, b| {
-            a.category
-                .to_lowercase()
-                .cmp(&b.category.to_lowercase())
-                .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            group_rank(&a.category)
+                .cmp(&group_rank(&b.category))
+                .then(a.category.to_lowercase().cmp(&b.category.to_lowercase()))
+                .then(a.title.to_lowercase().cmp(&b.title.to_lowercase()))
         });
-        let mut counts: HashMap<String, usize> = HashMap::new();
-        for t in &items {
-            *counts.entry(t.category.clone()).or_insert(0) += 1;
-        }
-        let mut categories: Vec<(String, usize)> = counts.into_iter().collect();
-        categories.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-        self.categories = categories;
         self.items = items;
         self.ready = true;
     }
 
-    pub fn categories(&self) -> &[(String, usize)] {
-        &self.categories
+    /// Category names with table counts; the technical tables are left out unless `show_all`.
+    pub fn categories(&self, show_all: bool) -> Vec<(String, usize)> {
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for t in self.items.iter().filter(|t| show_all || t.editable) {
+            *counts.entry(t.category.clone()).or_insert(0) += 1;
+        }
+        let mut categories: Vec<(String, usize)> = counts.into_iter().collect();
+        categories.sort_by(|a, b| {
+            group_rank(&a.0)
+                .cmp(&group_rank(&b.0))
+                .then(a.0.to_lowercase().cmp(&b.0.to_lowercase()))
+        });
+        categories
     }
 
     /// How many of the indexed tables have hand-written field names.
@@ -371,15 +411,18 @@ impl TableIndex {
             .count()
     }
 
-    pub fn search(&self, query: &str, category: Option<&str>) -> Vec<usize> {
+    pub fn search(&self, query: &str, category: Option<&str>, show_all: bool) -> Vec<usize> {
         let q = query.trim().to_lowercase();
         self.items
             .iter()
             .enumerate()
             .filter(|(_, t)| {
-                category.map(|c| t.category == c).unwrap_or(true)
+                (show_all || t.editable)
+                    && category.map(|c| t.category == c).unwrap_or(true)
                     && (q.is_empty()
                         || t.name.to_lowercase().contains(&q)
+                        || t.title.to_lowercase().contains(&q)
+                        || t.kind.to_lowercase().contains(&q)
                         || t.category.to_lowercase().contains(&q)
                         || t.rel.to_lowercase().contains(&q))
             })
@@ -618,17 +661,110 @@ impl TableDoc {
         self.row_size = size;
         self.rows = (0..count).map(|i| root + i * size).collect();
         self.build_synthetic();
-        self.labels = (0..self.rows.len()).map(|r| self.label(r)).collect();
+        if self.schema.is_some() || self.synthetic.iter().all(|f| f.ty != FieldType::Text) {
+            self.labels = (0..self.rows.len()).map(|r| self.label(r)).collect();
+        }
     }
 
     fn build_synthetic(&mut self) {
         self.synthetic.clear();
-        let ty = if self.row_size % 4 == 0 {
-            FieldType::U32
+        if self.row_size % 4 == 0 {
+            self.set_auto_columns();
         } else {
-            FieldType::U8
-        };
-        self.set_generic_type(ty);
+            self.set_generic_type(FieldType::U8);
+        }
+    }
+
+    /// Describe each 4-byte column of a schema-less table by what it holds: text, an id/key,
+    /// a flag, a decimal, a link (`-1` = none) or a plain number. Columns that never vary are
+    /// called "unused". The names are guesses from the data and say so on hover.
+    pub fn set_auto_columns(&mut self) {
+        if self.row_size == 0 || self.row_size % 4 != 0 || self.rows.is_empty() {
+            return;
+        }
+        let string_words = self.string_words();
+        let step = (self.rows.len() / 400).max(1);
+        let sample: Vec<usize> = (0..self.rows.len()).step_by(step).collect();
+        let n = sample.len().max(1);
+        let mut counters: HashMap<&'static str, usize> = HashMap::new();
+        let mut id_taken = false;
+        let mut fields = Vec::new();
+        for col in 0..self.row_size / 4 {
+            let offset = col * 4;
+            let values: Vec<u32> = sample.iter().map(|r| self.word(*r, offset)).collect();
+            let distinct: std::collections::HashSet<u32> = values.iter().copied().collect();
+            let max = values.iter().copied().filter(|v| *v != u32::MAX).max().unwrap_or(0);
+            let neg = values.iter().filter(|v| **v == u32::MAX).count();
+            let nonzero = values.iter().filter(|v| **v != 0).count();
+            let floaty = nonzero > 0
+                && values
+                    .iter()
+                    .filter(|v| **v != 0)
+                    .filter(|v| {
+                        let f = f32::from_bits(**v);
+                        f.is_finite() && f.abs() > 1e-4 && f.abs() < 1e7 && **v > 0x0080_0000 && **v < 0xFF00_0000
+                    })
+                    .count()
+                    * 10
+                    >= nonzero * 9
+                && max > 0x0080_0000;
+            let ascending = values.windows(2).all(|w| w[0] < w[1]);
+            let (kind, ty, read_only, why): (&'static str, FieldType, bool, String) = if string_words.contains(&offset) {
+                ("Text", FieldType::Text, true, "text - read-only here, editing a pointer would break the string pool".into())
+            } else if distinct.len() == 1 {
+                let v = values[0];
+                ("Unused", FieldType::U32, false, format!("always {v} in the {n} sampled rows"))
+            } else if !id_taken && values.len() > 3 && distinct.len() == values.len() && ascending && max > 0 {
+                id_taken = true;
+                ("ID", FieldType::U32, false, "different and increasing on every row - looks like the row id".into())
+            } else if floaty {
+                ("Decimal", FieldType::F32, false, "values read as sensible decimals (rates, positions, scales)".into())
+            } else if distinct.len() <= 2 && max <= 1 && neg == 0 {
+                ("Flag", FieldType::U32, false, "only 0 and 1 - an on/off switch".into())
+            } else if neg * 4 >= n && max < 0x1_0000 {
+                ("Link", FieldType::S32, false, "-1 means none; other values look like ids of another table".into())
+            } else if max <= 255 && neg == 0 {
+                ("Small number", FieldType::U32, false, format!("0..{max} - a count, level, type or enum"))
+            } else if max < 0x1_0000 && neg == 0 {
+                ("Number", FieldType::U32, false, format!("0..{max}"))
+            } else {
+                ("Value", FieldType::U32, false, "large number - possibly a hash, id or packed bit-field".into())
+            };
+            let count = counters.entry(kind).or_insert(0);
+            *count += 1;
+            let name = if kind == "ID" {
+                "ID".to_string()
+            } else {
+                format!("{kind} {count}")
+            };
+            fields.push(Field {
+                name,
+                offset,
+                ty,
+                read_only,
+                range: None,
+                labels: Vec::new(),
+                reference: None,
+                confidence: "raw".into(),
+                why: format!("guessed from the data: {why}. Column at +0x{offset:02X}."),
+            });
+        }
+        self.synthetic = fields;
+        self.refresh_auto_labels();
+    }
+
+    /// Row label for a schema-less table: its first text column, else `#row`.
+    fn refresh_auto_labels(&mut self) {
+        let text = self.synthetic.iter().find(|f| f.ty == FieldType::Text).cloned();
+        self.labels = (0..self.rows.len())
+            .map(|r| match &text {
+                Some(f) => {
+                    let t = self.text_value(r, f).replace('\n', " ");
+                    if t.is_empty() { format!("#{r}") } else { t }
+                }
+                None => format!("#{r}"),
+            })
+            .collect();
     }
 
     /// Words that look like string pointers on most rows. A schema-less table
@@ -1147,7 +1283,11 @@ pub fn decode_string(payload: &[u8]) -> String {
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
         .collect();
+    // U+E000..U+F8FF are the game's own inline control codes (article markers etc.); the UI font has no glyph for them.
     strip_ruby(&String::from_utf16_lossy(&units))
+        .chars()
+        .filter(|c| !('\u{E000}'..='\u{F8FF}').contains(c))
+        .collect()
 }
 
 /// Drop `\x01 kanji \x02 kana \x03` ruby annotations, keeping the kanji.

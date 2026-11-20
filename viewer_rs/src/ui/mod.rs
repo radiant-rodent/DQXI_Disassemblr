@@ -1,8 +1,11 @@
 //! Shared UI helpers: text views with syntax colouring, JSON tree, images.
 
 pub mod asset_jobs;
+pub mod external_editor;
 pub mod panels;
 pub mod shell;
+pub mod talk_preview;
+pub mod tool_job;
 pub mod tour;
 
 use std::collections::HashMap;

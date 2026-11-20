@@ -8,7 +8,8 @@
  * gaps are explicit padding; a field with a low confidence is marked
  * in its trailing comment. Do not hand-edit: rerun M2_types_merge. */
 
-/* Types referenced by pointer before their own S batch is merged. */
+/* Forward declarations: every type a field or global points at, so a
+ * pointer field can name a class defined further down (or not merged yet). */
 typedef struct Ui_Part Ui_Part;
 
 /* Ui_GaugeWindow - size 0x3FC, inherits Ui_AnimRef; HUD gauge window: owns the gauge/flash part pointers and the ring/gauge2 animation lists of one battle HUD gauge. */

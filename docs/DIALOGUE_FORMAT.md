@@ -59,3 +59,24 @@ MessageEnd(); return;`) with every text of `param/region/r021/npc_ie` replaced b
 reads exactly the bank the editor's Dialogue group edits, and a bank rebuilt by `text_tool.rebuild_bank` loads.
 Re-run with `StartFadeInDefault(); WaitAllFade();` before the message (`out/emu/probe/tev_99704`): ZZ again at frame 3473 and the scene is visible
 (an event that returns without the fade-in leaves the screen black; that was the first test script, not the edit). Not yet proven: that pressing A on the NPC in the street picks the same talk.
+
+## Blocks and Yes / No questions (decoded 2026-11-15, from the data and the scripts)
+
+* A variant's `+8` points at a UTF-8 **block label** (`【はいの場合】`, `【いいえの場合】`, `【エマと結婚している場合】` ...), or is 0. The script
+  switches to a labelled block by name: `IEChangeBlock("【はいの場合】")`. Unlabelled variants are the ones played in turn.
+* Line record byte `+0x0A` says what follows the line: 0 end of the block, 1 next line, **3 a Yes / No question**
+  (365 lines; the scripts have 323 `local result = MessageLoop(...); if (result == 0) {yes} else {no}` branches).
+  2 / 8 / 9 / 128 are not decoded. Byte `+0x09` is 0xFF or a small number (unknown).
+* The Yes / No window is the layout `win_yesno_3d` / `win_yesno_2d` (answers and cursor are in the layout).
+* What an answer does beyond showing a block is code of the event (`tools/npc_talk.py event_info`).
+
+## What the condition group is: the story chapter (decoded 2026-11-15)
+
+The "flag group" of a talk record is a **scenario flag id**: the number scripts pass to `SetScenarioFlag(id, stage)` /
+`GetScenarioFlag(id)`, and the row of `syscmn/scenario_id_list` (54 chapters: script area such as `a_010` + a title,
+e.g. 0 = 勇者の旅立ち, 16 = 勇者ゆかりの郷ドゥルダ, 52 = エンディング; rows 31..51 are the post-game episodes). The minimum
+is a **stage** of that chapter; area scripts set the stages mostly in `OnCutSceneEnd`. `gamecmn/story_<id>`
+(the menu's "story so far") has one row per stage with the summary text, so every (chapter, stage) has the game's own
+description. 0 = the chapter has begun, 34 = it is over, an unset flag reads 0xFF and matches nothing. Row 28 has no
+name: `ScenarioToCPart` sets it, so "28 >= 0" means the third act. `tools/npc_talk.py scenarios()` exports all of
+this into `npc_talks.json` (`scenarios`); the Inspector shows the names, a chapter / stage picker and the summary.

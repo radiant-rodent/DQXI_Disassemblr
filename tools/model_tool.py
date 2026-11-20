@@ -82,6 +82,28 @@ def pick_diffuse(tex0: str, tex1: str = "") -> str:
         return tex1
     return tex0
 
+
+def unit_wrap(entry: dict, unit: int) -> tuple[str, str]:
+    """A texture unit's sampler wrap along U and V ("repeat", "mirror" or "clamp"),
+    from the material map's `wrap` (SPICA's TextureMappers); repeat when unknown."""
+    names = {"Repeat": "repeat", "Mirror": "mirror", "ClampToEdge": "clamp", "ClampToBorder": "clamp"}
+    wrap = entry.get("wrap") or []
+    if unit >= len(wrap) or len(wrap[unit]) != 2:
+        return ("repeat", "repeat")
+    return tuple(names.get(w, "repeat") for w in wrap[unit])
+
+
+def wrap_coords(x, mode: str):
+    """Maps texture coordinates (numpy array) into 0..1 the way the GPU sampler does."""
+    import numpy as np
+
+    if mode == "mirror":
+        x = np.mod(x, 2.0)
+        return np.where(x > 1.0, 2.0 - x, x)
+    if mode == "clamp":
+        return np.clip(x, 0.0, 1.0)
+    return np.mod(x, 1.0)
+
 # PICA200 GPU Register IDs
 GPUREG_ATTRIBBUFFERS_LOC = 0x0200
 GPUREG_ATTRIBBUFFERS_FORMAT_LOW = 0x0200
@@ -142,6 +164,9 @@ class MeshGeometry:
     # per vertex min(rgb * stage-0 scale, 1), then times `color_scale` (stage-1 scale)
     vertex_rgb: list[tuple[float, float, float]] = field(default_factory=list)
     color_scale: float = 1.0
+    # sampler wrap of the colour texture along U and V: "repeat", "mirror" or "clamp"
+    # (mirrored halves of faces/bodies use negative U and need "mirror")
+    wrap: tuple[str, str] = ("repeat", "repeat")
     # hidden by default in game (e.g. alternate hand poses L_Hand02..05)
     hidden: bool = False
     node_name: str = ""
@@ -507,12 +532,16 @@ class BchParser:
             if any(textures[u] not in images or len(uv_sets[u]) != len(mesh.uvs) for u in needed):
                 continue
             coords = json.dumps(entry.get("uv_coords", []), sort_keys=True)
-            groups.setdefault((tuple(entry["tev"][:2]), textures, base, coords), []).append(mesh)
+            wraps = tuple(unit_wrap(entry, u) for u in range(3))
+            groups.setdefault((tuple(entry["tev"][:2]), textures, base, coords, wraps), []).append(mesh)
 
-        def sample(img, uv):
+        def sample(img, uv, wrap=("repeat", "repeat")):
+            # the sampler's wrap matters: mirrored face halves use negative U, and with
+            # Mirror they read the same eye/mouth cell flipped (Repeat would land in
+            # the atlas's opposite column, a different expression)
             h, w = img.shape[:2]
-            x = (np.floor(np.mod(uv[:, 0], 1.0) * w).astype(int)).clip(0, w - 1)
-            y = (np.floor((1.0 - np.mod(uv[:, 1], 1.0)) * h).astype(int)).clip(0, h - 1)
+            x = (np.floor(wrap_coords(uv[:, 0], wrap[0]) * w).astype(int)).clip(0, w - 1)
+            y = (np.floor((1.0 - wrap_coords(uv[:, 1], wrap[1])) * h).astype(int)).clip(0, h - 1)
             return img[y, x, :3]
 
         def combine(op, a, b, c):
@@ -533,7 +562,7 @@ class BchParser:
             return a  # Replace and anything unexpected
 
         baked = []
-        for (tev, textures, base, coords), group in groups.items():
+        for (tev, textures, base, coords, wraps), group in groups.items():
             coords = json.loads(coords)
             # the pose replaces the eye/mouth translations; everything else keeps the material's
             matrices = {}
@@ -589,7 +618,7 @@ class BchParser:
                     if m is not None:
                         uv = np.stack([uv[:, 0] * m[0] + uv[:, 1] * m[2] + m[4],
                                        uv[:, 0] * m[1] + uv[:, 1] * m[3] + m[5]], axis=1)
-                    texel[u] = sample(img, uv)
+                    texel[u] = sample(img, uv, wraps[u])
                 previous = ones
                 for op, srcs in stages:
                     args = []
@@ -923,6 +952,7 @@ class BchParser:
                 if colour is not None and unit_uvs(colour) is not None:
                     mesh.texture_name = f"{entry[f'tex{colour}']}.png"
                     mesh.uvs = unit_uvs(colour)
+                    mesh.wrap = unit_wrap(entry, colour)
                     if mesh.material_name == "default_mat":
                         mesh.material_name = f"Material_{index}"
                 if mask is not None and unit_uvs(mask[0]) is not None and mesh.texture_name:
@@ -1335,6 +1365,8 @@ def export_obj(target: MeshGeometry | BchModel, texture_name: str = "") -> tuple
             mtl_lines.append(f"  dqxi_blend {m.blend}")
         if m.alpha_cutoff:
             mtl_lines.append(f"  dqxi_alpha_cutoff {m.alpha_cutoff:.3f}")
+        if tex and tuple(m.wrap) != ("repeat", "repeat"):
+            mtl_lines.append(f"  dqxi_wrap {m.wrap[0]} {m.wrap[1]}")
         mtl_lines.append("")
 
     return "\n".join(obj_lines), "\n".join(mtl_lines)
@@ -1512,7 +1544,7 @@ def export_gltf(target: MeshGeometry | BchModel, texture_name: str = "") -> tupl
             image = image_index.get(Path(m.texture_name).name)
             if image is not None:
                 state = (image, m.blend, m.alpha_cutoff,
-                         (mask_image, m.mask_channel) if mask_image is not None else None)
+                         (mask_image, m.mask_channel) if mask_image is not None else None, tuple(m.wrap))
                 if state not in material_index:
                     material_index[state] = len(material_index)
                 prim["material"] = material_index[state]
@@ -1543,15 +1575,30 @@ def export_gltf(target: MeshGeometry | BchModel, texture_name: str = "") -> tupl
     }
     if has_mat:
         gltf_dict["images"] = [{"uri": name} for name in texture_files]
-        gltf_dict["textures"] = [{"sampler": 0, "source": i} for i in range(len(texture_files))]
-        gltf_dict["samplers"] = [{"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497}]
+        # texture i = image i with the repeat sampler; other wraps (mirrored halves of
+        # faces and bodies) get their own sampler and texture entry
+        textures = [{"sampler": 0, "source": i} for i in range(len(texture_files))]
+        gl_wrap = {"repeat": 10497, "mirror": 33648, "clamp": 33071}
+        samplers = [("repeat", "repeat")]
+        wrapped: dict[tuple, int] = {}
+
+        def texture_for(image: int, wrap: tuple[str, str]) -> int:
+            if wrap == ("repeat", "repeat"):
+                return image
+            if wrap not in samplers:
+                samplers.append(wrap)
+            if (image, wrap) not in wrapped:
+                wrapped[(image, wrap)] = len(textures)
+                textures.append({"sampler": samplers.index(wrap), "source": image})
+            return wrapped[(image, wrap)]
+
         materials = []
-        for (image, blend, cutoff, mask), _ in sorted(material_index.items(), key=lambda kv: kv[1]):
+        for (image, blend, cutoff, mask, wrap), _ in sorted(material_index.items(), key=lambda kv: kv[1]):
             mat = {
                 "name": f"Material_{len(materials)}",
                 "doubleSided": True,
                 "pbrMetallicRoughness": {
-                    "baseColorTexture": {"index": image},
+                    "baseColorTexture": {"index": texture_for(image, wrap)},
                     "metallicFactor": 0.0,
                     "roughnessFactor": 0.6,
                 },
@@ -1573,6 +1620,9 @@ def export_gltf(target: MeshGeometry | BchModel, texture_name: str = "") -> tupl
                 mat["extras"] = extras
             materials.append(mat)
         gltf_dict["materials"] = materials
+        gltf_dict["textures"] = textures
+        gltf_dict["samplers"] = [{"magFilter": 9729, "minFilter": 9987, "wrapS": gl_wrap[u], "wrapT": gl_wrap[v]}
+                                 for u, v in samplers]
 
     return gltf_dict, bytes(bin_data)
 

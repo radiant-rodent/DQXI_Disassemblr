@@ -287,5 +287,5 @@ pub fn load_preview(
 ) -> Option<egui::TextureHandle> {
     let image = crate::utils::decode_image(path, None).ok()?;
     let key = format!("asset-preview::{tag}::{version}");
-    Some(ctx.load_texture(key, image, egui::TextureOptions::LINEAR))
+    Some(ctx.load_texture(key, image, crate::utils::PREVIEW_FILTER))
 }

@@ -210,7 +210,7 @@ impl Workspace {
     pub fn sections(self) -> &'static [Section] {
         match self {
             Workspace::Home => &[Section::Overview, Section::Search],
-            Workspace::World => &[Section::Editor, Section::Maps],
+            Workspace::World => &[Section::Editor],
             Workspace::Assets => &[Section::Models, Section::Textures, Section::Layouts, Section::Audio],
             Workspace::Data => &[Section::Tables, Section::Dialogues, Section::Scripts, Section::Code],
             Workspace::Play => &[Section::Playtest],
@@ -375,12 +375,16 @@ pub struct ViewerApp {
     pub quit_prompt: bool,
     /// the user confirmed leaving; the next close request goes through
     pub quit_ok: bool,
+    /// game versions (retail / English patch), see tools/game_version.py
+    pub versions: crate::data::versions::GameVersions,
+    pub version_job: crate::ui::tool_job::ToolJob,
 }
 
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::apply(&cc.egui_ctx);
         let dirs = Dirs::detect();
+        let root_for_versions = dirs.root.clone();
         let gl = cc
             .gl
             .clone()
@@ -445,6 +449,8 @@ impl ViewerApp {
             opened: Vec::new(),
             quit_prompt: false,
             quit_ok: false,
+            versions: crate::data::versions::GameVersions::read(&root_for_versions),
+            version_job: Default::default(),
             tour: crate::ui::tour::Tour {
                 step: std::env::var("DQXI_TOUR").ok().filter(|v| v == "1").map(|_| 0),
             },
@@ -515,6 +521,61 @@ impl ViewerApp {
         }
     }
 
+    /// Switches the project to another game version (swaps the files on disk), then reloads.
+    pub fn switch_version(&mut self, name: &str) {
+        if self.version_job.running() || name == self.versions.active {
+            return;
+        }
+        let label = self.versions.label(name);
+        self.status = format!("switching to {label}\u{2026}");
+        let root = self.dirs.root.clone();
+        self.version_job
+            .start(&root, &format!("switch to {label}"), "tools.game_version", vec!["use".into(), name.into()], None);
+    }
+
+    /// (Re)imports a patched version from its patch file, then switches to it.
+    pub fn import_version(&mut self, name: &str) {
+        if self.version_job.running() {
+            return;
+        }
+        self.status = format!("importing {}\u{2026} (a few minutes)", self.versions.label(name));
+        let root = self.dirs.root.clone();
+        self.version_job.start(
+            &root,
+            &format!("import {name}"),
+            "tools.game_version",
+            vec!["import".into(), name.into(), "--use".into()],
+            None,
+        );
+    }
+
+    fn poll_version_job(&mut self) {
+        let Some(result) = self.version_job.poll() else { return };
+        self.versions = crate::data::versions::GameVersions::read(&self.dirs.root);
+        if result.ok {
+            self.reload_all();
+            self.status = format!("{} \u{2014} now on {}", result.summary(), self.versions.active_label());
+        } else {
+            self.status = format!("{} failed: {}", self.version_job.label, result.summary());
+        }
+    }
+
+    /// Drops every index and cached view and rebuilds them from disk (after a version switch).
+    pub fn reload_all(&mut self) {
+        let (tx, rx) = channel();
+        Data::spawn_indexers(self.dirs.clone(), tx);
+        self.boot_rx = rx;
+        self.boot_step = (0, "starting");
+        self.boot_error = None;
+        self.data = Some(Box::new(Data::empty(&self.dirs)));
+        self.panels = panels::Panels::new();
+        self.opened.clear();
+        self.thumbs = ImageCache::new(Some(176), 700, Some(self.dirs.thumbs.clone()));
+        self.preview = ImageCache::new(None, 8, None);
+        self.layout_tex = ImageCache::new(Some(512), 240, None);
+        self.font_tex = ImageCache::new(None, 8, None);
+    }
+
     /// True once every background index has arrived.
     pub fn booted(&self) -> bool {
         self.boot_step.0 >= BOOT_STEPS
@@ -582,8 +643,9 @@ impl ViewerApp {
     }
 
     pub fn open_area(&mut self, area: &str) {
-        self.panels.maps.request(area);
-        self.section = Section::Maps;
+        // The old Maps browser is gone from the UI; a global search for the area code lists the
+        // same textures, models, scripts, dialogues and audio with a jump button on each.
+        self.open_search(area);
     }
 
     pub fn open_search(&mut self, query: &str) {
@@ -617,7 +679,7 @@ impl ViewerApp {
                     ui.label(egui::RichText::new(format!("\u{25cf} {} unsaved", unsaved.len())).color(theme::ACCENT).size(12.0))
                         .on_hover_text(unsaved.join("\n"));
                 }
-                let output = if shell.show_output { "Output \u{25be}" } else { "Output \u{25b4}" };
+                let output = if shell.show_output { "Output (hide)" } else { "Output (show)" };
                 if ui.add(egui::Button::new(theme::faint_label(output)).frame(false)).on_hover_text("Ctrl+J").clicked() {
                     shell.show_output = !shell.show_output;
                 }
@@ -675,6 +737,7 @@ impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_boot();
+        self.poll_version_job();
         if !self.booted() && self.boot_error.is_none() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
@@ -818,7 +881,7 @@ pub fn paint_mesh_viewport_posed(
     mesh: Option<(u64, Arc<crate::render::mesh::Mesh>)>,
     pose: Option<(u64, Arc<Vec<f32>>)>,
 ) -> egui::Response {
-    paint_mesh_viewport_scene(ui, renderer, camera, opts, mesh, pose, None)
+    paint_mesh_viewport_scene(ui, renderer, camera, opts, mesh, pose, None, true)
 }
 
 /// Models to draw besides the main mesh: new ones to upload, and this frame's placements.
@@ -835,6 +898,7 @@ pub fn paint_mesh_viewport_scene(
     mesh: Option<(u64, Arc<crate::render::mesh::Mesh>)>,
     pose: Option<(u64, Arc<Vec<f32>>)>,
     instances: Option<Instances>,
+    keep_clear_texels: bool,
 ) -> egui::Response {
     let size = ui.available_size();
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
@@ -848,6 +912,7 @@ pub fn paint_mesh_viewport_scene(
             // frame that is actually painted (UI passes and paints are not 1:1)
             if let Some((id, mesh)) = &mesh {
                 if *id != r.uploaded_id {
+                    r.keep_clear_texels = keep_clear_texels;
                     match r.upload(*id, mesh) {
                         Ok(()) => r.error = None,
                         Err(e) => r.error = Some(e),
@@ -869,6 +934,10 @@ pub fn paint_mesh_viewport_scene(
                     eprintln!("draws {} first {:?}", inst.draws.len(), inst.draws[0].1);
                 }
                 r.set_instances(inst.draws.clone());
+            } else {
+                // the renderer is shared by every 3D view: a view without placed models
+                // (Models, Maps) must not draw the level editor's last actors
+                r.set_instances(Vec::new());
             }
             if let Some((serial, data)) = &pose {
                 if *serial != r.pose_serial {

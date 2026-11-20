@@ -50,6 +50,21 @@ def plausible(v: float) -> bool:
     return math.isfinite(v) and abs(v) < 1e7
 
 
+_GLITTER: list[int] | None = None
+
+
+def _glitter_item(row: int) -> int:
+    """fieldcmn/glitter_drop_param: u16 item id per 4-byte row (0xFFFF = drawn from the area's material table)."""
+    global _GLITTER
+    if _GLITTER is None:
+        try:
+            raw = (DATA_DIR / "packs" / "fieldcmn" / "glitter_drop_param.bxon").read_bytes()
+            _GLITTER = [int.from_bytes(raw[0x2C + 4 * i:0x2E + 4 * i], "little") for i in range(u32(raw, 0x20))]
+        except OSError:
+            _GLITTER = []
+    return _GLITTER[row] if row < len(_GLITTER) else 0xFFFF
+
+
 def collect_records(node, path="root"):
     """Yield (path, record) for every structural record with an offset and size."""
     if isinstance(node, dict):
@@ -137,6 +152,60 @@ def candidate_objects(struct: dict, raw: bytes) -> list[dict]:
                     ],
                 })
             continue
+        if size == 100 and "/+0x230/items" in path:
+            # treasure chest: the drop row at +0x2E is the one the level's 2D chest record carries (level2d +0x110;
+            # b011_001a 38 / 39 / 683 and d007_001a 11 / 15 / 253 / 254 in both files), position at +0x34
+            px, py, pz = (f32(raw, off + 0x34 + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                out.append({
+                    "kind": "gimmick",
+                    "label": "Treasure chest",
+                    "shape": 100,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "field_offsets": {"position": [f"0x{off + 0x34:X}", f"0x{off + 0x38:X}", f"0x{off + 0x3C:X}"]},
+                    "props": [
+                        {"name": "drop row", "offset": f"0x{off + 0x2E:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x2E:off + 0x30], "little"),
+                         "editable": True, "hint": "row of fieldcmn/fixed_drop_param (item + count in the chest); same row as the 2D chest"},
+                        {"name": "word 2C", "offset": f"0x{off + 0x2C:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x2C:off + 0x2E], "little"),
+                         "editable": False, "hint": "unknown (0x40FF on most chests)"},
+                        {"name": "object type", "offset": f"0x{off + 0x30:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x30:off + 0x32], "little"),
+                         "editable": False, "hint": "0x2CB = treasure chest"},
+                    ],
+                })
+            continue
+        if size == 88 and "/+0x2E0/items" in path:
+            # Tockle spot (stray spirit generator). Emulator 2026-11-16: copied into the Heliodor church it is drawn as a coloured Tockle, not as a sparkle; the classes are GmSpiritGenerator* / StraySpirit*, and the ids 0..462 fit fieldcmn/spirit_generator_table (464 rows). It was first taken for a sparkly spot. Real 3D sparkly spots (GmBeeGlitterPoint3DActor / RCommand GlitterPoint) are NOT decoded yet.
+            # id at +0x50, equal to the id of the
+            # level's 2D record (level2d +0x280; d007_001a 400..408 in both), position at +0x08
+            px, py, pz = (f32(raw, off + 0x08 + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                out.append({
+                    "kind": "gimmick",
+                    "label": "Tockle spot",
+                    "shape": 88,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    # the spot's position is stored twice: in the record and in its point list (count at +0x00,
+                    # pointer at +0x04 -> 16-byte points; one point equal to the record position in all 421 spots).
+                    # The game shows the spot at the POINT (emulator 2026-11-16), so both are written.
+                    "field_offsets": {"position": [f"0x{off + 0x08:X}", f"0x{off + 0x0C:X}", f"0x{off + 0x10:X}"],
+                                      **({"position_shadow": [f"0x{off + 4 + u32(raw, off + 4) + i * 4:X}" for i in range(3)]}
+                                         if u32(raw, off) >= 1 and off + 4 + u32(raw, off + 4) + 12 <= len(raw) else {})},
+                    "props": [
+                        {"name": "spirit row", "offset": f"0x{off + 0x50:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x50:off + 0x52], "little"),
+                         "editable": True, "hint": "row of fieldcmn/spirit_generator_table (which Tockle appears here); not decoded further"},
+                        {"name": "word 44", "offset": f"0x{off + 0x44:X}", "type": "u32", "value": u32(raw, off + 0x44),
+                         "editable": False, "hint": "120 / 180 / 240 in d007_001a's three story groups (unknown)"},
+                    ],
+                })
+            continue
         if size == 104 and "/+0x218/items" in path:
             # roaming symbol (candidate monster, dungeon levels, docs/CUSTOM_ROOM.md): position at +0x20, the word at +0x5C = (u16 type, u16 group)
             px, py, pz = (f32(raw, off + 0x20 + i * 4) for i in range(3))
@@ -159,6 +228,32 @@ def candidate_objects(struct: dict, raw: bytes) -> list[dict]:
                          "editable": False, "hint": "0x1010000 / 0x1010001"},
                         {"name": "key 64", "offset": f"0x{off + 0x64:X}", "type": "u32", "value": u32(raw, off + 0x64),
                          "editable": False, "hint": "0x0A...... like the actor key"},
+                    ],
+                })
+            continue
+        if size == 24 and "/+0x298/items" in path:
+            # sparkly spot (GmGlitterPoint3DActor): position, radius (1.0 in all), u16 row of fieldcmn/glitter_drop_param
+            # at +0x10 (the item it gives), u16 gimmick id at +0x12 (1023 = none), key at +0x14. 377 in the game.
+            px, py, pz = (f32(raw, off + i * 4) for i in range(3))
+            if all(plausible(v) for v in (px, py, pz)):
+                row = int.from_bytes(raw[off + 0x10:off + 0x12], "little")
+                out.append({
+                    "kind": "gimmick",
+                    "label": "Sparkly spot",
+                    "shape": 24,
+                    "path": path,
+                    "record_offset": f"0x{off:X}",
+                    "position": [px, py, pz],
+                    "scale": [1.0, 1.0, 1.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "field_offsets": {"position": [f"0x{off:X}", f"0x{off + 4:X}", f"0x{off + 8:X}"]},
+                    "props": [
+                        {"name": "glitter row", "offset": f"0x{off + 0x10:X}", "type": "u16", "value": row,
+                         "editable": True, "hint": "row of fieldcmn/glitter_drop_param: the item the spot gives (65535 in the table = random materials of the area)"},
+                        {"name": "glitter item", "offset": "", "type": "u16", "value": _glitter_item(row),
+                         "editable": False, "hint": "item of that row in the game's table (65535 = random materials)"},
+                        {"name": "gimmick id", "offset": f"0x{off + 0x12:X}", "type": "u16", "value": int.from_bytes(raw[off + 0x12:off + 0x14], "little"),
+                         "editable": False, "hint": "1023 = none"},
                     ],
                 })
             continue
@@ -265,8 +360,15 @@ def candidate_objects(struct: dict, raw: bytes) -> list[dict]:
                 })
     # Stable ordering by source offset.
     out.sort(key=lambda x: int(x["record_offset"], 16))
-    for i, obj in enumerate(out):
-        obj["id"] = f"{i:03d}_{obj['record_offset']}"
+    # chests and sparkly spots were added later: they get ids of their own so the numbered ids of the other
+    # records (which saved editor projects refer to) stay what they were
+    i = 0
+    for obj in out:
+        if obj.get("label") in ("Treasure chest", "Tockle spot", "Sparkly spot"):
+            obj["id"] = f"g_{obj['record_offset']}"
+        else:
+            obj["id"] = f"{i:03d}_{obj['record_offset']}"
+            i += 1
     return out
 
 
@@ -345,6 +447,51 @@ def export_maps(limit: int | None, only: str | None) -> int:
     return 0
 
 
+def export_donors() -> int:
+    """`game_assets/maps/donors.json`: one record of every kind of object, each from the first level that has it and
+    whose record sits directly in a layer container. The Level Editor's Add menu copies such a record into a level
+    that has none of the kind (tools/level_records.py `import`)."""
+    from tools import level_records
+
+    def title(obj: dict) -> str | None:
+        props = {p["name"]: p["value"] for p in obj.get("props", [])}
+        if obj["kind"] == "gimmick":
+            if obj.get("label"):
+                return obj["label"]
+            return {0: "Pot / search spot", 1: "Slot machine", 2: "Door", 3: "Keyed door", 4: "Event door",
+                    5: "One-way door (open side)", 6: "One-way door (closed side)"}.get(props.get("interaction kind"))
+        return {"actor": "Character (NPC)", "trigger": "Trigger", "symbol": "Roaming monster (symbol)"}.get(obj["kind"])
+
+    wanted = ["Character (NPC)", "Treasure chest", "Pot / search spot", "Sparkly spot", "Tockle spot", "Door", "Keyed door", "Event door",
+              "One-way door (open side)", "One-way door (closed side)", "Slot machine", "Trigger", "Roaming monster (symbol)"]
+    found: dict[str, dict] = {}
+    for map_id in map_ids():
+        if len(found) == len(wanted):
+            break
+        scene_path = OUT_DIR / map_id / "scene.json"
+        if not scene_path.is_file():
+            continue
+        scene = json.loads(scene_path.read_text(encoding="utf-8"))
+        level = None
+        for obj in scene.get("objects", []):
+            name = title(obj)
+            if name is None or name in found or name not in wanted:
+                continue
+            if level is None:
+                level = level_records.Level((DATA_DIR / "packs" / "level3d" / map_id / "level3d.bxon").read_bytes())
+            try:
+                arr, _ = level.unit_for(int(obj["record_offset"], 16))
+            except level_records.RecordError:
+                continue
+            if arr.parent is None or arr.parent.esize <= level_records.MAX_WRAPPER * 2:
+                continue
+            found[name] = {"title": name, "level": map_id, "object": obj}
+    out = [found[n] for n in wanted if n in found]
+    (OUT_DIR / "donors.json").write_text(json.dumps({"format": "DQXI_DONORS", "donors": out}, ensure_ascii=False), encoding="utf-8")
+    print(f"{len(out)} kinds of object -> {OUT_DIR / 'donors.json'}: " + ", ".join(f"{d['title']} ({d['level']})" for d in out))
+    return 0
+
+
 def write_edit(raw: bytearray, off: int, edit: dict) -> None:
     """One edit of a project file: a float by default, or ``"type"``: u8 / u16 / u32 / f32."""
     kind = edit.get("type", "f32")
@@ -392,12 +539,15 @@ def main() -> int:
     p_exp.add_argument("--only")
     p_exp.add_argument("--all", action="store_true")
     p_patch = sub.add_parser("patch")
+    sub.add_parser("donors")
     p_patch.add_argument("project", type=Path)
     args = ap.parse_args()
     if args.command == "list":
         for map_id in map_ids():
             print(map_id)
         return 0
+    if args.command == "donors":
+        return export_donors()
     if args.command == "export":
         return export_maps(args.limit, args.only)
     if args.command == "patch":

@@ -10,19 +10,19 @@
   "fields": [
    {
     "offset": 0,
-    "name": "maybe_initFlag",
+    "name": "freeBlockHead",
     "type": "u8",
     "size": 1,
-    "confidence": 0.4,
-    "evidence": "FUN_0054F18C one-shot guard `if (*self == 0) { ...; *self = 1; }`, like 0x00550B00. CAUTION: Sound_Decoder_AllocWork passes the same self as the ring root to Sound_WorkBuffer_AllocBlocks (0x00556BA4), which links free blocks through `*param_1`; byte 0 is therefore either a one-shot flag or the free-block list head depending on which function's object view is meant."
+    "confidence": 0.6,
+    "evidence": "Sound_Decoder_AllocWork (0x0054EF50) passes self as the ring argument to Sound_WorkBuffer_AllocBlocks (0x00556BA4), whose loop pushes every carved block with '*blockPtr = *ring; *ring = blockPtr', so this word is the free-block list head"
    },
    {
     "offset": 4,
-    "name": "maybe_outputMode",
+    "name": "outputMode",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "FUN_0054F18C stores 0/1/2 taken from the Sound_Frame_BeginUpdate (0x00518670) result; Sound_Mixer_BuildVolumeMatrix (0x0054C8A4) switches on the same 0..8 output-mode byte."
+    "confidence": 0.5,
+    "evidence": "Sound_Decoder_InitChannelTable (0x0054F18C) records the Sound_Frame_BeginUpdate() result here as 0, 1 or 2, the output-mode selector the mixer volume matrix switches on"
    },
    {
     "offset": 16,
@@ -162,11 +162,11 @@
    },
    {
     "offset": 496,
-    "name": "maybe_decodeMode",
+    "name": "decodeMode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Sound_Decoder_DecodeFrame (0x0054DD2C) stores parameter 8 at +0x1F0 and branches on `param_8 == 1` to pass a 4-word parameter block to 0x0051846C. (The same batch offset also collects FUN_0054F18C's +0x7C write, scaled by 4.)"
+    "confidence": 0.55,
+    "evidence": "Sound_Decoder_DecodeFrame (0x0054DD2C) stores its mode argument at +0x1F0 on every call and, when mode == 1, forwards a per-channel argument block to Sound_ForwardToVoicePlayback"
    },
    {
     "offset": 502,
@@ -261,11 +261,11 @@
    },
    {
     "offset": 44,
-    "name": "maybe_dualOutput",
+    "name": "dualOutputEnabled",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "BuildVolumeMatrix only applies the +0x30 pan offsets when `*(int *)(self + 8) >= 2 || *(char *)(self + 0x2C) != 1` - a two-output configuration flag."
+    "confidence": 0.6,
+    "evidence": "Sound_Mixer_BuildVolumeMatrix (0x0054C8A4) takes the split-pan branch only when the output count at +0x08 is >= 2 and this byte equals 1; otherwise it builds one shared pan pair for both outputs"
    },
    {
     "offset": 45,
@@ -277,19 +277,19 @@
    },
    {
     "offset": 48,
-    "name": "maybe_panOffsetA",
+    "name": "panOffset",
     "type": "f32",
     "size": 4,
-    "confidence": 0.5,
-    "evidence": "BuildVolumeMatrix reads it as float and, in the 2-output path, adds or subtracts a constant depending on the destination side (param_2)."
+    "confidence": 0.6,
+    "evidence": "Sound_Mixer_BuildVolumeMatrix (0x0054C8A4) adds/subtracts 1.0f to it per speaker index when the output count is 2, and uses defaultPan - panOffset for the opposite speaker"
    },
    {
     "offset": 52,
-    "name": "maybe_panOffsetB",
+    "name": "rearPanOffset",
     "type": "f32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "BuildVolumeMatrix reads it as float in output mode 2: `fVar4 = pfVar2[2] - *(float *)(self + 0x34)`."
+    "confidence": 0.55,
+    "evidence": "Sound_Mixer_BuildVolumeMatrix (0x0054C8A4) reads it only in output mode 2 to derive the surround pan as defaultPan[2] - value"
    },
    {
     "offset": 56,
@@ -587,19 +587,19 @@
    },
    {
     "offset": 8,
-    "name": "maybe_waitEventTime",
+    "name": "previousPosition",
     "type": "s32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Init/Reset write -1; ProcessEvents stores a between-events timestamp here."
+    "confidence": 0.65,
+    "evidence": "Sound_SequencePlayer_Seek (0x005E9824) copies the old cursor into +0x08 and stores the new position in +0x0C; Init/Reset set both to -1"
    },
    {
     "offset": 12,
-    "name": "maybe_loopEventTime",
+    "name": "currentPosition",
     "type": "s32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Init/Reset write -1; written next to the wait timestamp while skipping events."
+    "confidence": 0.7,
+    "evidence": "Sound_SequencePlayer_Seek (0x005E9824) stores the requested playback position in +0x0C and compares it against +0x08 to decide forward/backward seek"
    },
    {
     "offset": 16,
@@ -675,27 +675,27 @@
    },
    {
     "offset": 52,
-    "name": "maybe_releasedNoteCount",
+    "name": "fadingNoteCount",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Third count, decremented when a mask bit is cleared in the release path."
+    "confidence": 0.6,
+    "evidence": "Sound_SequencePlayer_StopVoices (0x005E9A48) and UpdateVoices (0x005E94F0) decrement it in lockstep with clearing a bit of +0x38 whenever an active note slot is faded out and retired"
    },
    {
     "offset": 56,
-    "name": "maybe_releasedNoteMask",
+    "name": "fadingNoteMask",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Third 32-bit mask, tested with `1 << slot` in the release path."
+    "confidence": 0.65,
+    "evidence": "Sound_SequencePlayer_Seek (0x005E9824) walks this mask bit by bit and fades each listed voice slot through Sound_SetVoiceGainByHandle, then zeroes mask and count"
    },
    {
     "offset": 60,
-    "name": "maybe_noteSlots",
+    "name": "voiceSlotTable",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Base of the 16-entry {u32 id, u32 note} slot table (`self + i*2 + 0xf`); FUN_00116AE0(self+0x3C, 0x100) clears its 0x100 bytes in Init/Reset."
+    "confidence": 0.7,
+    "evidence": "ProcessEvents (0x005E9B6C) stores the handle from Sound_AllocateVoiceSlot and the event pointer into self[i*2+0xF] (0x3C + i*8) and UpdateVoices/StopVoices (0x005E94F0/0x005E9A48) read the same {handle, event} pairs"
    },
    {
     "offset": 64,
@@ -814,19 +814,19 @@
    },
    {
     "offset": 48,
-    "name": "maybe_argument7",
+    "name": "argument7",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Seventh command argument (`param_1[0xC]`); argument6 at +0x2C is not in the batch."
+    "confidence": 0.55,
+    "evidence": "the ten-word submit helper (0x00549154) copies this word (param_1[0xC]) straight into target+0x30, continuing the argument0..argument5 series at +0x14..+0x28"
    },
    {
     "offset": 56,
-    "name": "maybe_argument14Short",
+    "name": "argument9",
     "type": "u16",
     "size": 2,
-    "confidence": 0.4,
-    "evidence": "Opcode 0x2A reads `(short)param_1[0xE]` and passes it to FUN_00552914 - the only command argument that is consumed as 16-bit; the upper half of the word is unused."
+    "confidence": 0.55,
+    "evidence": "the opcode 0x2A submit path passes (short)param_1[0xE] (this word) as the only 16-bit command argument to 0x00552914, next to argument0/argument1; the upper half of the word is unused"
    },
    {
     "offset": 180,
@@ -1135,11 +1135,11 @@
    },
    {
     "offset": 8,
-    "name": "maybe_frameInterval",
+    "name": "framePeriodMs",
     "type": "u8",
     "size": 1,
-    "confidence": 0.4,
-    "evidence": "`(char)param_1[2] == 0` selects the blocking wait FUN_00518010 instead of reading the display time; the same byte is later used as a frame-length byte."
+    "confidence": 0.6,
+    "evidence": "Sound_MixerThread_Main (0x00517B6C) tests its low byte to choose Sound_WaitForDisplayTime (0) instead of Sound_GetDisplayTime, then adds framePeriod - elapsed to the 64-bit tick accumulator at +0x00/+0x04"
    },
    {
     "offset": 13,
@@ -1175,27 +1175,27 @@
    },
    {
     "offset": 40,
-    "name": "maybe_mainCallback",
+    "name": "frameCallback",
     "type": "void (*)(void)",
     "size": 4,
-    "confidence": 0.6,
-    "evidence": "`if ((char)param_1[0xc] == '\\0' && (code *)param_1[10] != 0) (*(code *)param_1[10])(param_1[0xb]);` - main per-frame callback."
+    "confidence": 0.65,
+    "evidence": "Sound_MixerThread_Main (0x00517B6C) calls it once per loop iteration with the +0x2C argument whenever the +0x30 low byte is zero"
    },
    {
     "offset": 44,
-    "name": "maybe_mainCallbackArg",
+    "name": "frameCallbackArg",
     "type": "u32",
     "size": 4,
-    "confidence": 0.5,
-    "evidence": "Argument passed to maybe_mainCallback."
+    "confidence": 0.6,
+    "evidence": "Sound_MixerThread_Main (0x00517B6C) passes it as the argument of the +0x28 frame callback"
    },
    {
     "offset": 48,
-    "name": "maybe_pauseFlag",
+    "name": "callbackPauseFlag",
     "type": "u8",
     "size": 1,
-    "confidence": 0.35,
-    "evidence": "Low byte of word +0x30; when non-zero the main callback is skipped."
+    "confidence": 0.5,
+    "evidence": "Sound_MixerThread_Main (0x00517B6C) skips the +0x28 frame callback entirely when this byte is non-zero"
    },
    {
     "offset": 52,
@@ -1258,11 +1258,11 @@
    },
    {
     "offset": 220,
-    "name": "maybe_queuedSlotCount",
+    "name": "queuedSlotCount",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Decremented on the queue-release path (`*(int *)(self + 0xDC) -= 1`)."
+    "confidence": 0.65,
+    "evidence": "Snd_StreamSlot_UpdateAll (0x00105584) decrements it exactly when it clears a slot's state bit 4 and frees that slot's pack handle, alongside liveSlotCount and finishingSlotCount"
    },
    {
     "offset": 248,
@@ -1317,19 +1317,19 @@
   "fields": [
    {
     "offset": 0,
-    "name": "maybe_errorType",
+    "name": "errorType",
     "type": "u32",
     "size": 4,
-    "confidence": 0.35,
-    "evidence": "Constructor word 0 is zeroed; nn::err::FatalErrInfo starts with the error type word (established fact: 0x0051CBF8 builds a FatalErrInfo)."
+    "confidence": 0.5,
+    "evidence": "Err_FatalErrInfo_Init (0x0051CBF8) zeroes word 0 of the 0xF80 FatalErrInfo record whose +0x04 receives the nn::Result in Fs_ReportFatalError (0x001D033C)"
    },
    {
     "offset": 4,
-    "name": "maybe_resultCode",
+    "name": "resultCode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Second zeroed word; established fact places the nn::Result at FatalErrInfo+0x04."
+    "confidence": 0.65,
+    "evidence": "Fs_ReportFatalError (0x001D033C) writes its nn::Result argument to +0x04 of the record built by Err_FatalErrInfo_Init (0x0051CBF8) before Err_LaunchFatalErrorApplet submits it"
    },
    {
     "offset": 3812,
@@ -1365,11 +1365,11 @@
    },
    {
     "offset": 3952,
-    "name": "maybe_timeout",
+    "name": "timeout",
     "type": "s32",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "Constructor writes -1 (0xFFFFFFFF) at +0xF70 - an infinite/no-timeout sentinel."
+    "confidence": 0.5,
+    "evidence": "Err_FatalErrInfo_Init (0x0051CBF8) initialises the 64-bit slot at +0xF70/+0xF74 to 0xFFFFFFFF/0, the max-timeout default"
    },
    {
     "offset": 3958,
@@ -1458,7 +1458,7 @@
  },
  {
   "class": "Sound_Stream_Request",
-  "type": "SoundStreamRequest",
+  "type": "Sound_Stream_Request",
   "summary": "Polymorphic stream request/release record (vtable 0x00781D3C): owner back-pointer, active/pending bytes and the intrusive list node used to queue it back to the stream player, with the stream object allocated directly behind it.",
   "size": 296,
   "base": null,
@@ -1483,11 +1483,11 @@
    },
    {
     "offset": 248,
-    "name": "maybe_queueNode",
+    "name": "queueNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "The intrusive list node: Cancel does `FUN_0011fcbc(owner + 8, self + 0x3E words)` and `FUN_0011fcf8(owner + 0x14, owner + 0x18, self + 0x3E words)`, i.e. the node lives at byte +0xF8 and links into the owner's free list."
+    "confidence": 0.6,
+    "evidence": "the cancel path (0x00549288) unlinks the request with FUN_0011FCBC(owner+8, request+0xF8) and relinks it with FUN_0011FCF8(owner+0x14, owner+0x18, request+0xF8) - an intrusive list node inside the request"
    },
    {
     "offset": 284,
@@ -1515,11 +1515,11 @@
    },
    {
     "offset": 292,
-    "name": "maybe_embeddedStream",
+    "name": "embeddedStream",
     "type": "u32",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "FUN_005506AC(self+0x124) initialises an object whose fields reach +0xC0; AllocInit returns `result - 0x124`, so the request and its stream share one allocation and this word is the stream's first member."
+    "confidence": 0.6,
+    "evidence": "Sound_Stream_Request_AllocInit (0x00556EC8) constructs the object at +0x124 through Sound_Stream_AcquireLock (0x005506AC) and returns stream-0x124, so request and stream share one allocation"
    }
   ]
  },
@@ -1542,27 +1542,27 @@
    },
    {
     "offset": 64,
-    "name": "maybe_channelListRoot",
+    "name": "channelListCount",
     "type": "u32",
     "size": 4,
-    "confidence": 0.35,
-    "evidence": "REAL OFFSET +0x10: FUN_0011FCF8(self+0x10, self+0x14, channel+0x58) - the root of the intrusive list of 0x60-byte ADCMP channels."
+    "confidence": 0.55,
+    "evidence": "Sound_AdpcmChannel_InitTable (0x00550B00) passes &self->f_10 as the counter argument of FUN_0011FCF8 (the same count/head/node append used for SoundDriver->deferredListCount), so +0x10 is incremented once per linked channel"
    },
    {
     "offset": 80,
-    "name": "maybe_channelListFirst",
+    "name": "channelListFirst",
     "type": "u32",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "REAL OFFSET +0x14: the first node of that list (each node is at channel+0x58)."
+    "confidence": 0.6,
+    "evidence": "Sound_AdpcmChannel_InitTable (0x00550B00) calls FUN_0011FCF8(&self->f_10, &self->f_14, entry+0x58), making +0x14 the list head the 0x60-byte ADPCM entries are linked into"
    },
    {
     "offset": 112,
-    "name": "maybe_channelCount",
+    "name": "channelCount",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "REAL OFFSET +0x1C: `*(uint *)(self + 0x1C) = count` where count = bytes / 0x60."
+    "confidence": 0.55,
+    "evidence": "Sound_AdpcmChannel_InitTable (0x00550B00) computes size/6 (0xAAAAAAAB magic) and stores it at +0x1C after building the channel list"
    },
    {
     "offset": 128,

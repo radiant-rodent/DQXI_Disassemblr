@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::{file_size, rel_string, walk_ext};
+use crate::data::versions::{CodeChanges, GameVersions};
 use crate::utils::{read_text, Dirs};
 
 #[derive(Clone)]
@@ -14,6 +15,8 @@ pub struct Function {
     pub mode: String,
     pub file: PathBuf,
     pub status: String,
+    /// what the active game version's patch did here ("modified", "hook", "cave"), if anything
+    pub patch: Option<String>,
 }
 
 impl Function {
@@ -23,6 +26,33 @@ impl Function {
     pub fn end(&self) -> u32 {
         self.address + self.size.max(1)
     }
+}
+
+/// Files under `dir` with the given extensions, as (path relative to `root`, path, size), sorted.
+/// Takes the file type and size from the directory entry itself - on Windows that costs no extra
+/// stat per file, which is what made a 56,000-file scan take ten seconds.
+fn walk_sized(dir: &std::path::Path, root: &std::path::Path, exts: &[&str]) -> Vec<(String, PathBuf, u64)> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = entry.path();
+            if kind.is_dir() {
+                stack.push(path);
+            } else if path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|ext| exts.iter().any(|e| e.eq_ignore_ascii_case(ext)))
+            {
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                out.push((rel_string(&path, root), path, size));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.1.cmp(&b.1));
+    out
 }
 
 #[derive(Default)]
@@ -35,6 +65,9 @@ pub struct CodeIndex {
     cache: HashMap<PathBuf, String>,
     groups: Vec<(String, Vec<(String, PathBuf, u64)>)>,
     groups_ready: bool,
+    /// the active game version's code patch (empty for the retail game)
+    pub changes: CodeChanges,
+    pub version_label: String,
 }
 
 pub fn parse_addr(text: &str) -> Option<u32> {
@@ -94,6 +127,7 @@ impl CodeIndex {
                             .to_string(),
                         file: if rel.is_empty() { PathBuf::new() } else { dirs.root.join(rel) },
                         status: "ok".to_string(),
+                        patch: None,
                     });
                 }
             }
@@ -107,7 +141,48 @@ impl CodeIndex {
             self.total_discovered = functions.len();
         }
         self.functions = functions;
+        self.apply_version(dirs);
         self.ready = true;
+    }
+
+    /// Marks the functions the active game version's patch changed and adds its code caves.
+    fn apply_version(&mut self, dirs: &Dirs) {
+        let versions = GameVersions::read(&dirs.root);
+        self.version_label = versions.active_label();
+        self.changes = CodeChanges::read(&dirs.root, &versions.active);
+        if self.changes.by_address.is_empty() {
+            return;
+        }
+        for f in &mut self.functions {
+            if let Some(p) = self.changes.by_address.get(&f.address) {
+                f.patch = Some(p.kind.clone());
+            }
+        }
+        for (address, size, name, mode) in self.changes.caves.clone() {
+            if self.functions.iter().any(|f| f.address == address) {
+                continue;
+            }
+            self.functions.push(Function {
+                address,
+                name,
+                size,
+                mode,
+                file: PathBuf::new(),
+                status: "cave".into(),
+                patch: Some("cave".into()),
+            });
+        }
+        self.functions.sort_by_key(|f| f.address);
+        self.addresses = self.functions.iter().map(|f| f.address).collect();
+    }
+
+    pub fn patch_of(&self, index: usize) -> Option<&crate::data::versions::CodePatch> {
+        let f = self.functions.get(index)?;
+        self.changes.by_address.get(&f.address)
+    }
+
+    pub fn patched_count(&self) -> usize {
+        self.functions.iter().filter(|f| f.patch.is_some()).count()
     }
 
     fn ensure_ghidra(&mut self, dirs: &Dirs, path: &std::path::Path) {
@@ -140,6 +215,7 @@ impl CodeIndex {
                         base.join(rel)
                     },
                     status: status.to_string(),
+                    patch: None,
                 });
             }
         }
@@ -148,6 +224,7 @@ impl CodeIndex {
         self.total_discovered = functions.len();
         self.decompiled_count = functions.iter().filter(|f| f.status == "ok").count();
         self.functions = functions;
+        self.apply_version(dirs);
         self.ready = true;
     }
 
@@ -176,7 +253,11 @@ impl CodeIndex {
         let mut out = Vec::new();
         for (i, f) in self.functions.iter().enumerate() {
             if let Some(mode) = mode {
-                if f.mode != mode {
+                if mode == "patched" {
+                    if f.patch.is_none() {
+                        continue;
+                    }
+                } else if f.mode != mode {
                     continue;
                 }
             }
@@ -226,11 +307,7 @@ impl CodeIndex {
             ("Assembly (asm/)", &dirs.asm, vec!["s"]),
             ("Tools (tools/)", &dirs.root.join("tools"), vec!["py", "md"]),
         ] {
-            let mut files = Vec::new();
-            for path in walk_ext(dir, &exts) {
-                files.push((rel_string(&path, &dirs.root), path.clone(), file_size(&path)));
-            }
-            groups.push((label.to_string(), files));
+            groups.push((label.to_string(), walk_sized(dir, &dirs.root, &exts)));
         }
         self.groups = groups;
         self.groups_ready = true;

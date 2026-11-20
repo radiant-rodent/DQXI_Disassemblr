@@ -1,0 +1,700 @@
+[
+ {
+  "address": "0x00119498",
+  "name": "maybe_Engine_InitIpcWorker",
+  "signature": "void maybe_Engine_InitIpcWorker(void* self)",
+  "params": {
+   "self": "worker"
+  },
+  "summary": "Brings up an IPC worker block: clears state words, opens/reuses the handle at f_2C, initialises its event, sends the status request, installs the 0x1000-byte transfer buffer and completion callback, then creates the worker thread 0x0011F3C0 with this block as argument.",
+  "confidence": 0.42,
+  "evidence": "Tail calls Os_CreateThreadWithStack(...,0x0011F3C0,&self) fixing the init/loop pair; only caller is Gfx_InitDrawState and callees are OS primitives, so the owning service is not pinned.",
+  "previous_name": "maybe_Engine_InitIpcWorker",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011896C",
+  "name": "maybe_Os_WaitIpcTransferDone",
+  "signature": "void maybe_Os_WaitIpcTransferDone(void* transfer)",
+  "params": {
+   "transfer": "transfer"
+  },
+  "summary": "Waits for an asynchronous IPC transfer to finish: under the global monitor it polls the completion object, sleeps while the status is the busy value, retires the record and re-sends it through Svc_SendRequestBuffer128, re-arming the wait object when the record is not in state 2 or 5.",
+  "confidence": 0.42,
+  "evidence": "Body uses only OS primitives (Os_LockMonitor, Os_LightEvent_Init, Os_LockSemaphore, Svc_SendRequestBuffer128) and is tail-entered from the 0x00118814 Os_InvokeCallbacks patch area; no named caller pins the subsystem.",
+  "previous_name": "maybe_Os_WaitIpcTransferDone",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011F3C0",
+  "name": "maybe_Engine_IpcWorker",
+  "signature": "void maybe_Engine_IpcWorker(void* worker)",
+  "params": {
+   "worker": "worker"
+  },
+  "summary": "Worker thread body of the IPC request ring initialised by 0x00119498: waits on the worker event, pops one record with an exclusive-access index update, dispatches it through the callback table at worker+0x10 and exits when the stop byte at worker+0x77 is set.",
+  "confidence": 0.4,
+  "evidence": "0x00119498 passes this exact address as the Os_CreateThreadWithStack entry, so the two are the init/loop pair; body only uses OS primitives and the callback table.",
+  "previous_name": "maybe_Engine_IpcWorker",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0011223E",
+  "name": "maybe_Snd_SetChannelFilterParams",
+  "signature": "void maybe_Snd_SetChannelFilterParams(u32 unit, u16* unitA, u16* unitB, u32 flags, ...)",
+  "params": {
+   "unit": "unit",
+   "unitA": "unitA",
+   "unitB": "unitB",
+   "flags": "flags"
+  },
+  "summary": "Damaged 18-byte Thumb function that writes u16 filter/pan words into the sound-unit record and pushes them to the command stream; the decompilation has in_CY and overlapping varargs so the argument list and record layout are unreliable.",
+  "confidence": 0.3,
+  "evidence": "Only basis for the name is the sound filter setter tail; the body is damaged (in_CY, overlapping varargs) and callers span gfx, sound and icon-cache code.",
+  "previous_name": "maybe_Snd_SetChannelFilterParams",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001132DC",
+  "name": "maybe_Snd_TeardownStreamContext",
+  "signature": "int maybe_Snd_TeardownStreamContext(void* ctx, int releaseBuffers)",
+  "params": {
+   "ctx": "ctx",
+   "releaseBuffers": "releaseBuffers"
+  },
+  "summary": "Tears a streaming context down: sends stop request 2 with mode 1 or 3, waits for the transfer-done flag, clears the active byte f_4C7, releases the 0x1080-byte sample buffer when asked, closes the handle and returns the cached error at ctx[1].",
+  "confidence": 0.45,
+  "evidence": "Request/wait/close sequence mirrors the init path and the 0x1080-byte buffer release matches the sample buffer; no named caller pins the owning service, so the Snd_ prefix stays a hypothesis.",
+  "previous_name": "maybe_Snd_TeardownStreamContext",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00112250",
+  "name": "maybe_Svc_Cfg_ReleaseServiceU",
+  "signature": "void maybe_Svc_Cfg_ReleaseServiceU(void)",
+  "params": {},
+  "summary": "Releases one reference to the cfg/session service: decrements the user count under the config monitor and, when it reaches zero, closes the handle with svcCloseHandle and resets it to the sentinel.",
+  "confidence": 0.45,
+  "evidence": "Globals, refcount and close sequence are identical to the kind==0 arm of 0x0011212C; callers span sound, movie and gfx code so the owning service cannot be read from the body.",
+  "previous_name": "maybe_Svc_Cfg_ReleaseServiceU",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001138B8",
+  "name": "maybe_Gfx_ExchangeSlotValue",
+  "signature": "u32 maybe_Gfx_ExchangeSlotValue(u32 value, u32 slot)",
+  "params": {
+   "value": "value",
+   "slot": "slot"
+  },
+  "summary": "Atomically exchanges one of seven 32-bit slots at +0x10 of the draw-state object (singleton 0x007AF178->f_1C) under that object's monitor and returns the previous content; slot >= 7 is ignored and returns 0.",
+  "confidence": 0.45,
+  "evidence": "Seven-slot array, monitor and returned old value are explicit in the body; the meaning of the slots is unknown, so the name stays at mechanism level.",
+  "previous_name": "maybe_Gfx_ExchangeSlotValue",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00123260",
+  "name": "maybe_Os_ReleaseSharedHandle",
+  "signature": "int maybe_Os_ReleaseSharedHandle(u32 monitor)",
+  "params": {
+   "monitor": "monitor"
+  },
+  "summary": "Releases one reference to the shared kernel handle at 0x007AF900: when the refcount drops below 2 it closes the handle with svcCloseHandle, decrements the count and restores the process-handle sentinel; otherwise it only decrements and returns the 0x082067F0 status constant.",
+  "confidence": 0.45,
+  "evidence": "Same refcount-and-close shape as the cfg helpers in this batch (count, handle in a global slot, svcCloseHandle, sentinel restore); the only caller (0x0011E0DC) is unnamed so the handle owner stays unknown.",
+  "previous_name": "maybe_Os_ReleaseSharedHandle",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001580CC",
+  "name": "maybe_Fs_SeekStream",
+  "signature": "u32 maybe_Fs_SeekStream(void* stream, u32 posLo, u32 posHi, u32 limit)",
+  "params": {
+   "stream": "stream",
+   "posLo": "posLo",
+   "posHi": "posHi",
+   "limit": "limit"
+  },
+  "summary": "Bounds-checks a 64-bit position against the stream end, then under a monitor stores the new position/end/hint pairs and calls the owner's vtable +0x40 seek callback; returns 1 if accepted.",
+  "confidence": 0.45,
+  "evidence": "64-bit bound check, four stored position pairs, owner vtable +0x40 callback, monitor lock/unlock; no named caller and owner type unproven.",
+  "previous_name": "maybe_Fs_SeekStream",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005498FC",
+  "name": "maybe_Svc_SetFieldLocked",
+  "signature": "void maybe_Svc_SetFieldLocked(u32 value, void* object)",
+  "params": {
+   "value": "value",
+   "object": "object"
+  },
+  "summary": "Locked setter: stores value into object+0x180 while holding the monitor at object+0x184.",
+  "confidence": 0.45,
+  "evidence": "Three-instruction body: Os_LockMonitor(&object->f_184), store to f_180, unlock; field meaning and subsystem unknown, no callers.",
+  "previous_name": "maybe_Svc_SetFieldLocked",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x006B93A4",
+  "name": "Gfx_MovieQueue_Peek",
+  "signature": "u32 maybe_Gfx_MovieQueue_Peek(void* queue, u32* out)",
+  "params": {
+   "queue": "queue",
+   "out": "out"
+  },
+  "summary": "Under the global movie monitor, copies the next queued frame descriptor (surface id, converted addresses, timestamps) into out without advancing the read index; returns 1, or 0 when empty.",
+  "confidence": 0.5,
+  "evidence": "Read index f_34 never advanced (peek), frame descriptor fields f_28/f_2c indexed by it, global monitor 0x007CF360, returns 1/0.",
+  "previous_name": "maybe_Gfx_MovieQueue_Peek",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x006E7624",
+  "name": "maybe_Mem_HeapFreeLocked",
+  "signature": "void maybe_Mem_HeapFreeLocked(void* handle, u32 block)",
+  "params": {
+   "handle": "handle",
+   "block": "block"
+  },
+  "summary": "Frees a block through the heap stored at handle+4, taking the monitor at heap+0x58 around the free call.",
+  "confidence": 0.4,
+  "evidence": "handle+4 -> heap, lock heap+0x58, call 0x0050E5B8(heap, block), unlock; callee name itself unreliable so heap-free reading rests on monitor offset only.",
+  "previous_name": "maybe_Mem_HeapFreeLocked",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001A476C",
+  "name": "maybe_Field_CreateMapObject",
+  "signature": "void* maybe_Field_CreateMapObject(Scene* scene, int defId)",
+  "params": {
+   "scene": "scene",
+   "defId": "defId"
+  },
+  "summary": "Creates a map object from a definition record: resolves the sprite actor via Gfx_SpriteActor_CreateFromTable, allocates a 0x178 object and fills scene fields.",
+  "confidence": 0.4,
+  "evidence": "Called by Field_SceneObject_SpawnByTypeB; calls Gfx_SpriteActor_CreateFromTable and Mem_AllocAligned_2; damaged decompilation (unaff_r9, bad instruction data).",
+  "previous_name": "maybe_Field_CreateMapObject",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0017C910",
+  "name": "maybe_Ui_CreateMapCursor",
+  "signature": "void maybe_Ui_CreateMapCursor(UiMapCursorHolder* self)",
+  "params": {
+   "self": "self"
+  },
+  "summary": "When the 2D-field mode gate passes and self+0xDC is null, allocates a 0x280 UI object from the definition at self+0xE0, builds its parts, stores it at self+0xDC and activates it via vtable+0x24.",
+  "confidence": 0.4,
+  "evidence": "Callers include Map_AddInstance and maybe_Map_RefreshLevelGrid; gate on world+0x3C==2 and func_0062AD40; uses Ui_Object_CreatePartsFromTable and vtable+0x24 activation.",
+  "previous_name": "maybe_Ui_CreateMapCursor",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0017F5A2",
+  "name": "maybe_Actor_CreateSmallAction",
+  "signature": "void maybe_Actor_CreateSmallAction(Actor* actor)",
+  "params": {
+   "actor": "actor"
+  },
+  "summary": "Allocates a 0x28-byte action object via Actor_ActionBase_Ctor and submits it into a container slot when the actor's +0x40 counter exceeds 3.",
+  "confidence": 0.3,
+  "evidence": "Callee Actor_ActionBase_Ctor shows the 0x28 object is an action base; body is damaged Thumb decompilation with unaff_r4/unaff_r6 carrying actor and node.",
+  "previous_name": "maybe_Actor_CreateSmallAction",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001C9DF0",
+  "name": "maybe_Effect_CreateVariant",
+  "signature": "void maybe_Effect_CreateVariant(void* owner, u32 effectId, int variant)",
+  "params": {
+   "owner": "owner",
+   "effectId": "effectId",
+   "variant": "variant"
+  },
+  "summary": "Selects per-variant fields from the effect record (f_72..f_77, +8/+0x10 sub-records) and initializes the owner via Gfx_InitTripletTable, storing the effect record at owner+0xC.",
+  "confidence": 0.42,
+  "evidence": "Variant switch on a byte selecting f_72..f_77 and +8/+0x10 offsets, calls maybe_Gfx_InitTripletTable; caller Gfx_ScreenViews_InitBuffers is generic.",
+  "previous_name": "maybe_Effect_CreateVariant",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001E4A40",
+  "name": "maybe_Gfx_InitTripletTable",
+  "signature": "void maybe_Gfx_InitTripletTable(int owner, int* desc, u32 arg3, u8 count, int arg5)",
+  "params": {
+   "owner": "owner",
+   "desc": "desc",
+   "arg3": "flagByte",
+   "count": "count",
+   "arg5": "allocator"
+  },
+  "summary": "Rebuilds a three-entry 0x10-byte sub-table on the owner, resolving ids per entry and storing a flag byte and count; called from screen-view/effect creation.",
+  "confidence": 0.4,
+  "evidence": "Callers are Gfx_ScreenViews_InitBuffers/ResetCollections/Ctor plus effect/screen-view creation; constructs 3 entries of 0x10 bytes and stores at +0x30/+0x31.",
+  "previous_name": "maybe_Gfx_InitTripletTable",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001BBE30",
+  "name": "Ui_FindOrCreateNamedEntry",
+  "signature": "void maybe_Ui_FindOrCreateNamedEntry(ResContainer* self, int parent, u32 name)",
+  "params": {
+   "self": "container",
+   "parent": "allocator",
+   "name": "name"
+  },
+  "summary": "Searches the container's child list for a matching 0x40-byte name and returns early if found, otherwise allocates and initialises a 0x54-byte named entry and links it in.",
+  "confidence": 0.55,
+  "evidence": "Loop compares node+0x14 with name via func_00123660 and breaks on match; otherwise Mem_AllocAligned_2(0x54) + Ui_NamedEntry_InitFromName and list link.",
+  "previous_name": "maybe_Ui_FindOrCreateNamedEntry",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001E24B4",
+  "name": "maybe_PartyPanel_CreateSlotObject",
+  "signature": "void maybe_PartyPanel_CreateSlotObject(PartyPanel* self)",
+  "params": {
+   "self": "panel"
+  },
+  "summary": "Lazily creates a 0x30-byte UI sub-object on the panel and registers it in the panel's notification list; no direct callers, only a vtable slot.",
+  "confidence": 0.4,
+  "evidence": "Allocates 0x30 bytes, Ui_SubObjectHost_Ctor, stores at self->f_248, notifies via f_4c; no named callers.",
+  "previous_name": "maybe_PartyPanel_CreateSlotObject",
+  "previous_confidence": 0.42,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0020B798",
+  "name": "maybe_Ui_CreateSlotObject",
+  "signature": "void maybe_Ui_CreateSlotObject(u32 slot_offset)",
+  "params": {
+   "slot_offset": "slotOffset"
+  },
+  "summary": "Resets two UI-core sub-controllers, allocates a 0x3C4-byte object, constructs it and stores it into a global slot table indexed by the argument.",
+  "confidence": 0.35,
+  "evidence": "No callers; stores into 0x4204+slot_offset; constructed class func_001E0024 unidentified.",
+  "previous_name": "maybe_Ui_CreateSlotObject",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x003BB9F8",
+  "name": "maybe_Container_NodeList_Init",
+  "signature": "void maybe_Container_NodeList_Init(void)",
+  "params": {},
+  "summary": "No dossier or readable body available; name cannot be verified.",
+  "confidence": 0.2,
+  "evidence": "No dossier (no readable file).",
+  "previous_name": "maybe_Container_NodeList_Init",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00148E28",
+  "name": "maybe_Map_TestCellBlocked",
+  "signature": "u32 maybe_Map_TestCellBlocked(u32 zone, u32 state, u32 owner, u32 flags)",
+  "params": {
+   "zone": "zone",
+   "state": "state",
+   "owner": "owner",
+   "flags": "flags"
+  },
+  "summary": "Tests map cell entries against zone/state ids and an enable table, returning 1 on a hit; on the free path creates a field marker object.",
+  "confidence": 0.3,
+  "evidence": "Damaged decompilation (unaff_r4..r8, overlapping instructions); creates object with g_fieldMarkerWarpVtable.",
+  "previous_name": "maybe_Map_TestCellBlocked",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0016096C",
+  "name": "maybe_Ui_Widget_CreateDefault",
+  "signature": "u32* maybe_Ui_Widget_CreateDefault(void)",
+  "params": {},
+  "summary": "Default-constructs a UI widget: allocates, runs the shared base constructor and installs a UI widget vtable.",
+  "confidence": 0.45,
+  "evidence": "Vtable 0x00758A60 has Ui_Widget_DeleteSub and Ui_Object_DtorSub slots; allocation args dropped by Ghidra.",
+  "previous_name": "maybe_Ui_Widget_CreateDefault",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00161DC4",
+  "name": "maybe_Container_CreateObject",
+  "signature": "void* maybe_Container_CreateObject(void)",
+  "params": {},
+  "summary": "Default-constructs an object via the shared constructor, installing a vtable and an embedded descriptor at +0x60; called from actor/UI overlay code.",
+  "confidence": 0.35,
+  "evidence": "Nine callers across actor model/action and UI overlay code; vtable slots unnamed, embedded descriptor at +0x60.",
+  "previous_name": "maybe_Container_CreateObject",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00162084",
+  "name": "maybe_Actor2D_CreateDefault",
+  "signature": "void* maybe_Actor2D_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates a block, runs the shared object initializer and installs vtable g_001620a4; the class is only known through the 0x2A5xxx 2D-actor slot block, and the six callers are unrelated UI/field code, so the class cannot be pinned down.",
+  "confidence": 0.3,
+  "evidence": "No class-specific callers (Ui_CompositeWindow_MeasureCurrentText, Gfx_Actor_CreateFromConfig, Field_ActorGroup_AddMember, etc. are unrelated); only callees are Mem_AllocAligned_2 and func_005798CC; vtable slots are unnamed 0x2A5xxx code.",
+  "previous_name": "maybe_Actor2D_CreateDefault",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00162278",
+  "name": "maybe_Ui_RenderWidget_CreateDefault",
+  "signature": "void* maybe_Ui_RenderWidget_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates a block, installs vtable 0x0075F958 and initializes a render sub-object at +0x18; the class is only known through maybe_ slot names, so the name stays uncertain.",
+  "confidence": 0.35,
+  "evidence": "No callers; callees dropped by Ghidra; vtable slots are themselves maybe_ (Gfx_RegisterRenderObject 0.40, Ui_Widget_DtorDeleteD 0.45).",
+  "previous_name": "maybe_Ui_RenderWidget_CreateDefault",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00162758",
+  "name": "maybe_Ui_PaneBinding_CreateDefault",
+  "signature": "void* maybe_Ui_PaneBinding_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates a block, runs the shared initializer and installs vtable 0x00762FEC whose slot 9 is Ui_PaneBinding_BindToLayout; allocation arguments are dropped, so the name keeps maybe_.",
+  "confidence": 0.35,
+  "evidence": "No callers; vtable 0x00762FEC slot 9 is confident Ui_PaneBinding_BindToLayout (0.65); callees Mem_AllocAligned_2 and func_005798CC.",
+  "previous_name": "maybe_Ui_PaneBinding_CreateDefault",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00162DA8",
+  "name": "maybe_Ui_Widget_CreateDefaultB",
+  "signature": "void* maybe_Ui_Widget_CreateDefaultB(void)",
+  "params": {},
+  "summary": "Allocates a block, installs vtable 0x007730F8 and initializes the sub-object at +0x18; the class is only known through a maybe_ slot name, so the B-suffixed maybe_ name is kept.",
+  "confidence": 0.3,
+  "evidence": "No callers; vtable slots are maybe_Ui_EquipWindow_DtorB (0.45) and confident Ui_Widget_ReleaseSub; callees Mem_AllocAligned_2, Script_ByteStream_Read, func_005798CC.",
+  "previous_name": "maybe_Ui_Widget_CreateDefaultB",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00162DE8",
+  "name": "maybe_Ui_Object_CreateDefault",
+  "signature": "void* maybe_Ui_Object_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates a block, installs vtable 0x00776A64 and clears field +0x60; every vtable slot is unnamed, so the class cannot be determined.",
+  "confidence": 0.3,
+  "evidence": "No callers; all slots of vtable 0x00776A64 unnamed; only callees Mem_AllocAligned_2 and func_005798CC; Ui_ prefix rests only on the 0x4B3xxx slot block.",
+  "previous_name": "maybe_Ui_Object_CreateDefault",
+  "previous_confidence": 0.3,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001D7F5C",
+  "name": "maybe_Ui_AddListNode",
+  "signature": "void maybe_Ui_AddListNode(int owner, u32 arg2, u32 arg3, u32 arg4, u32 arg5, u8 arg6, u8 arg7)",
+  "params": {
+   "owner": "owner",
+   "arg2": "arg2",
+   "arg3": "arg3",
+   "arg4": "arg4",
+   "arg5": "arg5",
+   "arg6": "arg6",
+   "arg7": "arg7"
+  },
+  "summary": "Allocates a 0x20-byte node with vtable 0x00765484, stores five payload arguments at +0x10..+0x1D and links it into the list at owner+0xB4; the payload type is unknown.",
+  "confidence": 0.35,
+  "evidence": "Only caller is Ui_BattleEnemyListWindow_SkipInvalidCursor; vtable 0x00765484 slots (0x0036817C, 0x00368558) unnamed, so no item-data identification; list mechanics certain.",
+  "previous_name": "maybe_Ui_AddListNode",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002FB668",
+  "name": "maybe_Ui_Window_PaneSetupSlot17",
+  "signature": "void maybe_Ui_Window_PaneSetupSlot17(UiWindow* self)",
+  "params": {
+   "self": "self"
+  },
+  "summary": "Vtable slot 17 handler for window 0x0076267C: allocates a 0x4C-byte record and initializes pane bounds; the decompilation is truncated by bad instruction data, so the name stays slot-based.",
+  "confidence": 0.3,
+  "evidence": "No callers; body hits halt_baddata() twice (damaged decompilation); callees Mem_AllocAligned_2, std_memmove, Os_ThreadEntry; name only records vtable slot 17.",
+  "previous_name": "maybe_Ui_Window_PaneSetupSlot17",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0056D6D4",
+  "name": "maybe_Gfx_ModelPart_CreateDefault",
+  "signature": "void maybe_Gfx_ModelPart_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates a block, runs the shared initializer, installs vtable 0x00782140 and clears field +0x60; slot 2 is the confident Gfx_ModelPart_Dtor, so the class is a model part, but allocation arguments are dropped.",
+  "confidence": 0.4,
+  "evidence": "No callers; vtable 0x00782140 slot 2 is confident Gfx_ModelPart_Dtor (0.50); callees Mem_AllocAligned_2 and func_005798CC.",
+  "previous_name": "maybe_Gfx_ModelPart_CreateDefault",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x0056D70C",
+  "name": "Gfx_MaterialBinding_CreateDefault",
+  "signature": "void* Gfx_MaterialBinding_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs a material binding object: sets up the intrusive list at +4, installs vtable 0x0078217C with the shared resource table at +0x10, and initialises the sub-object at +0x60.",
+  "confidence": 0.55,
+  "evidence": "Vtable 0x0078217C's slots 7/8 are the confident Gfx_MaterialBinding_Dtor/DtorDelete; body allocates via Mem_AllocAligned_2, installs that vtable and calls func_0056EE88 on +0x60.",
+  "previous_name": "maybe_Gfx_MaterialBinding_CreateDefault",
+  "previous_confidence": 0.45,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x00576E9C",
+  "name": "Gfx_SceneNode_CreateDefault",
+  "signature": "void Gfx_SceneNode_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs a scene node: runs func_00579974, installs vtable 0x007826E8 and clears the ten words at +0x64..+0x88.",
+  "confidence": 0.5,
+  "evidence": "Vtable 0x007826E8's slot 7 is the confident Gfx_SceneNode_DtorBody; body allocates via Mem_AllocAligned_2 and installs that vtable.",
+  "previous_name": "maybe_Gfx_SceneNode_CreateDefault",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x005AB860",
+  "name": "Gfx_RenderObject_CreateDefault",
+  "signature": "void Gfx_RenderObject_CreateDefault(void)",
+  "params": {},
+  "summary": "Allocates and default-constructs a render object: runs func_00579974 and installs vtable 0x00783470.",
+  "confidence": 0.5,
+  "evidence": "Vtable 0x00783470's slots sit in the 0x5A79xx render-object block next to Gfx_ApplyMaterialAnimKey and maybe_Gfx_RenderObject_FindNodeByName; body allocates via Mem_AllocAligned_2 and installs that vtable.",
+  "previous_name": "maybe_Gfx_RenderObject_CreateDefault",
+  "previous_confidence": 0.35,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x001522A8",
+  "name": "Party_InitMemberRoster",
+  "signature": "void Party_InitMemberRoster(u32 arg1, int arg2)",
+  "params": {
+   "arg1": "work",
+   "arg2": "masterRecordBase"
+  },
+  "summary": "Walks party slots 1..0x1E (skipping 0, 7, 0x11), resolving each member with func_0035EB98 and either initialising it from the master record (Party_Member_InitFromMasterRecord) when active or compacting its inventory when not.",
+  "confidence": 0.5,
+  "evidence": "Named callees Party_Member_InitFromMasterRecord, Party_IsMemberActive and maybe_Party_Member_CompactInventory show a whole-roster initialisation pass; body is damaged (unaff_r4/r6/r7/r9/r10/r11).",
+  "previous_name": "maybe_Party_InitMemberRoster",
+  "previous_confidence": 0.4,
+  "change": "confirmed"
+ },
+ {
+  "address": "0x0048356C",
+  "name": "maybe_Battle_Ui_RowTransition_Tail",
+  "signature": "u32 maybe_Battle_Ui_RowTransition_Tail(u32 arg1, int arg2, int arg3, int arg4)",
+  "params": {},
+  "summary": "Thumb fragment at the end of a battle state handler: walks 0x12-byte row records, resolves an action row through Game_GetDataManager and updates the message object at +0x260/+0x7A4; probably the tail of 0x00483870 rather than a function of its own.",
+  "confidence": 0.25,
+  "evidence": "Entry is Thumb while neighbours are ARM, no prologue, body reads unaff_r4/r5/r6/r7/r9, so the symbol boundary is damaged; 0x12 stride matches the row records of Battle_PartyMember_Update.",
+  "previous_name": "maybe_Battle_Ui_RowTransition_Tail",
+  "previous_confidence": 0.25,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005DC02C",
+  "name": "maybe_Field_Gimmick_PlayReactionThunk",
+  "signature": "void maybe_Field_Gimmick_PlayReactionThunk(void* self, int arg2, int arg3, int arg4)",
+  "params": {},
+  "summary": "36-byte Thumb callback: builds a reaction matrix from the part's +0x224, calls the UI effect hook when self->f_E8 is set and plays sound id 300.",
+  "confidence": 0.35,
+  "evidence": "Only three calls long and uses unaff_r4/r6/r7 (damaged register flow), so the matrix-build and UI-hook callees cannot be confirmed; the thunk role is visible but 'reaction' remains an interpretation.",
+  "previous_name": "maybe_Field_Gimmick_PlayReactionThunk",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x001EF818",
+  "name": "maybe_Sound_FadeTimer_Get",
+  "signature": "void maybe_Sound_FadeTimer_Get(u32* out, void* sound)",
+  "params": {},
+  "summary": "Returns a BGM fade time window: while a fade is pending it triggers the fade (UI core +0x1C slot, Sound_GetPlayer, 0x001EE018) and returns the short window from 0x72BD64, otherwise the default window from the same global table.",
+  "confidence": 0.4,
+  "evidence": "Body only selects between two pairs of globals under a pending-fade flag and calls the sound helper; with no caller and only Sound_GetPlayer/Ui_GetCore named, the fade-timer reading remains unconfirmed.",
+  "previous_name": "maybe_Sound_FadeTimer_Get",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x004C2810",
+  "name": "maybe_Ui_Overlay_PlayFrameSounds",
+  "signature": "void maybe_Ui_Overlay_PlayFrameSounds(void* self)",
+  "params": {},
+  "summary": "Frame-driven sound/state player: increments the frame counter at +0x14, plays SE 0xE5F at frame 5 and 0xE60 at frame 25, calls the 0x4A43CC hook at frame 35 and after frame 44 copies a vtable/handle pair from the 0x72A79C data block.",
+  "confidence": 0.4,
+  "evidence": "Frame comparisons and the two SE ids are explicit, but there is still no caller and only the sound helpers are named, so the 'Overlay' owner is a guess from the 0x72A79C data block.",
+  "previous_name": "maybe_Ui_Overlay_PlayFrameSounds",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x005D9A34",
+  "name": "maybe_Field_Gimmick_UpdateReactionC",
+  "signature": "int maybe_Field_Gimmick_UpdateReactionC(void* self)",
+  "params": {
+   "self": "gimmick"
+  },
+  "summary": "Per-frame reaction step: switches on the state word at +0x38 - states 8 and 0x10 play SE 0xE4E through the sound player, state 0x1A removes key 4 from the small keyed list at +0x2C - and always returns 1.",
+  "confidence": 0.45,
+  "evidence": "No callers, no vtable slot; only the SE play and keyed-list remove are verified, so the gimmick/reaction attribution stays a guess.",
+  "previous_name": "maybe_Field_Gimmick_UpdateReactionC",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00284BDC",
+  "name": "maybe_Ui_Cue_ResetIfIdle",
+  "signature": "void maybe_Ui_Cue_ResetIfIdle(void* cue)",
+  "params": {
+   "cue": "cue"
+  },
+  "summary": "When the sound player's state byte at +4 has bit 3 clear, resets the cue to its neutral state: clears +0x14 and copies the two default words at 0x0072A79C+0x68/+0x6C into cue+4 and cue+8.",
+  "confidence": 0.4,
+  "evidence": "Sound_GetPlayer is the lazy sound-player singleton, so the bit test is a sound-system idle flag; the object's identity as a cue rests only on neighbouring maybe_ names.",
+  "previous_name": "maybe_Ui_Cue_ResetIfIdle",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00159E30",
+  "name": "maybe_Sound_SetGainFromValue",
+  "signature": "void maybe_Sound_SetGainFromValue(u32 handleOrId, float value)",
+  "params": {
+   "handleOrId": "handleOrId",
+   "value": "value"
+  },
+  "summary": "Sound gain wrapper: fetches the sound player singleton, reinterprets the u32 argument as a float and forwards it with the first argument to the gain setter 0x001ED7CC.",
+  "confidence": 0.4,
+  "evidence": "Body only uses Sound_GetPlayer and a target in the Snd_ range next to Sound_SetVoiceGainByHandle; the target 0x001ED7CC is not a Ghidra entry point, so which gain it sets remains unproven.",
+  "previous_name": "maybe_Sound_SetGainFromValue",
+  "previous_confidence": 0.4,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002DD1D8",
+  "name": "maybe_Battle_UiFlow_IsSoundHandleActive",
+  "signature": "int maybe_Battle_UiFlow_IsSoundHandleActive(void* self)",
+  "params": {
+   "self": "node"
+  },
+  "summary": "Returns the flow node itself when the sound player's table at +0x1848 still has an entry whose first word equals node->f_1B4->f_78, otherwise 0; a per-node keep-alive test.",
+  "confidence": 0.35,
+  "evidence": "0x0063071C searches 8-byte entries at soundPlayer+0x1848 for the key, so the test is against the sound system; the flow-node role rests only on table entry 0x00726F90.",
+  "previous_name": "maybe_Battle_UiFlow_IsSoundHandleActive",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002DD7E0",
+  "name": "maybe_Battle_UiFlow_ApplyVolumeFromField",
+  "signature": "void maybe_Battle_UiFlow_ApplyVolumeFromField(void* self)",
+  "params": {
+   "self": "node"
+  },
+  "summary": "Fetches the sound player and applies the value stored at self+0x1A8 (converted to float) through the sound volume setter 0x001EE018; returns self.",
+  "confidence": 0.35,
+  "evidence": "0x001EE018 scales the incoming s0 float, converts to int and stores the sound player's volume/state byte; the object is only known as a flow-table entry (0x00727078).",
+  "previous_name": "maybe_Battle_UiFlow_ApplyVolumeFromField",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x002DF270",
+  "name": "maybe_Battle_UiFlow_IsEntryUsable",
+  "signature": "u32 maybe_Battle_UiFlow_IsEntryUsable(u32 value)",
+  "params": {
+   "value": "value"
+  },
+  "summary": "Gates a flow entry value: reads the sound player's current id (field +0x58, or +0x64 when state bit 1 is set), treats out-of-range values (>= 0x9E or 0xFF) as unusable, and returns 0 when the player is in the state reported by 0x006305F0; otherwise returns value unchanged.",
+  "confidence": 0.35,
+  "evidence": "0x006305F0 is a pure predicate on the sound player's byte +0x10A50 (true for state 2 or 3); no caller, so both the entry role and the return convention remain unproven.",
+  "previous_name": "maybe_Battle_UiFlow_IsEntryUsable",
+  "previous_confidence": 0.35,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00450550",
+  "name": "maybe_Ui_RecipeInfo_TickCraft",
+  "signature": "u32 maybe_Ui_RecipeInfo_TickCraft(void* self)",
+  "params": {
+   "self": "widget"
+  },
+  "summary": "Sound-gated step: while the sound player still has the id stored at self+0x224 and the widget at self+0x2F0 is idle (+0x28 == 0), requests step 7 on the script object at self+0x11C and commits it; always returns 1.",
+  "confidence": 0.45,
+  "evidence": "0x0062F680 returns 1 when obj+0x28 == 0 (idle test) and 0x0063071C is the sound-player table lookup, so this is a sound/animation-gated script step; the RecipeInfo/craft attribution rests only on the first pass.",
+  "previous_name": "maybe_Ui_RecipeInfo_TickCraft",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00450878",
+  "name": "maybe_Ui_RecipeInfo_TickCraftB",
+  "signature": "u32 maybe_Ui_RecipeInfo_TickCraftB(void* self)",
+  "params": {
+   "self": "widget"
+  },
+  "summary": "Second copy of the sound-gated step: same sound id at self+0x224, same idle widget at self+0x2F0 and same step-7 request on the script object at self+0x11C, returning 1.",
+  "confidence": 0.45,
+  "evidence": "Byte-identical to 0x00450550 except for the function address (template copy); callee names confirm the step shape but nothing names the alternate recipe slot.",
+  "previous_name": "maybe_Ui_RecipeInfo_TickCraftB",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ },
+ {
+  "address": "0x00465DD4",
+  "name": "Sound_ApplyPlayerVolume",
+  "signature": "void Sound_ApplyPlayerVolume(float value)",
+  "params": {
+   "value": "volume"
+  },
+  "summary": "Fetches the sound player singleton and forwards the float volume argument (in s0, dropped by Ghidra) to the player's volume setter 0x001EE018.",
+  "confidence": 0.55,
+  "evidence": "Body is Sound_GetPlayer then 0x001EE018 on the returned player; 0x001EE018 scales the s0 float and stores player volume; neighbouring symbol Sound_GetPlayer; no callers to contradict.",
+  "previous_name": "maybe_Sound_ApplyPendingVolume",
+  "previous_confidence": 0.4,
+  "change": "corrected"
+ },
+ {
+  "address": "0x00465DF8",
+  "name": "maybe_Ui_TalkWindow_CanHandleEvent",
+  "signature": "u32 maybe_Ui_TalkWindow_CanHandleEvent(void* self, u32 context)",
+  "params": {
+   "self": "self",
+   "context": "context"
+  },
+  "summary": "Gated on a sound-player flag byte bit 3, asks the object at self+0x11C to accept event 0x0C (vt+0x14) and commits it (vt+0x10), always returning 1.",
+  "confidence": 0.35,
+  "evidence": "Only callee is Sound_GetPlayer used as a gate; the virtual +0x14/+0x10 pair on self+0x11C is a generic event-accept/commit pattern, and the window class is unproven; no callers.",
+  "previous_name": "maybe_Ui_TalkWindow_CanHandleEvent",
+  "previous_confidence": 0.45,
+  "change": "kept_maybe"
+ }
+]

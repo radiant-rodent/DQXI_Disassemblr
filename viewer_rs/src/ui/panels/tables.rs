@@ -97,6 +97,8 @@ pub struct TablesPanel {
     save_job: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     /// Display type for tables with no schema.
     generic_type: FieldType,
+    generic_auto: bool,
+    pub show_all: bool,
 }
 
 impl Default for TablesPanel {
@@ -126,6 +128,8 @@ impl Default for TablesPanel {
             status_bad: false,
             save_job: None,
             generic_type: FieldType::U32,
+            generic_auto: true,
+            show_all: false,
         }
     }
 }
@@ -153,8 +157,11 @@ impl TablesPanel {
             let ta = &data.tables.items[*a];
             let tb = &data.tables.items[*b];
             let ord = match self.sort {
-                SortKey::Name => ta.name.to_lowercase().cmp(&tb.name.to_lowercase()),
-                SortKey::Category => ta.category.to_lowercase().cmp(&tb.category.to_lowercase()),
+                SortKey::Name => ta.title.to_lowercase().cmp(&tb.title.to_lowercase()),
+                SortKey::Category => crate::data::tables::group_rank(&ta.category)
+                    .cmp(&crate::data::tables::group_rank(&tb.category))
+                    .then(ta.category.to_lowercase().cmp(&tb.category.to_lowercase()))
+                    .then(ta.title.to_lowercase().cmp(&tb.title.to_lowercase())),
                 SortKey::Size => ta.size.cmp(&tb.size),
             };
             if desc { ord.reverse() } else { ord }
@@ -273,7 +280,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
     if app.panels.tables.dirty {
         if let Some(data) = app.data.as_deref() {
             let panel = &mut app.panels.tables;
-            panel.list = data.tables.search(&panel.query, panel.category.as_deref());
+            panel.list = data.tables.search(&panel.query, panel.category.as_deref(), panel.show_all);
             panel.sort_list(data);
             panel.dirty = false;
             if let Some(name) = panel.request.take() {
@@ -319,12 +326,20 @@ fn list_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let total = app.data().map(|d| d.tables.items.len()).unwrap_or(0);
             let named = app.data().map(|d| d.tables.named_tables()).unwrap_or(0);
             ui.label(theme::faint_label(format!(
-                "{} tables \u{b7} {named} with field names",
-                human_count(total)
+                "{named} editable tables with named fields \u{b7} {} technical tables hidden",
+                human_count(total.saturating_sub(named))
             )));
+            if ui
+                .checkbox(&mut app.panels.tables.show_all, "Show technical tables (no field names)")
+                .changed()
+            {
+                app.panels.tables.category = None;
+                app.panels.tables.dirty = true;
+            }
+            let show_all = app.panels.tables.show_all;
             let categories: Vec<(String, usize)> = app
                 .data()
-                .map(|d| d.tables.categories().to_vec())
+                .map(|d| d.tables.categories(show_all))
                 .unwrap_or_default();
             let label = app
                 .panels
@@ -334,7 +349,7 @@ fn list_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 .unwrap_or_else(|| "All categories".into());
             egui::ComboBox::from_id_salt("table_category")
                 .selected_text(label)
-                .width(f32::INFINITY)
+                .width(ui.available_width())
                 .show_ui(ui, |ui| {
                     if ui
                         .selectable_label(app.panels.tables.category.is_none(), "All categories")
@@ -437,7 +452,8 @@ fn list_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
                         let Some(table) = app.data().and_then(|d| d.tables.items.get(index)) else {
                             return;
                         };
-                        let name = table.name.clone();
+                        let name = table.title.clone();
+                        let hover = format!("{}\n{}.json  \u{b7}  {}", table.rel, table.name, table.kind);
                         let size = table.size;
                         let named = app
                             .data()
@@ -448,9 +464,9 @@ fn list_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
                             let text = egui::RichText::new(name)
                                 .size(12.0)
                                 .color(if named { theme::TEXT } else { theme::TEXT_DIM });
-                            let response = ui.label(text);
+                            let response = ui.add(egui::Label::new(text).truncate()).on_hover_text(hover);
                             if !named {
-                                response.on_hover_text("no field names yet - editable by offset");
+                                response.on_hover_text("no field names yet - columns are described by what they hold");
                             }
                         });
                         row.col(|ui| {
@@ -567,16 +583,18 @@ fn detail_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 ui.label(theme::faint_label("Select a table."));
                 return;
             };
-            let Some((name, category, size, path, rel)) = app
+            let Some((name, category, size, path, rel, stem, kind)) = app
                 .data()
                 .and_then(|d| d.tables.items.get(index))
                 .map(|t| {
                     (
-                        t.name.clone(),
+                        t.title.clone(),
                         t.category.clone(),
                         t.size,
                         t.path.clone(),
                         t.rel.clone(),
+                        t.name.clone(),
+                        t.kind.clone(),
                     )
                 })
             else {
@@ -586,7 +604,7 @@ fn detail_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
             // header
             ui.horizontal(|ui| {
                 ui.label(theme::heading(name.clone()));
-                ui.label(theme::dim_label(format!("{category}  \u{b7}  {}", human_size(size))));
+                ui.label(theme::dim_label(format!("{category}  \u{b7}  {stem}  \u{b7}  {}", human_size(size))));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     for (label, tab) in [
                         ("Summary", Tab::Summary),
@@ -636,6 +654,8 @@ fn detail_panel(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 Tab::Summary => {
                     let rows: Vec<(&str, String)> = vec![
                         ("category", category.clone()),
+                        ("table", stem.clone()),
+                        ("game type", kind.clone()),
                         ("file", path.to_string_lossy().into_owned()),
                         ("size", human_size(size)),
                         ("shape", summary),
@@ -796,19 +816,29 @@ fn grid_tab(app: &mut ViewerApp, ui: &mut egui::Ui, index: usize, rel: &str) {
         ui.horizontal(|ui| {
             ui.label(theme::faint_label("Show each column as"));
             let mut chosen = app.panels.tables.generic_type;
+            let mut auto = app.panels.tables.generic_auto;
             egui::ComboBox::from_id_salt("generic_type")
-                .selected_text(chosen.name())
+                .selected_text(if auto { "described by contents" } else { chosen.name() })
                 .show_ui(ui, |ui| {
+                    if ui.selectable_label(auto, "described by contents").clicked() {
+                        auto = true;
+                    }
                     for ty in [FieldType::U8, FieldType::U16, FieldType::U32, FieldType::F32] {
-                        if ui.selectable_label(chosen == ty, ty.name()).clicked() {
+                        if ui.selectable_label(!auto && chosen == ty, ty.name()).clicked() {
                             chosen = ty;
+                            auto = false;
                         }
                     }
                 });
-            if chosen != app.panels.tables.generic_type {
+            if auto != app.panels.tables.generic_auto || (!auto && chosen != app.panels.tables.generic_type) {
+                app.panels.tables.generic_auto = auto;
                 app.panels.tables.generic_type = chosen;
                 if let Some(doc) = app.panels.tables.doc.as_mut() {
-                    doc.set_generic_type(chosen);
+                    if auto {
+                        doc.set_auto_columns();
+                    } else {
+                        doc.set_generic_type(chosen);
+                    }
                 }
             }
         });
@@ -1139,6 +1169,10 @@ fn draw_grid(
     actions: &mut Vec<Action>,
 ) {
     use egui_extras::{Column, TableBuilder};
+    egui::ScrollArea::horizontal()
+        .id_salt(("table_grid_h", doc.rel.clone()))
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
     let mut builder = TableBuilder::new(ui)
         .id_salt(("table_grid", doc.rel.clone()))
         .striped(true)
@@ -1180,6 +1214,7 @@ fn draw_grid(
                     });
                 }
             });
+        });
         });
 }
 

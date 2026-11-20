@@ -92,6 +92,14 @@ header. Failures are expected and useful: they expose decompiler artifacts (unde
 globals, mismatched signatures, vector helpers). This is a reading tree, not a buildable target
 yet; functions move from reading to buildable one at a time (below).
 
+## Patched game versions
+
+On the English version (`python -m tools.game_version use en`, see
+[GAME_VERSIONS.md](GAME_VERSIONS.md)) `asm/` holds the patched instructions, and `tools.build`
+must reproduce `versions/en/code/code.decompressed.bin`. The decompiled C stays retail.
+`versions/en/code_changes.json` lists every function and code cave the patch touches.
+`python -m tools.code_edit` edits any of them into `mod/code/code.bin`.
+
 ## Changing a function
 
 Two paths, both under the bit-matching gate:

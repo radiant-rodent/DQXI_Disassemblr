@@ -60,6 +60,26 @@ impl Blend {
     }
 }
 
+/// Sampler wrap of a group's colour texture along one axis (`dqxi_wrap` in the MTL).
+/// Mirrored halves of faces and bodies use negative U and need `Mirror`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Wrap {
+    #[default]
+    Repeat,
+    Mirror,
+    Clamp,
+}
+
+impl Wrap {
+    fn parse(word: &str) -> Self {
+        match word {
+            "mirror" => Wrap::Mirror,
+            "clamp" => Wrap::Clamp,
+            _ => Wrap::Repeat,
+        }
+    }
+}
+
 /// Floats per GPU vertex: position 3, normal 3, uv 2, mask uv 2, vertex alpha 1,
 /// vertex colour 3 (baked lighting).
 pub const STRIDE: usize = 14;
@@ -108,6 +128,8 @@ pub struct MeshGroup {
     /// second texture whose channel multiplies the alpha, read through the mask UVs
     pub mask_path: Option<std::path::PathBuf>,
     pub mask_channel: MaskChannel,
+    /// colour texture wrap along U and V
+    pub wrap: [Wrap; 2],
     pub index_start: usize,
     pub index_count: usize,
 }
@@ -122,6 +144,7 @@ struct MtlEntry {
     mask: Option<std::path::PathBuf>,
     mask_channel: MaskChannel,
     color_scale: f32,
+    wrap: [Wrap; 2],
 }
 
 impl Default for MtlEntry {
@@ -135,6 +158,7 @@ impl Default for MtlEntry {
             mask: None,
             mask_channel: MaskChannel::None,
             color_scale: 1.0,
+            wrap: [Wrap::Repeat; 2],
         }
     }
 }
@@ -268,6 +292,7 @@ pub fn load_obj(path: &Path) -> Result<Mesh, String> {
                 color_scale: if lit { entry.color_scale } else { 0.0 },
                 mask_path: entry.mask,
                 mask_channel: entry.mask_channel,
+                wrap: entry.wrap,
                 index_start: start,
                 index_count: indices.len() - start,
             });
@@ -619,6 +644,9 @@ fn read_mtl_map(obj: &Path) -> HashMap<String, MtlEntry> {
             }
             Some("dqxi_blend") => entry.blend = Blend::parse(it.next().unwrap_or("")),
             Some("dqxi_hidden") => entry.hidden = it.next() == Some("1"),
+            Some("dqxi_wrap") => {
+                entry.wrap = [Wrap::parse(it.next().unwrap_or("")), Wrap::parse(it.next().unwrap_or(""))];
+            }
             Some("dqxi_color_scale") => {
                 entry.color_scale = it.next().and_then(|t| t.parse().ok()).unwrap_or(1.0);
             }

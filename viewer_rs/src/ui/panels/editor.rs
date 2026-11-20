@@ -68,6 +68,135 @@ static NPC_TALKS: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::
 /// Level name of every map id (row of syscmn/level_map.json), from the same file.
 static MAPS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
 
+/// Readable name of a level (`game_assets/maps/level_labels.json`, tools/level_labels.py).
+#[derive(Clone, Debug, Default)]
+pub struct LevelLabel {
+    /// "Cobblestone · interior 5 · door from outdoors 1"
+    pub title: String,
+    /// Project dock folder, "b011 · Cobblestone"
+    pub group: String,
+    /// "3D room, 5 talking NPCs, 1 exit"
+    pub summary: String,
+    pub details: Vec<String>,
+    /// level whose background mesh this level shows (itself, a sibling variant, or none)
+    pub geometry: Option<String>,
+    /// no objects and no 3D room: nothing to see or edit
+    pub empty: bool,
+}
+
+static LEVEL_LABELS: std::sync::OnceLock<std::collections::HashMap<String, LevelLabel>> = std::sync::OnceLock::new();
+
+fn load_labels(root: &Path) -> &'static std::collections::HashMap<String, LevelLabel> {
+    LEVEL_LABELS.get_or_init(|| {
+        let doc = std::fs::read_to_string(root.join("game_assets/maps/level_labels.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        let Some(levels) = doc.as_ref().and_then(|d| d.get("levels")).and_then(|v| v.as_object()) else {
+            return Default::default();
+        };
+        let s = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+        levels
+            .iter()
+            .map(|(id, v)| {
+                (
+                    id.clone(),
+                    LevelLabel {
+                        title: s(v, "title"),
+                        group: s(v, "group"),
+                        summary: s(v, "summary"),
+                        details: v
+                            .get("details")
+                            .and_then(|d| d.as_array())
+                            .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
+                            .unwrap_or_default(),
+                        geometry: v.get("geometry").and_then(|g| g.as_str()).map(str::to_owned),
+                        empty: v.get("empty").and_then(|e| e.as_bool()).unwrap_or(false),
+                    },
+                )
+            })
+            .collect()
+    })
+}
+
+/// Other records of the same character standing at (about) the same spot. The game keeps one record per story
+/// state, each in its own level group (top byte of key 60) that the area script switches on and off
+/// (SetLevelGroupEnable, docs/CUSTOM_ROOM.md), so moving one copy reveals the others.
+fn copies_section(app: &mut ViewerApp, ui: &mut egui::Ui) {
+    let panel = &app.panels.editor;
+    let (Some(sel), Some(scene)) = (panel.selected_object, panel.scene.as_ref()) else { return };
+    let Some(obj) = scene.objects.get(sel) else { return };
+    let prop = |o: &SceneObject, n: &str| o.props.iter().find(|p| p.name == n).map(|p| p.value);
+    let Some(id) = prop(obj, "entity id") else { return };
+    let group = |o: &SceneObject| prop(o, "key 60").map(|v| (v >> 24) & 0xFF);
+    let near = |o: &SceneObject| (o.position[0] - obj.position[0]).hypot(o.position[2] - obj.position[2]) < 1.0;
+    let copies: Vec<(usize, Option<i64>)> = scene
+        .objects
+        .iter()
+        .enumerate()
+        .filter(|(i, o)| *i != sel && !o.deleted && o.kind == "actor" && prop(o, "entity id") == Some(id) && near(o))
+        .map(|(i, o)| (i, group(o)))
+        .collect();
+    if copies.is_empty() {
+        return;
+    }
+    let own_group = group(obj).map(|g| g.to_string()).unwrap_or_else(|| "?".into());
+    let all_selected = copies.iter().all(|(i, _)| panel.multi.contains(i));
+    egui::Frame::new().fill(theme::BG_RAISED).inner_margin(egui::Margin::same(6)).corner_radius(4.0).show(ui, |ui| {
+        let groups: Vec<String> = copies.iter().map(|(_, g)| g.map(|g| g.to_string()).unwrap_or_else(|| "?".into())).collect();
+        ui.label(egui::RichText::new(format!(
+            "{} other cop{} of this character here (level group {})",
+            copies.len(),
+            if copies.len() == 1 { "y" } else { "ies" },
+            groups.join(", ")
+        )).color(theme::WARN));
+        ui.label(theme::faint_label(format!(
+            "One record per story state; the area script enables one level group at a time. This one is group {own_group}."
+        )));
+        let mut select: Option<usize> = None;
+        let mut together = false;
+        ui.horizontal_wrapped(|ui| {
+            for (i, g) in &copies {
+                if ui.small_button(format!("Select g{}", g.map(|g| g.to_string()).unwrap_or_default())).clicked() {
+                    select = Some(*i);
+                }
+            }
+            if ui
+                .add_enabled(!all_selected, egui::Button::new("Move all copies together"))
+                .on_hover_text("Adds the copies to the selection, so a Move drag moves every story state of this character")
+                .clicked()
+            {
+                together = true;
+            }
+        });
+        let panel = &mut app.panels.editor;
+        if let Some(i) = select {
+            panel.selected_object = Some(i);
+            panel.multi.clear();
+        }
+        if together {
+            for (i, _) in &copies {
+                if !panel.multi.contains(i) {
+                    panel.multi.push(*i);
+                }
+            }
+            if !panel.multi.contains(&sel) {
+                panel.multi.push(sel);
+            }
+        }
+    });
+    ui.add_space(4.0);
+}
+
+/// Level name of a map id (row of syscmn/level_map).
+pub fn map_name(id: i64) -> Option<String> {
+    MAPS.get()?.get(usize::try_from(id).ok()?).filter(|n| !n.is_empty()).cloned()
+}
+
+/// Label of a level, once `ensure_maps` / the editor has loaded the table.
+pub fn level_label(map: &str) -> Option<&'static LevelLabel> {
+    LEVEL_LABELS.get()?.get(map)
+}
+
 fn load_entities(root: &Path) {
     if ENTITIES.get().is_some() {
         return;
@@ -152,18 +281,34 @@ fn load_entities(root: &Path) {
     let _ = ENTITIES.set(list);
 }
 
-/// What a gimmick (chest / search spot) gives: its drop row -> fixed_drop_param row -> item name and count.
-fn gimmick_contents(obj: &SceneObject) -> Option<String> {
-    let row = obj.props.iter().find(|p| p.name == "drop row")?.value;
+pub fn item_name(item: u32) -> String {
+    ITEM_NAMES.get().and_then(|m| m.get(&item)).cloned().unwrap_or_else(|| format!("item {item}"))
+}
+
+/// What a drop row gives: fixed_drop_param row -> item name and count.
+pub fn drop_contents(row: i64) -> Option<String> {
     if row == 0xFFFF {
-        return Some("nothing fixed (glitter / random)".into());
-    }
-    let (item, count) = *FIXED_DROPS.get()?.get(row as usize)?;
-    if item == 0xFFFF {
         return Some("nothing".into());
     }
-    let name = ITEM_NAMES.get().and_then(|m| m.get(&item)).cloned().unwrap_or_else(|| format!("item {item}"));
-    Some(format!("{name} x{count}"))
+    let (item, count) = *FIXED_DROPS.get()?.get(usize::try_from(row).ok()?)?;
+    if item == 0xFFFF {
+        return Some("no item (gold or empty row)".into());
+    }
+    Some(format!("{} x{count}", item_name(item)))
+}
+
+/// What a gimmick (chest / pot) gives; a Tockle spot says which spirit row it uses.
+fn gimmick_contents(obj: &SceneObject) -> Option<String> {
+    if let Some(row) = obj.props.iter().find(|p| p.name == "spirit row") {
+        return Some(format!("a Tockle appears here (spirit row {})", row.value));
+    }
+    if let Some(row) = obj.props.iter().find(|p| p.name == "glitter row") {
+        return Some(match obj.props.iter().find(|p| p.name == "glitter item").map(|p| p.value).filter(|v| *v != 0xFFFF) {
+            Some(item) => format!("{} (glitter row {})", item_name(item as u32), row.value),
+            None => format!("random materials of the area (glitter row {})", row.value),
+        });
+    }
+    drop_contents(obj.props.iter().find(|p| p.name == "drop row")?.value)
 }
 
 /// The model an actor shows in the game: its id is a row of the level's region table (see `NPC_TABLES`).
@@ -211,11 +356,152 @@ fn time_names(mask: u64) -> String {
 /// The Dialogue group of an NPC: every conversation the character can have, with the story condition that
 /// selects it, the variants played in turn, and the lines (editable). Also lists events the area script starts
 /// for this character instead (docs/DIALOGUE_FORMAT.md).
+/// Short name of a story chapter: a conversation's condition group is the chapter's scenario flag
+/// (`syscmn/scenario_id_list`, tools/npc_talk.py `scenarios`).
+pub(crate) fn chapter_name(talks: &serde_json::Value, group: u64) -> String {
+    let c = &talks["scenarios"][group as usize];
+    match c["title_en"].as_str().filter(|t| !t.is_empty()) {
+        Some(en) => en.to_string(),
+        None => c["title"].as_str().filter(|t| !t.is_empty()).map(str::to_owned).unwrap_or_else(|| format!("story flag {group}")),
+    }
+}
+
+/// Stages a chapter's flag takes, in order, each with the game's own summary of what has just happened.
+pub(crate) fn chapter_stages(talks: &serde_json::Value, group: u64) -> Vec<(u64, String)> {
+    let mut out: Vec<(u64, String)> = talks["scenarios"][group as usize]["stages"]
+        .as_object()
+        .map(|o| o.iter().filter_map(|(k, v)| Some((k.parse().ok()?, v["text"].as_str().unwrap_or("").to_string()))).collect())
+        .unwrap_or_default();
+    out.sort();
+    out
+}
+
+pub(crate) fn stage_label(stage: u64) -> String {
+    match stage {
+        0 => "the chapter has begun".to_string(),
+        34 => "the chapter is over".to_string(),
+        n => format!("stage {n}"),
+    }
+}
+
+/// The conversation line open in the level view's dialogue window.
+#[derive(Clone, Debug, PartialEq)]
+struct TalkFocus {
+    /// (region, character id) the lines belong to
+    actor: (i32, i64),
+    title: String,
+    /// (text entry, speaker entry, what follows: 3 = a Yes / No question) of every line of the block
+    lines: Vec<(usize, Option<usize>, u64)>,
+    index: usize,
+    page: usize,
+}
+
+/// Page buttons under a talk window preview.
+fn page_nav(ui: &mut egui::Ui, page: &mut usize, pages: usize) {
+    if pages > 1 {
+        *page = (*page).min(pages - 1);
+        ui.horizontal(|ui| {
+            if ui.add_enabled(*page > 0, egui::Button::new("\u{25c0}").small()).clicked() {
+                *page -= 1;
+            }
+            ui.label(theme::faint_label(format!("box {} of {pages}", *page + 1)));
+            if ui.add_enabled(*page + 1 < pages, egui::Button::new("\u{25b6}").small()).clicked() {
+                *page += 1;
+            }
+        });
+    } else {
+        *page = 0;
+    }
+}
+
+/// The dialogue window over the level view: the focused line in the game's talk window at a readable size, with
+/// the text editable right under it.
+fn talk_window(app: &mut ViewerApp, ctx: &egui::Context) {
+    let Some(mut focus) = app.panels.editor.talk_focus.clone() else { return };
+    if !app.panels.editor.talk_overlay || focus.lines.is_empty() {
+        return;
+    }
+    focus.index = focus.index.min(focus.lines.len() - 1);
+    let (entry, speaker, kind) = focus.lines[focus.index];
+    let Some(mut text) = app.panels.dialogues.line_text(entry) else { return };
+    let name = speaker.and_then(|s| app.panels.dialogues.line_text(s)).unwrap_or_default();
+    let mut mode2d = app.panels.editor.talk_mode.unwrap_or(app.panels.editor.view2d.on);
+    let mut open = true;
+    let screen = ctx.content_rect();
+    egui::Window::new("Dialogue")
+        .id(egui::Id::new("level_talk_window"))
+        .open(&mut open)
+        .collapsible(true)
+        .resizable(false)
+        .default_pos([screen.center().x - 380.0, screen.bottom() - 330.0])
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(&focus.title).color(theme::TEXT_DIM));
+                ui.separator();
+                if ui.add_enabled(focus.index > 0, egui::Button::new("\u{25c0} line").small()).clicked() {
+                    focus.index -= 1;
+                    focus.page = 0;
+                }
+                ui.label(theme::faint_label(format!("line {} of {}", focus.index + 1, focus.lines.len())));
+                if ui.add_enabled(focus.index + 1 < focus.lines.len(), egui::Button::new("line \u{25b6}").small()).clicked() {
+                    focus.index += 1;
+                    focus.page = 0;
+                }
+                ui.separator();
+                ui.label(theme::faint_label("window of"));
+                if ui.selectable_label(!mode2d, "3D mode").clicked() {
+                    mode2d = false;
+                }
+                if ui.selectable_label(mode2d, "2D mode").clicked() {
+                    mode2d = true;
+                }
+            });
+            let shown = crate::ui::talk_preview::show(app, ui, mode2d, &name, &text, focus.page, 720.0, kind == 3);
+            page_nav(ui, &mut focus.page, shown.pages);
+            if kind == 3 {
+                ui.label(egui::RichText::new("This line asks Yes / No. The answer picks the block that plays next (see the Inspector).").color(theme::INFO).size(11.5));
+            }
+            for note in &shown.notes {
+                ui.label(egui::RichText::new(note).color(theme::WARN).size(11.5));
+            }
+            let before = text.clone();
+            ui.add(egui::TextEdit::multiline(&mut text).id_salt("level_talk_edit").desired_rows(3).desired_width(720.0).font(egui::TextStyle::Monospace));
+            if text != before {
+                app.panels.dialogues.set_line_text(entry, text.clone());
+            }
+            ui.horizontal(|ui| {
+                let original = app.panels.dialogues.original_text(entry);
+                if ui.add_enabled(original.as_deref().is_some_and(|o| o != text), egui::Button::new("Revert line")).clicked() {
+                    if let Some(o) = original {
+                        app.panels.dialogues.set_line_text(entry, o);
+                    }
+                }
+                let dirty = app.panels.dialogues.dirty_count();
+                if ui.add_enabled(dirty > 0, egui::Button::new(format!("Save dialogue to mod ({dirty})"))).clicked() {
+                    let mut panel = std::mem::take(&mut app.panels.dialogues);
+                    panel.save_now(app);
+                    app.panels.dialogues = panel;
+                }
+                ui.label(theme::faint_label("a new line = a line break \u{b7} {PAGE} starts a new box \u{b7} {ruby:base|reading} \u{b7} {PLAYER}"));
+            });
+        });
+    // the 3D / 2D switch here only changes which window is previewed while the view itself stays as it is
+    app.panels.editor.talk_mode = (mode2d != app.panels.editor.view2d.on).then_some(mode2d);
+    if !open {
+        app.panels.editor.talk_overlay = false;
+    }
+    if app.panels.editor.talk_focus.is_some() {
+        app.panels.editor.talk_focus = Some(focus);
+    }
+}
+
 fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, level: &str) {
     let class = obj.props.iter().find(|p| p.name == "entity class").map(|p| p.value).unwrap_or(0);
     let Some(id) = obj.props.iter().find(|p| p.name == "entity id").map(|p| p.value) else { return };
     let region = CUR_REGION.load(std::sync::atomic::Ordering::Relaxed);
-    if class != 0x200 || region < 0 {
+    // every NPC class is a row of the region character table: the high byte is only the display-mode mask
+    // (0x100 3D, 0x200 2D mode, 0x300 both, docs/CUSTOM_ROOM.md). Gating on 0x200 hid the dialogue of all 3D NPCs.
+    if class & 0x300 == 0 || region < 0 {
         return;
     }
     let Some(talks) = NPC_TALKS.get().filter(|v| !v.is_null()) else {
@@ -244,15 +530,67 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new("Triggers an event:").color(theme::WARN));
                 ui.label(theme::mono(event.clone()));
-                if ui.small_button("Open script").on_hover_text("The area script starts this event instead of the default talk while its story condition holds").clicked() {
+                if ui.small_button("Open script").on_hover_text("The area script starts this event instead of the default talk while its story condition holds. Edit what an answer does there.").clicked() {
                     app.open_scripts(event);
                 }
             });
+            // what the event does, read from the decompiled script (tools/npc_talk.py event_info)
+            let info = &talks["event_info"][&area][event];
+            let editing = app.panels.editor.event_edit.as_ref().is_some_and(|e| e.area == area && e.event == *event);
+            if editing {
+                egui::Frame::new().fill(theme::BG_RAISED).corner_radius(4.0).inner_margin(egui::Margin::symmetric(8, 5)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    crate::ui::panels::talk_edit::event_editor(app, ui, &area, event);
+                });
+            } else if info.is_object() {
+                let list = |key: &str| -> Vec<String> { info[key].as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_owned)).collect()).unwrap_or_default() };
+                egui::Frame::new().fill(theme::BG_RAISED).corner_radius(4.0).inner_margin(egui::Margin::symmetric(8, 5)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    let rows: Vec<(&str, Vec<String>)> = if info["asks"].as_bool() == Some(true) {
+                        vec![("If Yes", list("yes")), ("If No", list("no")), ("Either way", list("always"))]
+                    } else {
+                        vec![("Does", list("always"))]
+                    };
+                    for (title, steps) in rows {
+                        if steps.is_empty() {
+                            continue;
+                        }
+                        ui.label(egui::RichText::new(title).color(theme::INFO).strong().size(11.5));
+                        for step in steps.iter().take(12) {
+                            ui.label(egui::RichText::new(format!("  \u{2022} {step}")).size(11.5).color(theme::TEXT_DIM));
+                        }
+                        if steps.len() > 12 {
+                            ui.label(theme::faint_label(format!("  \u{2026} {} more steps in the script", steps.len() - 12)));
+                        }
+                    }
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(theme::faint_label(format!("script line {}", info["line"].as_u64().unwrap_or(0))));
+                        if ui.small_button("Edit what the answers do").on_hover_text("Add or remove steps (set a flag, give an item, show or hide a level group ...) in the Yes and No branches").clicked() {
+                            crate::ui::panels::talk_edit::open_event(app, &area, event);
+                        }
+                    });
+                });
+            }
         }
+        // a character whose structure is being rewritten shows the structure editor instead of the game's list
+        crate::ui::panels::talk_edit::ensure_loaded(app, region + 1);
+        if app.panels.editor.talk_custom.contains_key(&(region + 1, id)) {
+            crate::ui::panels::talk_edit::section(app, ui, talks, region, id);
+            return;
+        }
+        let restructure = |app: &mut ViewerApp, ui: &mut egui::Ui, label: &str| {
+            if ui.button(label).on_hover_text("Add, remove and reorder conversations, blocks and lines, or add a Yes / No question. The character's whole dialogue is then rewritten when you save.").clicked() {
+                if let Err(e) = crate::ui::panels::talk_edit::start(app, region + 1, id, character) {
+                    app.status = format!("could not read the dialogue structure: {e}");
+                }
+            }
+        };
         let Some(talks_list) = character["talks"].as_array().filter(|t| !t.is_empty()) else {
             ui.label(theme::faint_label("This character has no talk lines of its own (silent, or handled entirely by script)."));
+            restructure(app, ui, "Add dialogue...");
             return;
         };
+        restructure(app, ui, "Restructure (add / remove conversations, blocks, lines)...");
         crate::ui::panels::dialogues::DialoguesPanel::prepare(app, ui.ctx());
         if !app.panels.dialogues.ready() {
             ui.horizontal(|ui| {
@@ -278,6 +616,40 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
             }
         }
         ui.label(theme::faint_label("The game plays the last conversation whose story condition and time of day match. A conversation with several variants plays them one after another when you talk again."));
+        ui.checkbox(&mut app.panels.editor.talk_overlay, "Dialogue window in the level view")
+            .on_hover_text("Shows the selected line in the game's own talk window over the level view, where you can edit it");
+        if app.panels.editor.talk_overlay && app.panels.editor.talk_focus.as_ref().map_or(true, |f| f.lines.is_empty()) {
+            ui.label(theme::faint_label("Nothing to preview yet: this character has no lines of their own. Press \"Level view\" on a line, or add lines with Restructure."));
+        } else if !app.panels.editor.talk_overlay {
+            ui.label(theme::faint_label("The window is off (closing it with the cross turns this off). Tick the box to bring it back."));
+        }
+        // a newly selected character: its first conversation with lines opens in the level view
+        if app.panels.editor.talk_focus.as_ref().map(|f| f.actor) != Some((region, id)) {
+            app.panels.editor.talk_focus = talks_list.iter().find_map(|talk| {
+                let t = talk["t"].as_u64().unwrap_or(0);
+                talk["variants"].as_array()?.iter().find_map(|variant| {
+                    let lines: Vec<(usize, Option<usize>, u64)> = variant
+                        .as_array()?
+                        .iter()
+                        .filter_map(|l| Some((l["e"].as_u64()? as usize, l["s"].as_u64().map(|s| s as usize), l["k"].as_u64().unwrap_or(0))))
+                        .collect();
+                    (!lines.is_empty()).then(|| TalkFocus { actor: (region, id), title: format!("Conversation {t}"), lines, index: 0, page: 0 })
+                })
+            });
+        }
+        let mode2d = app.panels.editor.view2d.on;
+        // conditions saved to the mod earlier (tools/npc_talk.py set-cond) show up as edits again
+        if app.panels.editor.talk_loaded.insert(region + 1) {
+            let file = app.dirs.root.join("build").join("npc_conditions").join(format!("param_region_r{:03}_npc_ie.json", region + 1));
+            if let Some(rows) = std::fs::read(&file).ok().and_then(|b| serde_json::from_slice::<Vec<serde_json::Value>>(&b).ok()) {
+                for r in rows {
+                    let (Some(c), Some(t)) = (r["char"].as_i64(), r["talk"].as_u64()) else { continue };
+                    let v = ["group", "min", "time", "first"].map(|k| r[k].as_u64().unwrap_or(0) as u8);
+                    app.panels.editor.talk_edits.insert((region + 1, c, t), v);
+                    app.panels.editor.talk_saved.insert((region + 1, c, t), v);
+                }
+            }
+        }
         for talk in talks_list {
             let t = talk["t"].as_u64().unwrap_or(0);
             let orig = [
@@ -290,7 +662,13 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
             let mut cond = app.panels.editor.talk_edits.get(&edit_key).copied().unwrap_or(orig);
             let (group, min, time) = (cond[0] as u64, cond[1] as u64, cond[2] as u64);
             let variants = talk["variants"].as_array().cloned().unwrap_or_default();
-            let when = if group == 0 && min == 0 { "default".to_string() } else { format!("story flag {group} \u{2265} {min}") };
+            let when = if group == 0 && min == 0 {
+                "always".to_string()
+            } else if min == 0 {
+                format!("from \u{201c}{}\u{201d}", chapter_name(talks, group))
+            } else {
+                format!("\u{201c}{}\u{201d}, {}", chapter_name(talks, group), stage_label(min))
+            };
             let lines_total: usize = variants.iter().map(|v| v.as_array().map(|a| a.len()).unwrap_or(0)).sum();
             let title = format!("{}Conversation {t}  \u{b7}  {when}  \u{b7}  {}", if cond != orig { "\u{25cf} " } else { "" }, time_names(time));
             egui::CollapsingHeader::new(egui::RichText::new(title).color(theme::TEXT_DIM))
@@ -298,10 +676,25 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                 .default_open(false)
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(theme::faint_label("Appears when story flag"));
-                        ui.add(egui::DragValue::new(&mut cond[0]).range(0..=255));
+                        ui.label(theme::faint_label("Plays once the chapter"));
+                        let chapters = talks["scenarios"].as_array().map(|a| a.len()).unwrap_or(0);
+                        egui::ComboBox::from_id_salt(("talk_chapter", id, t)).selected_text(chapter_name(talks, cond[0] as u64)).width(210.0).show_ui(ui, |ui| {
+                            for g in 0..chapters {
+                                let jp = talks["scenarios"][g]["title"].as_str().unwrap_or("");
+                                ui.selectable_value(&mut cond[0], g as u8, format!("{g}  {}  {jp}", chapter_name(talks, g as u64)));
+                            }
+                        });
+                        ui.label(theme::faint_label("has reached"));
+                        let stages = chapter_stages(talks, cond[0] as u64);
+                        egui::ComboBox::from_id_salt(("talk_stage", id, t)).selected_text(stage_label(cond[1] as u64)).width(150.0).show_ui(ui, |ui| {
+                            for (stage, text) in &stages {
+                                let short: String = text.chars().take(34).collect();
+                                ui.selectable_value(&mut cond[1], *stage as u8, format!("{}  {short}", stage_label(*stage))).on_hover_text(text);
+                            }
+                        });
+                        ui.add(egui::DragValue::new(&mut cond[0]).range(0..=255)).on_hover_text("The chapter's number: the id scripts pass to SetScenarioFlag / GetScenarioFlag");
                         ui.label(theme::faint_label("\u{2265}"));
-                        ui.add(egui::DragValue::new(&mut cond[1]).range(0..=255));
+                        ui.add(egui::DragValue::new(&mut cond[1]).range(0..=255)).on_hover_text("The stage number inside the chapter");
                         for (bit, name) in [(1u8, "morning"), (2, "day"), (4, "evening"), (8, "night")] {
                             let mut on = cond[2] & bit != 0;
                             if ui.checkbox(&mut on, name).changed() {
@@ -312,6 +705,47 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                             cond = orig;
                         }
                     });
+                    // what that condition means: the chapter and what has just happened at that stage
+                    if cond[0] != 0 || cond[1] != 0 {
+                        let (g, v) = (cond[0] as u64, cond[1] as u64);
+                        let chapter = &talks["scenarios"][g as usize];
+                        let stage = &chapter["stages"][v.to_string()];
+                        egui::Frame::new().fill(theme::BG_RAISED).corner_radius(4.0).inner_margin(egui::Margin::symmetric(8, 5)).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            let stages = chapter_stages(talks, g);
+                            let nth = stages.iter().position(|(s, _)| *s == v).map(|i| format!(" ({} of {})", i + 1, stages.len())).unwrap_or_default();
+                            ui.label(egui::RichText::new(format!(
+                                "Chapter {g}: {}  {}  \u{b7}  {}{nth}",
+                                chapter_name(talks, g),
+                                chapter["title"].as_str().unwrap_or(""),
+                                stage_label(v)
+                            )).color(theme::INFO).size(11.5));
+                            match stage["text"].as_str().filter(|t| !t.is_empty()) {
+                                Some(text) => {
+                                    ui.label(egui::RichText::new(format!("By then: {text}")).size(12.0).color(theme::TEXT));
+                                }
+                                None if v == 0 => {
+                                    ui.label(theme::faint_label("From the start of this chapter."));
+                                }
+                                None => {
+                                    ui.label(theme::faint_label("The game has no story summary for this stage."));
+                                }
+                            }
+                            if let Some(area) = stage["set_by"]["area"].as_str() {
+                                let function = stage["set_by"]["function"].as_str().unwrap_or("");
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(theme::faint_label(format!(
+                                        "Reached in script {area} \u{b7} {function} (line {}){}",
+                                        stage["set_by"]["line"].as_u64().unwrap_or(0),
+                                        if function == "OnCutSceneEnd" { ": when a cutscene of the chapter ends" } else { "" }
+                                    )));
+                                    if function.starts_with("IE_") && ui.small_button("Open script").clicked() {
+                                        app.open_scripts(function);
+                                    }
+                                });
+                            }
+                        });
+                    }
                     if let Some(r) = talk.get("redirect") {
                         ui.label(theme::faint_label(format!(
                             "Says the same as the conversation for story flag {} \u{2265} {}.",
@@ -322,16 +756,37 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                     if lines_total == 0 {
                         ui.label(theme::faint_label("No lines of its own."));
                     }
+                    let labels: Vec<Option<String>> = (0..variants.len()).map(|i| talk["labels"][i].as_str().map(str::to_owned)).collect();
+                    let unlabelled = labels.iter().filter(|l| l.is_none()).count();
                     for (vi, variant) in variants.iter().enumerate() {
-                        if variants.len() > 1 {
-                            ui.label(egui::RichText::new(format!("Variant {} of {}", vi + 1, variants.len())).color(theme::ACCENT).size(11.5));
+                        match &labels[vi] {
+                            // a named block: the script switches to it (IEChangeBlock), e.g. after a Yes / No answer
+                            Some(label) => {
+                                let role = if label.contains("\u{3044}\u{3044}\u{3048}\u{306e}\u{5834}\u{5408}") {
+                                    "  \u{b7}  plays after No"
+                                } else if label.contains("\u{306f}\u{3044}\u{306e}\u{5834}\u{5408}") {
+                                    "  \u{b7}  plays after Yes"
+                                } else {
+                                    "  \u{b7}  the script picks this block by name"
+                                };
+                                ui.label(egui::RichText::new(format!("Block {label}{role}")).color(theme::ACCENT).size(11.5));
+                            }
+                            None if unlabelled > 1 => {
+                                ui.label(egui::RichText::new(format!("Variant {} of {unlabelled} (played in turn when you talk again)", labels[..vi].iter().filter(|l| l.is_none()).count() + 1)).color(theme::ACCENT).size(11.5));
+                            }
+                            None => {}
                         }
                         for (li, line) in variant.as_array().cloned().unwrap_or_default().iter().enumerate() {
                             let (Some(e), speaker) = (line["e"].as_u64(), line["s"].as_u64()) else { continue };
                             let name = speaker.and_then(|s| app.panels.dialogues.line_text(s as usize)).unwrap_or_default();
                             let Some(mut text) = app.panels.dialogues.line_text(e as usize) else { continue };
-                            let edit_id = ui.make_persistent_id(("talkline_edit", id, t, vi, li));
-                            let mut editing: bool = ui.data(|d| d.get_temp(edit_id).unwrap_or(false));
+                            let page_id = ui.make_persistent_id(("talkline_page", id, t, vi, li));
+                            let mut page: usize = ui.data(|d| d.get_temp(page_id).unwrap_or(0));
+                            let variant_lines: Vec<(usize, Option<usize>, u64)> = variant
+                                .as_array()
+                                .map(|a| a.iter().filter_map(|l| Some((l["e"].as_u64()? as usize, l["s"].as_u64().map(|s| s as usize), l["k"].as_u64().unwrap_or(0)))).collect())
+                                .unwrap_or_default();
+                            let asks = line["k"].as_u64() == Some(3);
                             egui::Frame::new()
                                 .fill(theme::BG_INPUT)
                                 .corner_radius(4.0)
@@ -354,34 +809,91 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                                                 }
                                                 ui.label(egui::RichText::new("\u{25cf}").color(theme::ACCENT).size(10.0));
                                             }
-                                            if ui.small_button(if editing { "Done" } else { "Edit" }).on_hover_text("Edit the raw text with its tags ({CR} line break, {ruby:base|reading}, {PLAYER} ...)").clicked() {
-                                                editing = !editing;
+                                            let focused = app.panels.editor.talk_focus.as_ref().is_some_and(|f| f.lines.get(f.index).map(|l| l.0) == Some(e as usize));
+                                            if ui.add(egui::Button::new("Level view").small().selected(focused)).on_hover_text("Show and edit this line in the dialogue window over the level view").clicked() {
+                                                let index = variant_lines.iter().position(|l| l.0 == e as usize).unwrap_or(0);
+                                                app.panels.editor.talk_focus = Some(TalkFocus {
+                                                    actor: (region, id),
+                                                    title: match &labels[vi] {
+                                                        Some(label) => format!("Conversation {t} \u{b7} {label}"),
+                                                        None if variants.len() > 1 => format!("Conversation {t}, variant {}", vi + 1),
+                                                        None => format!("Conversation {t}"),
+                                                    },
+                                                    lines: variant_lines.clone(),
+                                                    index,
+                                                    page: 0,
+                                                });
+                                                app.panels.editor.talk_overlay = true;
                                             }
                                         });
                                     });
-                                    if editing {
-                                        let before = text.clone();
-                                        ui.add(
-                                            egui::TextEdit::multiline(&mut text)
-                                                .id_salt(("talkline", id, t, vi, li))
-                                                .desired_rows(3)
-                                                .desired_width(f32::INFINITY)
-                                                .font(egui::TextStyle::Monospace),
-                                        );
-                                        if text != before {
-                                            app.panels.dialogues.set_line_text(e as usize, text.clone());
-                                        }
-                                        ui.label(theme::faint_label("Preview:"));
+                                    // the line as the game shows it: its talk window, fonts and furigana
+                                    let width = ui.available_width();
+                                    let shown = crate::ui::talk_preview::show(app, ui, mode2d, &name, &text, page, width, asks);
+                                    page_nav(ui, &mut page, shown.pages);
+                                    if asks {
+                                        // where the two answers lead: the blocks of this conversation named after them
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(egui::RichText::new("Asks Yes / No").color(theme::INFO).strong().size(11.5));
+                                            for (answer, needle) in [("Yes", "\u{306f}\u{3044}\u{306e}\u{5834}\u{5408}"), ("No", "\u{3044}\u{3044}\u{3048}\u{306e}\u{5834}\u{5408}")] {
+                                                let target = labels.iter().position(|l| l.as_deref().is_some_and(|l| l.contains(needle) && (answer == "No" || !l.contains("\u{3044}\u{3044}\u{3048}"))));
+                                                match target {
+                                                    Some(bi) => {
+                                                        let label = labels[bi].clone().unwrap_or_default();
+                                                        if ui.small_button(format!("{answer} \u{2192} {label}")).on_hover_text("Open that block in the level view's dialogue window").clicked() {
+                                                            let lines: Vec<(usize, Option<usize>, u64)> = variants
+                                                                .get(bi)
+                                                                .and_then(|v| v.as_array())
+                                                                .map(|a| a.iter().filter_map(|l| Some((l["e"].as_u64()? as usize, l["s"].as_u64().map(|s| s as usize), l["k"].as_u64().unwrap_or(0)))).collect())
+                                                                .unwrap_or_default();
+                                                            if !lines.is_empty() {
+                                                                app.panels.editor.talk_focus = Some(TalkFocus { actor: (region, id), title: format!("Conversation {t} \u{b7} {label}"), lines, index: 0, page: 0 });
+                                                                app.panels.editor.talk_overlay = true;
+                                                            }
+                                                        }
+                                                    }
+                                                    None => {
+                                                        ui.label(theme::faint_label(format!("{answer}: no block of its own here (the script decides)")));
+                                                    }
+                                                }
+                                            }
+                                        });
                                     }
-                                    ui.add(egui::Label::new(egui::RichText::new(readable(&text)).size(13.0).color(theme::TEXT)).wrap());
+                                    for note in &shown.notes {
+                                        ui.label(egui::RichText::new(note).color(theme::WARN).size(11.0));
+                                    }
+                                    let before = text.clone();
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut text)
+                                            .id_salt(("talkline", id, t, vi, li))
+                                            .desired_rows(2)
+                                            .desired_width(f32::INFINITY)
+                                            .font(egui::TextStyle::Monospace),
+                                    )
+                                    .on_hover_text("The raw text with its tags: a new line is a line break ({CR} before it waits for a button), {PAGE} starts a new box, {ruby:base|reading}, {PLAYER}");
+                                    if text != before {
+                                        app.panels.dialogues.set_line_text(e as usize, text.clone());
+                                    }
                                 });
-                            ui.data_mut(|d| d.insert_temp(edit_id, editing));
+                            ui.data_mut(|d| d.insert_temp(page_id, page));
                             ui.add_space(4.0);
                         }
                     }
                 });
+            // the widgets above edit a copy: keep it (or drop it when it is back to the game's value)
+            if cond != orig {
+                app.panels.editor.talk_edits.insert(edit_key, cond);
+            } else {
+                app.panels.editor.talk_edits.remove(&edit_key);
+            }
         }
-        let pending = app.panels.editor.talk_edits.len();
+        let ed = &app.panels.editor;
+        let mine = |m: &std::collections::BTreeMap<(i32, i64, u64), [u8; 4]>| -> Vec<((i32, i64, u64), [u8; 4])> {
+            m.iter().filter(|(k, _)| k.0 == region + 1).map(|(k, v)| (*k, *v)).collect()
+        };
+        let (now, saved) = (mine(&ed.talk_edits), mine(&ed.talk_saved));
+        let pending = now.iter().filter(|(k, v)| ed.talk_saved.get(k) != Some(v)).count()
+            + saved.iter().filter(|(k, _)| !ed.talk_edits.contains_key(k)).count();
         if pending > 0 {
             ui.horizontal(|ui| {
                 ui.label(theme::faint_label(format!("{pending} conversation condition(s) changed")));
@@ -406,6 +918,13 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                         .arg(&file)
                         .current_dir(&app.dirs.root)
                         .output();
+                    if matches!(&out, Ok(o) if o.status.success()) {
+                        let ed = &mut app.panels.editor;
+                        ed.talk_saved.retain(|k, _| k.0 != region + 1);
+                        for (k, v) in now.iter() {
+                            ed.talk_saved.insert(*k, *v);
+                        }
+                    }
                     app.status = match out {
                         Ok(o) if o.status.success() => "Conversation conditions written to the mod (param/region pack)".to_string(),
                         Ok(o) => format!("conditions not saved: {}", String::from_utf8_lossy(&o.stderr).trim()),
@@ -414,6 +933,7 @@ fn dialogue_section(app: &mut ViewerApp, ui: &mut egui::Ui, obj: &SceneObject, l
                 }
             });
         }
+        talk_window(app, ui.ctx());
         let dirty = app.panels.dialogues.dirty_count();
         ui.horizontal(|ui| {
             if ui.add_enabled(dirty > 0, egui::Button::new(format!("Save dialogue to mod ({dirty})"))).clicked() {
@@ -464,6 +984,9 @@ pub struct SceneObject {
     #[serde(default)]
     pub rotation: [f32; 3],
     pub record_offset: String,
+    /// what a gimmick is (Treasure chest, Sparkly spot), when the exporter knows
+    #[serde(default)]
+    pub label: String,
     #[serde(default)]
     pub field_offsets: FieldOffsets,
     /// record size in bytes (68 placement, 120 transform); needed to place a duplicate
@@ -509,6 +1032,8 @@ struct Loaded {
 }
 
 pub struct EditorPanel {
+    /// the 2D-mode view of the level (ui/panels/editor2d.rs)
+    pub view2d: crate::ui::panels::editor2d::View2D,
     pub query: String,
     maps: Vec<String>,
     filtered: Vec<String>,
@@ -541,6 +1066,23 @@ pub struct EditorPanel {
     clone_target: String,
     /// edited conversation conditions: (region, character, conversation) -> [group, minimum, time mask, first-time byte]
     talk_edits: std::collections::BTreeMap<(i32, i64, u64), [u8; 4]>,
+    /// the conditions last written to the mod (build/npc_conditions), to tell saved from pending edits
+    talk_saved: std::collections::BTreeMap<(i32, i64, u64), [u8; 4]>,
+    /// regions whose saved conditions were read back into talk_edits
+    talk_loaded: std::collections::HashSet<i32>,
+    /// characters whose dialogue structure is being rewritten (ui/panels/talk_edit.rs): (region, character id)
+    pub(crate) talk_custom: std::collections::HashMap<(i32, i64), crate::ui::panels::talk_edit::Custom>,
+    pub(crate) talk_custom_loaded: std::collections::HashSet<i32>,
+    /// the event whose Yes / No steps are being edited
+    pub(crate) event_edit: Option<crate::ui::panels::talk_edit::EventEdit>,
+    /// the game's talk window (layout + fonts) for the dialogue previews
+    pub talk_preview: crate::ui::talk_preview::TalkPreview,
+    /// the line shown in the level view's dialogue window
+    talk_focus: Option<TalkFocus>,
+    /// show the dialogue window over the level view while an NPC is selected
+    talk_overlay: bool,
+    /// which mode's talk window the level-view dialogue window shows, when not the view's own
+    talk_mode: Option<bool>,
     /// start of a Shift+drag box select in the viewport
     marquee: Option<egui::Pos2>,
     history_open: bool,
@@ -591,6 +1133,7 @@ impl Default for EditorPanel {
     fn default() -> Self {
         let model_channel = channel();
         Self {
+            view2d: Default::default(),
             query: String::new(),
             maps: Vec::new(),
             filtered: Vec::new(),
@@ -617,6 +1160,15 @@ impl Default for EditorPanel {
             collision_boxes: Vec::new(),
             clone_target: String::new(),
             talk_edits: std::collections::BTreeMap::new(),
+            talk_saved: std::collections::BTreeMap::new(),
+            talk_loaded: std::collections::HashSet::new(),
+            talk_custom: Default::default(),
+            talk_custom_loaded: Default::default(),
+            event_edit: None,
+            talk_preview: Default::default(),
+            talk_focus: None,
+            talk_overlay: true,
+            talk_mode: None,
             marquee: None,
             history_open: false,
             multi: Vec::new(),
@@ -752,7 +1304,7 @@ impl EditorPanel {
             saved += 1;
         }
         for p in self.parked.values_mut().filter(|p| p.dirty) {
-            match write_project(root, &p.scene, &p.original, &[], &[], &[]) {
+            match write_project(root, &p.scene, &p.original, &[], &[], &[], None) {
                 Ok(_) => {
                     p.dirty = false;
                     saved += 1;
@@ -813,6 +1365,10 @@ impl EditorPanel {
     }
 
     pub fn undo_action(&mut self) {
+        if self.view2d.on {
+            self.view2d.undo();
+            return;
+        }
         if let Some(prev) = self.undo.pop() {
             if let Some(cur) = self.scene.as_mut() {
                 self.redo.push(cur.objects.clone());
@@ -859,6 +1415,10 @@ impl EditorPanel {
     }
 
     pub fn redo_action(&mut self) {
+        if self.view2d.on {
+            self.view2d.redo();
+            return;
+        }
         if let Some(next) = self.redo.pop() {
             if let Some(cur) = self.scene.as_mut() {
                 self.undo.push(cur.objects.clone());
@@ -877,6 +1437,7 @@ impl EditorPanel {
         if !self.maps.is_empty() {
             return;
         }
+        load_labels(root);
         let dir = root.join("game_assets/maps");
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for entry in entries.flatten() {
@@ -900,7 +1461,11 @@ impl EditorPanel {
         self.filtered = self
             .maps
             .iter()
-            .filter(|m| q.is_empty() || m.to_lowercase().contains(&q))
+            .filter(|m| {
+                q.is_empty()
+                    || m.to_lowercase().contains(&q)
+                    || level_label(m).is_some_and(|l| l.title.to_lowercase().contains(&q))
+            })
             .cloned()
             .collect();
     }
@@ -934,11 +1499,16 @@ impl EditorPanel {
                     .map_err(|e| format!("read {}: {e}", scene_path.display()))?;
                 let scene: Scene = serde_json::from_str(&text)
                     .map_err(|e| format!("parse {}: {e}", scene_path.display()))?;
-                let mesh = scene
+                let mut mesh = scene
                     .background_bch
                     .as_deref()
                     .and_then(|bch| background_obj(&root, &map_name, bch))
                     .and_then(|path| crate::render::mesh::load_obj(&path).ok());
+                if mesh.is_none() {
+                    // b/c/d variants are overlays of the same room and usually have no background of their own:
+                    // show the sibling's room, the way collision::load already does for the wall shapes
+                    mesh = sibling_background(&root, &map_name).and_then(|path| crate::render::mesh::load_obj(&path).ok());
+                }
                 Ok(Loaded { scene, mesh })
             })();
             let _ = tx.send(result);
@@ -999,7 +1569,8 @@ impl EditorPanel {
 
     fn save_project(&mut self, root: &Path) {
         let Some(scene) = &self.scene else { return };
-        match write_project(root, scene, &self.original, &self.collision_moves, &self.collision_dropped, &self.collision_boxes) {
+        let level2d = self.view2d.project_section(&scene.id);
+        match write_project(root, scene, &self.original, &self.collision_moves, &self.collision_dropped, &self.collision_boxes, level2d) {
             Ok(path) => {
                 self.dirty = false;
                 self.status = format!("Saved project {path}");
@@ -1214,11 +1785,50 @@ fn prop_edits_between(objects: &[SceneObject], original: &[SceneObject]) -> Vec<
     out
 }
 
+/// One kind of object the Add menu offers: a record of another level (`game_assets/maps/donors.json`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Donor {
+    pub title: String,
+    pub level: String,
+    pub object: SceneObject,
+}
+
+static DONORS: std::sync::OnceLock<Vec<Donor>> = std::sync::OnceLock::new();
+
+fn donors(root: &Path) -> &'static [Donor] {
+    DONORS.get_or_init(|| {
+        std::fs::read_to_string(root.join("game_assets/maps/donors.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| serde_json::from_value::<Vec<Donor>>(v["donors"].clone()).ok())
+            .unwrap_or_default()
+    })
+}
+
 /// Structural changes for `tools/level_records.py`: duplicates first, then deletes.
 fn ops_between(objects: &[SceneObject], original: &[SceneObject]) -> Vec<serde_json::Value> {
     let by_id = original_by_id(original);
     let mut ops = Vec::new();
     for o in objects.iter().filter(|o| !o.deleted) {
+        // a record brought in from another level: "import:<level>:<offset there>:<a record of the target container>"
+        if let Some(rest) = o.new_from.as_deref().and_then(|s| s.strip_prefix("import:")) {
+            let mut parts = rest.split(':');
+            let (level, offset, anchor) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+            ops.push(serde_json::json!({
+                "op": "import",
+                "donor": level,
+                "offset": offset,
+                "anchor": if anchor.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(anchor.to_string()) },
+                "shape": o.shape,
+                "set": {
+                    "position": o.position,
+                    "scale": o.scale,
+                    "rotation": o.rotation,
+                    "props": o.props.iter().filter(|p| p.editable).map(|p| (p.name.clone(), p.value)).collect::<std::collections::BTreeMap<_, _>>(),
+                },
+            }));
+            continue;
+        }
         if let Some(src) = &o.new_from {
             ops.push(serde_json::json!({
                 "op": "duplicate",
@@ -1240,8 +1850,16 @@ fn ops_between(objects: &[SceneObject], original: &[SceneObject]) -> Vec<serde_j
 }
 
 /// Writes `editor_projects/<level>.json` (objects plus the byte edits they imply).
-fn write_project(root: &Path, scene: &Scene, original: &[SceneObject], collision: &[[f32; 3]], dropped: &[bool], boxes: &[([f32; 3], [f32; 3])]) -> Result<String, String> {
+/// `level2d`: the 2D view's section (Some(Null) = no 2D changes); None keeps whatever the file already has.
+fn write_project(root: &Path, scene: &Scene, original: &[SceneObject], collision: &[[f32; 3]], dropped: &[bool], boxes: &[([f32; 3], [f32; 3])], level2d: Option<serde_json::Value>) -> Result<String, String> {
     validate_objects(&scene.objects)?;
+    let level2d = level2d.unwrap_or_else(|| {
+        std::fs::read_to_string(root.join("editor_projects").join(format!("{}.json", scene.id)))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .map(|v| v["level2d"].clone())
+            .unwrap_or(serde_json::Value::Null)
+    });
     let mut edits: Vec<serde_json::Value> = edits_between(&scene.objects, original)
         .into_iter()
         .map(|(offset, value)| serde_json::json!({"offset": offset, "value": value}))
@@ -1265,6 +1883,7 @@ fn write_project(root: &Path, scene: &Scene, original: &[SceneObject], collision
             .map(|(i, d)| serde_json::json!({"shape": i, "delta": d, "drop": dropped.get(i).copied().unwrap_or(false)}))
             .collect::<Vec<_>>(),
         "collision_boxes": boxes.iter().map(|(lo, hi)| serde_json::json!({"lo": lo, "hi": hi})).collect::<Vec<_>>(),
+        "level2d": level2d,
     });
     let dir = root.join("editor_projects");
     let _ = std::fs::create_dir_all(&dir);
@@ -1298,6 +1917,24 @@ pub fn apply_float_edits(bytes: &mut [u8], edits: &[(String, f32)]) -> Result<us
         bytes[parsed..parsed + 4].copy_from_slice(&value.to_le_bytes());
     }
     Ok(edits.len())
+}
+
+/// Background mesh of the variant this level shares its room with (`level_labels.json` geometry, else the first of
+/// the a/b/c/d siblings that has one).
+fn sibling_background(root: &Path, map: &str) -> Option<PathBuf> {
+    let base = map.get(..map.len().checked_sub(1)?)?;
+    let mut names: Vec<String> = level_label(map).and_then(|l| l.geometry.clone()).into_iter().collect();
+    names.extend("abcd".chars().map(|c| format!("{base}{c}")));
+    for name in names.into_iter().filter(|n| n != map) {
+        let text = std::fs::read_to_string(root.join("game_assets/maps").join(&name).join("scene.json")).ok();
+        let bch = text
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| v.get("background_bch").and_then(|b| b.as_str()).map(str::to_owned));
+        if let Some(path) = bch.and_then(|bch| background_obj(root, &name, &bch)) {
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn background_obj(root: &Path, map: &str, bch: &str) -> Option<PathBuf> {
@@ -1396,7 +2033,13 @@ fn object_label(i: usize, obj: &SceneObject) -> String {
         "actor" => "Actor",
         "trigger" => "Trigger",
         "exit" => "Exit",
-        "gimmick" => "Gimmick",
+        "gimmick" if !obj.label.is_empty() => obj.label.as_str(),
+        "gimmick" => match obj.props.iter().find(|p| p.name == "interaction kind").map(|p| p.value) {
+            Some(0) => "Pot / search spot",
+            Some(1) => "Slot machine",
+            Some(2..=6) => "Door",
+            _ => "Gimmick",
+        },
         "symbol" => "Symbol",
         "placement" => "Placement",
         "transform" => "Transform",
@@ -1489,7 +2132,14 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
         panel.collision_for = scene.id.clone();
         panel.collision_sel = None;
     }
-    editor_shortcuts(app, ui.ctx(), &scene);
+    if app.panels.editor.view2d.on {
+        // the 2D view handles its own keys; its edits mark the level dirty so Save / Save to mod pick them up
+        if app.panels.editor.view2d.take_edited() {
+            app.panels.editor.dirty = true;
+        }
+    } else {
+        editor_shortcuts(app, ui.ctx(), &scene);
+    }
     let root = app.dirs.root.clone();
 
     let swapped = app.panels.editor.swap_docks;
@@ -1518,7 +2168,12 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
         .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin::same(0)))
         .show(ui, |ui| {
             toolbar(app, ui, &scene, &root);
-            editor_viewport(app, ui, &scene);
+            if app.panels.editor.view2d.on {
+                let region = CUR_REGION.load(std::sync::atomic::Ordering::Relaxed);
+                crate::ui::panels::editor2d::show(app, ui, &scene.id, region);
+            } else {
+                editor_viewport(app, ui, &scene);
+            }
         });
 }
 
@@ -1606,6 +2261,57 @@ impl EditorPanel {
     }
 
     /// Ctrl+D: a copy of the selected node, placed beside it.
+    /// Adds an object of a kind this level may not have at all: a copy of another level's record. It goes into the
+    /// layer container of the selected node (else the level's first one), next to the selected node.
+    pub fn add_from_donor(&mut self, donor: &Donor) -> Result<(), String> {
+        self.begin_change();
+        let selected = self.selected_object;
+        let scene = self.scene.as_mut().ok_or("No level open")?;
+        let near = selected.and_then(|i| scene.objects.get(i)).cloned();
+        // the container is found through a record of the game file: the selected one, else any actor
+        let anchor = near
+            .iter()
+            .chain(scene.objects.iter().filter(|o| o.kind == "actor"))
+            .find(|o| o.new_from.is_none() && !o.record_offset.is_empty() && o.shape != 24)
+            .map(|o| o.record_offset.clone())
+            .unwrap_or_default();
+        let next = scene.objects.iter().filter_map(|o| o.id.strip_prefix("new_").and_then(|n| n.parse::<usize>().ok())).max().map(|n| n + 1).unwrap_or(1);
+        let mut obj = donor.object.clone();
+        obj.id = format!("new_{next}");
+        obj.new_from = Some(format!("import:{}:{}:{anchor}", donor.level, donor.object.record_offset));
+        obj.field_offsets = FieldOffsets::default();
+        obj.deleted = false;
+        obj.position = match &near {
+            Some(n) if n.shape != 24 => [n.position[0] + 1.0, n.position[1], n.position[2]],
+            _ => [0.0, 0.0, 0.0],
+        };
+        let mut note = String::new();
+        if obj.kind == "actor" {
+            // The donor's entity id means another character here (ids are per region: emulator run 2026-11-16, the
+            // donor's 224 came out as a sitting Erik in the Heliodor church). Start from a character of this level.
+            let local = scene
+                .objects
+                .iter()
+                .filter(|o| o.kind == "actor" && o.new_from.is_none())
+                .find_map(|o| o.props.iter().find(|p| p.name == "entity id").map(|p| p.value.clone()));
+            if let (Some(v), Some(p)) = (local, obj.props.iter_mut().find(|p| p.name == "entity id")) {
+                p.value = v;
+                note = " It starts as a copy of a character of this level: pick who it is with \"entity id\" in the Inspector.".into();
+            } else {
+                note = " Its \"entity id\" comes from another region and will be some other character here: set it in the Inspector.".into();
+            }
+            // created in both the 3D and the 2D view
+            if let Some(p) = obj.props.iter_mut().find(|p| p.name == "entity class") {
+                p.value = 0x300;
+            }
+        }
+        scene.objects.push(obj);
+        self.selected_object = Some(scene.objects.len() - 1);
+        self.tree_scroll = true;
+        self.status = format!("Added a {} (a copy of {}'s record). Save to mod writes it into the level.{note}", donor.title, donor.level);
+        Ok(())
+    }
+
     pub fn duplicate_selected(&mut self) -> Result<(), String> {
         let i = self.selected_object.ok_or("Select a node first")?;
         let src = self
@@ -1793,6 +2499,22 @@ fn toolbar(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, root: &Path) {
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let panel = &mut app.panels.editor;
+                {
+                    let on = panel.view2d.on;
+                    let text = egui::RichText::new(if on { "2D mode" } else { "3D" }).strong();
+                    let text = if on { text.color(theme::ON_LIGHT) } else { text.color(theme::TEXT_DIM) };
+                    let has_2d = crate::ui::panels::editor2d::View2D::has_data(root, &scene.id);
+                    let button = egui::Button::new(text).fill(if on { theme::ACCENT } else { theme::BG_HOVER });
+                    let hint = if has_2d {
+                        "Switch between the 3D level and the game's 2D mode (16-bit view): tile map, 2D actors with their sprites, triggers"
+                    } else {
+                        "No 2D data for this level (python tools/map2d.py export)"
+                    };
+                    if ui.add_enabled(has_2d || on, button).on_hover_text(hint).on_disabled_hover_text(hint).clicked() {
+                        panel.view2d.on = !on;
+                    }
+                    ui.separator();
+                }
                 for tool in [Tool::Select, Tool::Move, Tool::Rotate, Tool::Scale] {
                     let selected = panel.tool == tool;
                     let text = egui::RichText::new(tool.label());
@@ -1814,6 +2536,26 @@ fn toolbar(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, root: &Path) {
                     panel.focus_selection(scene);
                 }
                 ui.separator();
+                let mut add: Option<Donor> = None;
+                ui.menu_button("Add", |ui| {
+                    let list = donors(root);
+                    if list.is_empty() {
+                        ui.label(theme::faint_label("Run: python tools/map_tool.py donors"));
+                    }
+                    for d in list {
+                        if ui.button(&d.title).on_hover_text(format!("A copy of a record of {}; works even when this level has none of the kind", d.level)).clicked() {
+                            add = Some(d.clone());
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Add an object: character, chest, pot, sparkly spot, Tockle spot, door, trigger ...");
+                if let Some(d) = add {
+                    if let Err(e) = panel.add_from_donor(&d) {
+                        panel.status = e;
+                    }
+                }
                 if ui.button("Duplicate").on_hover_text("Copy the selected node (Ctrl+D)").clicked() {
                     if let Err(e) = panel.duplicate_selected() {
                         panel.status = e;
@@ -1860,10 +2602,11 @@ fn toolbar(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, root: &Path) {
                 });
                 ui.separator();
                 {
-                    if ui.add_enabled(!panel.undo.is_empty(), egui::Button::new("Undo")).on_hover_text("Ctrl+Z").clicked() {
+                    let (can_undo, can_redo) = if panel.view2d.on { (panel.view2d.can_undo(), panel.view2d.can_redo()) } else { (!panel.undo.is_empty(), !panel.redo.is_empty()) };
+                    if ui.add_enabled(can_undo, egui::Button::new("Undo")).on_hover_text("Ctrl+Z").clicked() {
                         panel.undo_action();
                     }
-                    if ui.add_enabled(!panel.redo.is_empty(), egui::Button::new("Redo")).on_hover_text("Ctrl+Y").clicked() {
+                    if ui.add_enabled(can_redo, egui::Button::new("Redo")).on_hover_text("Ctrl+Y").clicked() {
                         panel.redo_action();
                     }
                     if ui.add_enabled(panel.dirty, egui::Button::new("Save")).on_hover_text("Write the project file (Ctrl+S)").clicked() {
@@ -1874,7 +2617,7 @@ fn toolbar(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, root: &Path) {
                     }
                     if ui
                         .button("Save to mod")
-                        .on_hover_text("Patch level3d.bxon and stage mod/romfs/level3d/<map>.pack for Luma LayeredFS")
+                        .on_hover_text("Patch level3d.bxon (and level2d.bxon when the 2D view has changes) and stage mod/romfs/level3d|level2d/<map>.pack for Luma LayeredFS")
                         .clicked()
                     {
                         panel.save_to_mod(root);
@@ -2001,6 +2744,16 @@ fn scene_dock(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene) {
             ui.label(egui::RichText::new("\u{25cf} unsaved").color(theme::ACCENT).size(11.0));
         }
     });
+    if let Some(label) = level_label(&scene.id) {
+        ui.label(egui::RichText::new(&label.title).strong()).on_hover_text(label.details.join("\n"));
+        ui.label(theme::faint_label(format!("{}  \u{b7}  {}", scene.id, label.summary)));
+        if label.geometry.as_deref().is_some_and(|g| g != scene.id) {
+            ui.label(theme::faint_label(format!(
+                "Room shown is {}'s: this variant has no background of its own and the game uses the same room.",
+                label.geometry.as_deref().unwrap_or("")
+            )));
+        }
+    }
     ui.add(
         egui::TextEdit::singleline(&mut app.panels.editor.tree_filter)
             .hint_text("Filter nodes\u{2026}")
@@ -2455,9 +3208,36 @@ fn collision_section_inner(app: &mut ViewerApp, ui: &mut egui::Ui) {
     ui.add_space(6.0);
 }
 
-fn inspector_dock(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, _root: &Path) {
+fn inspector_dock(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, root: &Path) {
     ui.label(theme::heading("Inspector"));
     ui.separator();
+    egui::ScrollArea::vertical().id_salt("editor_inspector_scroll").auto_shrink([false, false]).show(ui, |ui| inspector_body(app, ui, scene, root));
+}
+
+fn inspector_body(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, _root: &Path) {
+    if app.panels.editor.view2d.on {
+        // 2D view: its own object, plus the region character's dialogue (same npc_ie bank as in 3D)
+        let region = CUR_REGION.load(std::sync::atomic::Ordering::Relaxed);
+        if let Some(id) = crate::ui::panels::editor2d::inspector(app, ui, region) {
+            let prop = |name: &str, value: i64| Prop { name: name.into(), offset: String::new(), ty: "u16".into(), value, editable: false, hint: String::new() };
+            let obj = SceneObject {
+                id: format!("2d_{id}"),
+                kind: "actor".into(),
+                position: [0.0; 3],
+                scale: [1.0; 3],
+                rotation: [0.0; 3],
+                record_offset: String::new(),
+                label: String::new(),
+                field_offsets: FieldOffsets::default(),
+                shape: 0,
+                deleted: false,
+                new_from: None,
+                props: vec![prop("entity class", 0x200), prop("entity id", id)],
+            };
+            dialogue_section(app, ui, &obj, &scene.id);
+        }
+        return;
+    }
     collision_section(app, ui);
     if !app.panels.editor.multi.is_empty() {
         let n = app.panels.editor.selection().len();
@@ -2522,10 +3302,17 @@ fn inspector_dock(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene, _root: 
         ui.label(theme::faint_label(obj.kind.clone()));
     });
     match &obj.new_from {
+        Some(src) if src.starts_with("import:") => ui.label(theme::faint_label(format!(
+            "new node  \u{b7}  a copy of a record of level {}; Save to mod adds it to this level (emulator-proven for a treasure chest: it appears in a level that had none)",
+            src.split(':').nth(1).unwrap_or("")
+        ))),
         Some(src) => ui.label(theme::faint_label(format!("new node  \u{b7}  copy of the record at {src}"))),
         None => ui.label(theme::faint_label(format!("id {}  \u{b7}  record at {}", obj.id, obj.record_offset))),
     };
     ui.add_space(4.0);
+    if obj.kind == "actor" {
+        copies_section(app, ui);
+    }
 
     let before = app.panels.editor.scene.as_ref().map(|s| s.objects.clone());
     let mut edited: Option<SceneObject> = None;
@@ -3075,7 +3862,7 @@ fn editor_viewport(app: &mut ViewerApp, ui: &mut egui::Ui, scene: &Scene) {
     };
     let mesh = app.panels.editor.mesh.as_ref().map(|m| (app.panels.editor.mesh_id, m.clone()));
     let instances = actor_instances(app, ui.ctx());
-    let response = paint_mesh_viewport_scene(ui, app.renderer.clone(), &camera, opts, mesh, None, instances);
+    let response = paint_mesh_viewport_scene(ui, app.renderer.clone(), &camera, opts, mesh, None, instances, false);
     let rect = response.rect;
     let pointer = response.interact_pointer_pos();
     let hover = response.hover_pos();
@@ -3453,6 +4240,7 @@ mod record_tests {
             scale: [1.0, 1.0, 1.0],
             rotation: [0.0; 3],
             record_offset: offset.into(),
+            label: String::new(),
             field_offsets: Default::default(),
             shape: 120,
             deleted: false,

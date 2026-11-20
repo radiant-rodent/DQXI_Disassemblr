@@ -38,15 +38,27 @@ CODE = bytes.fromhex(
 CALL = bytes.fromhex("6f2818eb")             # bl HOOK (from RETURN_AT)
 
 
+def _free_spot(out: bytearray) -> int:
+    """Where the hook goes: its usual cave when free, else the first zero-filled, 8-byte aligned run in the
+    .text tail. The English patch's own code caves sit on the usual cave, so the patched executable needs this."""
+    need = len(CODE)
+    for at in [HOOK] + list(range(0x724000, 0x725000 - need, 8)):
+        h = at - BASE
+        if not any(out[h:h + need]):
+            return at
+    raise ValueError("input hook: no free code cave in the .text tail")
+
+
 def apply(code: bytes) -> bytes:
-    """Return ``code`` with the input hook installed; raises if the target is not retail."""
+    """Return ``code`` with the input hook installed (retail or the English patch's executable)."""
     out = bytearray(code)
-    r, h = RETURN_AT - BASE, HOOK - BASE
+    r = RETURN_AT - BASE
     if out[r:r + 4] != ORIGINAL:
         raise ValueError("input hook: PadReader::Read not found at the expected address "
                          "(different game version?)")
-    if any(out[h:h + len(CODE)]):
-        raise ValueError("input hook: code cave at 0x%X is not free" % HOOK)
+    at = _free_spot(out)
+    h = at - BASE
     out[h:h + len(CODE)] = CODE
-    out[r:r + 4] = CALL
+    # bl at (relative, word offset from the instruction after the next one)
+    out[r:r + 4] = (0xEB000000 | (((at - (RETURN_AT + 8)) >> 2) & 0xFFFFFF)).to_bytes(4, "little")
     return bytes(out)

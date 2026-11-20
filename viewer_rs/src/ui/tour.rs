@@ -65,8 +65,8 @@ pub const STEPS: &[Step] = &[
                maybe_ are still guesses. The rebuilt code is checked to match the original exactly.",
     },
     Step {
-        section: Section::Maps,
-        title: "Maps and the level editor",
+        section: Section::Editor,
+        title: "The level editor",
         body: "Open a field map in 3D, select objects, move them and save. The Editor section holds \
                the level-editor project for the open map.",
     },

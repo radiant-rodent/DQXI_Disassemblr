@@ -206,7 +206,41 @@ def load_mod(mod_dir: Path) -> dict:
         digest = sha256_file(code_file)
         code.update(changed=digest != RETAIL_CODE_SHA256, size=size, sha256=digest)
 
+    # The active game version (tools.game_version, e.g. the English translation) is the base
+    # the mod was made on: its changed RomFS files and executable ship too, under the mod's own.
+    version = _game_version()
+    if version is not None:
+        name, overrides, vcode = version
+        have = {item["path"] for item in mod_files}
+        added = 0
+        for path, blob in sorted(overrides.items()):
+            if path not in have:
+                mod_files.append({"path": path, "source": blob, "rel": Path(path.lstrip("/")),
+                                  "base_version": name})
+                added += 1
+        mod_files.sort(key=lambda item: item["path"])
+        if not code["changed"] and vcode is not None:
+            digest = sha256_file(vcode)
+            code.update(path=vcode, changed=digest != RETAIL_CODE_SHA256, size=vcode.stat().st_size,
+                        sha256=digest)
+        print(f"  game version {name!r}: {added} RomFS file(s) and "
+              f"{'its' if code['path'] == vcode else 'the mod'} code.bin come from the version base")
+
     return {"dir": mod_dir, **meta, "romfs_files": mod_files, "code": code}
+
+
+def _game_version():
+    """(name, {romfs path: file}, code path | None) of the active non-retail version, else None."""
+    try:
+        from tools import game_version
+    except ImportError:
+        return None
+    name = game_version.active()
+    if name == "original":
+        return None
+    overrides = game_version.romfs_overrides(name)
+    vcode = game_version.code_path(name)
+    return name, overrides, (vcode if vcode != RETAIL_CODE else None)
 
 
 # --------------------------------------------------------------------------- #

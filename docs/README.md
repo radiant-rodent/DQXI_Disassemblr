@@ -24,6 +24,7 @@ Start with the front door in [`../README.md`](../README.md). This folder is the 
 | [Native code](CODE.md) | The readable C tree, coverage, how to read a function, the decompiler workflow |
 | [Source replacement](SOURCE_REPLACEMENT.md) | The bit-verified C path and how to replace more assembly |
 | [Rebuild and patch](REBUILD.md) | Baseline ROM, patched ROM, RomFS hash-tree caveats |
+| [Game versions](GAME_VERSIONS.md) | Work on the retail game or the English translation; switch any time; patched functions marked and editable |
 | [Export for hardware](EXPORT.md) | The `mod/` workspace, Luma LayeredFS, rebuilt `.3ds`, installable `.cia`, the real-console checklist |
 | [Testing in the emulator](TESTING_EMULATOR.md) | Azahar harness: `tools.emu boot`, `ctl` sessions, saves, crash/hang diagnosis |
 | [Audio / OST](AUDIO.md) | Soundtrack filters, durations, catalogs and stream replacement |

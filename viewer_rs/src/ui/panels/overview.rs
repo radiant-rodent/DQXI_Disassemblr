@@ -84,7 +84,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             ("View 3D models", Section::Models),
             ("Preview UI layouts", Section::Layouts),
             ("Read dialogues", Section::Dialogues),
-            ("Look at a map", Section::Maps),
+            ("Open the level editor", Section::Editor),
             ("Global search", Section::Search),
         ] {
             if ui.button(label).clicked() {

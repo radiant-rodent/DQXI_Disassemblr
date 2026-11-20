@@ -22,6 +22,11 @@ Nothing here downloads anything, and nothing in `original/` is modified: every t
 
 ---
 
+## 0. Which game is exported
+
+The exporter builds on the active game version ([GAME_VERSIONS.md](GAME_VERSIONS.md)). On `en`
+the output contains the English translation (its RomFS files and `code.bin`) plus your mod.
+
 ## 1. The `mod/` workspace
 
 ```

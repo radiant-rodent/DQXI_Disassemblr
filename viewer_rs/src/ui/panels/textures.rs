@@ -17,6 +17,8 @@ enum SortKey {
 pub struct TexturesPanel {
     pub query: String,
     pub pack: Option<String>,
+    /// "Group / Kind" or just "Group" (see `data::textures::classify`).
+    pub category: Option<String>,
     sort: SortKey,
     sort_desc: bool,
     pub thumb_size: f32,
@@ -37,6 +39,7 @@ impl Default for TexturesPanel {
         Self {
             query: String::new(),
             pack: None,
+            category: None,
             sort: SortKey::Name,
             sort_desc: false,
             thumb_size: 148.0,
@@ -61,6 +64,7 @@ impl TexturesPanel {
     pub fn reset(&mut self) {
         self.query.clear();
         self.pack = None;
+        self.category = None;
         self.sort = SortKey::Name;
         self.sort_desc = false;
         self.dirty = true;
@@ -80,7 +84,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
     if app.panels.textures.dirty {
         if let Some(data) = app.data.as_deref() {
             let panel = &mut app.panels.textures;
-            panel.list = data.textures.search(&panel.query, panel.pack.as_deref(), None);
+            panel.list = data.textures.search_in(&panel.query, panel.pack.as_deref(), panel.category.as_deref(), None);
             let desc = panel.sort_desc;
             panel.list.sort_by(|a, b| {
                 let ta = &data.textures.items[*a];
@@ -115,33 +119,62 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             {
                 app.panels.textures.dirty = true;
             }
-            let packs: Vec<(String, usize)> = app
+            let cats: Vec<(String, usize)> = app
                 .data
                 .as_deref()
-                .map(|d| d.textures.packs().to_vec())
+                .map(|d| d.textures.categories().to_vec())
                 .unwrap_or_default();
+            let mut group_totals: Vec<(String, usize)> = Vec::new();
+            for (name, count) in &cats {
+                let group = name.split(" / ").next().unwrap_or(name).to_string();
+                match group_totals.last_mut() {
+                    Some(last) if last.0 == group => last.1 += count,
+                    _ => group_totals.push((group, *count)),
+                }
+            }
             let label = app
                 .panels
                 .textures
-                .pack
+                .category
                 .clone()
-                .unwrap_or_else(|| "All packs".into());
-            egui::ComboBox::from_id_salt("texture_pack")
-                .selected_text(crate::utils::elide(&label, 30))
-                .width(f32::INFINITY)
+                .unwrap_or_else(|| "All categories".into());
+            egui::ComboBox::from_id_salt("texture_category")
+                .selected_text(crate::utils::elide(&label, 34))
+                .width(ui.available_width())
+                .height(520.0)
                 .show_ui(ui, |ui| {
-                    if ui.selectable_label(app.panels.textures.pack.is_none(), "All packs").clicked() {
-                        app.panels.textures.pack = None;
+                    if ui.selectable_label(app.panels.textures.category.is_none(), "All categories").clicked() {
+                        app.panels.textures.category = None;
                         app.panels.textures.dirty = true;
                     }
-                    for (name, count) in packs {
-                        let selected = app.panels.textures.pack.as_deref() == Some(name.as_str());
-                        if ui.selectable_label(selected, format!("{name}  ({count})")).clicked() {
-                            app.panels.textures.pack = Some(name);
+                    for (group, total) in &group_totals {
+                        let selected = app.panels.textures.category.as_deref() == Some(group.as_str());
+                        if ui
+                            .selectable_label(selected, egui::RichText::new(format!("{group}  ({total})")).strong())
+                            .clicked()
+                        {
+                            app.panels.textures.category = Some(group.clone());
                             app.panels.textures.dirty = true;
+                        }
+                        for (name, count) in cats.iter().filter(|(n, _)| n.split(" / ").next() == Some(group.as_str())) {
+                            let kind = name.split_once(" / ").map(|(_, k)| k).unwrap_or(name);
+                            let selected = app.panels.textures.category.as_deref() == Some(name.as_str());
+                            if ui.selectable_label(selected, format!("      {kind}  ({count})")).clicked() {
+                                app.panels.textures.category = Some(name.clone());
+                                app.panels.textures.dirty = true;
+                            }
                         }
                     }
                 });
+            if let Some(pack) = app.panels.textures.pack.clone() {
+                ui.horizontal(|ui| {
+                    ui.label(theme::faint_label(format!("pack: {}", crate::utils::elide(&pack, 24))));
+                    if ui.small_button("clear").clicked() {
+                        app.panels.textures.pack = None;
+                        app.panels.textures.dirty = true;
+                    }
+                });
+            }
             ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt("texture_sort")
                     .selected_text(match app.panels.textures.sort {
@@ -226,6 +259,7 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             }
             ui.add_space(6.0);
             let rows: Vec<(&str, String)> = vec![
+                ("category", tex.category.clone()),
                 ("pack", tex.pack.clone()),
                 ("resolution", tex.dims()),
                 ("format", tex.format.clone()),
@@ -240,8 +274,25 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             let ctx = ui.ctx().clone();
             let mut done: Option<String> = None;
             let panel = &mut app.panels.textures;
+            if crate::ui::external_editor::row(ui, &root, "image", "image editor") {
+                // Work on a copy so the extracted original stays intact; the Replace box below
+                // is pointed at the copy, so saving in the editor and pressing Replace is all it takes.
+                let dir = root.join("build").join("edits");
+                let _ = std::fs::create_dir_all(&dir);
+                let copy = dir.join(format!("{}__{}.png", tex.pack, tex.name));
+                let reused = copy.exists();
+                if !reused {
+                    let _ = std::fs::copy(&tex.path, &copy);
+                }
+                panel.tools.import_path = copy.display().to_string();
+                done = Some(match crate::ui::external_editor::launch(&root, "image", &copy) {
+                    Ok(()) if reused => "reopened your earlier working copy - save it, then press Replace".into(),
+                    Ok(()) => "opened a working copy - save it in your editor, then press Replace".into(),
+                    Err(e) => e,
+                });
+            }
             ui.horizontal(|ui| {
-                if ui.button("Open externally").clicked() {
+                if ui.button("Open with default app").clicked() {
                     let _ = std::process::Command::new("cmd")
                         .args(["/C", "start", ""])
                         .arg(&tex.path)
@@ -257,8 +308,8 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
             ui.separator();
             ui.label(theme::heading("Replace texture"));
             ui.label(theme::faint_label(
-                "Export the PNG (Export…), edit it in any paint program without changing its size, \
-                 then import it here. The tool re-encodes the original BFLIM format and warns about \
+                "Press \"Edit in …\" above (it fills the path below with a working copy), keep the size \
+                 unchanged, save, then press Replace. The tool re-encodes the original BFLIM format and warns about \
                  3DS limits (power-of-two padding, ETC1 loss, mips, 2048 px, VRAM).",
             ));
             ui.add(

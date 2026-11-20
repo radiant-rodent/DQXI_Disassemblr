@@ -11,7 +11,7 @@ use eframe::glow::{self, HasContext};
 
 use crate::math::Vec3;
 use crate::render::camera::Camera;
-use crate::render::mesh::{Blend, Mesh, STRIDE};
+use crate::render::mesh::{Blend, Mesh, Wrap, STRIDE};
 
 const MESH_VS: &str = r#"#version 330 core
 layout(location = 0) in vec3 a_pos;
@@ -71,7 +71,9 @@ void main() {
             alpha = (u_mask_channel == 2.0 || u_mask_channel == 4.0) ? 1.0 - c : c;
         }
         alpha *= v_alpha;                         // per-vertex fade (1 when not exported)
-        if (alpha <= max(u_alpha_cutoff, 0.02)) discard;
+        // negative cutoff: the game's draw has no alpha test and no blending, so clear texels still draw (monster faces)
+        if (u_alpha_cutoff >= 0.0 && alpha <= max(u_alpha_cutoff, 0.02)) discard;
+        if (u_alpha_cutoff < 0.0) alpha = 1.0;
         base *= tex.rgb;
     }
     if (u_color_scale > 0.0) {                    // the game's own baked lighting
@@ -213,6 +215,8 @@ pub struct GlRenderer {
     /// this frame's draws: (model key, model matrix)
     instances: Vec<(String, [f32; 16])>,
     pub uploaded_id: u64,
+    /// draws with no alpha test and no blending keep their clear texels (set by the Models panel only)
+    pub keep_clear_texels: bool,
     /// serial of the last animated vertex set written over the uploaded mesh
     pub pose_serial: u64,
     pub mesh_label: String,
@@ -269,6 +273,7 @@ impl GlRenderer {
                 models: Default::default(),
                 instances: Vec::new(),
                 uploaded_id: 0,
+                keep_clear_texels: false,
                 pose_serial: 0,
                 mesh_label: String::new(),
                 error: None,
@@ -293,14 +298,16 @@ impl GlRenderer {
         let buffers = self.upload_mesh(&mesh.vertices, &mesh.indices)?;
         let mut groups = Vec::new();
         for group in &mesh.groups {
-            let texture = group.texture_path.as_deref().and_then(|path| self.load_texture(path).ok());
+            let texture = group.texture_path.as_deref().and_then(|path| self.load_texture(path, group.wrap).ok());
+            let texture_missing = texture.is_none();
             groups.push(GpuGroup {
                 texture,
                 color: group.color,
                 blend: group.blend,
                 alpha_cutoff: group.alpha_cutoff,
-                hidden: group.hidden,
-                mask: group.mask_path.as_deref().and_then(|path| self.load_texture(path).ok()),
+                // untextured leftovers (ground-shadow decals the exporter could not texture) draw as white squares
+                hidden: group.hidden || (texture_missing && group.material == "default_mat"),
+                mask: group.mask_path.as_deref().and_then(|path| self.load_texture(path, [Wrap::Repeat; 2]).ok()),
                 mask_channel: group.mask_channel.code(),
                 color_scale: group.color_scale,
                 index_start: group.index_start as i32,
@@ -351,14 +358,17 @@ impl GlRenderer {
                 let texture = group
                     .texture_path
                     .as_deref()
-                    .and_then(|path| self.load_texture(path).ok());
+                    .and_then(|path| self.load_texture(path, group.wrap).ok());
+                // a single model on show (not instanced map props, whose ground-shadow decals need the cut):
+                // a draw with no alpha test and no blending keeps clear texels (monster faces); -1 = no test
+                let no_test = self.keep_clear_texels && group.blend == Blend::Opaque && group.alpha_cutoff == 0.0 && group.mask_path.is_none();
                 self.groups.push(GpuGroup {
                     texture,
                     color: group.color,
                     blend: group.blend,
-                    alpha_cutoff: group.alpha_cutoff,
-                    hidden: group.hidden,
-                    mask: group.mask_path.as_deref().and_then(|path| self.load_texture(path).ok()),
+                    alpha_cutoff: if no_test { -1.0 } else { group.alpha_cutoff },
+                    hidden: group.hidden || (!self.keep_clear_texels && texture.is_none() && group.material == "default_mat"),
+                    mask: group.mask_path.as_deref().and_then(|path| self.load_texture(path, [Wrap::Repeat; 2]).ok()),
                     mask_channel: group.mask_channel.code(),
                     color_scale: group.color_scale,
                     index_start: group.index_start as i32,
@@ -434,7 +444,12 @@ impl GlRenderer {
         }
     }
 
-    fn load_texture(&self, path: &Path) -> Result<glow::Texture, String> {
+    fn load_texture(&self, path: &Path, wrap: [Wrap; 2]) -> Result<glow::Texture, String> {
+        let gl_wrap = |w: Wrap| match w {
+            Wrap::Repeat => glow::REPEAT,
+            Wrap::Mirror => glow::MIRRORED_REPEAT,
+            Wrap::Clamp => glow::CLAMP_TO_EDGE,
+        } as i32;
         let image = image::open(path)
             .map_err(|e| format!("{path:?}: {e}"))?
             .to_rgba8();
@@ -455,12 +470,12 @@ impl GlRenderer {
             self.gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_WRAP_S,
-                glow::REPEAT as i32,
+                gl_wrap(wrap[0]),
             );
             self.gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_WRAP_T,
-                glow::REPEAT as i32,
+                gl_wrap(wrap[1]),
             );
             self.gl.tex_image_2d(
                 glow::TEXTURE_2D,

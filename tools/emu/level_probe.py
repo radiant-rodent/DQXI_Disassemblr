@@ -137,7 +137,9 @@ def _skip_to_title(run, timeout: float) -> tuple[bool, str | None]:
     while time.time() - t0 < timeout:
         if run.emu.proc.poll() is not None:
             return False, f"emulator exited ({run.emu.proc.returncode})"
-        if run.emu.title_evidence():
+        # the menu strings are Japanese in the retail game; the English patch replaces them, so also accept the
+        # title screen's look (otherwise A is pressed for the whole timeout, even in the game itself)
+        if run.emu.title_evidence() or run.emu.title_screen_visual():
             return True, None
         try:
             run.tap("A", settle=1.5)
@@ -157,12 +159,14 @@ def _load_field_fast(run, rec, shot_name: str) -> dict:
     time.sleep(2.5)                      # save-slot list
     run.tap("A", settle=1.0)             # slot 1
     if rec is not None:
-        wait(lambda: rec.find("あらすじ"), 150)
+        # the recap is Japanese in the retail game and English in the English patch: do not wait 150 s for
+        # text that never comes (the English patch made every probe stall here)
+        wait(lambda: rec.find("あらすじ") or rec.find("Story so far") or rec.find("story so far"), 25)
     else:
         time.sleep(25)
     run.tap("B", settle=1.0)             # "no" to the story recap
     if rec is not None:
-        wait(lambda: any(e.get("name") == "txt_place" for e in rec.events), 150)
+        wait(lambda: any(e.get("name") == "txt_place" for e in rec.events), 30)
     else:
         time.sleep(25)
     time.sleep(2.0)
@@ -184,7 +188,7 @@ def run_probe(name: str, mod: Path, attempts: int = 3, save: str | None = None,
                 report["attempts"].append("RPC port stayed busy")
                 break
             with R.Run(extras, mod, save=save or R.SAVE_2D, out=out) as run:
-                titled, why = _skip_to_title(run, 600)
+                titled, why = _skip_to_title(run, 120)
                 if not titled:
                     report["attempts"].append({"attempt": attempt + 1, "error": why})
                     continue

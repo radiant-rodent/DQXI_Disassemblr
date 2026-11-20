@@ -63,3 +63,17 @@ your decisions in your report.
     callers and callees with names, vtable neighbours, body; `--asm 40` adds assembly, `--find TEXT`
     searches names). Read several functions per call, decide per function, write results in chunks,
     and do not write your own caller-search scripts.
+15. **Batch mode (tasks named N_, R_, R2_, R3_, G_, S_, V_): do not explore.** Measured on 87 logged runs, these
+    were the things workers wasted calls on; none of them helps a naming batch:
+    - Do NOT read `README.md`, `orchestration/PLAN.md`, `docs/*`, `AGENT_LOG.md` (it is 2.9 MB; 330 reads of it
+      were logged) or `tools/typedb/apply.py` / `tools/*.py` sources, and do not run `apply.py --help`,
+      `--validate` or `--merge` (the dispatcher and the M-tasks do that). Rule 1 does not apply to batches.
+    - Do NOT run `git status` or any git command: this directory is not a git repository.
+    - Do NOT write your own dump/caller/inspect scripts (870 of them were written, one per run). Use the
+      batch's own helper (V_: `python tools/batchview.py`, see the task) or `python tools/fn.py`.
+    - Do NOT look at the same function twice: decide on first sight; omit it when unclear.
+    - Rule 9: do not read the log. Add your entry by appending, without reading:
+      `echo "## Entry - $(date +%F) (<task id>): batch finished, see orchestration/done/<task id>.md" >> AGENT_LOG.md`
+      (one line, appended; never open the file)
+    - The shape of a good run: read your chunk, answer it, save it, next chunk; at the end one check command,
+      the done report, the log line. Everything else is waste.

@@ -294,6 +294,93 @@ class Level:
         self.new_ranges.append((element, element + arr.esize))
         return element
 
+    # -- records from another level ---------------------------------------------
+    def container_of(self, offset: int | None) -> tuple[int, int]:
+        """(base, size) of the layer container that owns the record at ``offset``; without an offset, the first
+        container of the file. A container is the big element (level3d 1,092 bytes, level2d 804) whose fields are
+        the record arrays."""
+        if offset is not None:
+            arr = self.array_of(self.resolve(offset))
+            index = arr.element_of(self.resolve(offset))
+            while arr.esize <= MAX_WRAPPER * 2:
+                if arr.parent is None:
+                    raise RecordError(f"0x{offset:X} is not inside a layer container")
+                arr, index = arr.parent, arr.parent_index
+            return arr.block + index * arr.esize, arr.esize
+        big = [a for a in self.arrays.values() if a.esize > MAX_WRAPPER * 2]
+        if not big:
+            raise RecordError("this level has no layer container")
+        first = min(big, key=lambda a: a.block)
+        return first.block, first.esize
+
+    def _import_block(self, donor: "Level", src: int, size: int) -> int:
+        """Copy ``size`` bytes at ``src`` of another level to the end of this one, with everything they point at."""
+        dst = self._append_block(bytes(donor.raw[src : src + size]))
+        self.new_ranges.append((dst, dst + size))
+        for off, target, kind, geom in donor.pointer_fields(src, size):
+            if kind == "array":
+                count, esize = geom
+                child = self._import_block(donor, target, count * esize)
+                field = dst + off + 4
+            else:
+                block = donor.dec.blocks[target]
+                child = self._import_block(donor, target, block.size)
+                field = dst + off
+            struct.pack_into("<I", self.raw, field, (child - field) & M32)
+            self.known.add(field)
+        return dst
+
+    def import_record(self, donor: "Level", donor_offset: int, anchor: int | None) -> int:
+        """Add the record at ``donor_offset`` of another level to this one, into the container that owns ``anchor``
+        (or the first container). Works when this level has no record of that kind yet: the container's array
+        field (count 0) gets a new one-element array; otherwise the record is appended to the existing array.
+        Returns the new element's address."""
+        arr, index = donor.unit_for(donor_offset)
+        if arr.parent is None or arr.parent.esize <= MAX_WRAPPER * 2:
+            raise RecordError("the donor record does not sit directly in a layer container")
+        field = arr.desc - (arr.parent.block + arr.parent_index * arr.parent.esize)
+        base, size = self.container_of(anchor)
+        if size != arr.parent.esize or field + 8 > size:
+            raise RecordError("the donor level's container layout differs from this level's")
+        desc = base + field
+        self.new_ranges = []
+        existing = self.arrays.get(desc)
+        count = struct.unpack_from("<I", self.raw, desc)[0]
+        if existing is None and (count != 0 or struct.unpack_from("<I", self.raw, desc + 4)[0] != 0):
+            raise RecordError(f"field +0x{field:X} of the container is not an empty array")
+        if existing is not None and existing.esize != arr.esize:
+            raise RecordError("the donor record has another size than this level's records of that kind")
+        src = arr.block + index * arr.esize
+        if existing is None:
+            element = self._import_block(donor, src, arr.esize)
+            struct.pack_into("<I", self.raw, desc, 1)
+            struct.pack_into("<I", self.raw, desc + 4, (element - (desc + 4)) & M32)
+            self.known.add(desc + 4)
+            return element
+        # append: the array moves to the end with room for one more element, which is then filled from the donor
+        payload = bytes(self.raw[existing.block : existing.block + existing.count * existing.esize]) + bytes(donor.raw[src : src + arr.esize])
+        new_block = self._append_block(payload)
+        for i in range(existing.count):
+            old = existing.block + i * existing.esize
+            self._fix_pointers(old, existing.esize, new_block + i * existing.esize, deep=False)
+            self.redirect[old] = new_block + i * existing.esize
+        element = new_block + existing.count * existing.esize
+        self.new_ranges.append((element, element + arr.esize))
+        for off, target, kind, geom in donor.pointer_fields(src, arr.esize):
+            if kind == "array":
+                count2, esize2 = geom
+                child = self._import_block(donor, target, count2 * esize2)
+                fld = element + off + 4
+            else:
+                child = self._import_block(donor, target, donor.dec.blocks[target].size)
+                fld = element + off
+            struct.pack_into("<I", self.raw, fld, (child - fld) & M32)
+            self.known.add(fld)
+        struct.pack_into("<I", self.raw, desc, existing.count + 1)
+        struct.pack_into("<I", self.raw, desc + 4, (new_block - (desc + 4)) & M32)
+        self.known.add(desc + 4)
+        return element
+
     def delete(self, offset: int) -> None:
         arr, index = self.unit_for(offset)
         if arr.count <= 1:
@@ -397,6 +484,27 @@ def apply_ops(raw: bytes, ops: list[dict]) -> tuple[bytes, list[dict]]:
     for op in ops:
         kind = op["op"]
         offset = int(str(op["offset"]), 16)
+        if kind == "import":
+            # a record of another level ({"donor": level id, "offset": in the donor, "anchor": a record of the
+            # container to add to, or null}): how a level gets a kind of object it has none of
+            donor_path = ROOT / "game_data" / "packs" / op.get("pack", "level3d") / op["donor"] / (op.get("pack", "level3d") + ".bxon")
+            if not donor_path.is_file():
+                raise RecordError(f"donor level {op['donor']} not found")
+            donor = Level(donor_path.read_bytes())
+            before = level.finish()
+            region_start = len(before)
+            anchor = int(str(op["anchor"]), 16) if op.get("anchor") else None
+            level.import_record(donor, offset, anchor)
+            after = level.finish()
+            try:
+                level.decoder().decode()
+            except Exception as exc:  # the result must still decode
+                raise RecordError(f"the level does not decode after the import: {exc}") from exc
+            if op.get("set"):
+                level.raw = bytearray(_set_new_transform(level, after, region_start, op))
+                after = level.finish()
+            results.append({"op": kind, "source": f"{op['donor']}:0x{offset:X}", "new_region": [region_start, len(after)]})
+            continue
         before = level.finish()
         known_before = set(level.known)
         arr, index = level.unit_for(offset)

@@ -433,7 +433,12 @@ fn rebuild(app: &ViewerApp, shell: &mut Shell) {
     push_section(shell, &mut rows, "levels", "Levels", levels.len(), false, &filter, || {
         levels
             .iter()
-            .map(|m| (m.chars().take(4).collect::<String>(), m.clone(), Target::Level(m.clone())))
+            .map(|m| match crate::ui::panels::editor::level_label(m) {
+                // stubs without objects or a room go to one folder at the end instead of cluttering the towns
+                Some(l) if l.empty => ("~ empty stubs (nothing to edit)".to_string(), m.clone(), Target::Level(m.clone())),
+                Some(l) => (l.group.clone(), format!("{m}  {}", l.title.split_once(" \u{b7} ").map(|x| x.1).unwrap_or(&l.title)), Target::Level(m.clone())),
+                None => (m.chars().take(4).collect::<String>(), m.clone(), Target::Level(m.clone())),
+            })
             .collect()
     });
     push_section(shell, &mut rows, "maps", "Areas", d.areas.areas.len(), true, &filter, || {
@@ -719,7 +724,13 @@ fn search_palette(app: &ViewerApp, query: &str) -> Vec<Hit> {
             hits.push(Hit { kind, label, target });
         }
     }
-    take(&mut hits, "level", &q, app.panels.editor.maps().iter().map(|m| (m.clone(), Target::Level(m.clone()))));
+    take(&mut hits, "level", &q, app.panels.editor.maps().iter().map(|m| {
+        let label = match crate::ui::panels::editor::level_label(m) {
+            Some(l) => format!("{m}  {}", l.title),
+            None => m.clone(),
+        };
+        (label, Target::Level(m.clone()))
+    }));
     take(&mut hits, "model", &q, d.models.items.iter().map(|m| {
         let label = match &m.display_name {
             Some(display) => format!("{display}  ({})", m.name),
@@ -1011,8 +1022,71 @@ pub fn menu_bar(app: &mut ViewerApp, shell: &mut Shell, ui: &mut egui::Ui) {
             if ui.button("Quick Open").on_hover_text("Ctrl+P").clicked() {
                 shell.palette_open = true;
             }
+            version_menu(app, ui);
         });
     });
+}
+
+/// "Game: <version>" picker: the retail game or a patched one (tools/game_version.py).
+fn version_menu(app: &mut ViewerApp, ui: &mut egui::Ui) {
+    let busy = app.version_job.running();
+    let label = if busy {
+        format!("Game: {}\u{2026}", app.version_job.label)
+    } else {
+        format!("Game: {} (switch)", app.versions.active_label())
+    };
+    let color = if app.versions.is_patched() { theme::ACCENT } else { theme::TEXT_DIM };
+    let outdated = app.versions.list.iter().any(|v| v.outdated);
+    let response = ui.menu_button(egui::RichText::new(label).color(color), |ui| {
+        ui.label(theme::faint_label("Which game the whole project reads and edits"));
+        let unsaved = app.unsaved();
+        if !unsaved.is_empty() {
+            ui.label(theme::dim_label(format!("Save or close {} unsaved document(s) first.", unsaved.len())));
+        }
+        if let Some(to) = app.versions.unfinished.clone() {
+            ui.label(theme::dim_label(format!("A switch to {to} was interrupted: pick it again to finish.")));
+        }
+        ui.separator();
+        let list = app.versions.list.clone();
+        for v in list {
+            let current = v.name == app.versions.active;
+            ui.horizontal(|ui| {
+                let enabled = v.installed && !busy && unsaved.is_empty();
+                if ui
+                    .add_enabled(enabled, egui::Button::selectable(current, v.label.clone()))
+                    .on_hover_text(v.summary.clone())
+                    .clicked()
+                {
+                    app.switch_version(&v.name);
+                    ui.close();
+                }
+                if v.name != "original" {
+                    let text = if !v.installed {
+                        "Import"
+                    } else if v.outdated {
+                        "Update"
+                    } else {
+                        "Re-import"
+                    };
+                    let tip = if v.outdated {
+                        "The patch file changed since it was imported: import it again"
+                    } else {
+                        "Read the patch file again and rebuild this version"
+                    };
+                    if ui.add_enabled(!busy && unsaved.is_empty(), egui::Button::new(text)).on_hover_text(tip).clicked() {
+                        app.import_version(&v.name);
+                        ui.close();
+                    }
+                }
+            });
+            ui.label(theme::faint_label(v.summary.clone()));
+        }
+        ui.separator();
+        ui.label(theme::faint_label("Edits in mod/ belong to the version they were made on."));
+    });
+    if outdated {
+        response.response.on_hover_text("The translation patch changed: open to update");
+    }
 }
 
 /// Section tabs of the active workspace, like Godot's editor-screen tabs.

@@ -669,6 +669,9 @@ def replace_map(map_id: str, project: Path, stage: bool, preview: bool, mod: Pat
         warnings.append(f"{len(ops)} record operation(s) applied; the level grew by {len(patched) - len(raw):,} bytes")
         warnings.append("Emulator-proven: an NPC record appended to its own array loads and appears in game "
                         "(docs/LEVEL_FORMAT.md). Also proven: deleting actor records (an array element is removed, or the layer-mask byte +0x5F of a lone record is zeroed so the game skips it), exits and collision. Not yet proven: 68/120-byte placements.")
+        if any(o["op"] == "import" for o in ops):
+            warnings.append("Records copied from another level (Add menu): the level decodes with them, but a record of a kind "
+                            "the level did not have is emulator-proven for a treasure chest (tools/emu/add_probe.py); other kinds are not.")
         if any(o["op"] == "delete" for o in ops):
             warnings.append("deleted records shift the index of later records; scripts that refer to them by index may need a check")
     else:
@@ -714,6 +717,88 @@ def replace_map(map_id: str, project: Path, stage: bool, preview: bool, mod: Pat
         target.parent.mkdir(parents=True, exist_ok=True)
         built = rebuild_pack(pack, out, target)
         result["staged"] = {"mod_file": _display_path(target), "bytes": len(built)}
+    section = doc.get("level2d") or {}
+    if section.get("edits") or section.get("ops"):
+        # 2D-mode objects (tools/map2d.py, Level Editor 2D view)
+        from tools import map2d
+
+        src2d = GAME_DATA / "packs" / "level2d" / map_id / "level2d.bxon"
+        _require(src2d, "level2d source")
+        try:
+            patched2d, notes = map2d.apply_level2d(src2d.read_bytes(), section)
+        except Exception as exc:  # level_records.RecordError, ValueError
+            raise FamilyError(f"2D change refused: {exc}") from exc
+        out2d = ASSETS / "maps" / map_id / "level2d.patched.bxon"
+        out2d.parent.mkdir(parents=True, exist_ok=True)
+        out2d.write_bytes(patched2d)
+        warnings.extend(notes)
+        warnings.append("2D-mode edits: moves are plain field writes; duplicates/deletes use the same append-only record tool "
+                        "as 3D. Emulator-proven: moving, duplicating and deleting 2D actors (Cobblestone church, tools/emu/map2d_probe.py).")
+        result["level2d"] = {"edits": len(section.get("edits") or []), "ops": len(section.get("ops") or []),
+                             "file": str(out2d.relative_to(PROJECT_ROOT))}
+        if stage:
+            from tools.patch_game import rebuild_pack
+
+            pack2d = GAME_DATA / "romfs" / "level2d" / f"{map_id}.pack"
+            _require(pack2d, "level2d pack")
+            target2d = mod / "romfs" / "level2d" / f"{map_id}.pack"
+            built2d = rebuild_pack(pack2d, out2d, target2d, member="level2d.bxon")
+            result["level2d"]["staged"] = {"mod_file": _display_path(target2d), "bytes": len(built2d)}
+    cells = section.get("cells") or []
+    if cells:
+        # 2D collision: flag bytes of level2d/<level>/leveldmap.bxon (tools/map2d.py collision)
+        from tools import map2d
+
+        src_dm = GAME_DATA / "packs" / "level2d" / map_id / "leveldmap.bxon"
+        _require(src_dm, "leveldmap source")
+        try:
+            patched_dm = map2d.apply_dmap(src_dm.read_bytes(), cells)
+        except Exception as exc:
+            raise FamilyError(f"2D collision change refused: {exc}") from exc
+        out_dm = ASSETS / "maps" / map_id / "leveldmap.patched.bxon"
+        out_dm.parent.mkdir(parents=True, exist_ok=True)
+        out_dm.write_bytes(patched_dm)
+        result["collision2d"] = {"cells": len(cells), "file": str(out_dm.relative_to(PROJECT_ROOT))}
+        warnings.append(f"{len(cells)} 2D collision cell(s) changed in leveldmap.bxon (same-size byte writes; decoded from the data, "
+                        "emulator-proven: tools/emu/edit2d_probe.py)")
+        if stage:
+            from tools.patch_game import rebuild_pack
+
+            target2d = mod / "romfs" / "level2d" / f"{map_id}.pack"
+            # the level2d pack may already hold this save's level2d.bxon: build on it
+            source_pack = target2d if (result.get("level2d") or {}).get("staged") else GAME_DATA / "romfs" / "level2d" / f"{map_id}.pack"
+            _require(source_pack, "level2d pack")
+            packed = source_pack.read_bytes()
+            tmp_pack = BUILD / "staged" / f"level2d_{map_id}.src.pack"
+            tmp_pack.parent.mkdir(parents=True, exist_ok=True)
+            tmp_pack.write_bytes(packed)
+            built_dm = rebuild_pack(tmp_pack, out_dm, target2d, member="leveldmap.bxon")
+            result["collision2d"]["staged"] = {"mod_file": _display_path(target2d), "bytes": len(built_dm)}
+    tiles = section.get("tiles") or []
+    if tiles:
+        # 2D tiles: chip ids in the Indices section of 2d/bg/<background>/<background>.chp
+        from tools import map2d
+
+        bg2d = str(section.get("background") or map_id)
+        src_chp = GAME_DATA / "packs" / "2d" / "bg" / bg2d / f"{bg2d}.chp"
+        _require(src_chp, "2D map (.chp)")
+        try:
+            patched_chp = map2d.apply_chp(src_chp.read_bytes(), tiles, section.get("new_chips") or [])
+        except Exception as exc:
+            raise FamilyError(f"2D tile change refused: {exc}") from exc
+        out_chp = ASSETS / "maps" / map_id / f"{bg2d}.patched.chp"
+        out_chp.parent.mkdir(parents=True, exist_ok=True)
+        out_chp.write_bytes(patched_chp)
+        result["tiles2d"] = {"tiles": len(tiles), "background": bg2d, "file": str(out_chp.relative_to(PROJECT_ROOT))}
+        warnings.append(f"{len(tiles)} 2D tile(s) changed in {bg2d}.chp (same-size writes of chip ids; emulator-proven: tools/emu/edit2d_probe.py)")
+        if section.get("new_chips"):
+            warnings.append(f"{len(section['new_chips'])} new tile(s) added to the map's chip table: the .chp grew (tools/map2d.py add_chips; emulator-proven: tools/emu/edit2d_probe.py)")
+        if bg2d != map_id:
+            warnings.append(f"this level draws the 2D map of {bg2d}: every level that shares it shows the tile changes")
+        if stage:
+            from tools.export_mod import stage_member
+
+            result["tiles2d"]["staged"] = stage_member(f"2d/bg/{bg2d}.pack", f"{bg2d}.chp", out_chp, mod)
     if preview:
         preview_json = EDIT_DIR / "maps" / f"{map_id}.preview.json"
         preview_json.parent.mkdir(parents=True, exist_ok=True)

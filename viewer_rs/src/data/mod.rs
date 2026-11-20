@@ -14,6 +14,7 @@ pub mod rig;
 pub mod scripts;
 pub mod tables;
 pub mod textures;
+pub mod versions;
 
 use std::path::{Path, PathBuf};
 

@@ -365,28 +365,85 @@ fn find_blender() -> Option<PathBuf> {
 /// preferred over the OBJ; the viewport switches to material preview and frames
 /// the model.
 pub fn open_in_blender(obj: &Path) -> Result<(), String> {
+    let gltf = obj.with_extension("gltf");
+    open_file_in_blender(if gltf.is_file() { &gltf } else { obj })
+}
+
+/// Opens an .obj, .gltf or .glb in a fresh Blender scene: game-hidden parts come in hidden,
+/// armatures are drawn in front of the mesh so the joints stay visible.
+pub fn open_file_in_blender(source: &Path) -> Result<(), String> {
     let blender = find_blender().ok_or_else(|| {
         "Blender not found. Install Blender or add blender.exe to PATH.".to_string()
     })?;
-    let gltf = obj.with_extension("gltf");
-    let (source, import) = if gltf.is_file() {
-        (gltf, "bpy.ops.import_scene.gltf")
-    } else {
-        (obj.to_path_buf(), "bpy.ops.wm.obj_import")
-    };
+    let is_gltf = source.extension().is_some_and(|e| e.eq_ignore_ascii_case("gltf") || e.eq_ignore_ascii_case("glb"));
+    let import = if is_gltf { "bpy.ops.import_scene.gltf" } else { "bpy.ops.wm.obj_import" };
+    // no bone-shape spheres (and no glTF_not_exported collection): joints stay plain sticks
+    let extra = if is_gltf { ", disable_bone_shape=True" } else { "" };
     let script = std::env::temp_dir().join("dqxi_open_in_blender.py");
     let path = source.to_string_lossy().replace('\\', "/");
     std::fs::write(
         &script,
         format!(
             r#"import bpy
-bpy.ops.wm.read_homefile(use_empty=True)
-{import}(filepath={path:?})
-# parts the game hides by default (alternate hand poses) come in hidden
-for ob in bpy.context.scene.objects:
-    if ob.get("dqxi_hidden"):
-        ob.hide_set(True)
-        ob.hide_render = True
+def load():
+  # read_homefile(use_empty) breaks the glTF importer (context.object missing): clear the default scene instead
+  for ob in list(bpy.data.objects):
+    bpy.data.objects.remove(ob)
+  {import}(filepath={path:?}{extra})
+  tidy()
+  return None
+def tidy():
+  # parts the game hides by default (alternate hand poses) come in hidden
+  for ob in bpy.context.scene.objects:
+      # the glTF importer's bone-display helper (an icosphere at the origin), not part of the model
+      if ob.get("dqxi_hidden") or (ob.type == 'MESH' and ob.name.startswith("Icosphere") and not ob.vertex_groups):
+          ob.hide_set(True)
+          ob.hide_render = True
+      if ob.type == 'ARMATURE':
+          ob.show_in_front = True
+          ob.data.display_type = 'STICK'
+          # the importer plays the alphabetically first clip (often an aim pose): start on an idle instead
+          acts = list(bpy.data.actions)
+          idle = next((a for a in acts if a.name.endswith("idle0")), None) or next((a for a in acts if "idle" in a.name), None) or (acts[0] if acts else None)
+          if idle is not None:
+              ob.animation_data_create()
+              ob.animation_data.action = idle
+              ad = ob.animation_data
+              if hasattr(ad, "action_slot") and ad.action_slot is None and len(getattr(ad, "action_suitable_slots", [])):
+                  ad.action_slot = ad.action_suitable_slots[0]
+              bpy.context.scene.frame_start, bpy.context.scene.frame_end = (int(f) for f in idle.frame_range)
+              bpy.context.scene.frame_set(bpy.context.scene.frame_start)
+class DQXI_OT_play(bpy.types.Operator):
+    bl_idname = "dqxi.play_action"
+    bl_label = "Play clip"
+    name: bpy.props.StringProperty()
+    def execute(self, context):
+        ob = context.object
+        act = bpy.data.actions.get(self.name)
+        if ob is None or ob.type != 'ARMATURE' or act is None:
+            return {{'CANCELLED'}}
+        ad = ob.animation_data_create()
+        ad.use_nla = False  # the importer also put every clip on an NLA track: play just this one
+        ad.action = act
+        if hasattr(ad, "action_slot") and len(getattr(ad, "action_suitable_slots", [])):
+            ad.action_slot = ad.action_suitable_slots[0]
+        sc = context.scene
+        sc.frame_start, sc.frame_end = (int(f) for f in act.frame_range)
+        sc.frame_set(sc.frame_start)
+        return {{'FINISHED'}}
+class DQXI_PT_clips(bpy.types.Panel):
+    bl_label = "Animation clips"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "DQXI"
+    def draw(self, context):
+        col = self.layout.column(align=True)
+        cur = context.object.animation_data.action if context.object and context.object.animation_data else None
+        for a in sorted(bpy.data.actions, key=lambda x: x.name):
+            op = col.operator("dqxi.play_action", text=a.name, depress=(a == cur))
+            op.name = a.name
+bpy.utils.register_class(DQXI_OT_play)
+bpy.utils.register_class(DQXI_PT_clips)
 def frame():
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
@@ -397,7 +454,8 @@ def frame():
             with bpy.context.temp_override(window=window, area=area, region=region):
                 bpy.ops.view3d.view_all()
     return None
-bpy.app.timers.register(frame, first_interval=0.5)
+bpy.app.timers.register(load, first_interval=0.3)
+bpy.app.timers.register(frame, first_interval=1.0)
 "#
         ),
     )

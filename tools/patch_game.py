@@ -46,15 +46,15 @@ def hardlink_or_copy(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
-def rebuild_pack(original_pack: Path, patched_bxon: Path, out_pack: Path) -> bytes:
+def rebuild_pack(original_pack: Path, patched_bxon: Path, out_pack: Path, member: str = "level3d.bxon") -> bytes:
     p = pack.Pack.parse(original_pack.read_bytes())
     replaced = False
     for entry in p.entries:
-        if entry.name == "level3d.bxon":
+        if entry.name == member:
             entry.data = patched_bxon.read_bytes()
             replaced = True
     if not replaced:
-        raise ValueError(f"{original_pack} has no level3d.bxon entry")
+        raise ValueError(f"{original_pack} has no {member} entry")
     built = p.build()
     out_pack.parent.mkdir(parents=True, exist_ok=True)
     out_pack.write_bytes(built)

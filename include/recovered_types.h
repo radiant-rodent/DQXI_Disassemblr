@@ -12,110 +12,101 @@
 #ifndef DQXI_RECOVERED_TYPES_H
 #define DQXI_RECOVERED_TYPES_H
 
-/*  523 use(s): maybe_Ui_Window_PaneSetupSlot17, Ui_CursorWindow_Init, Ui_TwoListWindow_Init */
+/*  468 use(s): Ui_CursorWindow_Init, Ui_TwoListWindow_Init, Ui_TextureNameWindow_InitPanes */
 typedef struct UiWindow UiWindow;
 
 /*  285 use(s): Script_Vm_RegisterDefaultDelegates, Script_Vm_InitTables, Script_RegisterHook */
 typedef struct ScriptVm ScriptVm;
 
-/*  186 use(s): Ui_Widget_SetupAnimTransition, Ui_DigitRowWidget_Init, Ui_StartLayoutAnimations */
+/*  160 use(s): Ui_Widget_SetupAnimTransition, Ui_DigitRowWidget_Init, Ui_StartLayoutAnimations */
 typedef struct UiWidget UiWidget;
 
-/*  172 use(s): Field_IsPointInActorViewCone, Actor_HandleCollisionLanding, Actor_DisableForNpcScript */
+/*  153 use(s): Field_IsPointInActorViewCone, Actor_HandleCollisionLanding, Actor_DisableForNpcScript */
 typedef struct Actor Actor;
 
-/*  140 use(s): Ui_CreateMessageWindow, Ui_DestroyMessageWindow, Ui_MessageWindow_TogglePage */
+/*  142 use(s): Ui_CreateMessageWindow, Ui_DestroyMessageWindow, Ui_MessageWindow_TogglePage */
 typedef struct UiMessageWindow UiMessageWindow;
-
-/*  127 use(s): Ui_ReleaseSubObjects, Ui_ReleaseTwoSubObjects, Ui_ClearChildrenAndDeleteSlot */
-typedef struct UiObject UiObject;
 
 /*  122 use(s): Field_SceneObject_InitFromDef, Field_SceneObject_AttachDrawObject, Field_SceneObject_BuildDrawObject */
 typedef struct FieldSceneObject FieldSceneObject;
 
-/*  115 use(s): Field_HorseMesh_Init, maybe_Field_UpdateLocationGrid, Field_FindActorEntryByModel */
+/*  104 use(s): Ui_ReleaseSubObjects, Ui_ReleaseTwoSubObjects, Ui_ClearChildrenAndDeleteSlot */
+typedef struct UiObject UiObject;
+
+/*   99 use(s): maybe_Field_CreateEncounterTrigger, Field_HorseMesh_Init, Field_FindActorEntryByModel */
 typedef struct FieldActor FieldActor;
 
-/*   86 use(s): Battle_Ui_Update, Ui_BattleWindowManager_CreateWindows, maybe_Ui_Panel_UpdateStateA */
-typedef struct BattleUi BattleUi;
-
-/*   83 use(s): Battle_SetupUnitFromMonsterData, maybe_Battle_ApplyUnitPartMask, maybe_Battle_UnitMatchesHandle */
+/*   77 use(s): Battle_SetupUnitFromMonsterData, maybe_Battle_UnitMatchesHandle, Battle_SetupUnitModelParts */
 typedef struct BattleUnit BattleUnit;
-
-/*   81 use(s): Field_Gimmick_UpdateDeferredSubObject, Field_Gimmick_InitComponentA, Field_Gimmick_InitComponentB */
-typedef struct FieldGimmick FieldGimmick;
 
 /*   75 use(s): Battle_Action_SpecialMove_Sp13Loop_DtorDelete, Battle_Action_SpecialMove_Sp14Loop_Play, Battle_Action_SpecialMove_Sp14Loop_DtorDelete */
 typedef struct BattleActionSpecialMove BattleActionSpecialMove;
 
-/*   71 use(s): maybe_Battle_FinishUnitSelection, maybe_Battle_ShowCommandListEntry, Battle_PushActionEntry */
-typedef struct BattleScene BattleScene;
+/*   74 use(s): Field_Gimmick_UpdateDeferredSubObject, Field_Gimmick_InitComponentA, Field_Gimmick_InitComponentB */
+typedef struct FieldGimmick FieldGimmick;
 
-/*   70 use(s): Field_Screen_Recreate, Field_CollisionObject_Init, Field_CollisionObject_InitB */
-typedef struct FieldObject FieldObject;
+/*   72 use(s): Battle_Ui_Update, Ui_BattleWindowManager_CreateWindows, Ui_Panel_UpdateStateC */
+typedef struct BattleUi BattleUi;
 
-/*   70 use(s): Ui_LoadScreen_Init, Ui_LoadScreen_State26Or20, Ui_LoadScreen_State26Or20 */
+/*   68 use(s): Ui_LoadScreen_Init, Ui_LoadScreen_State26Or20, Ui_LoadScreen_State26Or20 */
 typedef struct Ui_LoadScreen Ui_LoadScreen;
 
-/*   61 use(s): maybe_Field_Action_StartCut, maybe_Field_Action_FinishCutIfDone, maybe_Field_Action_StartDig */
+/*   66 use(s): Field_Screen_Recreate, Field_CollisionObject_Init, Field_CollisionObject_InitB */
+typedef struct FieldObject FieldObject;
+
+/*   60 use(s): Battle_PushActionEntry, Battle_UpdateUnitTransform, Battle_PrepareUnitListUi */
+typedef struct BattleScene BattleScene;
+
+/*   55 use(s): maybe_Field_Action_StartCut, maybe_Field_Action_FinishCutIfDone, maybe_Field_Action_StartDig */
 typedef struct FieldAction FieldAction;
 
-/*   60 use(s): Container_HashTableInsert, Container_RemoveSmallSetEntry, Field_Scene_InitObjectTable */
-typedef struct Container Container;
-
-/*   60 use(s): Video_McPredict1ReadMv, Video_McPredict1ApplyMv, Video_McPredict2ReadMv */
-typedef struct McCtx McCtx;
-
-/*   59 use(s): maybe_Menu_WriteEffectStateByte, Menu_ResolveEntryHandler, Menu_CalcEquipStatValues */
-typedef struct MenuState MenuState;
-
-/*   58 use(s): Ui_TextureNameWindow_InitPanes, Ui_TwoColumnListWindow_InitPanes, maybe_Ui_EquipmentListWindow_InitPanes_2 */
-typedef struct UiLayout UiLayout;
-
-/*   57 use(s): Ui_ListWindow_SetVisibleAndSetTextLayers, Ui_ListWindow_Teardown, Ui_ListWindow_Delete */
-typedef struct UiListWindow UiListWindow;
-
-/*   55 use(s): Field_ActorAction_CtorBaseA, Field_ActorAction_CtorBaseB, Field_ActorAction_CheckArrived */
+/*   54 use(s): Field_ActorAction_CtorBaseA, Field_ActorAction_CtorBaseB, Field_ActorAction_CheckArrived */
 typedef struct ActorAction ActorAction;
 
-/*   55 use(s): Field_NpcActionRun, Field_NpcActionRunUpdate, Field_NpcAction_MoveToOffset */
+/*   54 use(s): Container_HashTableInsert, Container_RemoveSmallSetEntry, Field_Scene_InitObjectTable */
+typedef struct Container Container;
+
+/*   54 use(s): Ui_TextureNameWindow_InitPanes, Ui_TwoColumnListWindow_InitPanes, Ui_NumPanel_BindNumPane */
+typedef struct UiLayout UiLayout;
+
+/*   54 use(s): Ui_ListWindow_SetVisibleAndSetTextLayers, Ui_ListWindow_Teardown, Ui_ListWindow_Delete */
+typedef struct UiListWindow UiListWindow;
+
+/*   53 use(s): Field_NpcActionRun, Field_NpcActionRunUpdate, Field_NpcAction_MoveToOffset */
 typedef struct FieldNpcAction FieldNpcAction;
 
-/*   51 use(s): Gfx_SpriteActor_AddChild, maybe_Gfx_SpriteActor_AddChildB, maybe_Gfx_SpriteActor_AddChildD */
-typedef struct SpriteActor SpriteActor;
-
-/*   51 use(s): Ui_Tween_EvalScale, Ui_Tween_EvalOffset, Ui_Tween_EvalClampedMix */
+/*   49 use(s): Ui_Tween_EvalScale, Ui_Tween_EvalOffset, Ui_Tween_EvalClampedMix */
 typedef struct TweenPlayer TweenPlayer;
 
-/*   51 use(s): Ui_Tween_EvalScale, Ui_Tween_EvalOffset, Ui_Tween_EvalClampedMix */
+/*   49 use(s): Ui_Tween_EvalScale, Ui_Tween_EvalOffset, Ui_Tween_EvalClampedMix */
 typedef struct TweenTrack TweenTrack;
 
-/*   47 use(s): Ui_SakusenWindow_InitPanes, Ui_SakusenWindow_Update, Ui_SakusenWindow_OnInput */
+/*   46 use(s): Video_McPredict1ReadMv, Video_McPredict1ApplyMv, Video_McPredict2ReadMv */
+typedef struct McCtx McCtx;
+
+/*   46 use(s): Menu_ResolveEntryHandler, Menu_CalcEquipStatValues, Menu_BuildTargetActorSet */
+typedef struct MenuState MenuState;
+
+/*   46 use(s): Ui_SakusenWindow_InitPanes, Ui_SakusenWindow_Update, Ui_SakusenWindow_OnInput */
 typedef struct UiSakusenWindow UiSakusenWindow;
-
-/*   46 use(s): Model_SetupPartsFromTable, Model_CalcLookAtAngles, Model_UpdateLookAt */
-typedef struct Model Model;
-
-/*   45 use(s): Actor2D_ApplyStateAnimFlags, Actor2D_ValidateStateResource, Actor2D_DispatchEvent */
-typedef struct Actor2D Actor2D;
-
-/*   45 use(s): maybe_Battle_Manager_UpdateCommandState, maybe_Battle_CommandSlots_TryDecrement, Battle_QueueActionForGroupUnits */
-typedef struct BattleManager BattleManager;
 
 /*   45 use(s): Sq_VmDeleteSlot, Sq_VmResumeCallable, Sq_VmSetDelegate */
 typedef struct SqObjectPtr SqObjectPtr;
 
-/*   42 use(s): maybe_Field_Object2D_SyncAttachedNodes, Field_Object2D_ShowSceneEntryB, Field_Object2D_ResetAttachedNodes */
-typedef struct Field_Object2D Field_Object2D;
+/*   44 use(s): Model_SetupPartsFromTable, Model_CalcLookAtAngles, Model_UpdateLookAt */
+typedef struct Model Model;
 
-/*   40 use(s): Ui_ListWidget_ScrollToCursor, Ui_ListWidget_Ctor, Ui_ListWidget_Dtor */
+/*   44 use(s): Gfx_SpriteActor_AddChild, Gfx_SpriteActor_AddChildD, Gfx_SpriteActor_AddQuadChild */
+typedef struct SpriteActor SpriteActor;
+
+/*   43 use(s): Actor2D_ApplyStateAnimFlags, Actor2D_ValidateStateResource, Actor2D_DispatchEvent */
+typedef struct Actor2D Actor2D;
+
+/*   42 use(s): maybe_Battle_Manager_UpdateCommandState, Battle_CommandSlots_TryDecrement, Battle_QueueActionForGroupUnits */
+typedef struct BattleManager BattleManager;
+
+/*   37 use(s): Ui_ListWidget_ScrollToCursor, Ui_ListWidget_Ctor, Ui_ListWidget_Dtor */
 typedef struct UiListWidget UiListWidget;
-
-/*   38 use(s): Ui_Overlay_ClearAll, Ui_Overlay_ApplySlotSetup, Ui_Overlay_RefreshActorAttachments */
-typedef struct UiOverlay UiOverlay;
-
-/*   37 use(s): Sound_DecodeBufferInit, Sound_Voice_SetPauseMode, Sound_Mixer_BuildVolumeMatrix */
-typedef struct SoundVoice SoundVoice;
 
 /*   36 use(s): Battle_ActionAnim_ConfuseElementCtor, Battle_ActionAnim_MoveLandingElementCtor, Battle_ActionAnim_LevelUpElementCtor */
 typedef struct BattleAnimElement BattleAnimElement;
@@ -123,35 +114,32 @@ typedef struct BattleAnimElement BattleAnimElement;
 /*   36 use(s): Field_Marker_OnEvent, Field_Marker_UpdatePickupState, Field_Marker_SetupSpriteObject */
 typedef struct FieldMarker FieldMarker;
 
-/*   36 use(s): Ui_SmithMenu_DetailClose, Ui_SmithMenu_DetailOpen, maybe_Ui_SmithMenu_SetRowValueDigits */
-typedef struct UiSmithMenu UiSmithMenu;
+/*   36 use(s): Sound_DecodeBufferInit, Sound_Voice_SetPauseMode, Sound_Mixer_BuildVolumeMatrix */
+typedef struct SoundVoice SoundVoice;
 
-/*   35 use(s): maybe_Ui_CopyDefaultTransformIfActive, maybe_Ui_SetLinkedHandleFlag, maybe_Ui_EnableViewInState2 */
-typedef struct UiPart UiPart;
+/*   35 use(s): Field_Object2D_ShowSceneEntryB, Field_Object2D_ResetAttachedNodes, Field_Object2D_HideSceneEntryB */
+typedef struct Field_Object2D Field_Object2D;
 
-/*   34 use(s): maybe_Ui_PanelStack_1Out_SetEntry, maybe_Ui_PanelStack_1In_SetEntry, maybe_Ui_PanelStack_2In_SetEntry */
+/*   33 use(s): Ui_Overlay_ClearAll, Ui_Overlay_ApplySlotSetup, Ui_Overlay_RefreshActorAttachments */
+typedef struct UiOverlay UiOverlay;
+
+/*   33 use(s): Ui_PanelStack_1Out_SetEntry, Ui_PanelStack_1In_SetEntry, Ui_PanelStack_2In_SetEntry */
 typedef struct UiPane UiPane;
 
-/*   33 use(s): Gfx_Scene_DrawSprite, Gfx_Scene_AddSpriteEntryLarge, Gfx_Scene_AddSpriteEntrySmall */
-typedef struct GfxSceneSprite GfxSceneSprite;
+/*   32 use(s): UiPart_SetHandleFlag, maybe_Ui_EnableViewInState2, Ui_EnsurePanelActive */
+typedef struct UiPart UiPart;
 
-/*   33 use(s): Ui_Object_InsertPartInDrawOrder, Ui_Object_InsertPartInDrawOrder, Ui_Object_SetSlotResource */
+/*   32 use(s): Ui_Row_UpdateFull, Ui_ItemRow_Format, Ui_Row_Render */
+typedef struct UiRow UiRow;
+
+/*   32 use(s): Ui_SmithMenu_DetailClose, Ui_SmithMenu_DetailOpen, Ui_SmithMenu_DetailStack_PopPush */
+typedef struct UiSmithMenu UiSmithMenu;
+
+/*   32 use(s): Ui_Object_InsertPartInDrawOrder, Ui_Object_InsertPartInDrawOrder, Ui_Object_SetSlotResource */
 typedef struct Ui_Object Ui_Object;
-
-/*   32 use(s): Gfx_CreateMeshFromTransform, Gfx_Node_CreateChild, maybe_Gfx_Node_InitInlineListA */
-typedef struct GfxNode GfxNode;
-
-/*   31 use(s): maybe_Model_Actor_LoadMeshWithSlots, maybe_Model_Actor_SetAttachSlotResource, maybe_Model_Actor_SetAttachSlotHandle */
-typedef struct ModelActor ModelActor;
-
-/*   30 use(s): maybe_Sound_SeqPlayer_UpdateActiveNotes, Sound_SeqPlayer_StopVoices, Sound_SeqPlayer_ComputeTempoStep */
-typedef struct SoundSeqPlayer SoundSeqPlayer;
 
 /*   30 use(s): Ui_ArcListWindow_HandleMessage, Ui_ArcListWindow_RefreshEntryObjects, Ui_ArcListWindow_SetSwingMode */
 typedef struct UiArcListWindow UiArcListWindow;
-
-/*   30 use(s): Ui_PartyPanel_SelectSlot, maybe_Ui_PartyPanel_ResetMemberStates, Ui_PartyPanel_ConfirmMemberSlots */
-typedef struct UiPartyPanel UiPartyPanel;
 
 /*   30 use(s): maybe_Ui_SceneFlow_AdvanceCutscene, Ui_SceneFlow_Update, Ui_Window_Hide */
 typedef struct UiSceneFlow UiSceneFlow;
@@ -159,14 +147,14 @@ typedef struct UiSceneFlow UiSceneFlow;
 /*   30 use(s): Ui_LayoutText_GenerateQuads, Ui_LayoutText_InitRenderState, Ui_LayoutText_BuildEffectQuads */
 typedef struct UiTextWriter UiTextWriter;
 
-/*   29 use(s): Field2D_Sprite_InitFromRecord, Field2D_Sprite_SetFromRecordEx, maybe_Field2D_Sprite_DeleteThunk */
-typedef struct Field2DSprite Field2DSprite;
+/*   29 use(s): Gfx_CreateMeshFromTransform, Gfx_Node_CreateChild, Gfx_EffectPart_BindByName */
+typedef struct GfxNode GfxNode;
 
-/*   29 use(s): Ui_SenrekiStoryWindow_Init, Ui_Screen_CreateChildWindows, maybe_Ui_CloseScreen */
-typedef struct UiScreen UiScreen;
+/*   29 use(s): Sound_SeqPlayer_StopVoices, Sound_SeqPlayer_ComputeTempoStep, Sound_SeqPlayer_SetParamBlock */
+typedef struct SoundSeqPlayer SoundSeqPlayer;
 
-/*   28 use(s): Ui_HopeSelect_LoadLayout, Ui_HopeSelect_FreeResources, Ui_JockeyPanel_Clear */
-typedef struct UIWindow UIWindow;
+/*   29 use(s): Ui_PartyPanel_SelectSlot, maybe_Ui_BattleCommandWindow_ResetPartyUnitStates, Ui_PartyPanel_ConfirmMemberSlots */
+typedef struct UiPartyPanel UiPartyPanel;
 
 /*   28 use(s): Gfx_TrailMesh_GetSourcePosition, Gfx_TrailMesh_GetSourceDirection, Math_ClampPointToBox */
 typedef struct Vec3 Vec3;
@@ -174,20 +162,29 @@ typedef struct Vec3 Vec3;
 /*   27 use(s): Battle_UiFlow_UpdateState, Battle_UiFlow_OpenSelectedRowWindow, Battle_UiFlow_OpenItemNameWindow */
 typedef struct BattleUiFlow BattleUiFlow;
 
-/*   27 use(s): Ui_DiveWindow_InitPanes, Ui_DiveWindow_ResetSelection, Ui_DiveWindow_SetTextArg4 */
-typedef struct UiDiveWindow UiDiveWindow;
+/*   27 use(s): Field2D_Sprite_InitFromRecord, Field2D_Sprite_SetFromRecordEx, maybe_Field2D_Sprite_DeleteThunk */
+typedef struct Field2DSprite Field2DSprite;
 
-/*   26 use(s): Camera_BuildProjectionMatrix, Camera_UpdateViewAndProjection, Camera_SetupLookAtBasis */
-typedef struct Camera Camera;
+/*   27 use(s): Gfx_Scene_DrawSprite, Gfx_Scene_AddSpriteEntryLarge, Gfx_Scene_AddSpriteEntrySmall */
+typedef struct GfxSceneSprite GfxSceneSprite;
 
-/*   26 use(s): Field_ObjectSprite_InitFromDesc, Field_ObjectSprite_InitBox, Field_ObjectSprite_InitComplex */
-typedef struct FieldObjectSprite FieldObjectSprite;
+/*   26 use(s): Model_Actor_LoadMeshWithSlots, maybe_Model_Actor_SetAttachSlotResource, maybe_Model_Actor_SetAttachSlotHandle */
+typedef struct ModelActor ModelActor;
 
 /*   26 use(s): Model_AttachSlot_Setup, Model_AttachSlot_ShowAll, maybe_Model_AttachSlot_ReleaseNode */
 typedef struct ModelAttachSlot ModelAttachSlot;
 
+/*   26 use(s): Ui_DiveWindow_InitPanes, Ui_DiveWindow_ResetSelection, Ui_DiveWindow_SetTextArg4 */
+typedef struct UiDiveWindow UiDiveWindow;
+
 /*   26 use(s): Ui_EquipmentWindow_Setup, Ui_EquipmentWindow_Release, Ui_EquipmentWindow_FindItemIndex */
 typedef struct UiEquipmentWindow UiEquipmentWindow;
+
+/*   25 use(s): Camera_BuildProjectionMatrix, Camera_UpdateViewAndProjection, Camera_SetupLookAtBasis */
+typedef struct Camera Camera;
+
+/*   25 use(s): Field_ObjectSprite_InitFromDesc, Field_ObjectSprite_InitBox, Field_ObjectSprite_InitComplex */
+typedef struct FieldObjectSprite FieldObjectSprite;
 
 /*   25 use(s): Gfx_ModelInstance_ReleaseResources, Gfx_ModelInstance_BuildBoneMatrices, Gfx_ModelInstance_DrawParts */
 typedef struct GfxModelInstance GfxModelInstance;
@@ -201,83 +198,68 @@ typedef struct WidgetHost WidgetHost;
 /*   24 use(s): Actor_ResetComponents, Actor_ReleaseLinkedModelAttachments, Event_ActorModels_AttachModelA */
 typedef struct ActorModel ActorModel;
 
-/*   24 use(s): Battle_ActionSequence_UpdateActorStep, Battle_ActionSequence_TryStartAction, Battle_ActionSequence_BuildMemberRow */
-typedef struct BattleActionSequence BattleActionSequence;
-
-/*   24 use(s): Gfx_Scene_Init, Gfx_Scene_CreateSubObjects, Gfx_Scene_Shutdown */
-typedef struct GfxScene GfxScene;
-
 /*   24 use(s): Sound_SeqField_GetPointerByTag, Sound_SeqField_GetByteDefault40, Sound_SeqField_GetByteHi */
 typedef struct SoundSeqRecord SoundSeqRecord;
 
 /*   24 use(s): Script_BindUiMessageNatives, Script_BindActorNatives, Script_BindFieldNatives */
 typedef struct SqTable SqTable;
 
+/*   24 use(s): Ui_HopeSelect_LoadLayout, Ui_HopeSelect_FreeResources, Ui_JockeyPanel_Clear */
+typedef struct UIWindow UIWindow;
+
 /*   24 use(s): Ui_CreditWindow_LoadPageResources, Ui_CreditWindow_Release, Ui_CreditWindow_Dtor */
 typedef struct UiCreditWindow UiCreditWindow;
-
-/*   24 use(s): Ui_ShopWindow_Ctor, Ui_ShopWindow_Dtor, Ui_ShopWindow_InitPanes */
-typedef struct UiShopWindow UiShopWindow;
-
-/*   23 use(s): maybe_Field_InitNpcAction, Field_Npc_RefreshModelVariant, Field_Npc_ApplyModelVariant */
-typedef struct FieldNpc FieldNpc;
 
 /*   23 use(s): Gfx_CmdBuf_FlushAllState, Gfx_CmdBuf_FlushMatrixSlots, Gfx_CmdBuf_FlushSlotBlock */
 typedef struct GfxCmdBuf GfxCmdBuf;
 
-/*   23 use(s): maybe_Ui_MessageWindow_ReleaseChildren, maybe_Ui_MessageWindow_ReleaseChildrenB, Ui_MessageWindow_SetColumnCount */
-typedef struct MessageWindow MessageWindow;
+/*   23 use(s): Gfx_Scene_Init, Gfx_Scene_CreateSubObjects, Gfx_Scene_Shutdown */
+typedef struct GfxScene GfxScene;
 
 /*   23 use(s): Regex_AddCharWithFoldVariants, Regex_OpCopySetAndPush, Regex_OpCopySetAndPush */
 typedef struct RegexSet RegexSet;
 
-/*   23 use(s): Ui_ActionWindow_Setup, Ui_ActionWindow_Destroy, maybe_Ui_ActionWindow_Reset2 */
-typedef struct UiActionWindow UiActionWindow;
+/*   23 use(s): Ui_ShopWindow_Ctor, Ui_ShopWindow_Dtor, Ui_ShopWindow_InitPanes */
+typedef struct UiShopWindow UiShopWindow;
 
-/*   23 use(s): std_String_AppendChar, std_String_PushBackByte, std_String_FormatCtorA */
-typedef struct std_String std_String;
+/*   22 use(s): Battle_ActionSequence_UpdateActorStep, Battle_ActionSequence_TryStartAction, Battle_ActionSequence_BuildMemberRow */
+typedef struct BattleActionSequence BattleActionSequence;
 
-/*   22 use(s): maybe_Fx_UpdateParticleScaleFromKeyframe, Fx_UpdateParticlePosition, maybe_Fx_UpdateParticleColorA */
+/*   22 use(s): Field_Npc_RefreshModelVariant, Field_Npc_ApplyModelVariant, Field_Npc_UpdateFacingHook */
+typedef struct FieldNpc FieldNpc;
+
+/*   22 use(s): Fx_UpdateParticleScaleFromKeyframe, Fx_UpdateParticlePosition, maybe_Fx_UpdateParticleColorA */
 typedef struct FxParticle FxParticle;
 
-/*   22 use(s): maybe_Gfx_ModelInstance_SetSamplerStateB, Gfx_ModelInstance_SubmitSkinningData, maybe_Gfx_ModelInstance_ReleaseSlotEmittersIfUnused */
+/*   22 use(s): maybe_Gfx_ModelInstance_SetSamplerStateB, Gfx_ModelInstance_SubmitSkinningData, maybe_Gfx_ModelInstance_ReleaseSlotEmitters */
 typedef struct Gfx_ModelInstance Gfx_ModelInstance;
 
-/*   22 use(s): maybe_Ui_DiveForm_PopPanesToHandler, maybe_Ui_DiveForm_RefreshPage, Ui_DiveForm_SelectNext */
-typedef struct UiDiveForm UiDiveForm;
-
-/*   22 use(s): maybe_Ui_GuideWindow_Dtor, maybe_Ui_GuideWindow_DtorBase, Ui_GuideWindow_BeginClose */
-typedef struct UiGuideWindow UiGuideWindow;
+/*   22 use(s): std_String_AppendChar, std_String_PushBackByte, std_String_FormatCtorA */
+typedef struct std_String std_String;
 
 /*   21 use(s): Anim_Curve_Dispatch, Anim_CurveEval_F0M4, Anim_CurveEval_F0M2 */
 typedef struct AnimCurve AnimCurve;
 
-/*   21 use(s): Battle_Sequence_UpdateState, maybe_Battle_ActionSequence_HandleIdle, Battle_ActionSequence_StepUpdate */
-typedef struct BattleSequence BattleSequence;
-
 /*   21 use(s): Event_ResetState, Event_OnFieldEnd, Event_GetOrAddActorSlot */
 typedef struct EventState EventState;
-
-/*   21 use(s): Field_Gadget_TriggerCommand, Field_Gadget_TriggerTouchCommand, Field_Object_ApplyModelRecordAndNotify */
-typedef struct FieldGadget FieldGadget;
-
-/*   21 use(s): Sound_Command_SubmitValuesAndTimer, Sound_Player_SetSlotTimer, Sound_Player_StartSlotTrack */
-typedef struct SoundPlayer SoundPlayer;
-
-/*   21 use(s): maybe_Ui_Window_ShowPage0A, Ui_LoadScreen_Update, Ui_LoadScreen_SetAnim18 */
-typedef struct UiLoadScreen UiLoadScreen;
-
-/*   21 use(s): Ui_StatusWindow_SetOpen, Ui_StatusWindow_Build, Ui_StatusWindow_ApplyCharacterFlags */
-typedef struct UiStatusWindow UiStatusWindow;
 
 /*   21 use(s): Ui_LayoutText_GenerateQuads, Ui_LayoutText_BuildEffectQuads, Ui_LayoutText_ProcessDecoratedLines */
 typedef struct UiTextBoxDesc UiTextBoxDesc;
 
-/*   20 use(s): Battle_Ui_UpdateMemberActionDisplay, maybe_Battle_Ui_PushBalloonMessages, Battle_Ui_BuildMemberActionEntries */
-typedef struct BattleUiContext BattleUiContext;
+/*   20 use(s): Battle_Sequence_UpdateState, maybe_Battle_ActionSequence_HandleIdle, Battle_ActionSequence_StepUpdate */
+typedef struct BattleSequence BattleSequence;
 
 /*   20 use(s): Field_ActorAction_Update, Field_ActorAction_StartAscentAnim, Field_ActorAction_StartDescentAnim */
 typedef struct FieldActorAction FieldActorAction;
+
+/*   20 use(s): Sound_Command_SubmitValuesAndTimer, Sound_Player_SetSlotTimer, Sound_Player_StartSlotTrack */
+typedef struct SoundPlayer SoundPlayer;
+
+/*   20 use(s): Ui_ActionWindow_Setup, Ui_ActionWindow_Destroy, maybe_Ui_ItemDetail_Setup */
+typedef struct UiActionWindow UiActionWindow;
+
+/*   20 use(s): Ui_StatusWindow_SetOpen, Ui_StatusWindow_Build, Ui_StatusWindow_ApplyCharacterFlags */
+typedef struct UiStatusWindow UiStatusWindow;
 
 /*   20 use(s): Ui_WindowFrame_NextStateStep, Ui_WindowFrame_ApplySkin, Ui_Window_UpdateChildrenToState9 */
 typedef struct UiWindowFrame UiWindowFrame;
@@ -285,59 +267,38 @@ typedef struct UiWindowFrame UiWindowFrame;
 /*   20 use(s): Ui_SetupKyoukaiSelectWindow, Ui_SetupDouguDoSelectWindow, Ui_UpdateWindowParts */
 typedef struct Window Window;
 
-/*   20 use(s): maybe_Ui_DataPanel_SetTextRow, Ui_DataPanel_GetRowNameLength, Ui_DataPanel_RemoveRowByOwner */
-typedef struct WorkData WorkData;
+/*   19 use(s): Battle_Ui_UpdateMemberActionDisplay, maybe_Battle_Ui_PushBalloonMessages, Battle_Ui_BuildMemberActionEntries */
+typedef struct BattleUiContext BattleUiContext;
 
-/*   19 use(s): Gfx_SceneNode_Init, maybe_Field_Marker_LoadMesh, Gfx_SceneNode_LoadMeshByName */
+/*   19 use(s): Field_Gadget_TriggerCommand, Field_Gadget_TriggerTouchCommand, Field_Object_ApplyModelRecordAndNotify */
+typedef struct FieldGadget FieldGadget;
+
+/*   18 use(s): Gfx_SceneNode_Init, Field_Marker_LoadMesh, Gfx_SceneNode_LoadMeshByName */
 typedef struct GfxSceneNode GfxSceneNode;
 
-/*   19 use(s): Regex_OpBuildOperandSets, Regex_OpBuildOperandSets, Regex_OpBuildOperandSets */
-typedef struct RegexCursor RegexCursor;
-
-/*   19 use(s): maybe_Ui_ObjectList_BuildEntries, Ui_ObjectList_Clear, maybe_Ui_CollectObjectsByMask */
-typedef struct UiObjectList UiObjectList;
-
-/*   19 use(s): Ui_Panel_SetFourTexts, Ui_Panel_ReleaseLayoutRefs, Ui_Panel_DtorDelete */
-typedef struct UiPanel UiPanel;
-
-/*   18 use(s): BattleScene_SyncUnitModels, BattleScene_SyncUnitRenderResources, BattleScene_RebuildScene */
-typedef struct Battle2DScene Battle2DScene;
-
-/*   18 use(s): maybe_Video_ConvertBlocks32_A, maybe_Video_ConvertBlocks16_A, maybe_Video_ConvertBlocks32B_A */
-typedef struct ConvertCtx ConvertCtx;
-
-/*   18 use(s): Field_ApplySceneFade, Field_Scene_AddActorObject, Field_Scene_AddObjectEntryB */
-typedef struct FieldScene FieldScene;
-
-/*   18 use(s): Battle_Ui_MemberScreen_Update, maybe_Battle_Ui_MemberScreen_LinkActors, maybe_Battle_Ui_MemberScreen_SetupAttachments */
+/*   18 use(s): Battle_Ui_MemberScreen_Update, Battle_Ui_MemberScreen_LinkActors, Battle_Ui_MemberScreen_SyncMemberVisibility */
 typedef struct MemberScreen MemberScreen;
 
 /*   18 use(s): Ui_PokerWindow_Ctor, Ui_PokerWindow_Delete, Ui_PokerWindow_Dtor_2 */
 typedef struct UiPokerWindow UiPokerWindow;
 
+/*   18 use(s): Ui_SenrekiStoryWindow_Init, Ui_Screen_CreateChildWindows, Ui_CloseScreenIfChildDone */
+typedef struct UiScreen UiScreen;
+
 /*   18 use(s): Ui_SkillPanel_InitPanes, Ui_SkillPanel_OpenClose, Ui_SkillPanel_HandleInput */
 typedef struct UiSkillPanel UiSkillPanel;
 
-/*   18 use(s): Ui_TsuyosaWindow_InitPanes, Ui_TsuyosaWindow_Update, Ui_TsuyosaWindow_UpdateSelection */
-typedef struct UiTsuyosaWindow UiTsuyosaWindow;
+/*   17 use(s): BattleScene_SyncUnitModels, BattleScene_SyncUnitRenderResources, BattleScene_RebuildScene */
+typedef struct Battle2DScene Battle2DScene;
 
-/*   17 use(s): maybe_Battle_ActionUi_InitRowTransforms, maybe_Battle_ActionUi_Update2D, maybe_Battle_ActionUi_Update3D */
+/*   17 use(s): Battle_ActionUi_InitRowTransforms, maybe_Battle_ActionUi_Update2D, maybe_Battle_ActionUi_Update3D */
 typedef struct BattleActionUi BattleActionUi;
-
-/*   17 use(s): Battle_Popup_PrepareHealNumberPanes, Battle_Popup_InitLayout, Battle_Popup_InitMissPopup */
-typedef struct BattlePopup BattlePopup;
-
-/*   17 use(s): Battle_Ui_MemberWidget_PushActionMessage, Battle_Ui_MemberWidget_SelectActor, maybe_Battle_Ui_MemberWidget_ToggleStatusMessage */
-typedef struct BattleUiMemberWidget BattleUiMemberWidget;
 
 /*   17 use(s): Model_AttachWeaponAndAccessory, Model_AttachEquipmentMeshes, Model_Equip_AttachWeaponNode */
 typedef struct CharacterModel CharacterModel;
 
-/*   17 use(s): maybe_Effect_QuadEmitter_SetupA, maybe_Effect_QuadEmitter_SetupB, Effect_MeshEmitter_Setup */
-typedef struct EffectEmitter EffectEmitter;
-
-/*   17 use(s): Gfx_Sprite_SetFrameUVFromRecord, Gfx_Sprite_SetFrameUVFromPackedRecord, Gfx_Sprite_SetFrameUVFromBank */
-typedef struct GfxSprite GfxSprite;
+/*   17 use(s): Field_ApplySceneFade, Field_Scene_AddActorObject, Field_Scene_AddObjectEntryB */
+typedef struct FieldScene FieldScene;
 
 /*   17 use(s): Gfx_ModelInstance_Init, Gfx_ModelInstance_InitWithTransform, Gfx_BindIndexedResourceSet */
 typedef struct ModelInstance ModelInstance;
@@ -348,26 +309,53 @@ typedef struct SoundEmitter SoundEmitter;
 /*   17 use(s): Sound_InitPlayers, Sound_InitSystem, Sound_PlaySeById */
 typedef struct SoundSystem SoundSystem;
 
-/*   17 use(s): Ui_BattleCommandWindow_SwitchActiveSubWindow, Ui_BattleCommandWindow_CloseActiveSubWindow, maybe_Ui_BattleCommandWindow_GetState */
-typedef struct UiBattleCommandWindow UiBattleCommandWindow;
+/*   17 use(s): Ui_GuideWindow_BeginClose, Ui_GuideWindow_UpdateClose, Ui_GuideWindow_HandlePageInput */
+typedef struct UiGuideWindow UiGuideWindow;
 
-/*   17 use(s): maybe_Ui_ItemScreen_HandleConfirm, maybe_Ui_ScriptedScreen_HandleInput, maybe_Ui_ItemScreen_HandleCount */
-typedef struct UiItemScreen UiItemScreen;
+/*   17 use(s): Ui_LoadScreen_Update, Ui_LoadScreen_SetAnim18, Ui_LoadScreen_EnterState15B */
+typedef struct UiLoadScreen UiLoadScreen;
 
-/*   16 use(s): Actor_Component_CheckNotify, Actor_Node_SetVisibleAll, maybe_Actor_Node_InitState */
-typedef struct ActorComponent ActorComponent;
+/*   17 use(s): Ui_ObjectList_BuildEntries, Ui_ObjectList_Clear, Ui_CollectObjectsByMask */
+typedef struct UiObjectList UiObjectList;
+
+/*   17 use(s): Ui_TsuyosaWindow_InitPanes, Ui_TsuyosaWindow_Update, Ui_TsuyosaWindow_UpdateSelection */
+typedef struct UiTsuyosaWindow UiTsuyosaWindow;
+
+/*   17 use(s): maybe_Ui_DataPanel_SetTextRow, Ui_DataPanel_GetRowNameLength, Ui_DataPanel_RemoveRowByOwner */
+typedef struct WorkData WorkData;
+
+/*   16 use(s): Battle2DUnit_BeginActionSequence, Battle2DUnit_UpdateSpawnSequence, Battle2DUnit_BeginAttackSequence */
+typedef struct Battle2DUnit Battle2DUnit;
 
 /*   16 use(s): Battle_CommandWindow_Update, Battle_CommandWindow_HandleResult, Battle_Command_OpenItemPage */
 typedef struct BattleCommandWindow BattleCommandWindow;
 
+/*   16 use(s): Battle_Popup_PrepareHealNumberPanes, Battle_Popup_InitLayout, Battle_Popup_InitMissPopup */
+typedef struct BattlePopup BattlePopup;
+
+/*   16 use(s): Battle_Ui_MemberWidget_PushActionMessage, Battle_Ui_MemberWidget_SelectActor, maybe_Battle_Ui_MemberWidget_ToggleStatusMessage */
+typedef struct BattleUiMemberWidget BattleUiMemberWidget;
+
 /*   16 use(s): Ui_PopupEntry_SpawnForWindowRows, Battle_ActionCommand_PushSpeakerMessage, Battle_ActionCommand_SpawnSpeakerBalloon */
 typedef struct BattleUiWindow BattleUiWindow;
+
+/*   16 use(s): Video_ConvertBlocks16_A, Video_ConvertSelect_A, Video_ConvertSelectB_A */
+typedef struct ConvertCtx ConvertCtx;
 
 /*   16 use(s): Cutscene_LoadScenarioPacks, Cutscene_ApplyLayoutMode, Cutscene_OpenMessageForActor */
 typedef struct CutsceneScene CutsceneScene;
 
-/*   16 use(s): Field_Object2D_ShowSceneEntryA, Field_Object2D_ReleaseSceneEntry, Field_Object2D_HideSceneEntryA */
-typedef struct FieldObject2D FieldObject2D;
+/*   16 use(s): Effect_SpriteEmitter_SetupA, Effect_SpriteEmitter_SetupB, Effect_MeshEmitter_Setup */
+typedef struct EffectEmitter EffectEmitter;
+
+/*   16 use(s): Gfx_Sprite_SetFrameUVFromRecord, Gfx_Sprite_SetFrameUVFromPackedRecord, Gfx_Sprite_SetFrameUVFromBank */
+typedef struct GfxSprite GfxSprite;
+
+/*   16 use(s): maybe_Ui_MessageWindow_ReleaseChildren, Ui_MessageWindow_SetColumnCount, Ui_MessageWindow_AppendLinesWrapped */
+typedef struct MessageWindow MessageWindow;
+
+/*   16 use(s): Regex_OpBuildOperandSets, Regex_OpBuildOperandSets, Regex_OpBuildOperandSets */
+typedef struct RegexCursor RegexCursor;
 
 /*   16 use(s): Gfx_RenderObject_BindMaterialSetA, Gfx_RenderObject_BindMaterialSetFromDesc, Gfx_RenderObject_BindMaterialSetFromDescById */
 typedef struct RenderObject RenderObject;
@@ -378,8 +366,11 @@ typedef struct SceneWork SceneWork;
 /*   16 use(s): Text_DrawToken, Ui_TextLayout_GatherElementList, Ui_TextLayout_CollectMatchingElements */
 typedef struct TextLayout TextLayout;
 
-/*   16 use(s): Ui_Row_UpdateFull, Ui_ItemRow_Format, Ui_Row_Render */
-typedef struct UiRow UiRow;
+/*   16 use(s): Ui_BattleCommandWindow_SwitchActiveSubWindow, Ui_BattleCommandWindow_CloseActiveSubWindow, Ui_BattleCommandWindow_ExecuteSelectedCommand */
+typedef struct UiBattleCommandWindow UiBattleCommandWindow;
+
+/*   16 use(s): Ui_DiveForm_PopPanesToHandler, maybe_Ui_DiveForm_RefreshPage, Ui_DiveForm_SelectNext */
+typedef struct UiDiveForm UiDiveForm;
 
 /*   16 use(s): Ui_TalkParty_GetLayout, Ui_TalkContent_GetLayout, Ui_TalkWindow_ReleaseResources */
 typedef struct UiTalkWindow UiTalkWindow;
@@ -387,26 +378,11 @@ typedef struct UiTalkWindow UiTalkWindow;
 /*   16 use(s): Text_SetupDualLayers, Text_SetupDualLayersDefault, Ui_Balloon_BindParts */
 typedef struct Widget Widget;
 
-/*   15 use(s): Battle2DUnit_BeginActionSequence, Battle2DUnit_UpdateSpawnSequence, Battle2DUnit_BeginAttackSequence */
-typedef struct Battle2DUnit Battle2DUnit;
-
-/*   15 use(s): Battle_Popup3D_UpdateRoot, maybe_Battle_Popup3D_UpdateRootEx, Battle_Popup3D_DeletingDtor */
-typedef struct BattlePopup3D BattlePopup3D;
-
-/*   15 use(s): Ui_EquipWindow_HandleInput, maybe_Ui_EquipWindow_RunCallbackStep, Ui_EquipWindow_TryEquipSelected */
-typedef struct EquipWindow EquipWindow;
-
 /*   15 use(s): Field2D_MapChip_MapPointToCell, Field2D_Step_WaitDistance, Field2D_Step_CallCallback */
 typedef struct Field2DActor Field2DActor;
 
-/*   15 use(s): FieldParty_CalcGroupCenterPosition, FieldParty_CalcGroupBoundsCenter, FieldParty_UpdateStateMachine */
-typedef struct PartyGroup PartyGroup;
-
 /*   15 use(s): Ui_PartySelectWindow_DeletingDtor, Ui_PartySelectWindow_Setup, Ui_PartySelectWindow_RefreshRows */
 typedef struct UiPartySelectWindow UiPartySelectWindow;
-
-/*   15 use(s): Ui_UmaWindow_BuildModeRows, Ui_Window_CommitMode, maybe_Ui_UmaWindow_DtorDelete */
-typedef struct UmaWindow UmaWindow;
 
 /*   15 use(s): std_WString_FormatCtorA, std_WString_FormatCtorB, std_WString_FormatCtorC */
 typedef struct std_WString std_WString;
@@ -414,41 +390,17 @@ typedef struct std_WString std_WString;
 /*   14 use(s): Actor_Action_DragonJump_Begin, Actor_Action_DragonJump_OnEvent, Actor_Action_DragonJumpMUpLoopUpdate */
 typedef struct ActorActionDragonJump ActorActionDragonJump;
 
+/*   14 use(s): Actor_Component_CheckNotify, Actor_Node_SetVisibleAll, Actor_Node_ShowVariantA */
+typedef struct ActorComponent ActorComponent;
+
 /*   14 use(s): Anim_CurveSample_F2M5, Anim_CurveSample_F2M4, Anim_CurveSample_F2M3 */
 typedef struct AnimSampleOut AnimSampleOut;
 
-/*   14 use(s): Battle_Ui_SpawnSoundBalloon, maybe_Battle_Ui_HideMemberBalloons, maybe_Battle_Ui_UpdateMemberBalloons */
-typedef struct BattleBalloonUi BattleBalloonUi;
-
-/*   14 use(s): Battle_DamageExtWindow_Init, Ui_BattleWindow_IsIdle, maybe_Ui_BattleWindow_IsAnimInactive */
-typedef struct BattleWindow BattleWindow;
-
-/*   14 use(s): FieldParty_Dtor, FieldParty_Ui_UpdateSlotPopups, FieldParty_ResetAllMembers */
-typedef struct FieldParty FieldParty;
-
-/*   14 use(s): maybe_Field_SceneNode_CreateChild_75AEB8, maybe_Field_SceneNode_CreateChild_75B0B0, Field_SceneNode_InitObject */
-typedef struct FieldSceneNode FieldSceneNode;
+/*   14 use(s): Ui_EquipWindow_HandleInput, Ui_EquipWindow_TryEquipSelected, Ui_EquipWindow_PushSelectPane */
+typedef struct EquipWindow EquipWindow;
 
 /*   14 use(s): Field_Prop_TriggerInteractCommand, Field_Prop_InitFromModelRecord, Field_Prop_Show */
 typedef struct Field_Prop Field_Prop;
-
-/*   14 use(s): Fx_EmitterInitFromTemplate, Fx_Emitter_SelectUpdateModes, Fx_EmitterRandomizeSpawn */
-typedef struct FxEmitter FxEmitter;
-
-/*   14 use(s): Gfx_SpriteActor_InitSingleQuad, Gfx_SpriteActor_InitEightQuads, Gfx_SpriteActor_RefreshAndPlayAnim */
-typedef struct GfxSpriteActor GfxSpriteActor;
-
-/*   14 use(s): Ui_ListWindow_DtorB, Ui_ListWindow_RefreshPageRows, maybe_Ui_ListWindow_UpdateQuantityRows */
-typedef struct ListWindow ListWindow;
-
-/*   14 use(s): Save_ClearTask, maybe_Save_BeginLoad, Save_LoadTask_Update */
-typedef struct SaveTask SaveTask;
-
-/*   14 use(s): maybe_Field_SceneNode_Reset, Field_SceneNode_Destroy, Gfx_Gadget_DetachMeshByKey */
-typedef struct SceneNode SceneNode;
-
-/*   14 use(s): Sound_Channel_ApplyMaskedParam, Sound_Channel_ApplyFade, Sound_Channel_ClearWideParamRamp */
-typedef struct SoundChannel SoundChannel;
 
 /*   14 use(s): Sound_Stream_SubmitVoiceParamsA, Sound_Stream_SubmitVoiceParamsB, Sound_Stream_AcquireLock */
 typedef struct SoundStream SoundStream;
@@ -456,44 +408,38 @@ typedef struct SoundStream SoundStream;
 /*   14 use(s): maybe_Gfx_SpriteActor_InitFromDescSmall, maybe_Gfx_SpriteActor_InitFromDescLarge, Gfx_SpriteActor_InitFromDescVector */
 typedef struct SpriteDesc SpriteDesc;
 
-/*   14 use(s): Svc_Object_Release, Svc_Object_Cmd3, Svc_Object_ReleaseRef */
-typedef struct SvcObject SvcObject;
-
-/*   14 use(s): Ui_TextWindow_BindRowPanes, Text_MessageWindow_Update, maybe_Text_MessageWindow_UpdateChildTransforms */
+/*   14 use(s): Ui_TextWindow_BindRowPanes, Text_MessageWindow_Update, Text_MessageWindow_UpdateChildTransforms */
 typedef struct TextWindow TextWindow;
 
-/*   14 use(s): Ui_CursorIcon_SetWordType, maybe_Ui_CursorIcon_Close, Ui_CursorIcon_Hide */
-typedef struct UiCursor UiCursor;
-
-/*   14 use(s): Ui_List_CompareEntryByKey98, Ui_List_CompareEntryByKey98, Ui_List_CompareEntryByField13 */
-typedef struct UiEntryRef UiEntryRef;
-
-/*   14 use(s): Ui_LoadIconTextures, maybe_Ui_IconCache_ReadPageEntries, Ui_IconCache_RequestPage */
-typedef struct UiIconCache UiIconCache;
-
-/*   14 use(s): Ui_PanelState_Enter16, maybe_Ui_PanelState_Enter11Or0E, Ui_PanelState_Enter0B */
-typedef struct UiPanelSequence UiPanelSequence;
+/*   14 use(s): maybe_Ui_ItemScreen_HandleCount, maybe_Ui_ItemScreen_SelectEntry, maybe_Ui_ItemScreen_Cancel */
+typedef struct UiItemScreen UiItemScreen;
 
 /*   14 use(s): Ui_SlotWindow_ClearPatternLists, Ui_SlotWindow_AnimCallbackA, Ui_SlotWindow_AnimCallbackB */
 typedef struct UiSlotWindow UiSlotWindow;
 
-/*   14 use(s): Ui_Layout_HideNumberedPanes, maybe_Ui_TextWindow_LoadEffect, Ui_TextWindow_AdvanceLine */
-typedef struct UiTextWindow UiTextWindow;
-
-/*   14 use(s): Ui_UmaWindow_ToggleMode, Ui_UmaWindow_ApplyMode, Ui_UmaWindow_SetVisible */
-typedef struct UiUmaWindow UiUmaWindow;
+/*   13 use(s): Battle_Ui_SpawnSoundBalloon, maybe_Battle_Ui_UpdateMemberBalloons, Battle_Ui_SpawnBalloonTypeC */
+typedef struct BattleBalloonUi BattleBalloonUi;
 
 /*   13 use(s): Field_MultiPart_InitSpriteList, Field_MultiPart_HideChildren, Field_MultiPart_ShowChildren */
 typedef struct FieldMultiPart FieldMultiPart;
 
-/*   13 use(s): Ui_MessageWindow_Open, maybe_Ui_MessageWindow_BuildGlyphBuffers, Ui_MessageWindow_BuildGlyphMetrics */
-typedef struct MessageText MessageText;
+/*   13 use(s): Fx_EmitterInitFromTemplate, Fx_Emitter_SelectUpdateModes, Fx_EmitterRandomizeSpawn */
+typedef struct FxEmitter FxEmitter;
 
-/*   13 use(s): Field_SetupNpcActionScript, Field_NpcAction_StopMovement, Field_NpcAction_OpeFrameCtor */
-typedef struct NpcAction NpcAction;
+/*   13 use(s): Gfx_SpriteActor_InitSingleQuad, Gfx_SpriteActor_InitEightQuads, Gfx_SpriteActor_RefreshAndPlayAnim */
+typedef struct GfxSpriteActor GfxSpriteActor;
 
-/*   13 use(s): Casino_Poker_DealHandA, maybe_Casino_Poker_DealHandB, maybe_Casino_Poker_DealHandC */
+/*   13 use(s): Ui_ListWindow_DtorB, Ui_ListWindow_RefreshPageRows, maybe_Ui_ListWindow_UpdateQuantityRows */
+typedef struct ListWindow ListWindow;
+
+/*   13 use(s): Casino_Poker_DealHandA, Casino_Poker_DealHandB, maybe_Casino_Poker_DealHandC */
 typedef struct PokerHand PokerHand;
+
+/*   13 use(s): Field_SceneNode_Destroy, Gfx_Gadget_DetachMeshByKey, Field_SceneNode_InitFromRecord */
+typedef struct SceneNode SceneNode;
+
+/*   13 use(s): Sound_Channel_ApplyMaskedParam, Sound_Channel_ApplyFade, Sound_Channel_ClearWideParamRamp */
+typedef struct SoundChannel SoundChannel;
 
 /*   13 use(s): Sound_Channel_Reinsert, Sound_Channel_Free, Sound_Channel_InitSlot */
 typedef struct SoundChannelNode SoundChannelNode;
@@ -504,26 +450,41 @@ typedef struct SoundVoicePool SoundVoicePool;
 /*   13 use(s): Script_SqCompiler_Expect, Script_SqCompiler_Factor, Script_SqCompiler_EmitBinaryExp */
 typedef struct SqCompiler SqCompiler;
 
-/*   13 use(s): maybe_Ui_List_GetVisibleRowValue, maybe_Ui_List_SelectByValue, Ui_List_HandleInputPad */
+/*   13 use(s): Svc_Object_Release, Svc_Object_Cmd3, Svc_Object_ReleaseRef */
+typedef struct SvcObject SvcObject;
+
+/*   13 use(s): Ui_CursorIcon_SetWordType, Ui_CursorIcon_Hide, Ui_CursorIcon_Show */
+typedef struct UiCursor UiCursor;
+
+/*   13 use(s): Ui_LoadIconTextures, Ui_IconCache_RequestPage, Ui_IconCache_Open */
+typedef struct UiIconCache UiIconCache;
+
+/*   13 use(s): maybe_Ui_List_GetVisibleRowValue, Ui_List_SelectByValue, Ui_List_HandleInputPad */
 typedef struct UiList UiList;
 
 /*   13 use(s): Ui_ListCursor_GetSelectedMemberIdB, Ui_ListCursor_IsAtPartyEndRow, Ui_ListCursor_IsAtPartyEndRowPlus1 */
 typedef struct UiListCursor UiListCursor;
 
+/*   13 use(s): Ui_Panel_SetFourTexts, Ui_Panel_ReleaseLayoutRefs, Ui_Panel_DtorDelete */
+typedef struct UiPanel UiPanel;
+
+/*   13 use(s): Ui_Layout_HideNumberedPanes, Ui_TextWindow_AdvanceLine, maybe_Ui_MessageWindow_AdvanceControlStream */
+typedef struct UiTextWindow UiTextWindow;
+
+/*   13 use(s): Ui_UmaWindow_ToggleMode, Ui_UmaWindow_ApplyMode, Ui_UmaWindow_SetVisible */
+typedef struct UiUmaWindow UiUmaWindow;
+
 /*   13 use(s): Ui_Widget_Update, Ui_Window_InputToState18, Ui_Window_InputToStateConfirm */
 typedef struct UiUpdateArgs UiUpdateArgs;
+
+/*   13 use(s): Ui_UmaWindow_BuildModeRows, Ui_Window_CommitMode, Ui_UmaWindow_ReleaseRows */
+typedef struct UmaWindow UmaWindow;
 
 /*   12 use(s): maybe_Battle_ActorAction_UpdateMotionB, Battle_ActorAction_PlayActionSe, Battle_ActorAction_ApplyMonsterTransform */
 typedef struct BattleActorAction BattleActorAction;
 
-/*   12 use(s): Battle_HpGaugeWindow_Delete, Battle_HpGaugeWindow_Dtor, Battle_HpGaugeWindow_Update */
-typedef struct BattleHpGaugeWindow BattleHpGaugeWindow;
-
-/*   12 use(s): maybe_Snd_SetChannelLevel, Snd_SetUnitActive, Snd_SetChannelRate */
-typedef struct ChannelBuffer ChannelBuffer;
-
-/*   12 use(s): maybe_Field2D_MapChip_UpdateRegion, Field2D_Map_StartLayerTask, Field2D_Map_StopLayerTask */
-typedef struct Field2DMap Field2DMap;
+/*   12 use(s): Battle_DamageExtWindow_Init, Ui_BattleWindow_IsIdle, Ui_BattleWindow_IsAnimInactive */
+typedef struct BattleWindow BattleWindow;
 
 /*   12 use(s): Fs_ArchiveStream_ReadAt_2, Fs_ArchiveStream_SeekTo, Fs_ArchiveStream_ReleaseBuffer */
 typedef struct FsStream FsStream;
@@ -531,68 +492,59 @@ typedef struct FsStream FsStream;
 /*   12 use(s): maybe_Gfx_Sprite_CreateChild_75AE04, Gfx_CreateSpriteFromTemplate, Gfx_SpriteNode_InitAndSpawn */
 typedef struct GfxSpriteNode GfxSpriteNode;
 
+/*   12 use(s): Ui_MessageWindow_Open, Ui_MessageWindow_BuildGlyphMetrics, Ui_MessageWindow_SetTextById */
+typedef struct MessageText MessageText;
+
 /*   12 use(s): MoLive_Reader_Process, MoLive_StreamTable_BeginPackets, MoLive_StreamTable_FlushSegments */
 typedef struct MoLiveReader MoLiveReader;
 
-/*   12 use(s): maybe_Monster_Model_DestroySubNodeLists, maybe_Monster_Model_StartSubTween, Monster_Model_ApplyScreenOffset */
+/*   12 use(s): maybe_Monster_Model_DestroySubNodeLists, Monster_Model_StartSubTween, Monster_Model_ApplyScreenOffset */
 typedef struct Monster_Model Monster_Model;
 
-/*   12 use(s): std_RbTree_EraseNode, std_RbTree_EraseNode, std_RbTree_EraseNodeRebalance */
-typedef struct RbNode RbNode;
-
-/*   12 use(s): Casino_Slot_ApplyBetAndPayout, Casino_Slot_DetectWinLines, Casino_Slot_CalcPatternPayout */
-typedef struct SlotWindow SlotWindow;
-
-/*   12 use(s): Sound_StreamPlayer_Setup, Sound_StreamPlayer_Release, maybe_Sound_StreamPlayer_InitLock */
-typedef struct SoundStreamPlayer SoundStreamPlayer;
+/*   12 use(s): FieldParty_CalcGroupCenterPosition, FieldParty_CalcGroupBoundsCenter, FieldParty_UpdateStateMachine */
+typedef struct PartyGroup PartyGroup;
 
 /*   12 use(s): Gfx_SpriteObject_UpdateFrame, Gfx_SpriteObject_Show, Gfx_SpriteObject_Hide */
 typedef struct SpriteObject SpriteObject;
 
-/*   12 use(s): Ui_BattleTargetWindow_CreateLayout, Ui_TargetWindow_SetSlotCharacter, Ui_BattleTargetWindow_RefreshAllTargets */
-typedef struct TargetWindow TargetWindow;
-
-/*   12 use(s): Ui_MessagePage_Decode, Ui_MessagePage_Dtor, Ui_MessagePage_Build */
-typedef struct UiMessagePage UiMessagePage;
-
 /*   12 use(s): Ui_PanelMessageWindow_LoadPanels, Ui_PanelMessageWindow_Ctor, Ui_PanelMessageWindow_CtorEx */
 typedef struct UiPanelMessageWindow UiPanelMessageWindow;
 
-/*   12 use(s): Ui_TextLayout_MeasureElementWidth, Ui_TextLayout_Ctor_2, Ui_TextLayout_DeletingDtor */
-typedef struct UiTextLayout UiTextLayout;
-
-/*   11 use(s): Anim_TimeTrack_PurgeExpired, maybe_Anim_TimeTrack_PurgeExpiredB, Anim_TimeTrack_PurgeAndRenumber */
-typedef struct AnimTimeTrackList AnimTimeTrackList;
+/*   11 use(s): Battle_HpGaugeWindow_Delete, Battle_HpGaugeWindow_Dtor, Battle_HpGaugeWindow_Update */
+typedef struct BattleHpGaugeWindow BattleHpGaugeWindow;
 
 /*   11 use(s): Battle_TextWindow_Ctor, Battle_TextWindow_UpdateVisibility, Battle_TextWindow_EnsureSubPanel */
 typedef struct BattleTextWindow BattleTextWindow;
 
-/*   11 use(s): maybe_Camera_UpdateFollowPosition_2, maybe_Camera_UpdateTargetList, Camera_UpdateWorkList */
-typedef struct CameraWork CameraWork;
+/*   11 use(s): Field2D_Map_StartLayerTask, Field2D_Map_StopLayerTask, Field2D_Map_RebuildLayerTaskA */
+typedef struct Field2DMap Field2DMap;
 
-/*   11 use(s): Gfx_Mesh_ParseSections, Gfx_Mesh_SetupTextureChunk, Gfx_Model_BuildPartMatrices */
-typedef struct GfxMeshBuffers GfxMeshBuffers;
+/*   11 use(s): FieldParty_Dtor, FieldParty_Ui_UpdateSlotPopups, FieldParty_ResetAllMembers */
+typedef struct FieldParty FieldParty;
 
-/*   11 use(s): maybe_Ui_GuideWindow_ChangePage, maybe_Ui_GuideWindow_InitPageCounter, maybe_Ui_GuideWindow_ReleasePageNode */
-typedef struct GuideWindow GuideWindow;
+/*   11 use(s): maybe_Field_SceneNode_CreateChild_75AEB8, maybe_Field_SceneNode_CreateChild_75B0B0, Field_SceneNode_InitObject */
+typedef struct FieldSceneNode FieldSceneNode;
 
-/*   11 use(s): Sound_Frame_UpdateChannels, Sound_Frame_PublishChannelTable, Sound_Driver_TickWithProfiling */
-typedef struct SoundDriver SoundDriver;
+/*   11 use(s): Field_SetupNpcActionScript, Field_NpcAction_StopMovement, Field_NpcAction_OpeFrameCtor */
+typedef struct NpcAction NpcAction;
+
+/*   11 use(s): Casino_Slot_ApplyBetAndPayout, Casino_Slot_DetectWinLines, Casino_Slot_CalcPatternPayout */
+typedef struct SlotWindow SlotWindow;
+
+/*   11 use(s): Sound_StreamPlayer_Setup, Sound_StreamPlayer_Release, Sound_Archive_OpenEntryStream */
+typedef struct SoundStreamPlayer SoundStreamPlayer;
+
+/*   11 use(s): Ui_BattleTargetWindow_CreateLayout, Ui_TargetWindow_SetSlotCharacter, Ui_BattleTargetWindow_RefreshAllTargets */
+typedef struct TargetWindow TargetWindow;
 
 /*   11 use(s): Ui_AnimRef_ResetPanes, Ui_AnimRef_BindByName, Ui_AnimRef_SetFrame */
 typedef struct UiAnimRef UiAnimRef;
 
-/*   11 use(s): Ui_TwoTabCursor_HandleInput, Ui_SmithMenu_HandleInput, Ui_SmithMenu_HandleArmorList */
-typedef struct UiInputEvent UiInputEvent;
-
 /*   11 use(s): Ui_RacingWindow_DeletingDtor, Ui_RacingWindow_InitPanes, Ui_RacingWindow_BindAnimRefs */
 typedef struct UiRacingWindow UiRacingWindow;
 
-/*   11 use(s): Ui_SkillPanelWindow_Release, Ui_SkillPanel_OnCommandPopPane, maybe_Ui_SkillPanel_SelectRowsByIds */
-typedef struct UiSkillPanelWindow UiSkillPanelWindow;
-
-/*   11 use(s): Ui_List_MoveCursorWithFallback, Ui_List_SetupRows, Ui_List_DestroyRows */
-typedef struct Ui_List Ui_List;
+/*   11 use(s): Ui_TextLayout_MeasureElementWidth, Ui_TextLayout_Ctor_2, Ui_TextLayout_DeletingDtor */
+typedef struct UiTextLayout UiTextLayout;
 
 /*   11 use(s): Ui_Part_CheckAnimConditions, Ui_Part_GetAnimSlotMask, Ui_Part_GetAnimState */
 typedef struct Ui_Part Ui_Part;
@@ -600,14 +552,17 @@ typedef struct Ui_Part Ui_Part;
 /*   10 use(s): Event_ActorModels_Dtor, Event_ActorModels_AttachModelA, Event_ActorModels_AddModel */
 typedef struct ActorModelSet ActorModelSet;
 
-/*   10 use(s): Battle_BackupUnitActions, Battle_CheckActionSlotFree, Battle_HasPendingAction */
-typedef struct Battle Battle;
+/*   10 use(s): Anim_TimeTrack_PurgeExpired, Anim_TimeTrack_PurgeAndRenumber, Anim_TimeTrack_IsAlive */
+typedef struct AnimTimeTrackList AnimTimeTrackList;
 
 /*   10 use(s): Battle_UnitModel_AdvanceAnimSequence, Battle_UnitModel_PlayAnimSe, Battle_UnitModel_Update */
 typedef struct BattleUnitModel BattleUnitModel;
 
-/*   10 use(s): maybe_Ui_DiveForm_FindCommandEntry, Ui_DiveForm_OnAnimEnd, Ui_DiveForm_ActivateChildState11 */
-typedef struct DiveForm DiveForm;
+/*   10 use(s): maybe_Camera_UpdateScreenTargets, Camera_UpdateWorkList, Camera_Work_Snapshot */
+typedef struct CameraWork CameraWork;
+
+/*   10 use(s): maybe_Snd_SetChannelLevel, Snd_SetUnitActive, Snd_SetChannelRate */
+typedef struct ChannelBuffer ChannelBuffer;
 
 /*   10 use(s): Gfx_Effect2D_DeleteAll, Gfx_Effect2D_ReleaseSlot, Gfx_Effect2D_CreateInstance */
 typedef struct Effect2DManager Effect2DManager;
@@ -621,11 +576,11 @@ typedef struct Field_Marker Field_Marker;
 /*   10 use(s): std_FormatPutStringNarrow, std_PrintfFormatInt32, std_PrintfFormatHex64 */
 typedef struct FormatStream FormatStream;
 
+/*   10 use(s): Gfx_Mesh_ParseSections, Gfx_Mesh_SetupTextureChunk, Gfx_Model_BuildPartMatrices */
+typedef struct GfxMeshBuffers GfxMeshBuffers;
+
 /*   10 use(s): Gfx_SceneEntry_Show, Gfx_SceneEntry_Hide, Gfx_Scene_ReleaseEntryAttachments */
 typedef struct GfxSceneEntry GfxSceneEntry;
-
-/*   10 use(s): maybe_ItemBag_SortEntriesByKey, Item_CheckBagAcquire, maybe_Item_HasAnyWithFlag39 */
-typedef struct ItemBag ItemBag;
 
 /*   10 use(s): Ui_TextLayout_BeginLayout, Ui_TextLayout_CheckSlotsFit, Ui_TextLayout_LayoutMode0 */
 typedef struct LayoutCtx LayoutCtx;
@@ -636,23 +591,17 @@ typedef struct Message Message;
 /*   10 use(s): Gfx_ModelPart_InitFromParams, Gfx_ModelPart_InitWithTransforms, Gfx_ModelPart_InitColored */
 typedef struct ModelPart ModelPart;
 
-/*   10 use(s): Battle_Enemy_GetDisplaySlot, Monster_FormatEffectText, maybe_Battle_AnimateMemberStatBar */
-typedef struct MonsterWork MonsterWork;
-
 /*   10 use(s): Field_NpcUpdateMoveState, Field_NpcCheckPlayerDistance, Field_NpcUpdateFacing */
 typedef struct NpcBehavior NpcBehavior;
 
 /*   10 use(s): Gfx_ModelPart_InitFromParams, Gfx_ModelPart_InitWithTransforms, Gfx_ModelPart_InitColored */
 typedef struct PartParams PartParams;
 
-/*   10 use(s): Ui_PartyStatusWindow_Update, maybe_Ui_PartyStatusWindow_Confirm, maybe_Ui_PartyStatusWindow_CommitRows */
-typedef struct PartyStatusWindow PartyStatusWindow;
-
-/*   10 use(s): Ui_PokerWindow_HandleBet, maybe_Ui_PokerWindow_SetSelectedItem, Ui_PokerWindow_Close */
+/*   10 use(s): Ui_PokerWindow_HandleBet, Ui_PokerWindow_SetSelectedItem, Ui_PokerWindow_Close */
 typedef struct PokerWindow PokerWindow;
 
-/*   10 use(s): Regex_OpBuildOperandSets, Regex_OpBuildOperandSetsSingle, Regex_OpPushValueFromRight */
-typedef struct RegexValueList RegexValueList;
+/*   10 use(s): Save_ClearTask, Save_BeginLoad, Save_LoadTask_Update */
+typedef struct SaveTask SaveTask;
 
 /*   10 use(s): Field_SceneObject_RegisterInstance, Anim_PlayByNameIfPresent, Field_SceneObject_ShowAndSelectEntry */
 typedef struct SceneObject SceneObject;
@@ -663,26 +612,26 @@ typedef struct SndMixer SndMixer;
 /*   10 use(s): Sound_ArchiveStream_GetMemberRange, Sound_ArchiveStream_UpdateTracks, Sound_ArchiveStream_GetTrackInfo */
 typedef struct SoundArchiveStream SoundArchiveStream;
 
+/*   10 use(s): Sound_Frame_UpdateChannels, Sound_Frame_PublishChannelTable, Sound_Driver_TickWithProfiling */
+typedef struct SoundDriver SoundDriver;
+
 /*   10 use(s): Sound_SeqChannel_Tick, Sound_SeqChannel_KillNotes, Sound_SeqChannel_StopNotes */
 typedef struct SoundSeqChannel SoundSeqChannel;
 
-/*   10 use(s): Sound_Seq_ResolveRecord, Sound_Seq_GetHeaderWord, maybe_Sound_Seq_GetDataRange */
+/*   10 use(s): Sound_Seq_ResolveRecord, Sound_Seq_GetHeaderWord, Sound_Seq_GetDataRange */
 typedef struct SoundSeqData SoundSeqData;
-
-/*   10 use(s): maybe_Field_Gadget_IsFieldActive, Field_Gadget_OnEvent, maybe_Field_Gadget_InitSpriteGridA */
-typedef struct SpriteGadget SpriteGadget;
 
 /*   10 use(s): Ui_Part_PlayAnimFast, Ui_Part_PlayAnimDisabled, Ui_Part_PlayAnimNormal */
 typedef struct UiAnimatedPart UiAnimatedPart;
 
+/*   10 use(s): maybe_Ui_PanelState_SelectStepPair, maybe_Ui_PanelState_SelectStepPairAlt, maybe_Ui_PanelState_IncreaseBet */
+typedef struct UiCasinoPanel UiCasinoPanel;
+
 /*   10 use(s): Ui_Element_ApplyCommand, Ui_SkillPanel_OnCommandPopPane, Ui_SkillPanel_OnCommandShowMessage16 */
 typedef struct UiCommand UiCommand;
 
-/*   10 use(s): Ui_Element_ApplyCommand, maybe_Ui_Element_HandleActivateCommand, Ui_LayoutElement_FinishAnim */
-typedef struct UiElement UiElement;
-
-/*   10 use(s): maybe_Ui_EquipWindow_Dtor, maybe_Ui_EquipWindow_DtorBase, Ui_EquipWindow_InitPanes */
-typedef struct UiEquipWindow UiEquipWindow;
+/*   10 use(s): Ui_List_CompareEntryByKey98, Ui_List_CompareEntryByKey98, Ui_List_CompareEntryByField13 */
+typedef struct UiEntryRef UiEntryRef;
 
 /*   10 use(s): Ui_MessageWindow_Update, Ui_SkillPanel_HandleInput, Ui_SkillPanel_HandleInputB */
 typedef struct UiInput UiInput;
@@ -690,20 +639,23 @@ typedef struct UiInput UiInput;
 /*   10 use(s): Ui_MapShipIcon_Update, Ui_MapIcon_UpdateShipIconTransform, Ui_MapIcon_ClampToScreenEdge */
 typedef struct UiMapIcon UiMapIcon;
 
+/*   10 use(s): Ui_PanelState_Enter16, Ui_PanelState_Enter0B, Ui_PanelState_Enter0EOr10 */
+typedef struct UiPanelSequence UiPanelSequence;
+
 /*   10 use(s): Ui_SenrekiWindow_InitPanes, Ui_SenrekiWindow_SwitchPage, Ui_SenrekiWindow_OnInput */
 typedef struct UiSenrekiWindow UiSenrekiWindow;
 
 /*   10 use(s): Ui_Status_ShowMaxHp, Ui_Status_ShowMaxMp, Ui_Status_ShowAgility */
 typedef struct UiStatusRow UiStatusRow;
 
-/*    9 use(s): maybe_Actor_ActionSeq_StartCommonA, maybe_Actor_ActionSeq_RunChoice, maybe_Actor_ActionSeq_RunChoice2 */
-typedef struct ActorActionSeq ActorActionSeq;
-
-/*    9 use(s): Anim_ClipSet_PlayById, Anim_Clip_Build, maybe_Anim_Clip_BuildLoopFragment */
-typedef struct AnimClipSet AnimClipSet;
+/*   10 use(s): Ui_List_MoveCursorWithFallback, Ui_List_SetupRows, Ui_List_DestroyRows */
+typedef struct Ui_List Ui_List;
 
 /*    9 use(s): Battle_Command_GetTargetMode, Battle_Command_OpenAttackTargetWindow, Battle_Command_AttachEquipToActor */
 typedef struct BattleCommandState BattleCommandState;
+
+/*    9 use(s): Battle_Popup3D_UpdateRoot, maybe_Battle_Popup3D_UpdateRootEx, Battle_Popup3D_DeletingDtor */
+typedef struct BattlePopup3D BattlePopup3D;
 
 /*    9 use(s): Battle_Ui_UnitModel_SetPosition, Battle_Ui_UnitModel_StartTween, Battle_Ui_UnitModel_SetPositionOffset */
 typedef struct BattleUnitUiWidget BattleUnitUiWidget;
@@ -711,20 +663,17 @@ typedef struct BattleUnitUiWidget BattleUnitUiWidget;
 /*    9 use(s): maybe_Container_RbTree_Dtor, Container_HandleNode_Dtor, Container_HandleNode_DtorB */
 typedef struct ContainerNode ContainerNode;
 
+/*    9 use(s): maybe_Ui_DiveForm_FindCommandEntry, Ui_DiveForm_OnAnimEnd, Ui_DiveForm_ActivateChildState11 */
+typedef struct DiveForm DiveForm;
+
+/*    9 use(s): Field_Object2D_ShowSceneEntryA, Field_Object2D_ReleaseSceneEntry, Field_Object2D_HideSceneEntryA */
+typedef struct FieldObject2D FieldObject2D;
+
 /*    9 use(s): Field_Object_GetKind4Record, Field_Object_GetKind0Record, Field_Object_GetKind1Record */
 typedef struct FieldObjectDb FieldObjectDb;
 
-/*    9 use(s): Field_Prop_HandleCommand, maybe_Field_Prop_OnActionEnd, Field_Prop_FreeSubNode */
-typedef struct FieldProp FieldProp;
-
-/*    9 use(s): Field2D_Scene_BuildFromFieldWork, Field2D_Scene_UpdateFromFieldWork, maybe_Field_ApplyToActorsInRadius */
-typedef struct FieldWork FieldWork;
-
 /*    9 use(s): Gfx_MoviePlayer_AddRef, Gfx_MoviePlayer_ReleaseRef, Gfx_Movie_FlushStreams */
 typedef struct GfxMovieContext GfxMovieContext;
-
-/*    9 use(s): Ui_ItemIcon_SetFromItem, Ui_ItemListWindow_BuildItemRow, maybe_Ui_Row_SetItemIcon */
-typedef struct ItemRecord ItemRecord;
 
 /*    9 use(s): maybe_Menu_InvokeLayoutCallbackA, maybe_Menu_InvokeLayoutCallbackB, maybe_Menu_InvokeLayoutCallbackC */
 typedef struct LayoutNode LayoutNode;
@@ -735,11 +684,11 @@ typedef struct MessagePage MessagePage;
 /*    9 use(s): Ui_MessageVoice_UpdateLine0, Ui_MessageVoice_FinishLine0, Ui_MessageVoice_UpdateLine1 */
 typedef struct MessageVoice MessageVoice;
 
-/*    9 use(s): Model_ObjectType0x74_Ctor, maybe_Model_ResolveHandleAndRefresh, Model_GetNodeWorldPosition */
-typedef struct ModelObject ModelObject;
-
 /*    9 use(s): Field_ModelSlotEmitter_RefreshFromOwner, Field_ModelSlotEmitter_Configure, Field_ModelSlotEmitter_ReleaseSlots */
 typedef struct ModelSlotSet ModelSlotSet;
+
+/*    9 use(s): Battle_Enemy_GetDisplaySlot, Monster_FormatEffectText, maybe_Monster_GetAttackStat */
+typedef struct MonsterWork MonsterWork;
 
 /*    9 use(s): Party_StatCalc_CalcAgilityDeftness, Party_StatCalc_CalcResistances, Party_StatCalc_ApplyBaseStats */
 typedef struct PartyStatContext PartyStatContext;
@@ -750,17 +699,14 @@ typedef struct RbTreeNode RbTreeNode;
 /*    9 use(s): Gfx_BindIndexedResourceSet, Gfx_BindSingleResource, Gfx_BindResourceSetVariant */
 typedef struct ResDesc ResDesc;
 
-/*    9 use(s): Gfx_SceneSpriteSet_SetPartVisible, Gfx_SceneSpriteSet_ApplyPreset, Gfx_SceneSpriteSet_RefreshPreset */
-typedef struct SceneSpriteSet SceneSpriteSet;
-
-/*    9 use(s): Sound_SeqParam_GetHeaderWord, maybe_Sound_SeqParam_GetRangePair, Sound_SeqParam_GetVoiceParams */
-typedef struct SoundParamAccessor SoundParamAccessor;
-
 /*    9 use(s): Sound_SeqParam_NotifyChange, Sound_Seq_GetVoiceSlot, Sound_WaveInfo_CopyDescriptor */
 typedef struct SoundParamOwner SoundParamOwner;
 
 /*    9 use(s): Sound_Sequence_InitTrack, Sound_Track_UpdateVolume, Sound_Track_ApplyChannelKey */
 typedef struct SoundTrack SoundTrack;
+
+/*    9 use(s): Field_Gadget_OnEvent, Field_Gadget_InitSpriteGridA, Field_Gadget_InitSpriteGridB */
+typedef struct SpriteGadget SpriteGadget;
 
 /*    9 use(s): Actor2D_CreateSpritesFromRecord, Actor2D_CreateSingleSpritePane, Field2D_Sprite_InitFromRecord */
 typedef struct SpriteRecord SpriteRecord;
@@ -771,26 +717,29 @@ typedef struct SqHashTable SqHashTable;
 /*    9 use(s): Script_MakeObjectRef, Sq_ResolveSlotValue, Sq_ResolveSlotValue */
 typedef struct SqValue SqValue;
 
-/*    9 use(s): Text_LayoutPage_BuildLines, maybe_Item_CollectIdsFromBag, Ui_ListData_BindEntries */
-typedef struct TextBlock TextBlock;
-
 /*    9 use(s): maybe_Text_InitLineCache, maybe_Text_InitLineCache, Text_ApplyGlyphStyle */
 typedef struct TextLine TextLine;
 
-/*    9 use(s): Ui_ShopItemList_PopulateRows, maybe_Ui_ShopItemList_Restore, maybe_Ui_ShopItemList_Open */
-typedef struct UiShopItemList UiShopItemList;
+/*    9 use(s): Ui_Element_ApplyCommand, Ui_LayoutElement_FinishAnim, Ui_TwoColumnRow_InitPanes */
+typedef struct UiElement UiElement;
+
+/*    9 use(s): Ui_MessagePage_Decode, Ui_MessagePage_Dtor, Ui_MessagePage_Build */
+typedef struct UiMessagePage UiMessagePage;
+
+/*    9 use(s): Ui_SkillPanelWindow_Release, Ui_SkillPanel_OnCommandPopPane, Ui_SkillPanel_OnCommandShowMessage16 */
+typedef struct UiSkillPanelWindow UiSkillPanelWindow;
 
 /*    9 use(s): maybe_Ui_Window_AdvanceScrollPage, Ui_ListWindow_CommitSelection, Ui_ListWindow_ToggleDetailPanes */
 typedef struct Ui_ListWindow Ui_ListWindow;
 
-/*    8 use(s): maybe_Field_ActorMotion_WalkToward, Field_ActorMotion_PlayNutAndCommit, Field_ActorMotion_CopyTransformAndPlay */
-typedef struct ActorMotion ActorMotion;
-
-/*    8 use(s): Actor_InitStateController, Actor_OnStateEvent, Actor_CheckInteractionRange */
-typedef struct ActorStateController ActorStateController;
+/*    8 use(s): Anim_ClipSet_PlayById, Anim_Clip_Build, maybe_Anim_Clip_BuildLoopFragment */
+typedef struct AnimClipSet AnimClipSet;
 
 /*    8 use(s): Anim_TimeTrack_InsertRangeStart, Anim_TimeTrack_InsertRange, Anim_TimeTrack_ReserveRange */
 typedef struct AnimTimeTrack AnimTimeTrack;
+
+/*    8 use(s): Battle_BackupUnitActions, Battle_CheckActionSlotFree, Battle_HasPendingAction */
+typedef struct Battle Battle;
 
 /*    8 use(s): Battle_AnimWindow_ReleaseEffects, Battle_AnimWindow_UpdateAttach, Battle_AnimWindow_UpdateAttachEx */
 typedef struct BattleAnimWindow BattleAnimWindow;
@@ -801,17 +750,23 @@ typedef struct CasinoSlotContext CasinoSlotContext;
 /*    8 use(s): Casino_Slot_UpdateWinLineA, Casino_Slot_EvaluateWinLineA, Casino_Slot_UpdateWinLineB */
 typedef struct CasinoSlotLine CasinoSlotLine;
 
+/*    8 use(s): Field2D_Bob_Update, Field2D_Sprite_StepMoveTween, maybe_Field2D_MapChip_QueryCollision */
+typedef struct Field2DObject Field2DObject;
+
 /*    8 use(s): Field2D_Step_WaitDistance, Field2D_Step_CallCallback, Field2D_Step_ForwardCommand */
 typedef struct Field2DTask Field2DTask;
 
 /*    8 use(s): Field_MapObject2D_SetupFromList19D4, Field_MapObject2D_SetupFromList1A34, Field_MapObject2D_SetupFromList1B54 */
 typedef struct FieldMapObject2D FieldMapObject2D;
 
-/*    8 use(s): FieldParty_ResetMemberModels, maybe_FieldParty_UpdateMemberFade, FieldParty_ResetMemberPositions */
-typedef struct FieldPartyGroup FieldPartyGroup;
+/*    8 use(s): Field_Prop_HandleCommand, Field_Prop_OnActionEnd, Field_Prop_FreeSubNode */
+typedef struct FieldProp FieldProp;
 
 /*    8 use(s): Field_SpriteObject_InitFromRecord, Field_SpriteObject_ResetState, Field_SpriteObject_Dtor */
 typedef struct FieldSpriteObject FieldSpriteObject;
+
+/*    8 use(s): Field2D_Scene_BuildFromFieldWork, Field2D_Scene_UpdateFromFieldWork, Ui_FindObjectAtPosition */
+typedef struct FieldWork FieldWork;
 
 /*    8 use(s): Font_GlyphList_SetVisible, Font_GlyphCache_AllocSpan, Font_GlyphCache_FreeSpan */
 typedef struct FontGlyphCache FontGlyphCache;
@@ -819,11 +774,20 @@ typedef struct FontGlyphCache FontGlyphCache;
 /*    8 use(s): Fs_FormatResultCode, Svc_Content_OpenByRecord, Fs_BuildContentInfoArchivePath */
 typedef struct FsResult FsResult;
 
+/*    8 use(s): Ui_GuideWindow_UpdatePageMetrics, Ui_GuideWindow_BuildPageContent, Ui_GuideWindow_NextPage */
+typedef struct GuideWindow GuideWindow;
+
 /*    8 use(s): Field_Action_EvaluateTurnDirection, Field_Action_HorseTurn, Field_HorseAction_Ctor */
 typedef struct HorseAction HorseAction;
 
+/*    8 use(s): Ui_ItemIcon_SetFromItem, Ui_ItemListWindow_BuildItemRow, Model_CreateAttachedEffect */
+typedef struct ItemRecord ItemRecord;
+
 /*    8 use(s): Ui_MessageSelectWindow_SwitchMode, Ui_MessageSelectWindow_BuildRowsA, Ui_MessageSelectWindow_BuildRowsB */
 typedef struct MessageSelectWindow MessageSelectWindow;
+
+/*    8 use(s): Model_ObjectType0x74_Ctor, Model_ResolveHandleAndRefresh, Model_GetNodeWorldPosition */
+typedef struct ModelObject ModelObject;
 
 /*    8 use(s): Monster_Action_EggJumpCtor, Monster_ActionScaleGrow, Monster_Action_Ctor */
 typedef struct MonsterAction MonsterAction;
@@ -831,35 +795,29 @@ typedef struct MonsterAction MonsterAction;
 /*    8 use(s): Gfx_Overlay_DrawSprite, Gfx_Overlay_DrawScreenQuad, Gfx_Overlay_EndFrame */
 typedef struct OverlayCtx OverlayCtx;
 
-/*    8 use(s): Field_InitSceneObjects, Field_DestroyScene, Field_DeleteScene */
-typedef struct Scene Scene;
+/*    8 use(s): std_RbTree_EraseNode, std_RbTree_EraseNode, std_RbTree_EraseNodeRebalance */
+typedef struct RbNode RbNode;
+
+/*    8 use(s): Regex_OpBuildOperandSets, Regex_OpBuildOperandSetsSingle, Regex_OpPushValueFromRight */
+typedef struct RegexValueList RegexValueList;
+
+/*    8 use(s): Gfx_SceneSpriteSet_SetPartVisible, Gfx_SceneSpriteSet_ApplyPreset, Gfx_SceneSpriteSet_RefreshPreset */
+typedef struct SceneSpriteSet SceneSpriteSet;
 
 /*    8 use(s): Casino_Slot_StopAllReels, Casino_Slot_HideSymbols, Casino_Slot_ResetRows */
 typedef struct SlotMachine SlotMachine;
 
-/*    8 use(s): Snd_FadeChannelToGain, maybe_Snd_CalcVolumePan, Snd_UpdateChannelState */
-typedef struct SndChannel SndChannel;
-
 /*    8 use(s): Snd_PrepareBgmStream, Snd_RequestBgmPlay, Snd_StopPendingBgm */
 typedef struct SndPlayer SndPlayer;
 
-/*    8 use(s): Fs_Archive_Close, Fs_Archive_OpenRecordTable, maybe_Sound_Stream_CloseRecordTable */
+/*    8 use(s): Fs_Archive_Close, Fs_Archive_OpenRecordTable, Sound_Stream_CloseRecordTable */
 typedef struct SoundArchive SoundArchive;
-
-/*    8 use(s): Sound_SeqField_GetWord18, Sound_SeqField_GetWord18B, Sound_SeqField_GetByte18 */
-typedef struct SoundSeqField SoundSeqField;
-
-/*    8 use(s): Ui3D_AttachRecordEntries, Ui3D_TryStartAttackSequence, Ui3D_UpdatePendingTrigger */
-typedef struct Ui3DModelElement Ui3DModelElement;
 
 /*    8 use(s): Ui_BattleSpellWindow_DtorBase, Ui_BattleSpellWindow_Refresh, Ui_BattleSpellWindow_HasSelectableSpell */
 typedef struct UiBattleSpellWindow UiBattleSpellWindow;
 
 /*    8 use(s): Ui_CompositeWindow_ReleaseChildren, Ui_CompositeWindow_Delete, Ui_CompositeWindow_Dtor */
 typedef struct UiCompositeWindow UiCompositeWindow;
-
-/*    8 use(s): Ui_DiveForm_DispatchEvent, maybe_Ui_Window_ApplyTextEvent, maybe_Ui_LoadScreen_CloseAndFlush */
-typedef struct UiEvent UiEvent;
 
 /*    8 use(s): Ui_JumonWindow_Init, Ui_JumonWindow_Update, Ui_JumonWindow_InitPanes */
 typedef struct UiJumonWindow UiJumonWindow;
@@ -876,35 +834,26 @@ typedef struct UiRowList UiRowList;
 /*    8 use(s): Ui_SlotMachine_PlayMissAnim, Ui_SlotMachine_PlayHitAnim, Ui_SlotMachine_PlayStartAnim */
 typedef struct UiSlotMachine UiSlotMachine;
 
-/*    8 use(s): Ui_TrainingWindow_InitPanes, Ui_TrainingWindow_DispatchEvent, Ui_TrainingWindow_CreateRowTable */
-typedef struct UiTrainingWindow UiTrainingWindow;
-
 /*    8 use(s): Ui_WorldMap_Destructor, Ui_WorldMap_Teardown, Ui_WorldMap_Setup */
 typedef struct UiWorldMap UiWorldMap;
-
-/*    8 use(s): Ui_Widget_GetLowestPriority, Ui_Widget_UpdateLayout, Ui_Widget_ForwardInputMaskD0 */
-typedef struct Ui_Widget Ui_Widget;
-
-/*    8 use(s): Ui_AutoCloseMessageWindow, Ui_Window_BindTwoLinePanes, Ui_BattleWindow_ApplyLayoutMode */
-typedef struct Ui_Window Ui_Window;
-
-/*    8 use(s): ViewWork_Reset, Camera_ApplyWorkEntries, Camera_ApplyWorkEntriesDefault */
-typedef struct ViewWork ViewWork;
 
 /*    7 use(s): Actor_Action_Trail_Start, Actor_Action_Trail_AddSample, Actor_Action_Trail_InitSamples */
 typedef struct ActorActionTrail ActorActionTrail;
 
+/*    7 use(s): Field_ActorMotion_PlayNutAndCommit, Field_ActorMotion_CopyTransformAndPlay, Gfx_Actor_ApplyMotion */
+typedef struct ActorMotion ActorMotion;
+
+/*    7 use(s): Actor_InitStateController, Actor_OnStateEvent, Actor_CheckInteractionRange */
+typedef struct ActorStateController ActorStateController;
+
 /*    7 use(s): Effect_ActorTrail_Update, Effect_ActorTrail_ReleaseInstance, Effect_ActorTrail_Stop */
 typedef struct EffectActorTrail EffectActorTrail;
 
-/*    7 use(s): Field2D_Bob_Update, Field2D_Sprite_StepMoveTween, maybe_Field2D_MapChip_QueryCollision */
-typedef struct Field2DObject Field2DObject;
-
-/*    7 use(s): Field_ActorActionSeq_UpdateMain, maybe_Field_ActorActionSeq_UpdateAlt, Field_ActorActionSeq_StepEntryA */
+/*    7 use(s): Field_ActorActionSeq_UpdateMain, Field_ActorActionSeq_UpdateAlt, Field_ActorActionSeq_StepEntryA */
 typedef struct FieldActorSeq FieldActorSeq;
 
-/*    7 use(s): Gfx_SceneSprite2D_ApplyAnimScale, maybe_Gfx_SceneSprite2D_InitAnimSlots, Field_Level_ResetRuntime */
-typedef struct FieldLevel FieldLevel;
+/*    7 use(s): FieldParty_ResetMemberModels, FieldParty_ResetMemberPositions, FieldParty_ComputeFormationBounds */
+typedef struct FieldPartyGroup FieldPartyGroup;
 
 /*    7 use(s): Font_SetGlyphTable, Font_Init, Font_ApplyGlyphMetrics */
 typedef struct Font Font;
@@ -936,11 +885,20 @@ typedef struct PartyListWindow PartyListWindow;
 /*    7 use(s): Party_Status_SetMemberValue, Party_Status_AddMember, Party_Status_SelectPage */
 typedef struct PartyStatus PartyStatus;
 
+/*    7 use(s): Ui_PartyStatusWindow_Update, maybe_Ui_PartyStatusWindow_Confirm, Ui_PartyStatusWindow_Dtor */
+typedef struct PartyStatusWindow PartyStatusWindow;
+
 /*    7 use(s): Regex_State_FindOrCreate, Regex_State_SplitOverlappingClasses, Regex_State_SplitOverlappingClasses */
 typedef struct RegexState RegexState;
 
 /*    7 use(s): Script_ParseAssignmentExpression, Script_ParseBitwiseExpression, Script_ParseUnaryExpression */
 typedef struct ScriptCompiler ScriptCompiler;
+
+/*    7 use(s): Snd_FadeChannelToGain, Snd_UpdateChannelState, Snd_InsertChannelByPriority */
+typedef struct SndChannel SndChannel;
+
+/*    7 use(s): Sound_SeqParam_GetHeaderWord, Sound_SeqParam_GetVoiceParams, Sound_SeqParam_GetEntryTriple */
+typedef struct SoundParamAccessor SoundParamAccessor;
 
 /*    7 use(s): Sound_WaveCache_LoadDecoded, Sound_WaveCache_Preload, Sound_WaveCache_LoadDecodedWithHeader */
 typedef struct SoundWaveCache SoundWaveCache;
@@ -951,32 +909,35 @@ typedef struct TalkPartyWindow TalkPartyWindow;
 /*    7 use(s): Ui_TalkWindow_DtorB_2, Ui_TalkWindow_HandleEvent6, Ui_TalkWindow_HandleEvent7 */
 typedef struct TalkWindow TalkWindow;
 
-/*    7 use(s): Ui_MemoriesWindow_InitPanes, Ui_MemoriesWindow_Update, Ui_MemoriesWindow_HandleInput */
-typedef struct UiMemoriesWindow UiMemoriesWindow;
+/*    7 use(s): Ui3D_AttachRecordEntries, Ui3D_TryStartAttackSequence, Ui3D_UpdatePendingTrigger */
+typedef struct Ui3DModelElement Ui3DModelElement;
 
-/*    7 use(s): Ui_MessagePartTable_Ctor, Ui_MessagePartTable_Clear, Ui_MessagePartTable_AddElementParts */
-typedef struct UiMessagePartTable UiMessagePartTable;
+/*    7 use(s): Ui_EquipWindow_InitPanes, Ui_EquipWindow_Ctor_2, Ui_EquipWindow_Dtor */
+typedef struct UiEquipWindow UiEquipWindow;
 
-/*    7 use(s): maybe_Ui_CreateItemMenuWidget, Ui_SakusenWindow_CreateWithIconState, Ui_SakusenWindow_CreateAndRefreshList */
+/*    7 use(s): Ui_TwoTabCursor_HandleInput, Ui_SmithMenu_HandleInput, Ui_SmithMenu_HandleArmorList */
+typedef struct UiInputEvent UiInputEvent;
+
+/*    7 use(s): Ui_CreateItemMenuWidget, Ui_SakusenWindow_CreateWithIconState, Ui_SakusenWindow_CreateAndRefreshList */
 typedef struct UiOwner UiOwner;
 
 /*    7 use(s): Ui_PaneSet_Dtor_2, Ui_PaneSet_Dtor_1, Ui_PaneSet_Dtor_4 */
 typedef struct UiPaneSet UiPaneSet;
 
-/*    7 use(s): Ui_RecordDetailWindow_InitRows, Ui_RecordDetailWindow_HandleInputA, Ui_RecordDetailWindow_HandleInputB */
-typedef struct UiRecordDetailWindow UiRecordDetailWindow;
-
-/*    7 use(s): Ui_SlideWindow_UpdateSlideState, Ui_SlideWindow_UpdateSlideStateB, maybe_Ui_SlideWindow_OnEventA */
-typedef struct UiSlideWindow UiSlideWindow;
+/*    7 use(s): Ui_ShopItemList_PopulateRows, Ui_ShopItemList_HandleInput, Ui_ShopItemList_MoveCursor */
+typedef struct UiShopItemList UiShopItemList;
 
 /*    7 use(s): Ui_SlotPlateWindow_DrawPlates, Ui_SlotPlateWindow_UpdateStopSequence, Ui_SlotPlateWindow_DrawSinglePlate */
 typedef struct UiSlotPlateWindow UiSlotPlateWindow;
 
+/*    7 use(s): Ui_Widget_GetLowestPriority, Ui_Widget_UpdateLayout, Ui_Widget_ForwardInputMaskD0 */
+typedef struct Ui_Widget Ui_Widget;
+
+/*    7 use(s): ViewWork_Reset, Camera_ApplyWorkEntries, Camera_ApplyWorkEntriesDefault */
+typedef struct ViewWork ViewWork;
+
 /*    6 use(s): Actor_ModelInstance_InitState, Actor_ModelInstance_ResetQuadBuffers, Actor_ModelInstance_UpdateBoneTransforms */
 typedef struct ActorModelInstance ActorModelInstance;
-
-/*    6 use(s): Anim_CreateAnimSlots, Anim_PlayById, maybe_Anim_Resource_RebindCurrentFrame */
-typedef struct AnimOwner AnimOwner;
 
 /*    6 use(s): Battle_Command_CommitActorAction, Battle_Equip_UpdateWeaponSlot, Battle_Equip_UpdateArmourSlot */
 typedef struct BattleCommandContainer BattleCommandContainer;
@@ -984,29 +945,20 @@ typedef struct BattleCommandContainer BattleCommandContainer;
 /*    6 use(s): Ui_BattleEnemyListWindow_BuildRows, Ui_BattleEnemyListWindow_IsRowSelectable, Ui_BattleEnemyListWindow_SkipInvalidCursor */
 typedef struct BattleEnemyListWindow BattleEnemyListWindow;
 
-/*    6 use(s): BattleScene_BuildMemberModel, maybe_BattleScene_UpdateUnitModelsByState, BattleScene_BuildPartyModel */
+/*    6 use(s): BattleScene_BuildMemberModel, BattleScene_UpdateUnitModelsByState, BattleScene_BuildPartyModel */
 typedef struct BattleMember BattleMember;
 
 /*    6 use(s): Battle_Ui_PartyRowPanel_SetIndex, Battle_Ui_PartyRowPanel_Delete, Battle_Ui_PartyRowPanel_Init */
 typedef struct BattlePartyRowPanel BattlePartyRowPanel;
 
-/*    6 use(s): Battle_MessageRow_BuildLayout, Text_Row_MeasureIconRowWidth, maybe_Battle_Row_SumActorValues */
-typedef struct BattleRowCtx BattleRowCtx;
-
 /*    6 use(s): Battle_UnitModel_SetPosition, Battle_UnitModel_MoveBy, Battle_UnitModel_SetAlpha */
 typedef struct Battle_UnitModel Battle_UnitModel;
-
-/*    6 use(s): maybe_Casino_Slot_UpdateSpeed, Casino_Slot_GetPayoutRank, Casino_Slot_GetPatternRecordIndex */
-typedef struct CasinoSlot CasinoSlot;
 
 /*    6 use(s): maybe_Video_ConvertPlanes4_A, maybe_Video_ConvertPlanes3_A, maybe_Video_ConvertPlanes4_B */
 typedef struct ConvertArg ConvertArg;
 
-/*    6 use(s): Ui_DataPanel_OpenDefault, maybe_Ui_DataPanel_OpenWithStrings, maybe_Ui_DataPanel_OpenWithFlags */
+/*    6 use(s): Ui_DataPanel_OpenDefault, maybe_Ui_DataPanel_OpenWithWorkCopy, Ui_DataPanel_OpenWithFlags */
 typedef struct DataPanel DataPanel;
-
-/*    6 use(s): Effect_SpawnAttachedFromDescriptor, Effect_SpawnAttachedForSlot, Effect_SpawnAttachedPair */
-typedef struct EffectAttach EffectAttach;
 
 /*    6 use(s): Ui_EquipListWindow_Scroll, Ui_EquipListWindow_RebuildEntries, Ui_EquipListWindow_GetCursorItemId */
 typedef struct EquipListWindow EquipListWindow;
@@ -1014,8 +966,8 @@ typedef struct EquipListWindow EquipListWindow;
 /*    6 use(s): Event_BeeRise_UpdateMotion, Event_SkullRun_UpdateOrientation, Event_Rura_Update */
 typedef struct EventGimmick EventGimmick;
 
-/*    6 use(s): maybe_Event_Packet_ReleaseResource, Event_Packet_SetAnimationVariant, Event_Packet_GetResourcePair */
-typedef struct EventPacket EventPacket;
+/*    6 use(s): Gfx_SceneSprite2D_ApplyAnimScale, Field_Level_ResetRuntime, Field_Level_LoadResources */
+typedef struct FieldLevel FieldLevel;
 
 /*    6 use(s): Field_NotifyAttached24, Field_UpdateDrawList, Field_NotifyAttached20 */
 typedef struct FieldViewWork FieldViewWork;
@@ -1032,14 +984,14 @@ typedef struct GfxCharModel GfxCharModel;
 /*    6 use(s): Gfx_FlushCommandBuffer, Gfx_CommandBuffer_Release, Gfx_CommandBuffer_Submit */
 typedef struct GfxCommandBuffer GfxCommandBuffer;
 
-/*    6 use(s): Gfx_MeshChunk_DrawStrips, Gfx_MeshChunk_DrawStripsWithPalette, Gfx_MeshChunk_DrawPartList */
-typedef struct GfxMeshChunkDraw GfxMeshChunkDraw;
-
 /*    6 use(s): Font_GlyphQuad_CreateFromUVs, Font_GlyphQuad_Attach, Font_GlyphQuad_Ctor */
 typedef struct GlyphQuad GlyphQuad;
 
 /*    6 use(s): Ui_MapIcon_ProvideShipIconAlt, Ui_MapIcon_ProvideShipIcon, Ui_MapIcon_ProvideShipIconRotated */
 typedef struct IconDesc IconDesc;
+
+/*    6 use(s): ItemBag_SortEntriesByKey, Item_CheckBagAcquire, Item_RemoveByLinkedId */
+typedef struct ItemBag ItemBag;
 
 /*    6 use(s): Menu_IconModel_LoadBch, Menu_CombinationIcon_LoadPack, Menu_IconModel_Release */
 typedef struct MenuIconModel MenuIconModel;
@@ -1047,14 +999,20 @@ typedef struct MenuIconModel MenuIconModel;
 /*    6 use(s): MoLive_Decoder_Create, MoLive_Decoder_SkipPackets, MoLive_Decoder_GetPacket */
 typedef struct MoLiveDecoder MoLiveDecoder;
 
+/*    6 use(s): Model_ApplyFacingTilt, Model_Node_DestroyChildList, Model_EvaluateNodeTransform */
+typedef struct ModelNode ModelNode;
+
 /*    6 use(s): Monster_Pattern_LoadModel, Monster_Model_SetState, Monster_Model_SetupPattern */
 typedef struct MonsterModel MonsterModel;
 
 /*    6 use(s): Ui_PartyStatus_AdjustValue, Ui_PartyStatus_SetValue, Ui_PartyStatus_ApplyValue */
 typedef struct PartyStatusPanel PartyStatusPanel;
 
-/*    6 use(s): maybe_Save_SetNameBuffer, Save_WriteSlotStrings, Save_LoadSlotData */
+/*    6 use(s): Save_SetNameBuffer, Save_WriteSlotStrings, Save_LoadSlotData */
 typedef struct SaveWork SaveWork;
+
+/*    6 use(s): Field_InitSceneObjects, Field_DestroyScene, Field_DeleteScene */
+typedef struct Scene Scene;
 
 /*    6 use(s): Script_LookupIntTableValue, Script_TCSJump_Check, Script_TCS_FindSceneFrame */
 typedef struct ScriptContext ScriptContext;
@@ -1071,7 +1029,7 @@ typedef struct SoundChannelPool SoundChannelPool;
 /*    6 use(s): Sound_SeqNote_UpdateChannelMute, Sound_SeqNote_Release, Sound_SeqNote_Start */
 typedef struct SoundSeqNote SoundSeqNote;
 
-/*    6 use(s): maybe_Sound_SeqParam_GetTrackEventA, maybe_Sound_SeqParam_GetTrackEventB, Sound_SeqParam_FindRecordByName */
+/*    6 use(s): Sound_SeqParam_GetTrackEventA, Sound_SeqParam_GetTrackEventB, Sound_SeqParam_FindRecordByName */
 typedef struct SoundSeqParam SoundSeqParam;
 
 /*    6 use(s): Sound_SequencePlayer_UpdateVoices, Sound_SequencePlayer_Reset, Sound_SequencePlayer_Init */
@@ -1080,32 +1038,26 @@ typedef struct SoundSequencePlayer SoundSequencePlayer;
 /*    6 use(s): Sq_LexerReadHexNumber, Sq_LexerReadLiteral, Sq_LexerReadToken */
 typedef struct SqLexer SqLexer;
 
-/*    6 use(s): maybe_Gfx_StreamSlot_AllocEntry, Gfx_StreamSlot_Stop, Gfx_StreamSlot_Destroy */
+/*    6 use(s): Gfx_StreamSlot_AllocEntry, Gfx_StreamSlot_Stop, Gfx_StreamSlot_Destroy */
 typedef struct StreamSlot StreamSlot;
 
 /*    6 use(s): Text_NgWord_MatchWord, Text_NgWord_ValidateAll, Text_NgWord_ApplyDictionary */
 typedef struct TextFilter TextFilter;
 
-/*    6 use(s): maybe_Ui_AnimObject_DeletingDtor, maybe_Ui_Anim_SetStateId, AnimObject_ForwardEvent */
-typedef struct UiAnimObject UiAnimObject;
-
 /*    6 use(s): Ui_CharaStatusWindow_FillPartyMember, Ui_CharaStatusWindow_Dtor, Ui_CharaStatusWindow_Release */
 typedef struct UiCharaStatusWindow UiCharaStatusWindow;
-
-/*    6 use(s): maybe_Ui_DateDisplay_EnterState6, maybe_Ui_DateDisplay_EnterState10, maybe_Ui_DateDisplay_EnterState7 */
-typedef struct UiDateDisplay UiDateDisplay;
 
 /*    6 use(s): Ui_Dialog_UpdateLayout, Ui_Dialog_SetVisibleState, Ui_Dialog_ResetAnimation */
 typedef struct UiDialog UiDialog;
 
-/*    6 use(s): Ui_DiveStartWindow_DeletingDtorB, Ui_DiveStartWindow_InitPanes, maybe_Ui_DiveStartWindow_SetRecordHandle */
+/*    6 use(s): Ui_DiveStartWindow_DeletingDtorB, Ui_DiveStartWindow_InitPanes, Ui_DiveStartWindow_SetRecordHandle */
 typedef struct UiDiveStartWindow UiDiveStartWindow;
-
-/*    6 use(s): Ui_SlotPlateWindow_DrawPlates, Ui_SlotPlateWindow_DrawSinglePlate, Ui_SlotPlateWindow_DrawEmpty */
-typedef struct UiDrawList UiDrawList;
 
 /*    6 use(s): Ui_DungeonHpWindow_Dtor, Ui_DungeonHpWindow_InitPanes, maybe_Ui_DungeonHpWindow_LayoutRows */
 typedef struct UiDungeonHpWindow UiDungeonHpWindow;
+
+/*    6 use(s): Ui_DiveForm_DispatchEvent, Ui_LoadScreen_State37Or39, Ui_LoadScreen_State39Or34B */
+typedef struct UiEvent UiEvent;
 
 /*    6 use(s): Ui_HitIcon_SetupSlots, Ui_HitIcon_FindSlotNode, Ui_HitIcon_UpdateVisibleSlots */
 typedef struct UiHitIcon UiHitIcon;
@@ -1113,13 +1065,19 @@ typedef struct UiHitIcon UiHitIcon;
 /*    6 use(s): Ui_ListData_BuildEntries, Ui_ListData_AppendSpecialPartyRows, Ui_ListData_AppendReincarnationRows */
 typedef struct UiListData UiListData;
 
+/*    6 use(s): Ui_MemoriesWindow_InitPanes, Ui_MemoriesWindow_Update, Ui_MemoriesWindow_HandleInput */
+typedef struct UiMemoriesWindow UiMemoriesWindow;
+
+/*    6 use(s): Ui_MessagePartTable_Ctor, Ui_MessagePartTable_Clear, Ui_MessagePartTable_AddElementParts */
+typedef struct UiMessagePartTable UiMessagePartTable;
+
 /*    6 use(s): Ui_Window_ReleaseChild24, Ui_Window_ReleaseChild24B, Ui_Window_ReleaseChild20 */
 typedef struct UiMessageWindowLayout UiMessageWindowLayout;
 
 /*    6 use(s): Ui_Anim_PlayIdle, Ui_Anim_CycleIdleVariants, Ui_ModelView_SetSelectedCharacter */
 typedef struct UiModelView UiModelView;
 
-/*    6 use(s): maybe_Ui_Window_NotifyDefaultResult, maybe_Ui_Window_NotifyResult9OrDefault, maybe_Ui_Window_NotifyResult1Or2WithEffect */
+/*    6 use(s): Ui_Window_NotifyDefaultResult, Ui_Window_NotifyResult9OrDefault, Ui_Window_NotifyResult1Or2WithEffect */
 typedef struct UiNotify UiNotify;
 
 /*    6 use(s): Ui_PaneGroup_BindPanes, Ui_PaneGroup_UpdateFade, maybe_Ui_PaneGroup_DeletingDtor */
@@ -1134,17 +1092,23 @@ typedef struct UiPresentMessageManager UiPresentMessageManager;
 /*    6 use(s): Ui_ProfileWindow_BindPanes, Ui_3DBackground_SetupView, Ui_ProfileWindow_BuildTitleRows */
 typedef struct UiProfileWindow UiProfileWindow;
 
+/*    6 use(s): Ui_RecordDetailWindow_InitRows, Ui_RecordDetailWindow_HandleInputA, Ui_RecordDetailWindow_HandleInputB */
+typedef struct UiRecordDetailWindow UiRecordDetailWindow;
+
+/*    6 use(s): Ui_SlideWindow_UpdateSlideState, Ui_SlideWindow_UpdateSlideStateB, maybe_Ui_SlideWindow_OnEventA */
+typedef struct UiSlideWindow UiSlideWindow;
+
 /*    6 use(s): Ui_SlotGrid_UpdateCrossFade, Ui_SlotGrid_MoveHighlight, Ui_SlotGrid_SelectSlot */
 typedef struct UiSlotGrid UiSlotGrid;
 
-/*    6 use(s): maybe_Ui_TextLayout_InsertRun, Ui_TextRun_Copy, Ui_TextRun_Copy */
+/*    6 use(s): maybe_Ui_TextLayout_UnlinkRun, Ui_TextRun_Copy, Ui_TextRun_Copy */
 typedef struct UiTextRun UiTextRun;
-
-/*    6 use(s): maybe_Ui_TitleWindow_SetAnimFrame, maybe_Ui_TitleWindow_Dtor, Ui_TitleLoopWindow_InitPanes */
-typedef struct UiTitleWindow UiTitleWindow;
 
 /*    6 use(s): Ui_WidgetStack_InvokeTop_759688, Ui_WidgetStack_InvokeTop_7596BC, Ui_WidgetStack_InvokeTop_75A710 */
 typedef struct UiWidgetStackHost UiWidgetStackHost;
+
+/*    6 use(s): Ui_AutoCloseMessageWindow, Ui_Window_BindTwoLinePanes, Ui_BattleWindow_ApplyLayoutMode */
+typedef struct Ui_Window Ui_Window;
 
 /*    6 use(s): Battle_UnitModel_SetVariantPaired, Battle_UnitModelA_Update, Battle_UnitModel_SetVariantSolo */
 typedef struct UnitModel UnitModel;
@@ -1154,6 +1118,9 @@ typedef struct ActionRecord ActionRecord;
 
 /*    5 use(s): Anim_ClipSlot_InitArcMotion, Anim_ClipSlot_UpdateArcMotion, Anim_ClipSlot_InitLinearMotion */
 typedef struct AnimClipSlot AnimClipSlot;
+
+/*    5 use(s): Anim_CreateAnimSlots, Anim_PlayById, Anim_Resource_RebindCurrentFrame */
+typedef struct AnimOwner AnimOwner;
 
 /*    5 use(s): Fs_Archive_FindDirectory, Fs_Archive_ReadDirectoryEntry, Fs_Archive_ResolveChild */
 typedef struct ArchiveDirTable ArchiveDirTable;
@@ -1170,6 +1137,9 @@ typedef struct BattleUiRow BattleUiRow;
 /*    5 use(s): Anim_UpdatePoseBlend, Anim_InterpolatePose, Anim_UpdateBlendLerp */
 typedef struct BlendState BlendState;
 
+/*    5 use(s): Casino_Slot_GetPayoutRank, Casino_Slot_GetPatternRecordIndex, Casino_Slot_CalcPayout */
+typedef struct CasinoSlot CasinoSlot;
+
 /*    5 use(s): Casino_Slot_UpdateSpinState, Casino_Slot_SetPaylineSprites, Casino_Slot_LoadNumberSprites */
 typedef struct CasinoSlotMachine CasinoSlotMachine;
 
@@ -1185,9 +1155,6 @@ typedef struct EffectMeshDef EffectMeshDef;
 /*    5 use(s): maybe_Event_ActorModels_SetModelAnim, Event_ActorModels_LoadModelResources, Event_ActorModels_SetModelAnimSimple */
 typedef struct EventModel EventModel;
 
-/*    5 use(s): maybe_Event_Camera_ApplyObjectTransform, Event_Actor_PlayNutMotion, Event_Actor_SetPositionAndFacing */
-typedef struct EventObject EventObject;
-
 /*    5 use(s): Field2D_Scene_StartPathTask, Field2D_Scene_AddTaskId, Field2D_Scene_StartObjectTask */
 typedef struct Field2DScene Field2DScene;
 
@@ -1200,23 +1167,11 @@ typedef struct FieldModelObj FieldModelObj;
 /*    5 use(s): FieldParty_ActionSpawnInfoPopup_Delete, FieldParty_ActionPlayEmote_Delete, FieldParty_ActionWaitForActor_Reset */
 typedef struct FieldPartyAction FieldPartyAction;
 
-/*    5 use(s): maybe_FieldParty_MemberModel_DtorA, maybe_FieldParty_MemberModel_DtorB, maybe_FieldParty_MemberModel_DtorC */
-typedef struct FieldPartyModel FieldPartyModel;
-
 /*    5 use(s): Field_TwoPartObj_IsEventSlotFree, Field_TwoPartObj_NotifyCommand19, Field_TwoPartObj_IsEventSlotFreeB */
 typedef struct FieldTwoPartObj FieldTwoPartObj;
 
-/*    5 use(s): maybe_Field_SceneNode_UpdateMessageAction, maybe_Field_Gimmick_IsEventSlotFree, Field_SceneNode_OnCommand */
+/*    5 use(s): Field_SceneNode_UpdateMessageAction, Field_Gimmick_IsEventSlotFree, Field_SceneNode_OnCommand */
 typedef struct Field_SceneNode Field_SceneNode;
-
-/*    5 use(s): Fs_ArchiveEntry_ReadAt, Fs_ArchiveEntry_Seek, maybe_Fs_ArchiveEntry_SetReadPosition */
-typedef struct FsEntry FsEntry;
-
-/*    5 use(s): Fs_Sarc_Open, Fs_Sarc_ParseFatNodes, maybe_Fs_Sarc_LocateDataBlock */
-typedef struct FsSarcReader FsSarcReader;
-
-/*    5 use(s): Gfx_EffectPart_SetRotationFromActor, Gfx_Actor_BindModelHandle, Gfx_Actor_ReleaseModelHandle */
-typedef struct GfxActor GfxActor;
 
 /*    5 use(s): Gfx_GpuCmd_FlushTextureUnits, Gfx_GpuCmd_EnqueueTextureCopyRect, Gfx_GpuCmd_EnqueueMemoryWrite */
 typedef struct GfxCmdQueue GfxCmdQueue;
@@ -1224,14 +1179,14 @@ typedef struct GfxCmdQueue GfxCmdQueue;
 /*    5 use(s): Gfx_DrawPacket_BuildFormat2, Gfx_DrawPacket_ResizeBuffer, Gfx_DrawPacket_BuildFormat3 */
 typedef struct GfxDrawPacket GfxDrawPacket;
 
-/*    5 use(s): Gfx_MeshChunk_DrawStrips, Gfx_MeshChunk_DrawStripsWithPalette, Gfx_MeshChunk_DrawPartList */
-typedef struct GfxDrawTag GfxDrawTag;
-
 /*    5 use(s): Gfx_EffectPart_UpdateTransform, Gfx_EffectPart_BindByName, Gfx_EffectPart_ResetToDefault */
 typedef struct GfxEffectPart GfxEffectPart;
 
 /*    5 use(s): Gfx_Mesh_ParseSections, Gfx_Mesh_SetupTextureChunk, Gfx_Mesh_AllocSubmeshBuffers */
 typedef struct GfxMeshChunk GfxMeshChunk;
+
+/*    5 use(s): Gfx_MeshChunk_DrawStrips, Gfx_MeshChunk_DrawStripsWithPalette, Gfx_MeshChunk_DrawPartList */
+typedef struct GfxMeshChunkDraw GfxMeshChunkDraw;
 
 /*    5 use(s): Gfx_Mesh_ParseSections, Gfx_Mesh_SetupTextureChunk, Gfx_Mesh_AllocSubmeshBuffers */
 typedef struct GfxMeshData GfxMeshData;
@@ -1242,13 +1197,10 @@ typedef struct GfxRenderContext GfxRenderContext;
 /*    5 use(s): Gfx_ResourceSet_Parse, Gfx_ResourceSet_ProcessCommands, Gfx_ResourceSet_ApplyFormat */
 typedef struct GfxResourceSet GfxResourceSet;
 
-/*    5 use(s): maybe_Gfx_Sprite2D_CreateChild, Gfx_Sprite2D_DtorB, Gfx_Sprite2D_DtorC */
-typedef struct GfxSprite2D GfxSprite2D;
-
-/*    5 use(s): maybe_Gfx_SpriteObject_Dtor, Gfx_SpriteObject_ReleaseChildHandle, maybe_Gfx_SpriteObject_AttachToOwner */
+/*    5 use(s): Field_SpriteSceneObject_Dtor, Gfx_SpriteObject_ReleaseChildHandle, maybe_Gfx_SpriteObject_AttachToOwner */
 typedef struct GfxSpriteObject GfxSpriteObject;
 
-/*    5 use(s): Ui_IconList_BindIcon, maybe_Ui_IconList_UpdateState, Ui_IconList_RefreshIcons */
+/*    5 use(s): Ui_IconList_BindIcon, Ui_IconList_UpdateState, Ui_IconList_RefreshIcons */
 typedef struct IconListModel IconListModel;
 
 /*    5 use(s): Input_Initialize, Input_UpdatePadState, Ui_List_ScrollVertical */
@@ -1269,12 +1221,6 @@ typedef struct MemberList MemberList;
 /*    5 use(s): Menu_Slot_HandleSelectionInput, Menu_Slot_GetOccupancyState, Menu_Slot_DrainQueue */
 typedef struct MenuSlot MenuSlot;
 
-/*    5 use(s): maybe_Message_SetArgTextPair, maybe_Message_StorePosPairB, maybe_Message_StorePosPairBIfPromptNotConfirmed */
-typedef struct MessageArgRecord MessageArgRecord;
-
-/*    5 use(s): Model_ApplyFacingTilt, Model_EvaluateNodeTransform, Model_SetFaceLookAtTarget */
-typedef struct ModelNode ModelNode;
-
 /*    5 use(s): ModelPreview_SelectSlot, ModelPreview_CreateAttachments, ModelPreview_UpdateAttachments */
 typedef struct ModelPreview ModelPreview;
 
@@ -1290,16 +1236,10 @@ typedef struct NpcPlacement NpcPlacement;
 /*    5 use(s): Ui_Pager_ApplyLastPageId, Ui_Pager_ApplyLastPageCompareField1, Ui_Pager_ApplyLastPageCompareField2 */
 typedef struct Pager Pager;
 
-/*    5 use(s): maybe_PartyPanel_SelectCurrentSlot, maybe_PartyPanel_CreateSlotObject, maybe_PartyPanel_EnsureSlotObjects */
-typedef struct PartyPanel PartyPanel;
-
-/*    5 use(s): std_RbTree_EraseNodeRebalance, std_RbTree_EraseRange, std_RbTree_InsertNode */
-typedef struct RbTree RbTree;
-
 /*    5 use(s): Gfx_ResourceTable_InsertNode, Gfx_ResourceTable_InsertRange, Gfx_ResourceTable_Build */
 typedef struct ResourceTable ResourceTable;
 
-/*    5 use(s): Ui_RouletteWindow_InitPanes, maybe_Ui_RouletteWindow_CreatePanels, Ui_RouletteWindow_ResetPanels */
+/*    5 use(s): Ui_RouletteWindow_InitPanes, Ui_RouletteWindow_CreatePanels, Ui_RouletteWindow_ResetPanels */
 typedef struct RouletteWindow RouletteWindow;
 
 /*    5 use(s): Field_Object2D_CreateSceneEntry, Field_Object2D_CreateSpriteEntry, Field_Object2D_CreateSpriteEntryB */
@@ -1310,9 +1250,6 @@ typedef struct SlotTable SlotTable;
 
 /*    5 use(s): std_SlotVector_AppendRange, std_SlotVector_Reallocate, std_SlotVector_Append */
 typedef struct SlotVector SlotVector;
-
-/*    5 use(s): maybe_Ui_SmithMenu_GetRowState, Ui_SmithMenu_GetCellValue, maybe_Ui_SmithMenu_IsRecipeRow */
-typedef struct SmithRow SmithRow;
 
 /*    5 use(s): Sound_WaveCache_LoadDecoded, Sound_WaveCache_LoadDecodedWithHeader, Sound_WaveCache_PreloadGroup */
 typedef struct SoundAllocator SoundAllocator;
@@ -1329,32 +1266,23 @@ typedef struct SoundMixer SoundMixer;
 /*    5 use(s): Sound_WaveBuffer_Init, Sound_WaveBuffer_ComputeLayout, Sound_WaveBuffer_Reset */
 typedef struct SoundWaveBuffer SoundWaveBuffer;
 
-/*    5 use(s): Ui_Layout_CreateChildSprite, Gfx_Sprite_SetDistanceFade, maybe_Gfx_Sprite_SetupPattern */
-typedef struct Sprite Sprite;
-
-/*    5 use(s): Sq_VmReleaseObjectTables, Sq_VmInitInstance, Sq_VmDestroyInstance */
-typedef struct SqObject SqObject;
-
 /*    5 use(s): Sq_HashTable_Get, Sq_HashTable_Get, Sq_HashTable_NextIndex */
 typedef struct SquirrelValue SquirrelValue;
 
 /*    5 use(s): Battle_TargetMarker_UpdateSlots, Battle_TargetMarker_StartEffects, Battle_TargetMarker_CreateEffectInstance */
 typedef struct TargetMarkerManager TargetMarkerManager;
 
-/*    5 use(s): Ui_TextBuild_Start, maybe_Text_LayoutEmitStyleRuns, maybe_Ui_TextBuilder_SetStyleResource */
-typedef struct TextBuilder TextBuilder;
+/*    5 use(s): Text_LayoutPage_BuildLines, Ui_ListData_BindEntries, Ui_CreditWindow_LayoutLines */
+typedef struct TextBlock TextBlock;
 
 /*    5 use(s): Item_CanAddOneMore, Text_CopyLayoutWithOffset, Text_Page_BuildAtOffset */
 typedef struct TextPage TextPage;
 
-/*    5 use(s): Gfx_Trail_AddSegment, maybe_Gfx_Trail_PushPathNode, Gfx_Trail_Update */
-typedef struct Trail Trail;
-
-/*    5 use(s): Ui_TsuyosaWindow_SetMemberRowTexts, Ui_TsuyosaWindow_SortMembersByStat, Ui_TsuyosaWindow_RefreshMemberRows */
-typedef struct TsuyosaWindow TsuyosaWindow;
-
 /*    5 use(s): Ui3D_InitPanelFromRecord, Ui3D_AttachDrawNodes, Ui3D_DetachDrawNodes */
 typedef struct Ui3DPanel Ui3DPanel;
+
+/*    5 use(s): maybe_Ui_Anim_SetStateId, AnimObject_ForwardEvent, Ui_AnimObject_Init */
+typedef struct UiAnimObject UiAnimObject;
 
 /*    5 use(s): Ui_Balloon_BindWinParts, Ui_Balloon_DestroyAnimRefs, Ui_Balloon_UpdateAnchorPosition */
 typedef struct UiBalloon UiBalloon;
@@ -1367,9 +1295,6 @@ typedef struct UiBattleSkillWindow UiBattleSkillWindow;
 
 /*    5 use(s): Ui_BoushiShopWindow_InitPanes, Ui_BoushiShopWindow_Ctor, Ui_BoushiShopWindow_ApplyRowTransform */
 typedef struct UiBoushiShopWindow UiBoushiShopWindow;
-
-/*    5 use(s): Ui_ShopWindow_UpdateAffordability, maybe_Ui_ShopWindow_CloseSubPanel, maybe_Ui_ShopWindow_ClearPriceText */
-typedef struct UiCmdRecord UiCmdRecord;
 
 /*    5 use(s): Ui_CompareRow_SetValueA, Ui_CompareRow_SetValueWithDifference, Ui_CompareRow_SetFromCharacter */
 typedef struct UiCompareRow UiCompareRow;
@@ -1395,20 +1320,20 @@ typedef struct UiJewelShopWindow UiJewelShopWindow;
 /*    5 use(s): Ui_ListRow_ApplyValueColor, Ui_ListRow_ReleaseIcon, Ui_ListRow_ResetElements */
 typedef struct UiListRow UiListRow;
 
-/*    5 use(s): maybe_Ui_ListWidget_Screen_Ctor, Ui_ListWidget_Screen_DeleteDtor, Ui_ListWidget_Screen_Dtor */
+/*    5 use(s): Ui_ListWidget_Screen_Ctor, Ui_ListWidget_Screen_DeleteDtor, Ui_ListWidget_Screen_Dtor */
 typedef struct UiListWidgetScreen UiListWidgetScreen;
 
 /*    5 use(s): Ui_MainMenu_LoadTextResources, Ui_MainMenu_UpdateTextState, Ui_MainMenuText_DtorDelete */
 typedef struct UiMainMenuText UiMainMenuText;
+
+/*    5 use(s): Ui_MessagePanel_SetState, maybe_Ui_MessagePanel_ExecStateA, Ui_MessagePanel_HandleConfirm */
+typedef struct UiMessagePanel UiMessagePanel;
 
 /*    5 use(s): Ui_MonsterBook_SelectModel, Ui_MonsterBook_InitData, Ui_MonsterBook_UpdateList */
 typedef struct UiMonsterBook UiMonsterBook;
 
 /*    5 use(s): Ui_MotionPath_Release, Ui_MotionPath_UpdateTransform, Ui_MotionPath_SetSourceTransform */
 typedef struct UiMotionPath UiMotionPath;
-
-/*    5 use(s): maybe_Ui_Overlay_UpdateSlotVisibility, Ui_Overlay_TryTouchSelect, Ui_Overlay_AvoidCollision */
-typedef struct UiOverlayEntry UiOverlayEntry;
 
 /*    5 use(s): maybe_Ui_Overlay_SyncSlotFromHandle, Ui_Overlay_FreeSpriteHandleB, Ui_Overlay_ResolveSlotSprite */
 typedef struct UiOverlaySlot UiOverlaySlot;
@@ -1418,9 +1343,6 @@ typedef struct UiPagedIconSelect UiPagedIconSelect;
 
 /*    5 use(s): Ui_PastPlaceWindow_InitPanes, Ui_PastPlaceWindow_HandleInput, Ui_PastPlaceWindow_Destroy */
 typedef struct UiPastPlaceWindow UiPastPlaceWindow;
-
-/*    5 use(s): maybe_Ui_ProfileScreen_DtorDelete, maybe_Ui_ProfileScreen_ResetCursor, Ui_ProfileScreen_Cancel */
-typedef struct UiProfileScreen UiProfileScreen;
 
 /*    5 use(s): Ui_RecordWindow_Dtor, Ui_RecordWindow_Update, Ui_RecordWindow_HandleInput */
 typedef struct UiRecordWindow UiRecordWindow;
@@ -1434,13 +1356,13 @@ typedef struct UiScrollBar UiScrollBar;
 /*    5 use(s): Ui_Slot_Init, Ui_Slot_Dtor, Ui_SortSlotsByValue */
 typedef struct UiSlot UiSlot;
 
+/*    5 use(s): Ui_TrainingWindow_InitPanes, Ui_TrainingWindow_DispatchEvent, Ui_TrainingWindow_CreateRowTable */
+typedef struct UiTrainingWindow UiTrainingWindow;
+
 /*    5 use(s): Ui_WindowPart_UpdateTimers, Ui_WindowPart_SetTextWithIcon, Ui_WindowPart_SetText */
 typedef struct UiWindowPart UiWindowPart;
 
-/*    5 use(s): Ui_MapWindow_BindPanes, Ui_MapWindow_SetAreaName, Ui_MapWindow_SetIconVisibility */
-typedef struct Ui_MapWindow Ui_MapWindow;
-
-/*    5 use(s): maybe_Ui_OverlaySlot_BeginStateTransition, Ui_OverlaySlot_TryInteract, maybe_Ui_OverlaySlot_HandleCommandEnd */
+/*    5 use(s): Ui_OverlaySlot_BeginStateTransition, Ui_OverlaySlot_TryInteract, Ui_OverlaySlot_HandleCommandEnd */
 typedef struct Ui_OverlaySlot Ui_OverlaySlot;
 
 /*    4 use(s): Actor_Action_Riremito_Start, Actor_Action_Riremito_Update, Actor_Action_Riremito_End */
@@ -1449,13 +1371,10 @@ typedef struct ActorActionRiremito ActorActionRiremito;
 /*    4 use(s): Event_ActorModels_CreateSlotModel, Event_ActorModels_CreateSpritePart, Event_ActorModels_CreateMonsterModel */
 typedef struct ActorEntry ActorEntry;
 
-/*    4 use(s): maybe_Container_NodeList_Init, Gfx_BufferChannel_Init, Battle_PopupPool_AllocateArrays */
-typedef struct Allocator Allocator;
-
 /*    4 use(s): Anim_Instance_Ctor, Anim_Instance_CtorSprite, Anim_Instance_ReallocHandle */
 typedef struct AnimInstance AnimInstance;
 
-/*    4 use(s): maybe_Anim_Resource_ReleaseAndReset, Anim_Clip_Build, Anim_ClipSet_Build */
+/*    4 use(s): Anim_Resource_ReleaseAndReset, Anim_Clip_Build, Anim_ClipSet_Build */
 typedef struct AnimResource AnimResource;
 
 /*    4 use(s): Container_AvlTree_Insert, Container_AvlTree_InsertFixup, Container_AvlTree_Clear */
@@ -1476,6 +1395,9 @@ typedef struct BattlePartyMemberUi BattlePartyMemberUi;
 /*    4 use(s): Ui_BattlePartyWindow_RenderRow, Ui_BattlePartyWindow_SyncCursor, Ui_BattlePartyWindow_InitPanes */
 typedef struct BattlePartyWindow BattlePartyWindow;
 
+/*    4 use(s): Battle_MessageRow_BuildLayout, Text_Row_MeasureIconRowWidth, Battle_Row_SumHpBar */
+typedef struct BattleRowCtx BattleRowCtx;
+
 /*    4 use(s): Battle_Ui_TargetGroup_UpdateCornerAnimA, Battle_Ui_TargetGroup_InitMarkerSlots, Battle_Ui_TargetGroup_UpdateCornerAnimB */
 typedef struct BattleTargetGroup BattleTargetGroup;
 
@@ -1491,28 +1413,25 @@ typedef struct Battle_ActorAction Battle_ActorAction;
 /*    4 use(s): Bg2D_ApplyColorPreset, Bg2D_ResetLayerPages, Bg2D_SetTexturePages */
 typedef struct Bg2DScene Bg2DScene;
 
-/*    4 use(s): Battle_CommandListWindow_SelectEntryById, Battle_CommandListWindow_BuildEntries, Battle_CommandListWindow_ClearSelection */
-typedef struct CommandListWindow CommandListWindow;
-
 /*    4 use(s): Container_NamedMap_FindNodeA, Container_NamedMap_FindNodeB, Container_TreeMap_InsertOrFindA */
 typedef struct ContainerTree ContainerTree;
-
-/*    4 use(s): Ui_DiveForm_DivePanel_Start, maybe_Ui_DiveForm_DivePanel_UpdateAvailability, maybe_Ui_DiveForm_DivePanel_HandleInput */
-typedef struct DivePanel DivePanel;
 
 /*    4 use(s): Dive_SpawnDropEffect, Ui_DiveWindow_SetSelectionRow, Ui_DiveWindow_SetEightLabels */
 typedef struct DiveWindow DiveWindow;
 
-/*    4 use(s): maybe_Gfx_EffectNodeCreateChild_75B1AC, Gfx_EffectNodeCreateChild_75B1F4, maybe_Gfx_EffectNode_InitFromDesc */
-typedef struct EffectNode EffectNode;
+/*    4 use(s): Effect_SpawnAttachedFromDescriptor, Effect_SpawnAttachedForSlot, Effect_SpawnAttachedPair */
+typedef struct EffectAttach EffectAttach;
 
 /*    4 use(s): Event_DispatchHandlerByte6, Event_DispatchHandlerField39, Event_DispatchHandlerByte4 */
 typedef struct EventCmd EventCmd;
 
-/*    4 use(s): Field_ActorBehavior_TurnToTarget, Field_ActorBehavior_PlayReact, Field_ActorBehavior_UpdateIdle */
-typedef struct FieldActorBehavior FieldActorBehavior;
+/*    4 use(s): Event_Actor_PlayNutMotion, Event_Actor_SetPositionAndFacing, Event_SelectPartyStatusPageEx */
+typedef struct EventObject EventObject;
 
-/*    4 use(s): maybe_Field_ActorMove_Begin, Field_ActorMove_Integrate, Field_Actor_BeginStep */
+/*    4 use(s): Event_Packet_SetAnimationVariant, Event_Packet_GetResourcePair, Event_Packet_AttachModel */
+typedef struct EventPacket EventPacket;
+
+/*    4 use(s): Field_ActorMove_Begin, Field_ActorMove_Integrate, Field_Actor_BeginStep */
 typedef struct FieldActorMoveTask FieldActorMoveTask;
 
 /*    4 use(s): Field_ApproachObj_IsEventSlotFree, Field_ApproachObj_NotifyCommand0D, Field_ApproachObj_IsEventSlotFreeB */
@@ -1527,9 +1446,6 @@ typedef struct FieldCamera FieldCamera;
 /*    4 use(s): Field_Char_Delete, maybe_Field_Char_UpdateModelOffset, Field_Char_PlayNarrowPassAnim */
 typedef struct FieldChar FieldChar;
 
-/*    4 use(s): Field_ClimbAction_UpdateInput, Field_ClimbAction_Start, Field_ClimbAction_Update */
-typedef struct FieldClimbAction FieldClimbAction;
-
 /*    4 use(s): Field_Gimmick3107_SetupDrawObjectFromDesc, Field_Gimmick3107_SetupDrawObjectFromTemplate, Field_Gimmick3107_AttachDrawObject */
 typedef struct FieldGimmick3107 FieldGimmick3107;
 
@@ -1538,6 +1454,9 @@ typedef struct FieldHorseAction FieldHorseAction;
 
 /*    4 use(s): Field_Monster_EndAnimation, Field_Monster_OnEvent, Field_Monster_StartAnimation */
 typedef struct FieldMonster FieldMonster;
+
+/*    4 use(s): maybe_FieldParty_MemberModel_DtorA, maybe_FieldParty_MemberModel_DtorB, maybe_FieldParty_MemberModel_DtorC */
+typedef struct FieldPartyModel FieldPartyModel;
 
 /*    4 use(s): FieldParty_Ui_RefreshMemberSlot, FieldParty_Ui_Dtor, FieldParty_Ui_UpdateMemberSlot */
 typedef struct FieldPartyUi FieldPartyUi;
@@ -1554,17 +1473,23 @@ typedef struct FieldWalkAction FieldWalkAction;
 /*    4 use(s): Font_GlyphSprite_CreateA, Font_GlyphQuad_CreateSimple, Font_GlyphSprite_CreateVariant */
 typedef struct FontContext FontContext;
 
+/*    4 use(s): Fs_ArchiveEntry_ReadAt, Fs_ArchiveEntry_Seek, maybe_Fs_ArchiveEntry_SetReadPosition */
+typedef struct FsEntry FsEntry;
+
 /*    4 use(s): Fs_Cache_CreateSlotPool58, Fs_Cache_CreateSlotPool58Into, Fs_Cache_CreateSlotPool54 */
 typedef struct FsSlotPool FsSlotPool;
 
 /*    4 use(s): Menu_GetActorByIndex, Os_GetGameWork, Party_GetActiveMemberDataByIndex */
 typedef struct GameWork GameWork;
 
+/*    4 use(s): Gfx_EffectPart_SetRotationFromActor, Gfx_Actor_BindModelHandle, Gfx_Actor_ReleaseModelHandle */
+typedef struct GfxActor GfxActor;
+
 /*    4 use(s): Gfx_Scene_CullNodeWalk, Gfx_MeshChunk_DrawStrips, Gfx_MeshChunk_DrawStripsWithPalette */
 typedef struct GfxCullPlanes GfxCullPlanes;
 
-/*    4 use(s): Gfx_ModelPart_BuildDrawParams, Gfx_ModelPart_SetAttributeMask, maybe_Gfx_ModelPart_ApplyAttribute */
-typedef struct GfxModelPart GfxModelPart;
+/*    4 use(s): Gfx_MeshChunk_DrawStrips, Gfx_MeshChunk_DrawStripsWithPalette, Gfx_MeshChunk_DrawPartList */
+typedef struct GfxDrawTag GfxDrawTag;
 
 /*    4 use(s): Gfx_Movie_StartPlayback, Gfx_Movie_Update, Gfx_Movie_HasFrameReady */
 typedef struct GfxMovie GfxMovie;
@@ -1574,9 +1499,6 @@ typedef struct GfxNodeBounds GfxNodeBounds;
 
 /*    4 use(s): Gfx_Overlay_BeginDraw, Gfx_Overlay_DrawContent, Gfx_Overlay_AddQuad */
 typedef struct GfxOverlay GfxOverlay;
-
-/*    4 use(s): maybe_Gfx_RenderObject_ReleaseBindings, Gfx_RenderObject_ReleaseModel, Gfx_SkeletonNode_ResetMaterials */
-typedef struct GfxRenderObject GfxRenderObject;
 
 /*    4 use(s): Gfx_ResDesc_GetValueA, Gfx_ResDesc_GetValueB, Gfx_ResDesc_GetValueC */
 typedef struct GfxResDesc GfxResDesc;
@@ -1593,9 +1515,6 @@ typedef struct GfxSceneSpriteGroup GfxSceneSpriteGroup;
 /*    4 use(s): Gfx_ScreenView_ApplyFadeParams, Gfx_ScreenView_ReleaseAll, Gfx_ScreenView_ResetAll */
 typedef struct GfxScreenViewSet GfxScreenViewSet;
 
-/*    4 use(s): Ui_ObjectList_ReleaseRefPairA, Ui_ObjectList_ReleaseAllRefPairs, Ui_ObjectList_ReleaseRefPairB */
-typedef struct Heap Heap;
-
 /*    4 use(s): Field_HitBox_Setup, Field_HitBox_SetupFloat, Field_HitBox_LoadExtended */
 typedef struct HitBox HitBox;
 
@@ -1604,9 +1523,6 @@ typedef struct IntrusiveList IntrusiveList;
 
 /*    4 use(s): ItemList_Iterator_GetEntryByte, ItemList_Iterator_Init, ItemList_Iterator_GetEntryId */
 typedef struct ItemListIterator ItemListIterator;
-
-/*    4 use(s): maybe_Container_UnlinkNodeAndEnableView, maybe_Container_UnlinkAndEnableLayer, std_List_MergeSort */
-typedef struct ListNode ListNode;
 
 /*    4 use(s): Field_MapObject2D_SetupFromList19D4, Field_MapObject2D_SetupFromList1A34, Field_MapObject2D_SetupFromList1B54 */
 typedef struct MapObjectRecord MapObjectRecord;
@@ -1626,8 +1542,8 @@ typedef struct MemHeap MemHeap;
 /*    4 use(s): Mem_Pool_DestroyAllEntries, Mem_Pool_InitPoolA, Mem_Pool_InitPoolB */
 typedef struct MemPool MemPool;
 
-/*    4 use(s): maybe_FieldParty_MemberAction_SpawnInfoPopup, maybe_FieldParty_MemberAction_PlayEmote, maybe_FieldParty_MemberAction_WaitForActor */
-typedef struct MemberAction MemberAction;
+/*    4 use(s): maybe_Message_SetArgTextPair, maybe_Message_StorePosPairB, Message_StorePosPairBIfPromptConfirmed */
+typedef struct MessageArgRecord MessageArgRecord;
 
 /*    4 use(s): Model_SimulateSecondaryMotion, Model_BuildSecondaryMotionBoneMatrices, Model_UpdateSecondaryMotion */
 typedef struct ModelBoneMatrices ModelBoneMatrices;
@@ -1659,16 +1575,16 @@ typedef struct PanelMessageCamera PanelMessageCamera;
 /*    4 use(s): Party_FindEntryById, Party_EntryMatchesSelectedId, Ui_PartyList_BuildEntries */
 typedef struct PartyList PartyList;
 
-/*    4 use(s): Party_GetReserveMemberId, maybe_Party_ValidateMemberPage, Party_ValidateMemberSlots */
-typedef struct PartySlots PartySlots;
-
 /*    4 use(s): Gfx_Bch_EmitMaterialState, Gfx_Bch_FindShaderSymbol, Gfx_Bch_EmitPassState */
 typedef struct PicaCtx PicaCtx;
 
 /*    4 use(s): Ui_ListView_SetItemCount, Ui_ListView_BindDataSource, Ui_ListView_SetItemCountEx */
 typedef struct Range Range;
 
-/*    4 use(s): maybe_Ui_RecordWindow_CountByCategory, Ui_RecordWindow_InsertSorted, Ui_RecordWindow_LoadEntriesChunk */
+/*    4 use(s): std_RbTree_EraseNodeRebalance, std_RbTree_EraseRange, std_RbTree_InsertNode */
+typedef struct RbTree RbTree;
+
+/*    4 use(s): Ui_RecordWindow_CountByCategory, Ui_RecordWindow_InsertSorted, Ui_RecordWindow_LoadEntriesChunk */
 typedef struct RecordWindow RecordWindow;
 
 /*    4 use(s): Font_GlyphQuad_CreateSimple, Field_FindActorInRect, Field_FindActorInRect */
@@ -1683,17 +1599,23 @@ typedef struct ResProvider ResProvider;
 /*    4 use(s): Model_BindIndexedResource, Model_BindDoubleBufferedResource, Model_BindIndexedResourceB */
 typedef struct Resource Resource;
 
-/*    4 use(s): Container_RingBuffer_Next, maybe_Ui_ClearPendingInputC, Container_RingBuffer_Push */
-typedef struct RingBuffer RingBuffer;
-
 /*    4 use(s): Gfx_Scene_RenderPass1, Gfx_Scene_RenderPass2, Gfx_Scene_BuildDrawListPass1 */
 typedef struct SceneRenderer SceneRenderer;
 
 /*    4 use(s): Sound_Bgm_Request, Sound_LoadSoundGroup, Sound_Bank_BindWaveArchive */
 typedef struct SoundBank SoundBank;
 
+/*    4 use(s): Sound_SeqField_GetWord18, Sound_SeqField_GetWord18B, Sound_SeqField_GetByte18 */
+typedef struct SoundSeqField SoundSeqField;
+
 /*    4 use(s): Text_SpanCursor_Prev, Text_SpanCursor_Next, Text_SpanCursor_StepMultiline */
 typedef struct SpanCursor SpanCursor;
+
+/*    4 use(s): Ui_Layout_CreateChildSprite, Gfx_Sprite_SetDistanceFade, Gfx_Sprite_SetFrameUV */
+typedef struct Sprite Sprite;
+
+/*    4 use(s): Sq_VmReleaseObjectTables, Sq_VmInitInstance, Sq_VmDestroyInstance */
+typedef struct SqObject SqObject;
 
 /*    4 use(s): Sq_Vector_PushObject, Sq_Vector_ResizeObjectPairs, Sq_Vm_ResizeCallStack */
 typedef struct SqVector SqVector;
@@ -1701,14 +1623,23 @@ typedef struct SqVector SqVector;
 /*    4 use(s): std_StringLessThan, std_StringLessThan, std_StringLessThanCollated */
 typedef struct String16 String16;
 
+/*    4 use(s): Ui_TextBuild_Start, Text_LayoutEmitStyleRuns, Ui_TextBuilder_InitLayout */
+typedef struct TextBuilder TextBuilder;
+
 /*    4 use(s): Text_SpanCursor_Prev, Text_SpanCursor_Next, Text_SpanCursor_StepMultiline */
 typedef struct TextContext TextContext;
 
-/*    4 use(s): Ui_TextPairRow_SetText, Ui_TextBuild_Start, maybe_Text_LayoutEmitStyleRuns */
+/*    4 use(s): Ui_TextPairRow_SetText, Ui_TextBuild_Start, Text_LayoutEmitStyleRuns */
 typedef struct TextRecord TextRecord;
+
+/*    4 use(s): Gfx_Trail_AddSegment, Gfx_Trail_Update, Gfx_Trail_TryConnectCell */
+typedef struct Trail Trail;
 
 /*    4 use(s): Ui_TrainingWindow_LoadSlotLayouts, maybe_Ui_TrainingWindow_SelectTitleRow, Ui_TrainingWindow_Ctor */
 typedef struct TrainingWindow TrainingWindow;
+
+/*    4 use(s): Ui_TsuyosaWindow_SetMemberRowTexts, Ui_TsuyosaWindow_SortMembersByStat, Ui_TsuyosaWindow_RefreshMemberRows */
+typedef struct TsuyosaWindow TsuyosaWindow;
 
 /*    4 use(s): Ui_3DBackground_DeletingDtor, Ui_3DBackground_DtorBody, Ui_3DBackground_DeletingDtorB */
 typedef struct Ui3DBackground Ui3DBackground;
@@ -1725,23 +1656,23 @@ typedef struct UiButtonWidget UiButtonWidget;
 /*    4 use(s): Ui_CasinoWindow_Setup, Ui_CasinoWin_UpdateFukuroWindow, Ui_CasinoWin_PopWindowStack */
 typedef struct UiCasinoWindow UiCasinoWindow;
 
-/*    4 use(s): maybe_Ui_ChoiceSelectWindow_SelectByRecord, Ui_ChoiceSelectWindow_Ctor, Ui_ChoiceSelectWindow_LayoutRows */
+/*    4 use(s): Ui_ChoiceSelectWindow_SelectByRecord, Ui_ChoiceSelectWindow_Ctor, Ui_ChoiceSelectWindow_LayoutRows */
 typedef struct UiChoiceSelectWindow UiChoiceSelectWindow;
 
-/*    4 use(s): Ui_IsAnyWindowOpen, maybe_Ui_SetBusyFlagAndLeave, Ui_Row_SetCursorIcon */
+/*    4 use(s): Ui_IsAnyWindowOpen, Ui_SetBusyFlagAndLeave, Ui_Row_SetCursorIcon */
 typedef struct UiContext UiContext;
 
 /*    4 use(s): Ui_DiveManager_Ctor, Ui_DiveManager_DeletingDtor, Ui_DiveManager_Dtor */
 typedef struct UiDiveManager UiDiveManager;
 
+/*    4 use(s): Ui_SlotPlateWindow_DrawPlates, Ui_SlotPlateWindow_DrawSinglePlate, Ui_SlotPlateWindow_DrawEmpty */
+typedef struct UiDrawList UiDrawList;
+
 /*    4 use(s): Ui_DungeonBattleWindow_Update, Ui_DungeonBattleWindow_SetInfo, Ui_DungeonBattleWindow_InitPanes */
 typedef struct UiDungeonBattleWindow UiDungeonBattleWindow;
 
-/*    4 use(s): maybe_Ui_DungeonWindow_Update, Ui_DungeonWindow_InitPanes, Ui_DungeonWindow_ReleasePanes */
+/*    4 use(s): Ui_DungeonWindow_Update, Ui_DungeonWindow_InitPanes, Ui_DungeonWindow_ReleasePanes */
 typedef struct UiDungeonWindow UiDungeonWindow;
-
-/*    4 use(s): Ui_EquipRow_Update, maybe_Ui_EquipRow_RangeCheck, Ui_EquipRow_Refresh */
-typedef struct UiEquipRow UiEquipRow;
 
 /*    4 use(s): Ui_Frame_SelectColor, Ui_Frame_SelectColorAlt, Ui_Frame_SetColorVariant */
 typedef struct UiFrame UiFrame;
@@ -1755,12 +1686,6 @@ typedef struct UiGridWindow UiGridWindow;
 /*    4 use(s): Ui_ItemListWidget_FillCategory, Ui_ItemListWidget_GetRowItemId, Ui_ItemListWidget_GetRowIndex */
 typedef struct UiItemListWidget UiItemListWidget;
 
-/*    4 use(s): Ui_JackpotScreen_UpdateReels, Ui_JackpotScreen_SetNextState, Ui_JackpotScreen_SetNextStepUpdateReels */
-typedef struct UiJackpotScreen UiJackpotScreen;
-
-/*    4 use(s): Ui_KyoukaiWindow_CreatePanes, maybe_Ui_KyoukaiWindow_UpdateB, Ui_KyoukaiWindow_CreatePartyPanes */
-typedef struct UiKyoukaiWindow UiKyoukaiWindow;
-
 /*    4 use(s): Ui_LayoutAnim_AddOffset, Ui_LayoutAnim_SetTwoValues, Ui_LayoutAnim_UpdateAll */
 typedef struct UiLayoutAnimSet UiLayoutAnimSet;
 
@@ -1770,7 +1695,7 @@ typedef struct UiLocationWindow UiLocationWindow;
 /*    4 use(s): Ui_MainWindow_BindPanes, Ui_MainWindow_SelectListByEventId, Ui_MainWindow_ShowPane */
 typedef struct UiMainWindow UiMainWindow;
 
-/*    4 use(s): Ui_MapWindow_Init, Ui_MapWindow_DeletingDtor, maybe_Ui_MapWindow_RefreshEntry */
+/*    4 use(s): Ui_MapWindow_Init, Ui_MapWindow_DeletingDtor, Ui_MapWindow_ShowLocationBanner */
 typedef struct UiMapWindow UiMapWindow;
 
 /*    4 use(s): Ui_MessageWindow_OpenFromSlot, Ui_MessageWindow_HandleClose, maybe_Ui_MessageScreen_HandleConfirm */
@@ -1782,11 +1707,14 @@ typedef struct UiMonsterBookWindow UiMonsterBookWindow;
 /*    4 use(s): Ui_NumberedTextWindow_SetVisible, Ui_NumberedTextWindow_InitPanes, Ui_NumberedTextWindow_Ctor */
 typedef struct UiNumberedTextWindow UiNumberedTextWindow;
 
-/*    4 use(s): Ui_PartyStatus_ResetValue, Ui_PartyStatus_AddMPPreview, maybe_Ui_PartyStatus_ClearFlag10 */
+/*    4 use(s): Ui_PartyStatus_ResetValue, Ui_PartyStatus_AddMPPreview, Ui_PartyStatus_ClearFlag10 */
 typedef struct UiPartyStatusPanel UiPartyStatusPanel;
 
 /*    4 use(s): Ui_PlateWidget_BindEntry, Ui_PlateWidget_BindPlateLayout, Ui_PlateWidget_Update */
 typedef struct UiPlateWidget UiPlateWidget;
+
+/*    4 use(s): maybe_Ui_ProfileScreen_DtorDelete, Ui_ProfileScreen_Cancel, Ui_ProfileScreen_DefaultConfirm */
+typedef struct UiProfileScreen UiProfileScreen;
 
 /*    4 use(s): Ui_CmdQueue_ClearSlot, Ui_CmdQueue_PushWidgetCommand, Ui_CmdQueue_ProcessSlots */
 typedef struct UiQueue UiQueue;
@@ -1812,9 +1740,6 @@ typedef struct UiStatusParamWindow UiStatusParamWindow;
 /*    4 use(s): Ui_StatusPlate_RestoreIdleByHpWhenAnimEnds, Ui_Status_RefreshAilmentPlate, Ui_Status_PlayAilmentPose */
 typedef struct UiStatusPlate UiStatusPlate;
 
-/*    4 use(s): maybe_Ui_SubObject_Init, Ui_SubObject_Create, Ui_SubObject_Dtor */
-typedef struct UiSubObject UiSubObject;
-
 /*    4 use(s): Ui_MessagePair_SetPanels, Ui_MessagePair_SetPanels, Ui_MessagePair_Bind */
 typedef struct UiText UiText;
 
@@ -1824,14 +1749,20 @@ typedef struct UiTextLayer UiTextLayer;
 /*    4 use(s): Ui_TextListWindow_UpdateItemRects, Ui_TextListWindow_SetVisible, Ui_TextListWindow_FormatItemRects */
 typedef struct UiTextListWindow UiTextListWindow;
 
-/*    4 use(s): Ui_TextRowL1_Alt_SetVisible, Ui_TextRow_SetSpellText, maybe_Ui_TextRow_SetTextFromItemName */
+/*    4 use(s): Ui_TextRowL1_Alt_SetVisible, Ui_TextRow_SetSpellText, Ui_TextRow_SetTextFromItemName */
 typedef struct UiTextRow UiTextRow;
 
-/*    4 use(s): maybe_Ui_State_SetState2, maybe_Ui_State_SetState24, maybe_Ui_Transition_OnAccept */
+/*    4 use(s): Ui_TitleLoopWindow_InitPanes, Ui_TitleWindow_ShowTitle, Ui_TitleWindow_SetButtonVisible */
+typedef struct UiTitleWindow UiTitleWindow;
+
+/*    4 use(s): maybe_Ui_State_SetState2, Ui_ShopItemList_SetState24, maybe_Ui_Transition_OnAccept */
 typedef struct UiTransition UiTransition;
 
-/*    4 use(s): Ui_WindowHolder_DtorDelete, maybe_Ui_PastPlaceWindow_HolderCtor, Ui_Window_Dtor_530 */
+/*    4 use(s): Ui_WindowHolder_DtorDelete, Ui_PastPlaceWindow_HolderCtor, Ui_Window_Dtor_530 */
 typedef struct UiWindowHolder UiWindowHolder;
+
+/*    4 use(s): Ui_MapWindow_BindPanes, Ui_MapWindow_SetAreaName, Ui_MapWindow_SetIconVisibility */
+typedef struct Ui_MapWindow Ui_MapWindow;
 
 /*    4 use(s): Ui_SkillPanel_PropagateTextResource, Ui_SkillPanel_Create, Ui_SkillPanel_UpdateTabVisibility */
 typedef struct Ui_SkillPanel Ui_SkillPanel;
@@ -1878,9 +1809,6 @@ typedef struct std_StateSequence84 std_StateSequence84;
 /*    4 use(s): std_StateSequence85_ChangeState, std_StateSequence85_Tick, std_StateSequence85_SetState */
 typedef struct std_StateSequence85 std_StateSequence85;
 
-/*    3 use(s): Actor_ActionList_SortByPriority, maybe_Field_ActionList_FillSlotsWithTimers, maybe_Field_ActionList_FillSlotsWithHorseActions */
-typedef struct ActionList ActionList;
-
 /*    3 use(s): maybe_Actor2D_EffectNode_ReleaseEffects, Actor2D_EffectNode_Ctor, Actor2D_EffectNode_DeletingDtor */
 typedef struct Actor2DEffectNode Actor2DEffectNode;
 
@@ -1896,20 +1824,23 @@ typedef struct ActorActionIvyNut ActorActionIvyNut;
 /*    3 use(s): Actor_Action_LadderClimb_End, Actor_Action_LadderClimb_Update, Actor_Action_LadderClimb_Dtor */
 typedef struct ActorActionLadderClimb ActorActionLadderClimb;
 
+/*    3 use(s): ActorActionSeq_CanAdvance, ActorActionSeq_AdvanceAction, Field_ActorActionSeq_RunSteps */
+typedef struct ActorActionSeq ActorActionSeq;
+
 /*    3 use(s): Actor_Action_WhaleStart_Start, Actor_Action_WhaleStart_End, Actor_Action_WhaleStart_DtorDelete */
 typedef struct ActorActionWhaleStart ActorActionWhaleStart;
 
-/*    3 use(s): maybe_Actor_Action_CtorSimple, maybe_Actor_Action_CtorSimpleB, Actor_Object_DtorDelete */
+/*    3 use(s): Actor_Action_CtorSimple, Actor_Action_CtorSimpleB, Actor_Object_DtorDelete */
 typedef struct ActorObject ActorObject;
 
-/*    3 use(s): Gfx_Actor_ApplyModelSize, Gfx_Actor_ApplyAppearance, maybe_Gfx_Actor_ApplyAppearanceB */
+/*    3 use(s): Gfx_Actor_ApplyModelSize, Gfx_Actor_ApplyAppearance, Gfx_Actor_ApplyAppearanceB */
 typedef struct ActorVisual ActorVisual;
+
+/*    3 use(s): Gfx_BufferChannel_Init, Battle_PopupPool_AllocateArrays, Gfx_InitCommandPool */
+typedef struct Allocator Allocator;
 
 /*    3 use(s): Anim_ActionSeq_AdvanceEvents, Anim_ActionSeq_Reset, Anim_ActionSeq_AdvanceTime */
 typedef struct AnimActionSeq AnimActionSeq;
-
-/*    3 use(s): maybe_Anim_Clip_UpdateThunk, Ui_AnimClip_BindFrame, maybe_Anim_Clip_SetClockModeAndTime */
-typedef struct AnimClip AnimClip;
 
 /*    3 use(s): Ui_SlotPlateNumber_Set3Digits, Ui_SlotPlateNumber_Set4Digits, Ui_SlotPlateNumber_Set5Digits */
 typedef struct AnimContext AnimContext;
@@ -1922,9 +1853,6 @@ typedef struct AnimKey AnimKey;
 
 /*    3 use(s): Ui_Part_CheckAnimConditions, Ui_Part_GetAnimSlotMask, Ui_Part_GetAnimState */
 typedef struct AnimRecord AnimRecord;
-
-/*    3 use(s): Anim_AdvanceTimelineValue, maybe_Anim_Timeline_IsIdActive, maybe_Anim_Timeline_Advance */
-typedef struct AnimTimeline AnimTimeline;
 
 /*    3 use(s): Anim_FindKeyIndex, Anim_UpdateEventTrack, Anim_UpdateAttachTrack */
 typedef struct AnimTrackState AnimTrackState;
@@ -1950,9 +1878,6 @@ typedef struct BattleAnimUnit BattleAnimUnit;
 /*    3 use(s): Battle_ItemWindow_FillItemDetails, Battle_ItemWindow_BuildFilteredList, Battle_ItemWindow_FreeList */
 typedef struct BattleItemWindow BattleItemWindow;
 
-/*    3 use(s): maybe_Battle_CopyPartyData, BattleParty_Dtor, BattleParty_DtorNoFree */
-typedef struct BattleParty BattleParty;
-
 /*    3 use(s): Battle_PartyMember_GetDisplayId, Battle_PartyMember_GetModelRotation, Battle_PartyMember_GetDisplayId_Copy */
 typedef struct BattlePartyMember BattlePartyMember;
 
@@ -1977,17 +1902,14 @@ typedef struct CameraOwner CameraOwner;
 /*    3 use(s): Casino_Slot_InitPanes, Casino_Slot_ReleaseEffects, Casino_Slot_Dtor */
 typedef struct CasinoSlotWindow CasinoSlotWindow;
 
-/*    3 use(s): Snd_ResetChannelUnitsInPlace, maybe_Snd_ResetChannelUnitsToDefault, Snd_InitChannelState */
-typedef struct ChannelState ChannelState;
-
 /*    3 use(s): Field_Char_PlayDefaultAnimA, Field_Char_PlayDefaultAnimB, Field_Char_PlayDefaultAnimC */
 typedef struct CharAnimOwner CharAnimOwner;
 
 /*    3 use(s): Field2D_OnCharacterChanged, Ui_StatusWindow_Build, Ui_StatusWindow_UpdateSlots */
 typedef struct CharacterRecord CharacterRecord;
 
-/*    3 use(s): Ui_CompareRow_SetValueFromChar, maybe_Ui_CompareRow_SetValueFromByte, Ui_CompareRow_SetValueFromRecord */
-typedef struct CompareRow CompareRow;
+/*    3 use(s): Battle_CommandListWindow_SelectEntryById, Battle_CommandListWindow_BuildEntries, Battle_CommandListWindow_ClearSelection */
+typedef struct CommandListWindow CommandListWindow;
 
 /*    3 use(s): Container_HashMap_FindOrInsert, Container_HashMap_Resize, Container_HashMap_Remove */
 typedef struct ContainerHashMap ContainerHashMap;
@@ -1995,14 +1917,8 @@ typedef struct ContainerHashMap ContainerHashMap;
 /*    3 use(s): Ui_CriticalPopup_SetVisible, Ui_CriticalPopup_PlayAnim, Ui_CriticalPopup_Delete */
 typedef struct CriticalPopup CriticalPopup;
 
-/*    3 use(s): maybe_Battle_Damage_PlayAnimAndSe, maybe_Battle_DamagePopup_DetachActor, Battle_DamagePopup_DeletingDestructor */
-typedef struct DamagePopup DamagePopup;
-
 /*    3 use(s): Effect_SetupPackInfo, Effect_FindOrCreateInstance, Effect_RequestInstance */
 typedef struct EffectManager EffectManager;
-
-/*    3 use(s): Gfx_EffectParams_InitSet, Gfx_EffectParams_Create, maybe_Effect_SpawnOrientedInstance */
-typedef struct EffectOwner EffectOwner;
 
 /*    3 use(s): Gfx_EffectPart_ReleaseBuffers, Gfx_EffectPart_ClearFlagAndNotify, Gfx_EffectPart_SetFlagAndNotify */
 typedef struct EffectPart EffectPart;
@@ -2013,7 +1929,7 @@ typedef struct EnemyGroup EnemyGroup;
 /*    3 use(s): Svc_Timer_RunDue, Svc_Timer_ClearQueue, Svc_TimerSub_RunDue_24 */
 typedef struct EngineTimer EngineTimer;
 
-/*    3 use(s): Ui_EquipRow_Activate, maybe_Ui_EquipRow_UpdateCompareText, maybe_Ui_EquipRow_UpdateCurseMark */
+/*    3 use(s): Ui_EquipRow_Activate, maybe_Ui_EquipRow_ApplyEquipment, maybe_Ui_EquipRow_UpdateCurseMark */
 typedef struct EquipRow EquipRow;
 
 /*    3 use(s): Ui_EquipmentList_HandleInput, Ui_EquipmentList_Scroll, Ui_EquipmentList_UpdateLayout */
@@ -2021,9 +1937,6 @@ typedef struct EquipmentScreen EquipmentScreen;
 
 /*    3 use(s): Event_Rura_Start, Event_Rura_End, Event_Rura_Dtor */
 typedef struct EventRura EventRura;
-
-/*    3 use(s): Event_TimelineDispatchRange, Event_TimelineAdvance, maybe_Event_RegisterTimelineListener */
-typedef struct EventTimeline EventTimeline;
 
 /*    3 use(s): Event_TriggerObject_CanFire, Event_TriggerObject_FireCommand, Event_TriggerObject_Delete */
 typedef struct EventTrigger EventTrigger;
@@ -2034,6 +1947,9 @@ typedef struct Evidence Evidence;
 /*    3 use(s): Ui_FadeAnimator_InitCurveA, Ui_FadeAnimator_InitCurveB, Ui_FadeAnimator_DeletingDtor */
 typedef struct FadeAnimator FadeAnimator;
 
+/*    3 use(s): Field_ActorBehavior_TurnToTarget, Field_ActorBehavior_PlayReact, Field_ActorBehavior_UpdateIdle */
+typedef struct FieldActorBehavior FieldActorBehavior;
+
 /*    3 use(s): Field_ActorGimmick_UpdateDeferredSubObject, Field_ActorGimmick_UpdateModel, Field_ActorGimmick_DeletingDtor */
 typedef struct FieldActorGimmick FieldActorGimmick;
 
@@ -2043,17 +1959,17 @@ typedef struct FieldActorList FieldActorList;
 /*    3 use(s): Field_Actor_DtorModel, Field_ActorModel_Dtor, Field_ActorModel_BindParts */
 typedef struct FieldActorModel FieldActorModel;
 
-/*    3 use(s): maybe_Field_CharAction_Delete, maybe_Field_CharAction_DeleteAlt, maybe_Field_CharAction_DeleteC */
+/*    3 use(s): Field_CharAction_Delete, Field_CharAction_DeleteAlt, Field_CharAction_DeleteC */
 typedef struct FieldCharAction FieldCharAction;
+
+/*    3 use(s): Field_ClimbAction_UpdateInput, Field_ClimbAction_Start, Field_ClimbAction_Update */
+typedef struct FieldClimbAction FieldClimbAction;
 
 /*    3 use(s): Field_DragController_Update, Field_DragController_OnEvent, Field_DragController_Dtor */
 typedef struct FieldDragController FieldDragController;
 
 /*    3 use(s): Field_HandleRef_CallGetter, Field_HandleRef_SetValue, Field_HandleRef_Notify */
 typedef struct FieldHandleRef FieldHandleRef;
-
-/*    3 use(s): Field_FlushObjectList, maybe_Field_FindObjectInListA, maybe_Field_FindObjectInListB */
-typedef struct FieldList FieldList;
 
 /*    3 use(s): Field_ModelSlotEmitter_ApplyDescriptor, Field_ModelSlotEmitter_RemoveSlot, Field_ModelSlotEmitter_DtorDelete */
 typedef struct FieldModelSlotEmitter FieldModelSlotEmitter;
@@ -2063,12 +1979,6 @@ typedef struct FieldNpcTables FieldNpcTables;
 
 /*    3 use(s): Field_CreateRenderObject, Field_CreateActorRenderObject, Field_Gimmick_FindSlotObjectById */
 typedef struct FieldOwner FieldOwner;
-
-/*    3 use(s): Field_PathMover_SnapToNearestPathPoint, maybe_Field_PathMover_OnEvent, Field_PathMover_AdvanceAlongPath */
-typedef struct FieldPathMover FieldPathMover;
-
-/*    3 use(s): Field_Placement_TestAreaA, Field_Placement_TestAreaB, maybe_Field_Placement_TestAreaC */
-typedef struct FieldPlacementResult FieldPlacementResult;
 
 /*    3 use(s): maybe_Field_ActorAction_PropagateFlag, Field_ActorAction_SnapshotActorPose, Field_ActorAction_UpdateTurnDirection */
 typedef struct Field_ActorAction Field_ActorAction;
@@ -2082,7 +1992,7 @@ typedef struct Field_Object2D_Desc Field_Object2D_Desc;
 /*    3 use(s): Field_Smithy_DeleteDtor, Field_Smithy_InitMaterialFlash, Field_Smithy_UpdateSparkEffect */
 typedef struct Field_Smithy Field_Smithy;
 
-/*    3 use(s): Font_CacheGlyphsForText, maybe_Font_GlyphCache_FindSlotA, maybe_Font_GlyphCache_FindSlotB */
+/*    3 use(s): Font_CacheGlyphsForText, Font_GlyphCache_FindSlotA, Font_GlyphCache_FindSlotB */
 typedef struct FontCache FontCache;
 
 /*    3 use(s): Font_DispatchGlyphEvent, Font_FindHandlerForCode, Font_BroadcastGlyphDraw */
@@ -2094,8 +2004,8 @@ typedef struct FormatSink FormatSink;
 /*    3 use(s): Fs_BufferedStream_Read, Fs_BufferedStream_Seek, Fs_BufferedStream_ReadCached */
 typedef struct FsBufferedStream FsBufferedStream;
 
-/*    3 use(s): Fs_Request_Build, maybe_Fs_Request_WaitForService, Fs_BuildRequestHeader */
-typedef struct FsRequest FsRequest;
+/*    3 use(s): Fs_Sarc_Open, Fs_Sarc_ParseFatNodes, Fs_Sarc_FindFile */
+typedef struct FsSarcReader FsSarcReader;
 
 /*    3 use(s): Fx_BuildEmitterTransformMatrices, Fx_DestroyEmitter, Fx_SpawnEmitter */
 typedef struct FxEmitterInstance FxEmitterInstance;
@@ -2121,11 +2031,11 @@ typedef struct GfxHit GfxHit;
 /*    3 use(s): Gfx_MaterialBinding_Release, Gfx_MaterialBinding_DtorDelete, Gfx_MaterialBinding_Dtor */
 typedef struct GfxMaterialBinding GfxMaterialBinding;
 
-/*    3 use(s): Gfx_CreateMeshFromTransform, maybe_Gfx_MeshNode_InitChildren, maybe_Gfx_MeshNode_DeletingDtor */
-typedef struct GfxMeshNode GfxMeshNode;
-
 /*    3 use(s): Gfx_Model_AttachGadgetMesh, Battle_Ui_Balloon_CalcPartAnchor, Gfx_Bch_BuildMaterials */
 typedef struct GfxModel GfxModel;
+
+/*    3 use(s): Gfx_ModelPart_BuildDrawParams, Gfx_ModelPart_SetAttributeMask, Gfx_ModelPart_ApplyAttribute */
+typedef struct GfxModelPart GfxModelPart;
 
 /*    3 use(s): Gfx_MovieDecoder_FeedVideo, Gfx_MovieDecoder_FeedAudio, Gfx_MovieDecoder_CheckEndOfStream */
 typedef struct GfxMovieDecoder GfxMovieDecoder;
@@ -2142,20 +2052,23 @@ typedef struct GfxMovieThread GfxMovieThread;
 /*    3 use(s): Gfx_Scene_TestSpriteHitC, Gfx_Scene_TestSpriteHitA, Gfx_Scene_TestSpriteHitB */
 typedef struct GfxQuery GfxQuery;
 
+/*    3 use(s): Gfx_RenderObject_ReleaseModel, Gfx_SkeletonNode_ResetMaterials, Gfx_RenderObject_DetachFromDevice */
+typedef struct GfxRenderObject GfxRenderObject;
+
 /*    3 use(s): Gfx_Sprite_BindResource, Gfx_Sprite_BuildBuffers, Gfx_SpritePool_AllocFromResource */
 typedef struct GfxResEntry GfxResEntry;
 
 /*    3 use(s): Gfx_ScreenView_ReleaseNamedObjects, Gfx_ScreenView_ResetCollections, Gfx_ScreenView_DestroyCollections */
 typedef struct GfxScreenView GfxScreenView;
 
+/*    3 use(s): Gfx_Sprite2D_DtorB, Gfx_Sprite2D_DtorC, maybe_Actor2D_EffectNode_DeletingDtorB */
+typedef struct GfxSprite2D GfxSprite2D;
+
 /*    3 use(s): Gfx_PartList_AppendRecord20, Gfx_PartList_AppendRecord44, Gfx_SpriteParts_Clear */
 typedef struct GfxSpriteParts GfxSpriteParts;
 
 /*    3 use(s): Gfx_SpritePool_AllocFromResource, Gfx_SpritePool_Construct, Gfx_SpritePool_CommitTransform */
 typedef struct GfxSpritePool GfxSpritePool;
-
-/*    3 use(s): maybe_Gfx_GpuState_PackTransformConstants, Gfx_InitRegisterTables, Gfx_State_SetAlphaBlend */
-typedef struct GfxState GfxState;
 
 /*    3 use(s): Gfx_TextureBinding_Release, Gfx_TextureBinding_DtorDelete, Gfx_TextureBinding_Dtor */
 typedef struct GfxTextureBinding GfxTextureBinding;
@@ -2166,8 +2079,8 @@ typedef struct GfxTrail GfxTrail;
 /*    3 use(s): Gfx_ModelInstance_DrawVisiblePartsA, Gfx_ModelInstance_DrawVisiblePartsB, Gfx_ModelInstance_DrawPartBuckets */
 typedef struct Gfx_PartList Gfx_PartList;
 
-/*    3 use(s): maybe_Data_ResolveRelativeEntry8, maybe_Data_ResolveRelativeEntry4, Text_ExpandLineBreak */
-typedef struct GroupRecord GroupRecord;
+/*    3 use(s): Ui_ObjectList_ReleaseRefPairA, Ui_ObjectList_ReleaseAllRefPairs, Ui_ObjectList_ReleaseRefPairB */
+typedef struct Heap Heap;
 
 /*    3 use(s): Ui_QuestIcon_CreateA, Ui_QuestIcon_CreateB, maybe_Ui_QuestIcon_CreateC */
 typedef struct IconRecord IconRecord;
@@ -2178,23 +2091,17 @@ typedef struct IconRequest IconRequest;
 /*    3 use(s): Input_UpdatePadState, Input_ReadPadState, Input_SetPadMode */
 typedef struct InputPad InputPad;
 
-/*    3 use(s): maybe_Field_CheckGridInteraction, maybe_Camera_TestPointOccluded, maybe_Field_TryPlayerInteractGated */
-typedef struct InteractRequest InteractRequest;
-
 /*    3 use(s): Ui_CompositeWindow_LayoutRows, Ui_DiveForm_LayoutRows, Ui_Window_LayoutRowsSimple */
 typedef struct LayoutMsg LayoutMsg;
 
 /*    3 use(s): Ui_RankingPanel_BuildRows, Battle_TensionGauge_Init, Ui_Window_CollectNamedPane */
 typedef struct LayoutRoot LayoutRoot;
 
-/*    3 use(s): Ui_ListWindow_SetRowItem, Ui_ListRow_SetFlaggedValueText, maybe_Ui_ListWindow_HandleDetailToggle */
-typedef struct ListRow ListRow;
+/*    3 use(s): maybe_Container_UnlinkNodeAndEnableView, std_List_MergeSort, std_List_MergeSort */
+typedef struct ListNode ListNode;
 
 /*    3 use(s): Field2D_Map_CompactLayerObjects, maybe_Field2D_Map_SetVariantCallbackB, Field2D_Map_CompactLayerObjectsB */
 typedef struct MapOwner MapOwner;
-
-/*    3 use(s): maybe_Field2D_Map_MarkLayerFlag, maybe_Field2D_Map_SetVariantCallback, maybe_Field2D_Map_SetVariantCallbackB */
-typedef struct MapRoot MapRoot;
 
 /*    3 use(s): Menu_HorseRace_DeletingDtor, Menu_HorseRace_InitUi, Menu_HorseRace_UpdateCourseArrows */
 typedef struct MenuHorseRace MenuHorseRace;
@@ -2202,20 +2109,11 @@ typedef struct MenuHorseRace MenuHorseRace;
 /*    3 use(s): Menu_StatusScreen_EnableEffects, Menu_StatusScreen_DispatchWidgetEvent, Menu_StatusScreen_GetWidgetByHandler */
 typedef struct MenuStatusScreen MenuStatusScreen;
 
-/*    3 use(s): maybe_Message_StorePosPairAIfViewReady, maybe_Message_StorePosPairC, maybe_Message_StorePosPairD */
-typedef struct MessageAtom MessageAtom;
-
 /*    3 use(s): MoLive_Stream_PopPacket, maybe_MoLive_Stream_ReadPcm, MoLive_Stream_BindPacket */
 typedef struct MoLiveStream MoLiveStream;
 
 /*    3 use(s): Anim_UpdateModelInstance, Anim_ModelInstance_Release, Anim_IsInstanceBusy */
 typedef struct ModelAnimInstance ModelAnimInstance;
-
-/*    3 use(s): maybe_Model_SetAccessoryHandle, Model_ClearFlashingAccessory, maybe_Model_StartPreviewAnimation */
-typedef struct ModelAttachment ModelAttachment;
-
-/*    3 use(s): Monster_FieldBehaviour_SkullDash, Monster_FieldBehaviour_PlayRunEffect, maybe_Monster_FieldBehaviour_UpdateChase */
-typedef struct MonsterBehaviour MonsterBehaviour;
 
 /*    3 use(s): maybe_Motion_ApplyRotationBlend, maybe_Motion_ApplyRotationBlend, Motion_UpdateBlendedTransform */
 typedef struct Motion Motion;
@@ -2235,9 +2133,6 @@ typedef struct Node Node;
 /*    3 use(s): Os_ListAppendNode, Os_ListRemoveNode, Os_ListRemoveNodeIfPresent */
 typedef struct OsListNode OsListNode;
 
-/*    3 use(s): Os_SemaphoreAcquire, Os_SemaphoreRelease, maybe_Os_CheckSemaphoreResult */
-typedef struct OsSemaphore OsSemaphore;
-
 /*    3 use(s): Pack_AcquireResourceHandle, Pack_ReleaseResourceHandle, Pack_AcquireResourceHandle18 */
 typedef struct PackHandle PackHandle;
 
@@ -2250,16 +2145,16 @@ typedef struct PageDef PageDef;
 /*    3 use(s): Field_SpawnObject, Field_SpawnObjectVariant, Actor2D_InitSpanFromRecord */
 typedef struct PlacementRecord PlacementRecord;
 
-/*    3 use(s): maybe_Ui_PokerCards_UpdateSlotHighlight, Ui_PokerCards_ConfirmSelection, Ui_PokerCards_ResetSlots */
+/*    3 use(s): Ui_PokerCards_UpdateSlotHighlight, Ui_PokerCards_ConfirmSelection, Ui_PokerCards_ResetSlots */
 typedef struct PokerModel PokerModel;
 
-/*    3 use(s): maybe_Ui_PokerCards_UpdateSlotHighlight, Ui_PokerCards_ConfirmSelection, Ui_PokerCards_ResetSlots */
+/*    3 use(s): Ui_PokerCards_UpdateSlotHighlight, Ui_PokerCards_ConfirmSelection, Ui_PokerCards_ResetSlots */
 typedef struct PokerRow PokerRow;
 
 /*    3 use(s): Mem_PoolDestroy, Mem_PoolInit, Mem_InitBlockPool */
 typedef struct Pool Pool;
 
-/*    3 use(s): Ui_Window_RelocatePointerA, Ui_Window_RelocatePointerB, maybe_Ui_DateDisplay_RelocateEntryPointers */
+/*    3 use(s): Ui_Window_RelocatePointerA, Ui_Window_RelocatePointerB, maybe_Ui_Layout_RelocateEntryPointers */
 typedef struct PtrSlot PtrSlot;
 
 /*    3 use(s): Ui_RecipeBook_EvaluateRecipeQuery, Ui_RecipeBook_ApplyFilterClause, Ui_RecipeBook_CheckRecipeIngredients */
@@ -2267,6 +2162,9 @@ typedef struct RecipeBook RecipeBook;
 
 /*    3 use(s): Ui_RecipeBook_EvaluateRecipeQuery, Ui_RecipeBook_FilterByKnownIngredients, Ui_RecipeBook_FilterByOwnedIngredients */
 typedef struct RecipeQuery RecipeQuery;
+
+/*    3 use(s): Container_RingBuffer_Next, Container_RingBuffer_Push, std_RingBuffer_CopyWrapped */
+typedef struct RingBuffer RingBuffer;
 
 /*    3 use(s): Script_SqCompiler_Expect, Script_SqCompiler_Compile, Script_SqValueList_GetItem */
 typedef struct SQObjectPtr SQObjectPtr;
@@ -2289,7 +2187,7 @@ typedef struct SecondaryMotionChain SecondaryMotionChain;
 /*    3 use(s): Ui_SenrekiWindow_SetupEntry, Ui_SenrekiWindow_SetupEntryAlt, Ui_SenrekiWindow_DispatchEvent */
 typedef struct SenrekiWindow SenrekiWindow;
 
-/*    3 use(s): Ui_ShopWindow_SetupItemName, maybe_Ui_ShopWindow_BuildPriceText, Ui_ShopWindow_BuildSelectedItemText */
+/*    3 use(s): Ui_ShopWindow_SetupItemName, maybe_Ui_ShopWindow_CopySelectedItemName, Ui_ShopWindow_BuildSelectedItemText */
 typedef struct ShopWindow ShopWindow;
 
 /*    3 use(s): std_SlotVector_AppendRange, std_SlotVector_AppendRange, std_SlotVector_Append */
@@ -2325,19 +2223,13 @@ typedef struct SqStackFrame SqStackFrame;
 /*    3 use(s): Ui_StatCompare_Show, Ui_StatCompare_Show, Ui_StatComparePanel_Fill */
 typedef struct StatBlock StatBlock;
 
-/*    3 use(s): maybe_Field_TalkBalloon_OpenMessage, maybe_Field_TalkBalloon_Dtor, maybe_Field_TalkBalloon_OpenSimpleMessage */
-typedef struct TalkBalloon TalkBalloon;
-
 /*    3 use(s): Ui_TalkMenuWindow_RebuildContent, Ui_TalkMenuWindow_UpdateChildren, Ui_TalkMenuWindow_UpdateChildAnim */
 typedef struct TalkMenuWindow TalkMenuWindow;
 
 /*    3 use(s): Text3D_UpdateBillboardTransform, Text3D_ClearLayout, Text3D_DeletingDestructor */
 typedef struct Text3DWindow Text3DWindow;
 
-/*    3 use(s): maybe_Text_BuildLayoutSpanA, maybe_Text_BuildLayoutSpanB, Text_SpanHasContent */
-typedef struct TextEntry TextEntry;
-
-/*    3 use(s): Regex_ParseTokenStreamWithLength, Regex_ParseTokenStream, maybe_Text_MatchTokenTree */
+/*    3 use(s): Regex_ParseTokenStreamWithLength, Regex_ParseTokenStream, Text_MatchTokenTree */
 typedef struct TextParser TextParser;
 
 /*    3 use(s): Text_Row_Init, maybe_Text_Row_InitFromRecord_Tail, Text_Row_DtorDelete */
@@ -2385,16 +2277,13 @@ typedef struct UiArcListRow UiArcListRow;
 /*    3 use(s): maybe_Ui_Balloon_GetSeIdForSlot, maybe_Ui_Balloon_GetSeIdForLeader, maybe_Ui_Balloon_GetSeIdForEvent */
 typedef struct UiBalloonOwner UiBalloonOwner;
 
-/*    3 use(s): Ui_BigWindow_Ctor, Ui_BigWindow_Dtor, maybe_Ui_BigWindow_InitPanes */
-typedef struct UiBigWindow UiBigWindow;
-
 /*    3 use(s): Ui_BoushiPart_Ctor, Ui_BoushiPart_Dtor, Ui_BoushiPart_Release */
 typedef struct UiBoushiPart UiBoushiPart;
 
 /*    3 use(s): Ui_CameraAnimWindow_BindRowCallbacks, Ui_CameraAnimWindow_Init, Ui_CameraAnimWindow_Ctor */
 typedef struct UiCameraAnimWindow UiCameraAnimWindow;
 
-/*    3 use(s): maybe_Ui_Choice_Start, maybe_Ui_Choice_Confirm, maybe_Ui_Choice_Tick */
+/*    3 use(s): maybe_Ui_Choice_Start, maybe_Ui_Choice_InitState, maybe_Ui_Choice_Tick */
 typedef struct UiChoice UiChoice;
 
 /*    3 use(s): Ui_Cue_Update, Ui_Cue_StopBgm, Ui_Cue_Start */
@@ -2402,9 +2291,6 @@ typedef struct UiCue UiCue;
 
 /*    3 use(s): Ui_DamagePopup_SetNumber, Ui_DamagePopup_SetValue, Ui_DamagePopup_SetColoredValue */
 typedef struct UiDamagePopup UiDamagePopup;
-
-/*    3 use(s): maybe_Ui_DebugMenu_SetPageState, maybe_Ui_DebugMenu_CheckFrameSpike, maybe_Ui_DebugMenu_UpdateState */
-typedef struct UiDebugMenu UiDebugMenu;
 
 /*    3 use(s): Ui_Delegate_BindActionA, Ui_Delegate_BindActionB, Ui_Delegate_Invoke */
 typedef struct UiDelegate UiDelegate;
@@ -2421,11 +2307,11 @@ typedef struct UiDungeonMessageWindow UiDungeonMessageWindow;
 /*    3 use(s): Ui_DungeonSkillWindow_DeletingDtor, Ui_DungeonSkillWindow_InitLayout, Ui_DungeonSkillWindow_Teardown */
 typedef struct UiDungeonSkillWindow UiDungeonSkillWindow;
 
-/*    3 use(s): maybe_Ui_Element_GetSlotIntValue, maybe_Ui_Element_GetMetricA, maybe_Ui_Element_GetScaledHeight */
-typedef struct UiElementHolder UiElementHolder;
-
 /*    3 use(s): Ui_EntryList_FindByIdList, Ui_EntryList_FindByKeyList, Ui_Entry_GetDisplayText */
 typedef struct UiEntryTable UiEntryTable;
+
+/*    3 use(s): Ui_EquipRow_Update, Ui_EquipRow_Refresh, Ui_EquipRow_DeletingDtor */
+typedef struct UiEquipRow UiEquipRow;
 
 /*    3 use(s): Ui_EquipmentRow_Dtor, Ui_EquipmentRow_DtorWidget, Ui_EquipmentRow_CtorSmall */
 typedef struct UiEquipmentRow UiEquipmentRow;
@@ -2438,9 +2324,6 @@ typedef struct UiFourRowIconWindow UiFourRowIconWindow;
 
 /*    3 use(s): Ui_GaugeWindow_DeletingDtorC, Ui_GaugeWindow_DeletingDtorB, Ui_GaugeWindow_DtorB */
 typedef struct UiGaugeWindow UiGaugeWindow;
-
-/*    3 use(s): maybe_Ui_GridCursor_HandleInput, Ui_GridCursor_Move, Ui_GridCursor_RefreshHighlight */
-typedef struct UiGridCursor UiGridCursor;
 
 /*    3 use(s): Ui_QuestIcon_CreateA, Ui_QuestIcon_CreateB, maybe_Ui_QuestIcon_CreateC */
 typedef struct UiIconHost UiIconHost;
@@ -2457,13 +2340,19 @@ typedef struct UiItemListWindow UiItemListWindow;
 /*    3 use(s): Ui_ItemTextWindow_UpdateAndRefresh, Ui_ItemTextWindow_DeletingDtor, Ui_ItemTextWindow_ReplaceChildHandleB */
 typedef struct UiItemTextWindow UiItemTextWindow;
 
+/*    3 use(s): Ui_JackpotScreen_UpdateReels, Ui_JackpotScreen_SetNextState, Ui_JackpotScreen_SetNextStepUpdateReels */
+typedef struct UiJackpotScreen UiJackpotScreen;
+
+/*    3 use(s): Ui_KyoukaiWindow_CreatePanes, Ui_KyoukaiWindow_CreatePartyPanes, Ui_KyoukaiWindow_Update */
+typedef struct UiKyoukaiWindow UiKyoukaiWindow;
+
 /*    3 use(s): Ui_Window_BindRowLayoutSources, Ui_PartySelectWindow_BindSelectedRow, Ui_Layout_LoadBflyt */
 typedef struct UiLayoutContext UiLayoutContext;
 
 /*    3 use(s): Ui_LayoutRefList_Dtor, Ui_LayoutRef_InitList, Ui_LayoutRefList_Delete */
 typedef struct UiLayoutRefList UiLayoutRefList;
 
-/*    3 use(s): Ui_PartySelectWindow_BindDataSource, Ui_ListRow_GetLabelText, maybe_Ui_ListRow_GetLabelStyle */
+/*    3 use(s): Ui_PartySelectWindow_BindDataSource, Ui_ListRow_GetLabelText, Ui_ListRow_GetLabelStyle */
 typedef struct UiListModel UiListModel;
 
 /*    3 use(s): Ui_ListView_SetItemCount, Ui_ListView_BindDataSource, Ui_ListView_SetItemCountEx */
@@ -2481,23 +2370,20 @@ typedef struct UiMenuWindow UiMenuWindow;
 /*    3 use(s): Ui_MessagePair_SetPanels, Ui_MessagePair_Bind, Ui_MessagePair_SetupPanels */
 typedef struct UiMessagePair UiMessagePair;
 
-/*    3 use(s): Ui_MessagePanel_SetState, maybe_Ui_MessagePanel_ExecStateA, maybe_Ui_MessagePanel_DispatchState */
-typedef struct UiMessagePanel UiMessagePanel;
-
 /*    3 use(s): Ui_MessageSelectWindow_Ctor, Ui_MessageSelectWindow_Destroy, Ui_MessageSelectWindow_Dtor */
 typedef struct UiMessageSelectWindow UiMessageSelectWindow;
 
 /*    3 use(s): Ui_MessageText_Update, Ui_Message_ApplyArgRecord, Ui_MessageText_ResetChildren */
 typedef struct UiMessageText UiMessageText;
 
+/*    3 use(s): Ui_Overlay_TryTouchSelect, Ui_Overlay_AvoidCollision, Ui_Map_WrapMarkerPosition */
+typedef struct UiOverlayEntry UiOverlayEntry;
+
 /*    3 use(s): Ui_OverlaySlotObject_Ctor, Ui_OverlaySlotObject_Dtor, Ui_OverlaySlotObject_CtorB */
 typedef struct UiOverlaySlotObject UiOverlaySlotObject;
 
 /*    3 use(s): maybe_Ui_Pack_LoadLayout, Ui_Pack_LoadLayoutChecked, Ui_Pack_UnloadLayout */
 typedef struct UiPackOwner UiPackOwner;
-
-/*    3 use(s): maybe_Ui_PageControl_UpdateLayout, Ui_PageControl_Init, maybe_Ui_PageControl_Init_Tail */
-typedef struct UiPageControl UiPageControl;
 
 /*    3 use(s): Ui_PageList_ShowPage, Ui_PageList_StepSelectionDown, Ui_PageList_StepSelectionUp */
 typedef struct UiPageList UiPageList;
@@ -2508,8 +2394,8 @@ typedef struct UiPanelRow UiPanelRow;
 /*    3 use(s): Ui_PokerDisplayWindow_PlayLoop1, Ui_PokerDisplayWindow_DtorNoDelete, Ui_PokerDisplayWindow_Ctor */
 typedef struct UiPokerDisplayWindow UiPokerDisplayWindow;
 
-/*    3 use(s): Ui_QuestWindow_InitPanes, maybe_Ui_QuestWindow_AddEntry, Ui_QuestWindow_Dtor */
-typedef struct UiQuestWindow UiQuestWindow;
+/*    3 use(s): Ui_PrizeWindow_Init, Ui_PrizeWindow_Dtor, maybe_Ui_PrizeWindow_SetStateFromPrompt */
+typedef struct UiPrizeWindow UiPrizeWindow;
 
 /*    3 use(s): Ui_RecipeInfo_BuildText, Ui_RecipeInfo_IsUnlocked, Ui_RecipeInfo_ShowCraftMessage */
 typedef struct UiRecipeInfo UiRecipeInfo;
@@ -2547,7 +2433,7 @@ typedef struct UiSpriteNode UiSpriteNode;
 /*    3 use(s): Casino_Slot_SetPaylineSprites, Casino_Slot_SetPaylineSprites, Casino_Slot_SetPaylineSprites */
 typedef struct UiSpriteRef UiSpriteRef;
 
-/*    3 use(s): maybe_Ui_ItemScreen_NextStep, maybe_Ui_State_SetState2, maybe_Ui_State_SetState24 */
+/*    3 use(s): maybe_Ui_ItemScreen_NextStep, maybe_Ui_State_SetState2, Ui_ShopItemList_SetState24 */
 typedef struct UiStateMachine UiStateMachine;
 
 /*    3 use(s): Ui_StreetPassText_Load, Ui_StreetPassText_Delete, Ui_StreetPassText_Dtor */
@@ -2556,7 +2442,10 @@ typedef struct UiStreetPassText UiStreetPassText;
 /*    3 use(s): Ui_StreetPassVipMsg_Ctor, Ui_StreetPassVipMsg_DeletingDtor, Ui_StreetPassVipMsg_InitPanes */
 typedef struct UiStreetPassVipMsg UiStreetPassVipMsg;
 
-/*    3 use(s): Ui_TextBox_ResetLineColors, maybe_Ui_TextLayout_InsertRun, Ui_LayoutPlayer_CreateFromName */
+/*    3 use(s): Ui_SubObject_Create, Ui_SubObject_Dtor, Ui_SubObject_Ctor */
+typedef struct UiSubObject UiSubObject;
+
+/*    3 use(s): Ui_TextBox_ResetLineColors, maybe_Ui_TextLayout_UnlinkRun, Ui_LayoutPlayer_CreateFromName */
 typedef struct UiTextBox UiTextBox;
 
 /*    3 use(s): Ui_LayoutTextBox_Ctor, Ui_LayoutTextBox_AllocateCharBuffers, Ui_LayoutTextBox_CalculateTextMetrics */
@@ -2565,13 +2454,13 @@ typedef struct UiTextBoxPane UiTextBoxPane;
 /*    3 use(s): Ui_TextBuffer_AppendChars, Ui_TextBuffer_WriteCharsAt, Ui_TextBuffer_Release */
 typedef struct UiTextBuffer UiTextBuffer;
 
-/*    3 use(s): maybe_Ui_TextList_ClearRows, Ui_Message_FindTextForCurrentMode, Ui_TextList_CtorSmall */
+/*    3 use(s): maybe_Ui_TextList_Construct, Ui_Message_FindTextForCurrentMode, Ui_TextList_CtorSmall */
 typedef struct UiTextList UiTextList;
 
 /*    3 use(s): Ui_Text_ApplyTableIds, Ui_TextTable_FindRecord, Ui_TextTable_FindRecordFromBox */
 typedef struct UiTextOwner UiTextOwner;
 
-/*    3 use(s): Ui_Text_SetCharacterName, Ui_TextFormat_FormatWideString, Ui_TextWidget_Ctor */
+/*    3 use(s): Ui_Text_SetCharacterName, Ui_TextFormat_FormatWideString, Ui_TextWidget_Ctor_2 */
 typedef struct UiTextWidget UiTextWidget;
 
 /*    3 use(s): Ui_ThreeLineTwoSelectWindow_DeletingDtor, Ui_ThreeLineTwoSelectWindow_Ctor, Ui_ThreeLineTwoSelectWindow_InitLayout */
@@ -2595,17 +2484,14 @@ typedef struct UiWorldAnchorWidget UiWorldAnchorWidget;
 /*    3 use(s): Ui_FaceIcon_SetId, Ui_FaceIcon_CreateWidget, maybe_Ui_FaceIcon_SetOnOff */
 typedef struct Ui_FaceIcon Ui_FaceIcon;
 
-/*    3 use(s): Ui_MessagePanel_HideWithSound, Ui_MessagePanel_HideOrShowByFlag, maybe_Ui_MessagePanel_HideTarget */
+/*    3 use(s): Ui_MessagePanel_HideWithSound, Ui_MessagePanel_HideOrShowByFlag, Ui_MessagePanel_HideTarget */
 typedef struct Ui_MessagePanel Ui_MessagePanel;
 
 /*    3 use(s): Ui_Overlay_Dtor, Ui_Overlay_ShowQuad, Ui_Overlay_HideQuad */
 typedef struct Ui_Overlay Ui_Overlay;
 
-/*    3 use(s): Ui_MessagePanel_HideWithSound, Ui_MessagePanel_HideOrShowByFlag, maybe_Ui_MessagePanel_HideTarget */
+/*    3 use(s): Ui_MessagePanel_HideWithSound, Ui_MessagePanel_HideOrShowByFlag, Ui_MessagePanel_HideTarget */
 typedef struct Ui_Pane Ui_Pane;
-
-/*    3 use(s): Ui_List_ClearRow, maybe_Ui_List_AppendEntryA, maybe_Ui_List_AppendEntryB */
-typedef struct Ui_Row Ui_Row;
 
 /*    3 use(s): Ui_SpritePart_Create, Ui_SpritePart_CreateFromDesc, Ui_TextPart_Create */
 typedef struct Ui_SpriteOwner Ui_SpriteOwner;

@@ -25,7 +25,7 @@ FREE = ["opencode/deepseek-v4.1-flash-free", "opencode/glm-5.3-flash-free", "ope
 # google-genai SDK — Vertex is not an OpenCode provider here.
 VERTEX = "vertex:gemini-3.8-flash"
 # Vertex is out of the pool: its runner escaped the project (2026-10-26), see vertex_agent.py.
-MODELS = FREE + ["opencode-go/deepseek-v4.1-flash"]
+MODELS = list(FREE)  # 11-10: free models only (no Go)
 # Antigravity CLI `agy` (Google sign-in, Gemini subscription quota, no API key) joins the pool when
 # installed. "agy" uses its default model, "agy:<model>" a specific one (list them with `agy models`).
 # A task can pick its own order with "models: agy, opencode-go/deepseek-v4.1-flash".
@@ -45,13 +45,13 @@ PAID_OFF = True  # bulk batches never use the paid model
 GO_DEEPSEEK = "opencode-go/deepseek-v4.1-flash"
 # user, 11-01: Argon for lead tasks (one at a time), Flash for batches; when that Gemini
 # quota is used up the dispatcher stops (no free OpenCode, no paid Go)
-GO_WHEN_VIBE_FULL = True  # user 11-05 ("Allow Go now"): Go DeepSeek takes tasks while the Vibe slots are full
+GO_WHEN_VIBE_FULL = False  # user 11-05 ("Allow Go now"): Go DeepSeek takes tasks while the Vibe slots are full
 GEMINI_ONLY = False  # 11-05: the pool is Vibe + Flash + free OpenCode again (see policy_models)
 # user, 11-05: Mistral Vibe CLI (installed in WSL Ubuntu-22.04) driving DeepSeek v4.1 Flash
 # (model alias "ds-flash" in ~/.vibe/config.toml); the key lives in ~/.vibe/.env, never read here.
 VIBE = "vibe:ds-flash"
 VIBE_DISTRO = "Ubuntu-22.04"
-VIBE_MAX = 3          # concurrent Vibe workers (11-05: 7 at once -> Mistral 429 "not enough capacity")
+VIBE_MAX = 1          # concurrent Vibe workers (11-05: 7 at once -> Mistral 429 "not enough capacity")
 VIBE_TIME_LIMIT = 25 * 60  # seconds; a Vibe request can hang without an error (R3_080: 18 min silent); the run is interrupted and retried elsewhere
 active_vibe = 0
 ARGON_MAX = 1         # user: only one Argon worker at a time
@@ -67,10 +67,11 @@ def policy_models(tid, lane=""):
     fallback. Argon is not in the pool (not named in the 11-05 instruction)."""
     if GEMINI_ONLY:  # kept for the 11-01 behaviour: lead tasks on Argon, batches on Flash, then stop
         return [FLASH] if tid.startswith(("N_", "R_", "G_", "S_", "V_")) else [ARGON]
-    base = [VIBE] + ([FLASH] if AGY else []) + list(FREE) + [GO_DEEPSEEK]
+    # 11-10 user: ONLY free OpenCode models or a single Vibe (DeepSeek Flash) instance; no Gemini, Argon or Go
+    base = [VIBE]  # 11-10 later: free OpenCode quota is used up -> a single Vibe worker only
     # 11-09: the harder work (lead tasks, merges, S_ class/field typing) tries Argon first
     hard = tid.startswith("S_") or not re.match(r"(N|R\d*|G|S|V)_", tid)
-    return ([ARGON] + base) if (hard and AGY) else base
+    return base
 
 # OpenRouter: FREE models only (user's rule). Active once the key is stored with `opencode auth login`.
 OPENROUTER_FREE = [
@@ -148,7 +149,10 @@ def worker_cmd(model, tid, prompt):
         # tells the worker how to run the project's Python tools from there.
         pf = ORC / "logs" / f"{tid}.prompt.txt"
         pf.write_text(prompt + VIBE_NOTE, encoding="utf-8")
-        inner = (f"cd {WSL_ROOT} && exec {VIBE_BIN} --workdir {WSL_ROOT} -p --prompt-file "
+        # 11-10 user: no worker may delete or overwrite anything outside the project folder. sandbox_wsl.sh
+        # remounts every Windows drive read-only and the project read-write (see that file).
+        inner = (f"cd {WSL_ROOT} && exec bash {WSL_ROOT}/orchestration/sandbox_wsl.sh {WSL_ROOT} "
+                 f"{VIBE_BIN} --workdir {WSL_ROOT} -p --prompt-file "
                  f"{WSL_ROOT}/orchestration/logs/{tid}.prompt.txt --auto-approve --trust --output streaming "
                  f"--model {model.split(':', 1)[1]} --max-turns 400 --time-limit {VIBE_TIME_LIMIT}")
         return ["wsl.exe", "-d", VIBE_DISTRO, "--", "bash", "-lc", inner]
@@ -302,7 +306,9 @@ def run_task(tid, body, state):
         # pre-bake the batch's dossiers with the names as of the last merge (about a second)
         subprocess.run([sys.executable, str(ROOT / "tools" / "make_dossiers.py"), tid], cwd=ROOT,
                        capture_output=True, timeout=300)
-    if tid.startswith(BULK):  # naming batches get the hand-verified facts (re-read every launch)
+    if tid.startswith("V_"):  # 11-10: local-variable batches get a 2 KB rule sheet instead of rules + FACTS (20 KB)
+        PREAMBLE = (ORC / "WORKER_RULES_V.md").read_text(encoding="utf-8")
+    elif tid.startswith(BULK):  # naming batches get the hand-verified facts (re-read every launch)
         PREAMBLE += "\n\n" + (ORC / "naming" / "FACTS.md").read_text(encoding="utf-8")
     meta, body = parse(ORC / "tasks" / f"{tid}.md")
     (ORC / "logs").mkdir(exist_ok=True)
@@ -320,7 +326,7 @@ def run_task(tid, body, state):
         # whose output M1_merge_names validates); a task's own "models:" line overrides this
         starts = list(FREE) + ([GEMINI] if AGY else []) + \
                  ([OPENROUTER_FREE[0]] if OPENROUTER_FREE[0] in MODELS and tid.startswith(BULK) else [])
-        pools = [VIBE] + ([FLASH] if AGY else []) + [FREE[0]]
+        pools = [VIBE]
         start_on = pools[launches % len(pools)] if PAID_OFF and not GEMINI_ONLY else (
             None if PAID_OFF or meta.get("models") or (tid.startswith(BULK) and OR_ON)
             else starts[launches % len(starts)])

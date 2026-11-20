@@ -34,6 +34,26 @@ pub struct CodePanel {
     file_page: usize,
     /// show Ghidra's raw output instead of the readable view
     raw: bool,
+    /// C source, assembly listing, patch diff or the assembly editor
+    view: View,
+    /// assembly listing of the selected function (from `tools.code_edit show`)
+    asm: TextState,
+    asm_for: Option<u32>,
+    /// editable copy of the listing for the selected function
+    edit: String,
+    edit_for: Option<u32>,
+    job: crate::ui::tool_job::ToolJob,
+    /// what the running job is for: "show", "load-edit", "apply", "revert"
+    job_kind: String,
+    message: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    Source,
+    Assembly,
+    Diff,
+    Edit,
 }
 
 impl Default for CodePanel {
@@ -55,6 +75,14 @@ impl Default for CodePanel {
             page: 0,
             file_page: 0,
             raw: false,
+            view: View::Source,
+            asm: TextState::default(),
+            asm_for: None,
+            edit: String::new(),
+            edit_for: None,
+            job: Default::default(),
+            job_kind: String::new(),
+            message: String::new(),
         }
     }
 }
@@ -86,7 +114,8 @@ pub fn show(app: &mut ViewerApp, ui: &mut egui::Ui) {
         app.panels.code.query = query;
         app.panels.code.dirty = true;
     }
-    if app.panels.code.groups.is_empty() {
+    // The source trees are only needed by the Sources tab, so scan them when it is first opened.
+    if app.panels.code.tab == Tab::Sources && app.panels.code.groups.is_empty() {
         let dirs = app.dirs.clone();
         if let Some(data) = app.data.as_mut() {
             let groups = data.code.source_groups(&dirs).to_vec();
@@ -159,6 +188,22 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 app.panels.code.dirty = true;
             }
         }
+        let (patched, version) = app
+            .data
+            .as_deref()
+            .map(|d| (d.code.patched_count(), d.code.version_label.clone()))
+            .unwrap_or_default();
+        if patched > 0 {
+            let on = app.panels.code.mode.as_deref() == Some("patched");
+            if ui
+                .selectable_label(on, egui::RichText::new(format!("patched ({patched})")).color(theme::ACCENT))
+                .on_hover_text(format!("Functions and code caves the {version} patch changed or added"))
+                .clicked()
+            {
+                app.panels.code.mode = if on { None } else { Some("patched".into()) };
+                app.panels.code.dirty = true;
+            }
+        }
         ui.label(theme::faint_label(format!(
             "{} matches",
             human_count(app.panels.code.list.len())
@@ -216,7 +261,19 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
                         };
                         row.set_selected(selected == Some(index));
                         row.col(|ui| {
-                            ui.label(egui::RichText::new(func.name.clone()).size(12.0));
+                            match &func.patch {
+                                Some(kind) => {
+                                    ui.label(
+                                        egui::RichText::new(format!("\u{25cf} {}", func.name))
+                                            .size(12.0)
+                                            .color(theme::ACCENT),
+                                    )
+                                    .on_hover_text(patch_kind_text(kind));
+                                }
+                                None => {
+                                    ui.label(egui::RichText::new(func.name.clone()).size(12.0));
+                                }
+                            }
                         });
                         row.col(|ui| {
                             ui.label(theme::mono(func.addr_hex()));
@@ -235,6 +292,15 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
             if let Some(index) = clicked {
                 app.panels.code.selected = Some(index);
                 app.panels.code.text = TextState::default();
+                let is_cave = app
+                    .data
+                    .as_deref()
+                    .and_then(|d| d.code.functions.get(index))
+                    .map(|f| f.file.as_os_str().is_empty())
+                    .unwrap_or(false);
+                if is_cave && app.panels.code.view == View::Source {
+                    app.panels.code.view = View::Assembly;
+                }
             }
         });
     egui::CentralPanel::default()
@@ -244,13 +310,96 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 ui.label(theme::faint_label("Select a function."));
                 return;
             };
+            detail(app, ui, index);
+        });
+}
+
+fn patch_kind_text(kind: &str) -> &'static str {
+    match kind {
+        "hook" => "changed by the patch: branches into the patch's own code",
+        "cave" => "code the patch added (code cave in free space)",
+        _ => "instructions or literals changed by the patch",
+    }
+}
+
+fn detail(app: &mut ViewerApp, ui: &mut egui::Ui, index: usize) {
+    let Some(func) = app.data.as_deref().and_then(|d| d.code.functions.get(index)).cloned() else {
+        return;
+    };
+    let patch = app.data.as_deref().and_then(|d| d.code.patch_of(index)).cloned();
+    let version = app.data.as_deref().map(|d| d.code.version_label.clone()).unwrap_or_default();
+    let has_c = !func.file.as_os_str().is_empty();
+    poll_job(app, func.address);
+
+    ui.horizontal(|ui| {
+        ui.label(theme::heading(func.name.clone()));
+        ui.label(theme::dim_label(format!(
+            "{}  \u{b7}  {} bytes  \u{b7}  {}",
+            func.addr_hex(),
+            func.size,
+            func.mode
+        )));
+    });
+    if let Some(p) = &patch {
+        egui::Frame::new()
+            .fill(theme::BG_RAISED)
+            .inner_margin(egui::Margin::same(6))
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "\u{25cf} Changed by the {version} patch \u{2014} {} ({} bytes)",
+                        patch_kind_text(&p.kind),
+                        p.changed_bytes
+                    ))
+                    .color(theme::ACCENT),
+                );
+                for link in &p.links {
+                    ui.label(theme::dim_label(link.clone()));
+                }
+                for note in p.notes.iter().take(6) {
+                    ui.label(theme::faint_label(note.clone()));
+                }
+                if has_c {
+                    ui.label(theme::faint_label(
+                        "The C views show the retail code (decompiled before the patch); Assembly, Patch diff and Edit show the patched bytes.",
+                    ));
+                }
+            });
+    }
+    ui.horizontal(|ui| {
+        let panel = &mut app.panels.code;
+        let pick = |ui: &mut egui::Ui, on: bool, enabled: bool, label: &str, tip: &str| -> bool {
+            ui.add_enabled(enabled, egui::Button::selectable(on, label)).on_hover_text(tip).clicked()
+        };
+        if pick(ui, panel.view == View::Source && !panel.raw, has_c, "Readable", "Names, self->fields, plain types (tools/readable_c.py)") {
+            panel.view = View::Source;
+            panel.raw = false;
+            panel.text = TextState::default();
+        }
+        if pick(ui, panel.view == View::Source && panel.raw, has_c, "Raw Ghidra", "Ghidra's output exactly as generated") {
+            panel.view = View::Source;
+            panel.raw = true;
+            panel.text = TextState::default();
+        }
+        if pick(ui, panel.view == View::Assembly, true, "Assembly", "The instructions as they are now: mod/code/code.bin, else the active game version") {
+            panel.view = View::Assembly;
+        }
+        let diff = patch.as_ref().map(|p| !p.original.is_empty()).unwrap_or(false);
+        if pick(ui, panel.view == View::Diff, diff, "Patch diff", "Retail instructions next to the patched ones") {
+            panel.view = View::Diff;
+        }
+        if pick(ui, panel.view == View::Edit, true, "Edit assembly", "Change this function; saved into mod/code/code.bin") {
+            panel.view = View::Edit;
+        }
+        if has_c {
+            ui.label(theme::faint_label(func.file.to_string_lossy()));
+        }
+    });
+    ui.separator();
+    match app.panels.code.view {
+        View::Source if has_c => {
             if app.panels.code.text.lines.is_empty() {
-                let readable = app
-                    .data
-                    .as_deref()
-                    .and_then(|d| d.code.functions.get(index))
-                    .and_then(|f| readable_path(&app.dirs, &f.file))
-                    .filter(|_| !app.panels.code.raw);
+                let readable = readable_path(&app.dirs, &func.file).filter(|_| !app.panels.code.raw);
                 let text = match readable.and_then(|p| crate::utils::read_text(&p).ok()) {
                     Some(text) => text,
                     None => app.data.as_mut().map(|d| d.code.text(index)).unwrap_or_default(),
@@ -259,40 +408,150 @@ fn functions_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {
                 state.set(&text, Lang::C);
                 app.panels.code.text = state;
             }
-            if let Some(func) = app.data.as_deref().and_then(|d| d.code.functions.get(index)) {
-                ui.horizontal(|ui| {
-                    ui.label(theme::heading(func.name.clone()));
-                    ui.label(theme::dim_label(format!(
-                        "{}  \u{b7}  {} bytes  \u{b7}  {}",
-                        func.addr_hex(),
-                        func.size,
-                        func.mode
-                    )));
-                });
-                ui.horizontal(|ui| {
-                    let has_readable = readable_path(&app.dirs, &func.file).is_some();
-                    for (label, raw, tip) in [
-                        ("Readable", false, "Names, self->fields, plain types (tools/readable_c.py)"),
-                        ("Raw Ghidra", true, "Ghidra's output exactly as generated"),
-                    ] {
-                        let enabled = has_readable || raw;
-                        if ui
-                            .add_enabled(enabled, egui::Button::selectable(app.panels.code.raw == raw, label))
-                            .on_hover_text(tip)
-                            .clicked()
-                        {
-                            app.panels.code.raw = raw;
-                            app.panels.code.text = TextState::default();
-                        }
-                    }
-                    ui.label(theme::faint_label(func.file.to_string_lossy()));
-                });
-            }
-            ui.separator();
             let state = std::mem::take(&mut app.panels.code.text);
             crate::ui::text_view(ui, "code_text", &state, true);
             app.panels.code.text = state;
+        }
+        View::Source | View::Assembly => {
+            if app.panels.code.asm_for != Some(func.address) && !app.panels.code.job.running() {
+                start_job(app, "show", vec!["show".into(), func.addr_hex()], None);
+            }
+            if app.panels.code.asm_for != Some(func.address) {
+                ui.label(theme::faint_label("disassembling\u{2026}"));
+            } else {
+                let state = std::mem::take(&mut app.panels.code.asm);
+                crate::ui::text_view(ui, "code_asm", &state, true);
+                app.panels.code.asm = state;
+            }
+        }
+        View::Diff => diff_view(ui, patch.as_ref()),
+        View::Edit => edit_view(app, ui, &func, &version),
+    }
+}
+
+fn start_job(app: &mut ViewerApp, kind: &str, args: Vec<String>, stdin: Option<String>) {
+    let root = app.dirs.root.clone();
+    let panel = &mut app.panels.code;
+    if panel.job.running() {
+        return;
+    }
+    panel.job_kind = kind.to_string();
+    panel.job.start(&root, kind, "tools.code_edit", args, stdin);
+}
+
+fn poll_job(app: &mut ViewerApp, address: u32) {
+    let Some(result) = app.panels.code.job.poll() else { return };
+    let kind = app.panels.code.job_kind.clone();
+    let panel = &mut app.panels.code;
+    match kind.as_str() {
+        "show" => {
+            let mut state = TextState::default();
+            state.set(if result.ok { &result.stdout } else { &result.stderr }, Lang::Asm);
+            panel.asm = state;
+            panel.asm_for = Some(address);
+        }
+        "load-edit" => {
+            if result.ok {
+                panel.edit = result.stdout.clone();
+                panel.edit_for = Some(address);
+                panel.message.clear();
+            } else {
+                panel.message = result.summary();
+            }
+        }
+        _ => {
+            panel.message = result.summary();
+            if result.ok {
+                // the listings changed: load them again
+                panel.asm_for = None;
+                if kind == "revert" {
+                    panel.edit_for = None;
+                }
+            }
+        }
+    }
+    if kind == "apply" || kind == "revert" || (!result.ok && kind != "show") {
+        app.status = format!("code edit: {}", app.panels.code.message);
+    }
+}
+
+fn diff_view(ui: &mut egui::Ui, patch: Option<&crate::data::versions::CodePatch>) {
+    let Some(p) = patch else {
+        ui.label(theme::faint_label("This function is the same in the retail game and the active version."));
+        return;
+    };
+    // listing lines are "ADDRESS  BYTES     insn": show the bytes and the instruction
+    let body = |line: &str| line.get(10..).unwrap_or("").to_string();
+    egui::ScrollArea::both().id_salt("code_diff").auto_shrink([false, false]).show(ui, |ui| {
+        egui::Grid::new("code_diff_grid").striped(true).spacing([16.0, 2.0]).show(ui, |ui| {
+            ui.label(theme::faint_label("address"));
+            ui.label(theme::faint_label("retail"));
+            ui.label(theme::faint_label("patched"));
+            ui.end_row();
+            let n = p.original.len().max(p.patched.len());
+            for i in 0..n {
+                let a = p.original.get(i).map(String::as_str).unwrap_or("");
+                let b = p.patched.get(i).map(String::as_str).unwrap_or("");
+                let changed = a != b;
+                let addr = b.get(..8).or_else(|| a.get(..8)).unwrap_or("");
+                ui.label(theme::mono(addr.to_string()));
+                ui.label(theme::mono(body(a)).color(if changed { theme::ERR } else { theme::TEXT_DIM }));
+                ui.label(theme::mono(body(b)).color(if changed { theme::OK } else { theme::TEXT_DIM }));
+                ui.end_row();
+            }
         });
+    });
+}
+
+fn edit_view(app: &mut ViewerApp, ui: &mut egui::Ui, func: &crate::data::code::Function, version: &str) {
+    let busy = app.panels.code.job.running();
+    if app.panels.code.edit_for != Some(func.address) {
+        if !busy {
+            start_job(app, "load-edit", vec!["show".into(), func.addr_hex()], None);
+        }
+        ui.label(theme::faint_label("loading the listing\u{2026}"));
+        return;
+    }
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(!busy, theme::filled_button("Assemble & save to mod", theme::ACCENT))
+            .on_hover_text("Assembles the listing at this address (it must fit in the function and be ARMv6K-only) into mod/code/code.bin")
+            .clicked()
+        {
+            let text = app.panels.code.edit.clone();
+            start_job(app, "apply", vec!["apply".into(), func.addr_hex(), "--asm".into(), "-".into()], Some(text));
+        }
+        if ui
+            .add_enabled(!busy, egui::Button::new(format!("Revert to {version}")))
+            .on_hover_text("Puts the active game version's bytes back for this function")
+            .clicked()
+        {
+            start_job(app, "revert", vec!["revert".into(), func.addr_hex()], None);
+        }
+        if ui.add_enabled(!busy, egui::Button::new("Reload")).clicked() {
+            app.panels.code.edit_for = None;
+        }
+        if busy {
+            ui.spinner();
+        }
+        let msg = app.panels.code.message.clone();
+        if !msg.is_empty() {
+            let ok = app.panels.code.job.last.as_ref().map(|r| r.ok).unwrap_or(true);
+            ui.label(egui::RichText::new(msg).color(if ok { theme::OK } else { theme::ERR }));
+        }
+    });
+    ui.label(theme::faint_label(
+        "One instruction per line; the address and bytes columns are ignored. Branch targets are absolute (bl #0x724a00). Comments start with ; or @.",
+    ));
+    egui::ScrollArea::vertical().id_salt("code_edit").auto_shrink([false, false]).show(ui, |ui| {
+        ui.add(
+            egui::TextEdit::multiline(&mut app.panels.code.edit)
+                .font(egui::TextStyle::Monospace)
+                .code_editor()
+                .desired_width(f32::INFINITY)
+                .desired_rows(30),
+        );
+    });
 }
 
 fn sources_tab(app: &mut ViewerApp, ui: &mut egui::Ui) {

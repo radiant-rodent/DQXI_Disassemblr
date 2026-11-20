@@ -65,6 +65,11 @@ disappear.
 
 ## Code view
 
+On a patched game version, functions the patch changed are marked ● and the code caves it added
+are listed as functions. The **patched** filter shows only those. **Patch diff** and **Edit
+assembly** show and change their instructions. See [GAME_VERSIONS.md](GAME_VERSIONS.md).
+
+
 Code -> Decompiled functions lists all 18,787 entry points, 250 per page (search by name or address).
 Each function opens in the **Readable** view (`decomp/readable/`, from `tools/readable_c.py`): known
 function names in calls, `self` for the object a method works on, `self->f_274` instead of

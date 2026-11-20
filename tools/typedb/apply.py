@@ -70,6 +70,7 @@ KEYWORDS = {
 ADDR_RE = re.compile(r"^0x[0-9a-fA-F]{6,8}$")
 ARRAY_RE = re.compile(r"^(.*?)\s*\[\s*(0x[0-9a-fA-F]+|\d+)?\s*\]$")
 FNPTR_RE = re.compile(r"^(?:void|u32|int)\s*\(\s*\*\s*\)\s*\([^)]*\)$")
+FNPTR_PARTS = re.compile(r"^(\w+)\s*\(\s*\*\s*\)\s*\((.*)\)$")
 
 
 # --------------------------------------------------------------------------- #
@@ -171,9 +172,9 @@ def normalise_type(text: str, ev: Evidence) -> tuple[str | None, str | None, str
     if count:
         out = f"{out}[{count}]"
     type_class = None
-    if pointer and text in ev.classes:
+    if text in ev.classes:
         type_class = text
-    elif pointer and text in ev.types.values():
+    elif text in ev.types.values():
         type_class = ev.type_to_class[text]
     return out, type_class, None
 
@@ -207,9 +208,41 @@ def confidence_of(entry: dict, issues: list[dict], where: str) -> float:
 # --------------------------------------------------------------------------- #
 # merge S (classes + fields)
 # --------------------------------------------------------------------------- #
+def pointer_for_wide_class(ftype: str, type_class: str | None, fsize: int, ev: Evidence,
+                           issues: list[dict], where: str) -> tuple[str, str | None]:
+    """A class-typed field that is only 4 bytes wide holds a pointer, not the object.
+
+    Workers routinely write the class name without the `*` (`UiCursorWindow
+    normalDigitWindows` in a 4-byte slot of a 0x264-byte class).  The field
+    width is measured evidence, so the pointer reading is the only one that
+    fits; the correction is recorded as a warning instead of silently changing
+    the answer.
+    """
+    if not type_class or fsize != 4:
+        return ftype, type_class
+    array = ARRAY_RE.match(ftype)
+    base = (array.group(1) if array else ftype).strip()
+    if base.endswith("*") or (array and array.group(2)):
+        return ftype, type_class
+    class_size = (ev.classes.get(type_class) or {}).get("size") or 0
+    if class_size <= 4:
+        return ftype, type_class
+    issues.append({"item": where, "severity": "warning",
+                   "message": f"field is 4 bytes but class {type_class} is 0x{class_size:X}; "
+                              f"read as {base}* (pointer)"})
+    return f"{base}*", type_class
+
+
 def merge_structs(ev: Evidence, entries: list[dict], issues: list[dict]) -> dict:
     merged: dict[str, dict] = {}
     seen_names: dict[str, str] = {}
+    type_owner: dict[str, str] = {}
+    for entry in entries:
+        cls_name = entry.get("class")
+        cls_type = entry.get("type")
+        if cls_name and cls_type and cls_name in ev.classes:
+            ev.types[cls_name] = cls_type
+            ev.type_to_class[cls_type] = cls_name
     for entry in entries:
         batch = entry.get("_batch", "?")
         cls_name = entry.get("class")
@@ -225,6 +258,14 @@ def merge_structs(ev: Evidence, entries: list[dict], issues: list[dict]) -> dict
             issues.append({"batch": batch, "item": where, "severity": "error",
                            "message": f"class type: {err}"})
             continue
+        if cls_type in type_owner and type_owner[cls_type] != cls_name:
+            # Two different classes normalising to one C type would emit the
+            # same typedef twice and break every include of the header.
+            issues.append({"batch": batch, "item": where, "severity": "error",
+                           "message": f"type name '{cls_type}' is already used by class "
+                                      f"{type_owner[cls_type]}; give this class its own type"})
+            continue
+        type_owner[cls_type] = cls_name
         if cls_name in merged:
             issues.append({"batch": batch, "item": where, "severity": "warning",
                            "message": "class appears twice; the later entry is merged field by field"})
@@ -303,6 +344,8 @@ def merge_structs(ev: Evidence, entries: list[dict], issues: list[dict]) -> dict
                 fsize = int(field.get("size", 4))
             except (TypeError, ValueError):
                 fsize = 4
+            ftype, type_class = pointer_for_wide_class(ftype, type_class, fsize, ev, issues,
+                                                       f"{where}@0x{offset:x}")
             if evidence_field is None:
                 issues.append({"batch": batch, "item": f"{where}@0x{offset:x}",
                                "severity": "warning",
@@ -452,8 +495,41 @@ def c_comment(text: str, limit: int = 160) -> str:
     return text[:limit]
 
 
+def embedded_class(field: dict, merged: dict[str, dict]) -> str | None:
+    """Class name when this field is emitted as an embedded object, else None.
+
+    Only a field whose recorded width equals the class size (times the array
+    count) can be embedded: anything else would move every following offset.
+    """
+    type_class = field.get("type_class")
+    if not type_class or type_class not in merged:
+        return None
+    array = ARRAY_RE.match(field["type"])
+    base = (array.group(1) if array else field["type"]).strip()
+    if base.endswith("*"):
+        return None
+    count = int(array.group(2), 0) if (array and array.group(2)) else 1
+    if field["size"] != merged[type_class]["size"] * count:
+        return None
+    return type_class
+
+
+def by_value_classes(cls: dict, merged: dict[str, dict]) -> list[str]:
+    """Classes this struct embeds by value (not through a pointer)."""
+    out = []
+    for field in cls["fields"].values():
+        embedded = embedded_class(field, merged)
+        if embedded:
+            out.append(embedded)
+    return out
+
+
 def struct_order(merged: dict[str, dict], ev: Evidence) -> list[str]:
-    """Base classes before derived ones; cycles are broken deterministically."""
+    """Base classes and embedded members before the struct that contains them.
+
+    A by-value member needs the complete type, so it has to be defined first;
+    cycles are broken deterministically (the compile probe then reports them).
+    """
     order: list[str] = []
     state: dict[str, int] = {}
 
@@ -466,12 +542,43 @@ def struct_order(merged: dict[str, dict], ev: Evidence) -> list[str]:
         base = merged[name].get("base")
         if base in merged:
             visit(base)
+        for dep in by_value_classes(merged[name], merged):
+            visit(dep)
         state[name] = 2
         order.append(name)
 
     for name in sorted(merged):
         visit(name)
     return order
+
+
+def field_decl(field: dict, merged: dict[str, dict]) -> tuple[str, str]:
+    """(C declaration, extra note) for one struct field.
+
+    Three shapes need care: a function pointer carries its name inside the
+    declarator, an array carries the count after the name, and a by-value
+    member whose class has no S_### answer yet cannot be named at all - it is
+    kept as a byte array of the recorded width so the offsets stay right.
+    """
+    name = field["name"]
+    array = ARRAY_RE.match(field["type"])
+    base = (array.group(1) if array else field["type"]).strip()
+    count = array.group(2) if array else None
+    fnptr = FNPTR_PARTS.match(base)
+    if fnptr:
+        ret, args = fnptr.group(1), fnptr.group(2)
+        if count:
+            return f"{ret} (*{name}[{count}])({args})", ""
+        return f"{ret} (*{name})({args})", ""
+    type_class = field.get("type_class")
+    if type_class and not base.endswith("*") and not embedded_class(field, merged):
+        size = field["size"]
+        if count:
+            return f"u8 {name}[0x{size:X}]", f" {base}[{count}], class not embedded"
+        return f"u8 {name}[0x{size:X}]", f" {base}, class not embedded"
+    if count:
+        return f"{base} {name}[{count}]", ""
+    return f"{base} {name}", ""
 
 
 def emit_struct(cls: dict, merged: dict[str, dict]) -> list[str]:
@@ -498,26 +605,20 @@ def emit_struct(cls: dict, merged: dict[str, dict]) -> list[str]:
         offset = embed["size"]
     for field in fields:
         if field["offset"] < offset:
-            lines.append(f"    /* skipped {field['name']} at +0x{field['offset']:X}: "
-                         f"inside the embedded base */")
+            where = (f"inside the embedded {embed['class']} base" if embed
+                     else f"overlaps the field before it")
+            lines.append(f"    /* skipped {field['name']} at +0x{field['offset']:X}: {where} */")
             continue
         if field["offset"] > offset:
             gap = field["offset"] - offset
             lines.append(f"    u8 _pad_{offset:03X}[0x{gap:X}];")
             offset = field["offset"]
-        ftype = field["type"]
-        array = ARRAY_RE.match(ftype)
-        if array and array.group(2) is None:
-            ftype = f"{array.group(1)} {field['name']}[]"   # incomplete array member invalid
-            ftype = array.group(1)
-        decl = f"    {ftype} {field['name']}"
-        if array and array.group(2) is not None:
-            decl = f"    {array.group(1)} {field['name']}[{array.group(2)}]"
-        if array and array.group(2) is None:
-            decl = f"    {array.group(1)} {field['name']}[0]"
+        decl, extra = field_decl(field, merged)
+        decl = "    " + decl
         note = f"/* +0x{field['offset']:04X}"
         if field["confidence"] < 0.75:
             note += f" conf {field['confidence']:.2f}"
+        note += extra
         note += " */"
         lines.append(f"{decl};{' ' * max(1, 44 - len(decl))}{note}")
         offset = field["offset"] + field["size"]
@@ -539,10 +640,13 @@ def write_headers(merged_structs: dict, merged_globals: dict, merged_locals: dic
 #define DQXI_DQXI_BASE_H
 
 /* Fixed-width integer and float types shared by every generated struct.
- * Self-contained (only <stdint.h>) so a generated header can be syntax-checked
- * or included by matching C source without pulling in any SDK header.  The
- * typedefs are identical to include/types.h, so including both is harmless. */
+ * Self-contained (only <stdint.h> and <stdbool.h>) so a generated header can be
+ * syntax-checked or included by matching C source without pulling in any SDK
+ * header.  The typedefs are identical to include/types.h, so including both is
+ * harmless.  `bool` is the engine's one-byte C++ bool, which <stdbool.h> gives
+ * us in C. */
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef uint8_t   u8;
 typedef uint16_t  u16;
@@ -576,7 +680,11 @@ typedef double    f64;
             referenced.add(base_type)
         elif base_type in ev.types.values():
             referenced.add(ev.type_to_class.get(base_type, base_type))
-    forwards = sorted({ev.types.get(name, name) for name in referenced} - emitted)
+    # Every referenced type needs a forward typedef, including the ones emitted
+    # below: a field at +0x28 may point at a class whose definition comes 4000
+    # lines later, and C needs the name before the use.  A repeated typedef of
+    # the same type is legal C11 (and only a -pedantic warning in C89/C99).
+    forwards = sorted({ev.types.get(name, name) for name in referenced})
 
     lines = ["#ifndef DQXI_DQXI_STRUCTS_H", "#define DQXI_DQXI_STRUCTS_H", "",
              "#include \"dqxi_base.h\"", "",
@@ -586,7 +694,8 @@ typedef double    f64;
              " * in its trailing comment. Do not hand-edit: rerun M2_types_merge. */",
              ""]
     if forwards:
-        lines.append("/* Types referenced by pointer before their own S batch is merged. */")
+        lines.append("/* Forward declarations: every type a field or global points at, so a")
+        lines.append(" * pointer field can name a class defined further down (or not merged yet). */")
         for name in forwards:
             lines.append(f"typedef struct {name} {name};")
         lines.append("")

@@ -22,6 +22,7 @@ lives in `game_data/`, `game_assets/`, `decomp/`, `build/`, `mod/` and `out/`.
 
 | I want to… | Start here | You need |
 |---|---|---|
+| **Work on the English translation** | `python -m tools.game_version use en` or the **Game ▾** menu in DQXI Studio — [Game versions](docs/GAME_VERSIONS.md) | Python |
 | **Play with a mod** | **[Your first mod in 10 minutes](docs/FIRST_MOD.md)** — change an item price and a line of dialogue, see them in the emulator, put them on a 3DS | Python only |
 | **Edit data in DQXI Studio** | `run_editor.bat` (level editor) or `run_viewer_rs.bat` (browser): Tables, Dialogues, Scripts, Textures, Models, Audio, Layouts, Maps, Playtest | Rust (first build), Python for the tool buttons |
 | **Read & change native code** | [Project tour §4](docs/PROJECT_TOUR.md#4-engine-internals--the-guided-tour) then [Native code](docs/CODE.md) and [Source replacement](docs/SOURCE_REPLACEMENT.md) | Python, optionally Ghidra |

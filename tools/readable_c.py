@@ -125,6 +125,13 @@ def load_maps(directory: Path | None = None) -> dict:
         if locals_path.is_file():
             data = json.loads(locals_path.read_text(encoding="utf-8"))
             maps["locals"] = data.get("functions") or {}
+            # by address too: function_by_address only knows ~2/3 of the functions, the V_* maps cover more
+            maps["locals_by_address"] = {}
+            for entry in maps["locals"].values():
+                try:
+                    maps["locals_by_address"][int(str(entry["address"]), 16)] = entry
+                except (KeyError, TypeError, ValueError):
+                    continue
         for cls in maps["fields"].values():
             if cls.get("type"):
                 maps["types"][cls["type"]] = cls
@@ -407,6 +414,130 @@ def camel(name: str) -> str:
     return re.sub(r"ID\b", "Id", out)
 
 
+# --------------------------------------------------------------------------- #
+# Ghidra warnings that are artefacts of the export, not facts about the game
+# --------------------------------------------------------------------------- #
+# Ghidra ran without full analysis here, so (1) a virtual call that is the last thing a function does
+# (`ldr r2,[r0]; ldr r2,[r2,#0x84]; bx r2`) is an "indirect jump" it fails to turn into a jump table, and
+# (2) helpers that were never seeded as Thumb functions decode as junk, get marked "noreturn", and every
+# caller is cut off right after the call. The first is only noise; the second hides real code.
+_CAPSTONE = None
+_RETURNS: dict[int, tuple[bool, int | None]] = {}
+JUMP_WARN = re.compile(
+    r"^([ \t]*)/\* WARNING: Could not recover jumptable at (0x[0-9a-fA-F]+)\. Too many branches \*/\n"
+    r"[ \t]*/\* WARNING: Treating indirect jump as call \*/\n", re.M)
+NORETURN_WARN = re.compile(
+    r"^([ \t]*)/\* WARNING: Subroutine does not return \*/\n([ \t]*)(?:\([^()]*\)\s*)?([A-Za-z_]\w*)\(", re.M)
+
+
+def _capstone():
+    global _CAPSTONE
+    if _CAPSTONE is None:
+        try:
+            import capstone
+            _CAPSTONE = (capstone.Cs(capstone.CS_ARCH_ARM, capstone.CS_MODE_ARM),
+                         capstone.Cs(capstone.CS_ARCH_ARM, capstone.CS_MODE_THUMB))
+        except ImportError:
+            _CAPSTONE = ()
+    return _CAPSTONE
+
+
+def _decode(address: int, mode: int, count: int, span: int = 800):
+    md = _capstone()[mode]
+    off = address - 0x00100000
+    data = image()
+    if not 0 <= off < len(data):
+        return []
+    return list(md.disasm(data[off:off + span], address, count))
+
+
+def _is_return(i) -> bool:
+    ops = i.op_str.replace(" ", "")
+    if i.mnemonic.startswith(("pop", "ldm")):
+        regs = ops[ops.find("{") + 1:ops.find("}")].split(",") if "{" in ops else []
+        return "pc" in regs
+    return (i.mnemonic.startswith("bx") and ops == "lr") or (i.mnemonic.startswith("mov") and ops.startswith("pc,lr"))
+
+
+def callee_returns(address: int) -> tuple[bool, int | None]:
+    """(True, address of the return instruction) when code at `address` reaches a return cleanly, in ARM or Thumb."""
+    if address in _RETURNS:
+        return _RETURNS[address]
+    result = (False, None)
+    if _capstone() and 0x00100000 <= address < 0x0072403C:
+        for mode in (1, 0):
+            if mode == 0 and address & 3:
+                continue
+            md = _capstone()[mode]
+            off = address - 0x00100000
+            data = image()[off:off + 700]
+            pos, n = 0, 0
+            while pos < len(data) and n < 160:
+                ins = list(md.disasm(data[pos:pos + 4], address + pos, 1))
+                if not ins:
+                    break
+                i = ins[0]
+                if _is_return(i):
+                    result = (True, i.address)
+                    break
+                if i.mnemonic in ("udf", "svc", "bkpt"):
+                    break
+                pos += i.size
+                n += 1
+            if result[0]:
+                break
+    _RETURNS[address] = result
+    return result
+
+
+def jump_kind(address: int) -> str:
+    """What the instruction Ghidra complained about really is: 'call' (indirect tail call), 'switch' or '?'."""
+    if not _capstone():
+        return "?"
+    for mode in (0, 1):
+        if mode == 0 and address & 3:
+            continue
+        ins = _decode(address & (~3 if mode == 0 else ~1), mode, 1, 8)
+        if not ins:
+            continue
+        i = ins[0]
+        ops = i.op_str.replace(" ", "")
+        if i.mnemonic.startswith("bx") and ops != "lr":
+            return "call"
+        if i.mnemonic.startswith("ldr") and ops.startswith("pc,[") and "lsl" not in ops and not ops.startswith("pc,[pc"):
+            return "call"
+        if i.mnemonic.startswith("mov") and ops.startswith("pc,r") and ops != "pc,lr":
+            return "call"
+        if ("lsl" in ops and "pc" in ops) or i.mnemonic.startswith(("tbb", "tbh")):
+            return "switch"
+    return "?"
+
+
+def clean_decompiler_warnings(text: str, names: dict[int, str]) -> str:
+    def jump(m: re.Match) -> str:
+        if jump_kind(int(m.group(2), 16)) == "call":
+            return f"{m.group(1)}/* tail call through a function pointer / vtable slot (not a switch) */\n"
+        return m.group(0)
+
+    text = JUMP_WARN.sub(jump, text)
+    by_name = {v: k for k, v in names.items()}
+
+    def noreturn(m: re.Match) -> str:
+        callee = m.group(3)
+        fm = re.fullmatch(r"func_([0-9A-Fa-f]{8})", callee)
+        addr = int(fm.group(1), 16) if fm else by_name.get(callee)
+        if addr is not None:
+            ok, ret = callee_returns(addr)
+            if ok:
+                return (f"{m.group(1)}/* NOTE: Ghidra treats {callee} as 'does not return', but its code returns (return at "
+                        f"0x{ret:08X}). Code after this call was dropped by the decompiler (usually just the final return; "
+                        f"check the asm if the function seems to end early). */\n"
+                        + m.group(0).split("\n", 1)[1])
+        return m.group(0)
+
+    return NORETURN_WARN.sub(noreturn, text)
+
+
 def rewrite(text: str, names: dict[int, str], maps: dict | None = None,
             func: dict | None = None) -> str:
     if maps is None:
@@ -419,6 +550,8 @@ def rewrite(text: str, names: dict[int, str], maps: dict | None = None,
     if not maps:
         maps = {"fields": {}, "globals": {}, "literals": {}, "locals": {},
                 "functions": {}, "function_by_address": {}, "types": {}}
+    own = re.search(r"Address:\s*([0-9a-fA-F]{8})", text) or re.search(r"FUN_([0-9A-Fa-f]{8})", text)
+    own_addr = int(own.group(1), 16) if own else None  # taken before the call rewrite renames FUN_xxxxxxxx
 
     def call(m: re.Match) -> str:
         addr = int(m.group(1), 16)
@@ -469,8 +602,10 @@ def rewrite(text: str, names: dict[int, str], maps: dict | None = None,
     if maps.get("literals"):
         text = rewrite_global_refs(text, maps)
         text = resolve_number_literals(text)
-    if maps.get("locals") and func:
-        entry = maps["locals"].get(func["name"]) or {}
+    if maps.get("locals"):
+        entry = (maps["locals"].get(func["name"]) if func else None) or {}
+        if not entry and own_addr is not None:
+            entry = (maps.get("locals_by_address") or {}).get(own_addr) or {}
         local_map = dict(entry.get("params") or {})
         local_map.update(entry.get("locals") or {})
         text = apply_local_map(text, local_map, func)
@@ -507,7 +642,7 @@ def rewrite(text: str, names: dict[int, str], maps: dict | None = None,
     for var, field in re.findall(r"\b([a-z]{1,3}Var\d+) = (?:\([\w ]+\*?\))?\w+(?:->f_[0-9a-f]+)*->f_([0-9a-f]+);", text):
         if assigned_once(var):
             rename(var, f"f{field}")
-    return text
+    return clean_decompiler_warnings(text, names)
 
 
 def noise(text: str) -> dict[str, int]:

@@ -24,6 +24,25 @@
 | Tables | structural JSON | `--tables` |
 | Audio | 16-bit PCM WAV | `--audio` |
 | Maps | `scene.json` + `structure.json` | `tools/map_tool.py export` |
+| Images packed in BCH (UI, 2D mode, 2D battle) | PNG + `.meta.json` in named packs | `tools/export_bch_assets.py` |
+| Animations in BCH (motions, cutscenes, cameras) | JSON keyframe curves (`game_assets/animations/`) | `tools/export_bch_assets.py` (needs `tools/spica_ref`) |
+| 2D-mode maps and objects | rendered PNG (`2d_maps`) + `scene2d.json` | `tools/map2d.py export` |
+
+**BCH files are split by content.** Only 4,779 of the 10,542 BCH files hold meshes (`--models`). The rest:
+3,773 image-only files (UI icons and art, 2D sprites and tile sheets, 2D battle graphics, effect sheets) and 1,999
+animation files (1,989 animation-only, 10 with images too), plus one shader container (`syscmn/shader.bch`, 36
+compiled GPU shaders, no standard format). `tools/export_bch_assets.py` exports all of them and writes
+`game_assets/bch_index.json` (kind, contents and outputs of every BCH), which `tools/progress.py` counts from.
+
+Image packs (the Textures panel groups by the first folder below `game_assets/textures/` or `.../ui/`):
+`ui/<folder>` (joins the UI pack of that name: `item`, `tutorial`, `story`, `dive`, `location`, `training`,
+`credit`, `common_2d`), `2d_sprites`, `2d_tilesets`, `2d_maps`, `2d_battle_enemies`, `2d_battle_backgrounds`,
+`2d_battle_effects`, `2d_battle_enemy_anims`, `2d_battle_common`, `2d_effects`, `2d_weather`, `2d_common`,
+`misc_bch`. Animations: `animations/motions/<set>.json` (one file per `3d/motion/<set>`, each BCH of the set under
+`files`), `animations/cutscenes/<kind>/[<scene>/]<shot>.json`, `animations/battle/`, `animations/misc/`. Each
+animation lists its frames, looping flag and per-target curves (`keys` = `[frame, value]` or
+`[frame, value, in-slope, out-slope]`; defaults omitted, floats rounded to 5 decimals) or per-frame quaternion /
+matrix / bool tracks. The JSON is ~2.3x the binary size (911 MB for 394 MB of BCH).
 
 Each family writes a `*_summary.json` with output count and errors. A non-zero error list is a
 real failure; fix it rather than ignoring it.
@@ -76,7 +95,11 @@ per-corner `vt` indices, so `v` lines and their order stay exactly as in the BCH
 still lines up); glTF gets an unwelded copy of those meshes.
 
 Each unit is sampled through the material's texture-coordinate transform (`"uv_coords"`, SPICA's
-DccMaya/SoftImage/3dsMax formula). About 120 face draws default to a translated eye or mouth
+DccMaya/SoftImage/3dsMax formula) and its sampler wrap (`"wrap"`, per unit `[U, V]`). Wrap
+matters: the mirrored half of a face (and of most bodies and hair) uses negative U and the eye
+atlas wraps U with Mirror, so both eyes read the same cell, flipped. Read with Repeat, the second
+eye lands in the atlas's opposite column, a different eye/brow. Ordinary draws carry the wrap
+as `dqxi_wrap <u> <v>` in the MTL and as glTF samplers; the viewer sets GL wrap from it. About 120 face draws default to a translated eye or mouth
 cell; ordinary draws get their unit-0 transform baked into the exported UVs.
 
 ### Hand poses and other hidden parts
@@ -97,6 +120,52 @@ and `bake` writes a model's face for any pose:
 python -m tools.face_expressions bake game_data/packs/3d/model/cha01000a_h/cha01000a_h.bch `
     --eyes 0,0.797 --mouth 0,0.75 --out face.png
 ```
+
+### Skeletal animation: pose rules and which clips fit which rig
+
+DQXI motions are authored on a *reduced* skeleton. Evaluating them on the model's full bone hierarchy
+(what SPICA's DAE exporter and our viewer did before) floats heads on sticks and detaches arms. The
+rules, verified by rendering own-family clips (hero `pc001_*`, monster `m043_*`) against the bind pose:
+
+1. An animated bone's transform is relative to its nearest **animated** ancestor; bones without a
+   track in between (shoulders, clavicles, thighs, extra spine segments) are skipped.
+2. Those untracked in-between bones keep their rest offset from their parent and **rotate like aim
+   constraints** so their animated children land where the clip puts them (the hero's arm sits exactly
+   one rest shoulder length from the shoulder joint, in a new direction).
+3. An axis a track does not key keeps the bone's rest value, taken relative to the effective parent of
+   rule 1 (`Pose.Decompose` of bind(bone) · bind(parent)⁻¹).
+
+`tools/spica_ref/Compat.cs` (`Compat.MakePlan` / `Compat.Evaluate`) implements this once; `SpicaRef rig`
+(viewer), `SpicaRef gltf` (Blender) and the compatibility test all use it. Debug aids:
+`SpicaRef posedobj <model> <anim.bch> <index> <frame> out.obj` (env `DQXI_POSE=plain` for the old
+evaluation), `compatdiag`, `chan`.
+
+Which clips work on which rig is in `game_assets/animations/compat.json` (4,127 models, grouped into
+distinct skeletons; per skeleton: motion set → `"*"` or the working clip names; `cs/<path>` keys are
+cutscene or model files with embedded clips). `SpicaRef compat` poses every skeleton with every clip whose
+tracks are ≥ 90 % its bones (2.8 M pairs, ~4 min) and compares against the clip's *reference rig* (the one
+it fits best, normally its own family): a clip works when its skinned bone segments keep their lengths as
+well as on the reference (Δ ≤ 0.15) and limbs and animated bone orientations point within 20° of the
+reference pose. Own-family clips legitimately stretch (squash, weapons, props), so nothing is judged
+against zero. The viewer's animation row lists only the sets and clips from this table.
+
+```powershell
+python tools/anim_compat.py lists      # after SpicaRef skeletons build/anim_compat/list.txt ...
+tools/spica_ref/bin/Release/net9.0/SpicaRef.exe compat build/anim_compat/models.txt `
+    build/anim_compat/animfiles.txt build/anim_compat/compat_full.json
+python tools/anim_compat.py write      # -> game_assets/animations/compat.json
+```
+
+### Rigged models for Blender
+
+`python tools/export_glb.py <model>` (or Models → animation row → **Rigged → Blender**) writes
+`game_assets/blender/<model>.glb`: the game's joints as an armature, one vertex group per joint on every
+mesh (Weight Paint mode), textures, and the working clips as actions named `<set>/<clip>` (own family
+sets, one outfit variant each, by default; `--sets`, `--all`, `--cutscenes`, `--list`). The hero's
+default export is 820 clips / 52 MB. Textures are the raw SPICA ones: the layered face (eye/mouth atlas
+cells) is not baked yet, so the mouth shows as a dark atlas cell. Alternate hand meshes import hidden (`dqxi_hidden`), outline
+shells are left out unless `--outlines`. The viewer's animation cache is `build/rig_cache/*__v2.bin`;
+bump `RIG_CACHE_VERSION` in `model_anim.rs` when `SpicaRef rig` output changes.
 
 ### Transparency and blending
 
@@ -214,6 +283,8 @@ not identical. See `tests/test_asset_replace.py` for the per-family evidence.
 python -m tools.convert_assets --textures
 python -m tools.convert_assets --models --workers 12   # processes, ~135 s on 12 cores
 python -m tools.convert_assets --audio --workers 6
+python tools/export_bch_assets.py      # images + animations of every mesh-less BCH, ~5 min
+python tools/map2d.py export           # 2D maps + 2D objects
 ```
 
 Heavy conversions are safe to re-run; outputs are replaced per source file.

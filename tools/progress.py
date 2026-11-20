@@ -83,7 +83,9 @@ SOURCE_EXTS = {
     "text": (".bmsg", ".btxt", ".bmbt"),
 }
 ASSET_FAMILIES = [
-    ("models", "3D models (BCH)"),
+    ("models", "3D models (BCH with meshes)"),
+    ("bch_images", "Images packed in BCH (UI, 2D mode, 2D battle)"),
+    ("animations", "Animations (BCH: motions, cutscenes, cameras)"),
     ("textures", "Textures (BFLIM)"),
     ("layouts", "UI layouts / animations (BFLYT/BFLAN)"),
     ("tables", "Data tables (BXON)"),
@@ -378,6 +380,36 @@ def function_path(rec: dict) -> Path | None:
 
 READABLE = ROOT / "decomp" / "readable"
 _readable_cache: dict[str, str] = {}
+
+
+_readable_by_addr: dict[int, str] | None = None
+
+
+def readable_by_address(addr) -> str:
+    """Readable C path for an address, matching the ``_<addr8>.c`` file suffix.
+
+    Readable files carry the proposed/final name while the merged export still
+    points at the original ``FUN_...`` file, so a name-based lookup misses every
+    proposed or documented function.
+    """
+    global _readable_by_addr
+    if _readable_by_addr is None:
+        _readable_by_addr = {}
+        for sub in ("functions", "recovered"):
+            d = READABLE / sub
+            if not d.is_dir():
+                continue
+            for p in d.glob("*.c"):
+                tail = p.stem.rsplit("_", 1)[-1]
+                if len(tail) == 8:
+                    try:
+                        _readable_by_addr.setdefault(int(tail, 16), f"{sub}/{p.name}")
+                    except ValueError:
+                        pass
+    try:
+        return _readable_by_addr.get(int(addr), "")
+    except (TypeError, ValueError):
+        return ""
 
 
 def readable_relpath(rec_file) -> str:
@@ -927,6 +959,22 @@ def collect_assets() -> dict:
     sources = live_source_counts()
     outputs = live_output_counts()
 
+    # BCH files hold meshes, images or animations; tools/export_bch_assets.py classifies every one of them
+    bch = read_json(ROOT / "game_assets" / "bch_index.json", {})
+    bch_files = bch.get("files") if isinstance(bch, dict) else None
+    bch_counts: dict[str, tuple[int, int]] = {}
+    if isinstance(bch_files, dict) and bch_files:
+        def tally(kinds):
+            rows = [v for v in bch_files.values() if v.get("kind") in kinds]
+            return len(rows), sum(1 for v in rows if v.get("outputs") or v.get("kind") == "model")
+        bch_counts["models"] = tally({"model"})
+        bch_counts["bch_images"] = tally({"textures", "textures+animations"})
+        bch_counts["animations"] = tally({"animations", "textures+animations"})
+    texture_rows = 0
+    manifest = ROOT / "game_assets" / "textures_manifest.jsonl"
+    if manifest.is_file():
+        texture_rows = sum(1 for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip())
+
     families = []
     for key, label in ASSET_FAMILIES:
         live_source = sum(sources.get(ext, 0) for ext in SOURCE_EXTS.get(key, ()))
@@ -939,6 +987,15 @@ def collect_assets() -> dict:
 
         live_converted = output_value(outputs, key)
         converted = live_converted or audit_converted or SOURCE_BASELINE.get(key, 0) * 0
+        if key in bch_counts:
+            source, converted = bch_counts[key]
+        elif key in ("bch_images", "animations"):
+            source, converted = 0, 0
+        if key == "textures" and texture_rows:
+            # only the BFLIM conversions: PNGs extracted from BCH files are counted under bch_images
+            converted = texture_rows
+        # a family can never be more than fully converted
+        converted = min(converted, source) if source else converted
 
         manifest_editable = None
         entry = roundtrip_families.get(key)
@@ -962,11 +1019,14 @@ def collect_assets() -> dict:
             "editable": editable,
             "pct_converted": round(pct(converted, source), 2),
             "pct_editable": round(pct(editable, source), 2),
+            # families without a source count (text lives inside the tables) are listed but kept out of the totals
+            "counted": source > 0,
         })
 
-    source_total = sum(f["source"] for f in families)
-    converted_total = sum(f["converted"] for f in families)
-    editable_total = sum(f["editable"] for f in families)
+    counted = [f for f in families if f["counted"]]
+    source_total = sum(f["source"] for f in counted)
+    converted_total = sum(f["converted"] for f in counted)
+    editable_total = sum(f["editable"] for f in counted)
     return {
         "families": families,
         "source_total": source_total,
@@ -2135,9 +2195,11 @@ Source: <code>{esc(types["source"])}</code>{f" (demo merge)" if types.get("demo"
             f'<td class="num">{fam["source"]:,}</td>'
             f'<td class="num">{fam["converted"]:,}</td>'
             f'<td class="num">{fam["editable"]:,}</td>'
-            f'<td class="num pct">{fam["pct_converted"]:.1f}%</td>'
-            f'<td class="num pct">{fam["pct_editable"]:.1f}%</td>'
-            "</tr>"
+            + (f'<td class="num pct">{fam["pct_converted"]:.1f}%</td>'
+               f'<td class="num pct">{fam["pct_editable"]:.1f}%</td>'
+               if fam.get("counted", True) else
+               '<td class="num pct" colspan="2">not in total</td>')
+            + "</tr>"
         )
     asset_rows.append(
         '<tr class="total">'
@@ -2157,8 +2219,12 @@ exists; it is a capability count, not a per-file verification.</p>
 <thead><tr><th>Family</th><th>Source</th><th>Converted</th><th>Round-trip editable</th>
 <th>% converted</th><th>% editable</th></tr></thead>
 <tbody>{''.join(asset_rows)}</tbody></table>
-<p class="note">Source: {esc(assets["source"])}. Text is 0 until the E2 dialogue extractor produces
-readable message files.</p>
+<p class="note">Source: {esc(assets["source"])}. BCH files are split by what they contain
+(<code>game_assets/bch_index.json</code>, <code>tools/export_bch_assets.py</code>): meshes are 3D models, images go to
+<code>game_assets/textures</code>, animations to <code>game_assets/animations</code>; the 10 files with both images and
+animations count in both rows, and the one shader-only BCH (<code>syscmn/shader.bch</code>, compiled GPU shaders) has no
+standard format and is not counted. Text has no separate source files (its banks live inside the data tables), so it is
+listed but kept out of the total.</p>
 """
 
     # Editor checklist.
@@ -2439,7 +2505,7 @@ def build_map_data(native: dict, stamp: str) -> dict:
             status_index.get(fn["status"], 0),
             domain_index.get(fn["domain"], len(domains) - 1),
             fn.get("summary") or fn.get("proposal_summary") or "",
-            readable_relpath(fn.get("file")),
+            readable_relpath(fn.get("file")) or readable_by_address(fn["address"]),
         ])
 
     return {

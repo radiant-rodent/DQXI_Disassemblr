@@ -18,19 +18,19 @@
    },
    {
     "offset": 80,
-    "name": "maybe_hasAllocation",
+    "name": "hasAllocation",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "Release requires f_50 != 0 (together with f_51) before it frees the block and then stores 0 to f_50; name describes 'the buffer currently owns an allocation'."
+    "confidence": 0.55,
+    "evidence": "Ui_TextBuffer_Release (0x00548438) requires this byte to be set before freeing the block and clears it to 0 after the block pointer at +4 was released"
    },
    {
     "offset": 81,
-    "name": "maybe_ownsAllocation",
+    "name": "ownsAllocation",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "Release tests f_51 first ('ldrb r0,[r0,#0x51]; ldrbne r0,[r4,#0x50]'); f_51 is never cleared, so it gates whether this object is allowed to free the block at all."
+    "confidence": 0.55,
+    "evidence": "Ui_TextBuffer_Release (0x00548438) gates the whole free on this byte and never clears it, i.e. it declares that this object is allowed to release the buffer"
    },
    {
     "offset": 164,
@@ -93,11 +93,11 @@
    },
    {
     "offset": 44,
-    "name": "maybe_lineBufferArray",
+    "name": "lineBuffers",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "std_ConstructArray(puVar3 + 0xb (byte +0x2C), 0x001F0670, 0x414, 2) constructs two 0x414-byte per-line animation/text sets; the ctor then initialises a third 0x424-byte buffer at +0x858 with Ui_MessageBuffer_Init 0x0061555C, so the pair extends far past the recorded 48-byte size."
+    "confidence": 0.55,
+    "evidence": "Ui_MessageDualBuffer_Create (0x00616080) builds a two-element array of 0x414-byte Ui_MessageBuffer records at self+0x2c with std_ConstructArray(...,0x1F0670,0x414,2)"
    }
   ]
  },
@@ -120,11 +120,11 @@
    },
    {
     "offset": 44,
-    "name": "maybe_lineBufferArray",
+    "name": "messageBufferPair",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "std_ConstructArray(puVar3 + 0xb (byte +0x2C), 0x001F0670, 0x414, 2) constructs two 0x414-byte per-line animation/text sets; the ctor then initialises a third 0x424-byte buffer at +0x858 with Ui_MessageBuffer_Init 0x0061555C, so the pair extends far past the recorded 48-byte size."
+    "confidence": 0.6,
+    "evidence": "Ui_MessageExtendedBuffer_Create (0x006171E0) runs std_ConstructArray on +0x2C with element ctor 0x001F0670, stride 0x414 and count 2, so the word is the head of the two in-place 0x414-byte message-buffer objects"
    }
   ]
  },
@@ -155,19 +155,19 @@
    },
    {
     "offset": 24,
-    "name": "maybe_blipPatternState",
+    "name": "blipStreamHandle",
     "type": "void*",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Ui_MessageVoice_SelectBlipPattern is called with outDesc = &voice->f_1c and returns that same address; the code keeps the return value in f_18 and later passes f_18 to func_0041AD28 as the stream handle, so f_18 holds the address of the per-line pattern slot."
+    "confidence": 0.55,
+    "evidence": "Ui_MessageVoice_UpdateLine0 (0x006D4EDC) stores the pointer returned by Ui_MessageVoice_SelectBlipPattern (0x002CFCC0), null-tests it, and passes it to func_0041AD28 as the per-frame stream handle; the value is the address of this voice's own descriptor slot at +0x1C"
    },
    {
     "offset": 28,
-    "name": "maybe_blipPatternDescriptor",
+    "name": "blipPattern",
     "type": "void*",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "The out-parameter of Ui_MessageVoice_SelectBlipPattern: it receives one of the static descriptors 0x00773DE0/DF0/E00/E10 or 0x0076E29C (weighted choice on line index and long-run flag)."
+    "confidence": 0.65,
+    "evidence": "Ui_MessageVoice_SelectBlipPattern (0x002CFCC0) writes the chosen static g_messageVoiceBlipPattern* descriptor (0x00773DE0..0x00773E10 or 0x0076E29C) into this out-parameter; UpdateLine0 then advances a stream through its address"
    }
   ]
  },
@@ -182,19 +182,19 @@
   "fields": [
    {
     "offset": 152,
-    "name": "maybe_frameUpdater",
+    "name": "frameUpdater",
     "type": "void*",
     "size": 4,
-    "confidence": 0.5,
-    "evidence": "First statement of the update is '(*self->f_98->vt[0x2C])()' (asm: ldr r1,[r0,#0x98]! ; ldr r1,[r1,#0x2c] ; blx r1), so +0x98 points at the object that performs the base per-frame update."
+    "confidence": 0.65,
+    "evidence": "maybe_Ui_FrameScript_Update (0x00261F40) and Ui_DiveWindow_UpdateAnimation (0x0029A920) both start by calling vtable slot 0x2C of the object referenced here, i.e. it points at the object performing the base per-frame update"
    },
    {
     "offset": 304,
-    "name": "maybe_scriptState",
+    "name": "stepObjectVtable",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Asm: 'ldr r0,[r4,#0x130]; ldr r1,[r0,#0x10]; mov r0,r5(=self+0x130); blx r1' - the word at +0x130 is the vtable of an embedded state object whose slot 0x10 is called every frame; the same address is the base of the 0x18-byte step records."
+    "confidence": 0.55,
+    "evidence": "Both update drivers (0x00261F40, 0x0029A920) load a vtable from +0x130, call its slot 0x10 with self+0x130 as this every frame, and use self+0x130+stepIndex*0x18 as the base of the 0x18-byte step-record array"
    },
    {
     "offset": 308,
@@ -273,11 +273,11 @@
    },
    {
     "offset": 16,
-    "name": "maybe_rowTable",
+    "name": "rowTable",
     "type": "void*",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Ui_PanelState_Enter09ForRow 0x001E25B0 reads f_10 as a pointer, uses its +0x60 (row count) and +0x58 (row array offset) and indexes 0x20-byte row records; note Ui_PanelState_ResetProperties also zeroes a u16 at +0x10, so the two grouped callers disagree about the width."
+    "confidence": 0.6,
+    "evidence": "Ui_PanelState_Enter09ForRow (0x001E25B0) dereferences it as the row container: +0x60 is the row count and +0x58 the offset to the 0x20-byte row records it indexes; Ui_PanelState_ResetProperties (0x00398684) clears it as a null pointer"
    },
    {
     "offset": 18,
@@ -441,19 +441,19 @@
    },
    {
     "offset": 372,
-    "name": "maybe_widgetState",
+    "name": "widgetState",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Ui_PanelState_Update calls Ui_Widget_Update(&slot->f_1e18, &self->f_174); it is the widget-state argument (struct_db guessed Ui_Widget*), width/ownership unproven."
+    "confidence": 0.55,
+    "evidence": "Ui_PanelState_Update passes &self->0x174 as the state argument of Ui_Widget_Update (func_001DAD58), which is called with slot->+0x1E18"
    },
    {
     "offset": 404,
-    "name": "maybe_partyPanelHost",
+    "name": "partyPanelHost",
     "type": "void*",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Used as the object owning a Ui_PartyPanel at +0x11C: 'Ui_Anim_PlayChange1(&f_194->f_11c, ...)' and 'Ui_PartyPanel_ShowSlots(&f_194->f_11c, ...)'; only non-null is tested, so the exact class is unproven."
+    "confidence": 0.6,
+    "evidence": "Ui_PanelState_Enter09ForRow (0x001E25B0) null-tests it, then calls Ui_Anim_PlayChange1 and Ui_PartyPanel_ShowSlots on the Ui_PartyPanel embedded at host+0x11C, so it points at the object owning that party panel"
    },
    {
     "offset": 408,
@@ -489,11 +489,11 @@
    },
    {
     "offset": 436,
-    "name": "maybe_overlay",
+    "name": "overlayState",
     "type": "u32",
     "size": 4,
-    "confidence": 0.35,
-    "evidence": "FUN_004c2a9c(param_1 + 0x1b4) and FUN_004C2924(param_1 + 0x1b4) both take &self->0x1B4 (struct_db guessed Ui_Overlay); likely an embedded overlay/tween object."
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_Overlay_ReleaseHandle (0x004C2924) is called with &self->0x1B4; it resets the item-text window out-animations and releases that object's state record through the Field_ObjectManager slot f_54"
    },
    {
     "offset": 440,
@@ -513,11 +513,11 @@
    },
    {
     "offset": 460,
-    "name": "maybe_partBinding",
+    "name": "slotBinding",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Passed as the second argument of Ui_Slot_BindControl(&slot->f_1e18, &self->f_1cc); a widget/pane binding descriptor consumed by Ui_Slot_BindControl."
+    "confidence": 0.55,
+    "evidence": "Ui_PanelState_Enter09ForRow (0x001E25B0) passes &self->0x1CC as the binding/control argument of Ui_Slot_BindControl called on slot->+0x1E18"
    },
    {
     "offset": 544,
@@ -537,11 +537,11 @@
    },
    {
     "offset": 560,
-    "name": "maybe_activeRowIndex",
+    "name": "activeRowIndex",
     "type": "u8",
     "size": 1,
-    "confidence": 0.5,
-    "evidence": "Ui_PanelState_Enter09ForRow does 'self->f_230 = self->f_106' (the row index) and later feeds f_230 to Ui_Anim_PlayChange1."
+    "confidence": 0.6,
+    "evidence": "Ui_PanelState_Enter09ForRow (0x001E25B0) stores rowIndex (+0x106) here and feeds this byte to Ui_Anim_PlayChange1 as the row to animate"
    },
    {
     "offset": 564,
@@ -823,11 +823,11 @@
    },
    {
     "offset": 292,
-    "name": "maybe_pool124",
+    "name": "secondScratchBuffer",
     "type": "u8 [4]",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "func_00116AE0(&self->f_124, 0x100) clears the second 0x100-byte candidate pool; the first starts at +0x24."
+    "confidence": 0.6,
+    "evidence": "Ui_LayoutState_InitDefaults (0x00267B60) zero-fills 0x100 bytes at +0x124, the second of its two 0x100-byte scratch buffers (the first at +0x24); Battle_ActionModel_InitSubPanel clears the enclosing copies of the same layout block"
    },
    {
     "offset": 548,
@@ -906,19 +906,19 @@
    },
    {
     "offset": 292,
-    "name": "maybe_scriptStep",
+    "name": "fadeProgress",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Read as a word at +0x124 inside the same transition code ('iVar5 = *(int*)(param_1 + 0x124)'); a script step/field of the +0x11C object, exact meaning unproven."
+    "confidence": 0.6,
+    "evidence": "Ui_WindowState_Goto14 (0x00317020) reads it as a float and only requests controller state 0x0E once it equals 0x3F800000 (1.0f), so it is the transition's fade progress value"
    },
    {
     "offset": 1188,
-    "name": "maybe_widget4A4",
+    "name": "widget",
     "type": "Ui_Widget",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "FUN_001DAD58(param_1 + 0x4a4, param_2 + 0x104) binds it and FUN_0062f680(param_1 + 0x4a4) queries it; struct_db typed the callee as Ui_Widget*, so +0x4A4 is an embedded Ui_Widget."
+    "confidence": 0.6,
+    "evidence": "Ui_WindowState_Goto2 (0x00317194) calls Ui_Widget_Update (0x001DAD58) on &self->0x4A4 with frame+0x104 and then reads the tween-idle result through func_0062F680(&self->0x4A4), i.e. an embedded Ui_Widget used as the layout tween"
    },
    {
     "offset": 1304,
@@ -954,11 +954,11 @@
    },
    {
     "offset": 1345,
-    "name": "maybe_fadeStep",
+    "name": "fadePage",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "Set to 8 or 7 (and 5 in the DiveForm view) right after isActive in the same helpers; a fade/phase step index."
+    "confidence": 0.6,
+    "evidence": "Ui_WindowState_Goto17SetFade7 (0x00317864) writes 7 here right before requesting controller state 0x17, and its sibling variant (0x00317760) writes 8, so it selects the fade page used by the 0x17 transition"
    }
   ]
  },
@@ -989,11 +989,11 @@
    },
    {
     "offset": 12,
-    "name": "maybe_savedSnapshot",
+    "name": "savedStateSnapshot",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Reset does func_0011CD00(state+4, &state->f_c, 0x20): a 0x20-byte snapshot is copied from +0xC back to +4; this is the snapshot start."
+    "confidence": 0.6,
+    "evidence": "maybe_Ui_State_Reset (0x001C1028) restores a 0x20-byte block from +0xC back to +4 via func_0011CD00, so the 0x20 bytes here are a snapshot of the state record"
    },
    {
     "offset": 20,
@@ -1045,11 +1045,11 @@
    },
    {
     "offset": 336,
-    "name": "maybe_resultFlag54",
+    "name": "applyResult",
     "type": "u8",
     "size": 1,
-    "confidence": 0.45,
-    "evidence": "maybe_Ui_State_Apply stores the third sink's return at byte +0x54 (raw line 'state[0x54] = cVar4' on a byte pointer) and clears it on the other branch; the batch offset 336 is that raw dword index *4 - true byte is +0x54."
+    "confidence": 0.5,
+    "evidence": "maybe_Ui_State_Apply (0x00293C0C) stores the third sink's return value in this byte (raw line state[0x54]) and clears it on the other branch"
    }
   ]
  },
@@ -1064,19 +1064,19 @@
   "fields": [
    {
     "offset": 580,
-    "name": "maybe_activeListHead",
+    "name": "activeListHead",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "Address &self->f_244 is passed as the list head to func_001235A4 (0x001235A4 is an intrusive doubly-linked list link: it rewrites node+4/+8 and the neighbours' links); an embedded std::list-style sentinel."
+    "confidence": 0.55,
+    "evidence": "Ui_BalloonPool_Spawn (0x003246F0) passes &self->0x244 as the head argument of the intrusive doubly-linked list link func_001235A4, which rewrites the node links and its neighbours"
    },
    {
     "offset": 584,
-    "name": "maybe_activeListEnd",
+    "name": "activeListTail",
     "type": "void*",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Passed as the second (position/end) argument of the same link call; the ring's end node pointer."
+    "confidence": 0.5,
+    "evidence": "The same link call func_001235A4 uses the pointer stored at +0x248 as its end/position argument, so it holds the ring's last linked balloon node"
    }
   ]
  },
@@ -2241,11 +2241,11 @@
    },
    {
     "offset": 152,
-    "name": "maybe_paneHost",
+    "name": "layoutAnchor",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Ui_DiveForm_InitPanes uses 'iVar2 = self + 0x98' as the layout host passed to every Ui_PaneBinding_BindToLayout call; an embedded pane-layout object."
+    "confidence": 0.7,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) sets anchorPtr = self + 0x98 and passes it as the anchor argument of every Ui_PaneBinding_BindToLayout call (titlePane, list4Pane, list2Pane, list1Pane, list5Pane, list6Pane, buttonSetPane)"
    },
    {
     "offset": 172,
@@ -2257,11 +2257,11 @@
    },
    {
     "offset": 212,
-    "name": "maybe_paneAnimHost",
+    "name": "layoutWindow",
     "type": "u32",
     "size": 4,
-    "confidence": 0.4,
-    "evidence": "Ui_DiveForm_InitPanes uses 'iVar3 = self + 0xd4' as the animation/context argument of every Ui_PaneBinding_BindToLayout call."
+    "confidence": 0.65,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) sets windowObj = self + 0xd4 and passes it as the window/source argument of every Ui_PaneBinding_BindToLayout call"
    },
    {
     "offset": 284,
@@ -2385,11 +2385,11 @@
    },
    {
     "offset": 380,
-    "name": "maybe_handle17C",
+    "name": "paneCount",
     "type": "u32",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "Read as a word ('iVar3 = *(int*)(param_1 + 0x17c)') and forwarded to a pane-window setup; exact meaning unproven."
+    "confidence": 0.65,
+    "evidence": "Ui_DiveForm_PushPane (0x006D8A90) rejects when the count word at host+0x48 (self+0x134+0x48 = +0x17C) exceeds 4 and then increments it; Ui_DiveForm_PopPane (0x006D89DC) decrements the same word when popping"
    },
    {
     "offset": 384,
@@ -2433,11 +2433,11 @@
    },
    {
     "offset": 472,
-    "name": "maybe_paneStack1D8",
+    "name": "pageWidget1D8",
     "type": "u32",
     "size": 4,
-    "confidence": 0.35,
-    "evidence": "FUN_006D8A90(&self->f_134, &self->f_1d8, ...) - the same push helper used by Ui_DiveForm_PushPane; a pane stack/record at +0x1D8."
+    "confidence": 0.5,
+    "evidence": "a caller passes self+0x1d8 as the child widget argument of Ui_DiveForm_PushPane (0x006D8A90) together with a label id taken from DAT_003d82dc+0x70, i.e. an embedded widget used as a pushed page"
    },
    {
     "offset": 476,
@@ -2473,11 +2473,11 @@
    },
    {
     "offset": 528,
-    "name": "maybe_widget210",
+    "name": "pageWidget210",
     "type": "u32",
     "size": 4,
-    "confidence": 0.3,
-    "evidence": "FUN_001dab30(&self->f_210, uVar6) constructs/binds an embedded widget; exact type unproven."
+    "confidence": 0.5,
+    "evidence": "FUN_001dab30 constructs the object at self+0x210 and Ui_DiveForm_PushPane (0x006D8A90) is called twice with self+0x210 as its child widget argument, using different label ids (DAT_003d73d0+0x68 and +0x98)"
    },
    {
     "offset": 572,
@@ -2489,11 +2489,11 @@
    },
    {
     "offset": 596,
-    "name": "maybe_peopleListNode",
+    "name": "peoplePaneRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(&self->f_3440, &self->f_3440, &self->f_254) links this node into the people list head at +0x3440."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x254 as the node argument of func_001235A4 with the ring head at +0x3440 right after binding peoplePane; +0x254 is peoplePane(+0x23C)+0x18, the inherited Ui_Object ring word"
    },
    {
     "offset": 648,
@@ -2505,11 +2505,11 @@
    },
    {
     "offset": 672,
-    "name": "maybe_list2FirstListNode",
+    "name": "peopleListRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(list2Head, list2Head, &self->f_2a0) links this node into the list2 list."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x2a0 as the node argument of func_001235A4 with the ring head at +0x345c after binding peopleList; +0x2a0 is peopleList(+0x288)+0x18, the inherited Ui_Object ring word"
    },
    {
     "offset": 676,
@@ -2673,11 +2673,11 @@
    },
    {
     "offset": 2768,
-    "name": "maybe_list2ListNode",
+    "name": "list2RingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(list2Head, list2Head, &self->f_ad0) links this node into the list2 ring."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0xad0 as the node argument of func_001235A4 on the ring head at +0x345c after binding list2; +0xad0 is list2(+0xAB8)+0x18, the inherited Ui_Object ring word"
    },
    {
     "offset": 3016,
@@ -2689,11 +2689,11 @@
    },
    {
     "offset": 3040,
-    "name": "maybe_callListNode",
+    "name": "callListRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(&self->f_34cc, &self->f_34cc, &self->f_be0) links this node into the call-list ring."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0xbe0 as the node argument of func_001235A4 with the ring head at +0x34cc after binding callList; +0xbe0 is callList(+0xBC8)+0x18, the inherited Ui_Object ring word"
    },
    {
     "offset": 3328,
@@ -2705,11 +2705,11 @@
    },
    {
     "offset": 3352,
-    "name": "maybe_albumListNode",
+    "name": "albumPaneRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(&self->f_3478, &self->f_3478, &self->f_d18) links this node into the album ring."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0xd18 as the node argument of func_001235A4 with the ring head at +0x3478 after binding albumPane; +0xd18 is albumPane(+0xD00)+0x18, the inherited Ui_Object ring word"
    },
    {
     "offset": 3512,
@@ -2729,11 +2729,11 @@
    },
    {
     "offset": 3600,
-    "name": "maybe_loadKeyboardListNode",
+    "name": "keyboardPaneRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(name-list head, head, &self->f_e10) links this node into the load-name list."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0xe10 as the node argument of func_001235A4 on the name-list ring head at +0x3494 after binding loadKeyboardPane; +0xe10 is loadKeyboardPane(+0xDF8)+0x18"
    },
    {
     "offset": 3900,
@@ -2753,11 +2753,11 @@
    },
    {
     "offset": 4092,
-    "name": "maybe_loadNameListNode",
+    "name": "namePaneRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(name-list head, head, &self->f_ffc) links this node into the load-name list."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0xffc as the node argument of func_001235A4 on the same ring head at +0x3494 after binding loadNamePane; +0xffc is loadNamePane(+0xFE4)+0x18"
    },
    {
     "offset": 4144,
@@ -2801,11 +2801,11 @@
    },
    {
     "offset": 12600,
-    "name": "maybe_goldListNode",
+    "name": "goldPaneRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(callList head, head, &self->f_3138) links this node into the gold list."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x3138 as the node argument of func_001235A4 with the ring head at +0x34cc after binding goldWindow; +0x3138 is goldWindow(+0x3120)+0x18"
    },
    {
     "offset": 12652,
@@ -2817,11 +2817,11 @@
    },
    {
     "offset": 12676,
-    "name": "maybe_goldMenuListNode",
+    "name": "goldMenuRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(callList head, head, &self->f_3184) links this node into the gold menu list."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x3184 as the node argument of func_001235A4 with the same ring head at +0x34cc after binding goldMenuPane; +0x3184 is goldMenuPane(+0x316C)+0x18"
    },
    {
     "offset": 12728,
@@ -2833,11 +2833,11 @@
    },
    {
     "offset": 12752,
-    "name": "maybe_accessoryListNode",
+    "name": "accessoryRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(&self->f_34b0, &self->f_34b0, &self->f_31d0) links this node into the accessory ring."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x31d0 as the node argument of func_001235A4 with the ring head at +0x34b0 after binding accessoryMenuPane; +0x31d0 is accessoryMenuPane(+0x31B8)+0x18"
    },
    {
     "offset": 13284,
@@ -2849,11 +2849,11 @@
    },
    {
     "offset": 13308,
-    "name": "maybe_operationListNode",
+    "name": "operationRingNode",
     "type": "u32",
     "size": 4,
-    "confidence": 0.45,
-    "evidence": "func_001235A4(&self->f_34e8, &self->f_34e8, &self->f_33fc, uVar1) links this node into the operation ring."
+    "confidence": 0.55,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) passes self+0x33fc as the node argument of func_001235A4 with the ring head at +0x34e8 after binding operationMenuPane; +0x33fc is operationMenuPane(+0x33E4)+0x18"
    },
    {
     "offset": 13376,
@@ -2913,11 +2913,11 @@
    },
    {
     "offset": 13528,
-    "name": "maybe_listNodeD36",
+    "name": "messagePair",
     "type": "u32",
     "size": 4,
-    "confidence": 0.2,
-    "evidence": "FUN_00123594(self, &self->f_d36) - the offset +0xD36 is unaligned and probably a mistyped self in the grouped function, so the field is doubtful."
+    "confidence": 0.65,
+    "evidence": "Ui_DiveForm_InitPanes (0x003BD260) calls Ui_MessagePair_Bind(self+0x34d8, talkWindow, yesNoWindow), so this word holds the Ui_MessagePair that pairs the talk and yes/no windows"
    },
    {
     "offset": 13544,

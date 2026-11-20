@@ -42,6 +42,32 @@ EXPECTED_UNCOMPRESSED_SIZE = 7090176  # 0x006C3000
 
 EXPECTED_COMPRESSED_SHA256 = "ea3d2c02780e7d7406137cc5099e2ccdf9da4a90f48f35f97d59f0a08c298a2f"
 EXPECTED_COMPRESSED_SIZE = 3920924
+VERSION_NAME = "original"
+VERSION_LABEL = "original"
+
+
+def _use_game_version() -> None:
+    """Point the bit-match gate at the active game version (tools.game_version)."""
+    global EXPECTED_UNCOMPRESSED_SHA256, EXPECTED_UNCOMPRESSED_SIZE, EXPECTED_COMPRESSED_SHA256
+    global VERSION_NAME, VERSION_LABEL
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from tools import game_version
+        name = game_version.active()
+        exp = game_version.expected_code(name)
+    except Exception as exc:  # no versions set up: the retail gate
+        print(f"  note: game version not read ({exc}); checking against retail")
+        return
+    if name == "original":
+        return
+    VERSION_NAME = name
+    if not exp:
+        print(f"  note: game version {name!r} does not change code.bin; checking against retail")
+        return
+    EXPECTED_UNCOMPRESSED_SHA256 = exp["sha256"]
+    EXPECTED_UNCOMPRESSED_SIZE = exp["size"]
+    EXPECTED_COMPRESSED_SHA256 = None
+    VERSION_LABEL = f"the {name!r} game version's"
 
 # Memory Map Segments
 TEXT_SIZE = 0x0062403C    # 6,438,972 B
@@ -265,9 +291,24 @@ def build_pipeline(asm_dir: Path, out_dir: Path, verbose: bool = False) -> bool:
 
     # Step 4: Link segments and apply sections.ld page padding
     print("\n[4/4] Linking executable image per sections.ld memory map...")
-    text_pad_bytes = b"\x00" * TEXT_PAD
-    rodata_pad_bytes = b"\x00" * RODATA_PAD
-    data_pad_bytes = b"\x00" * DATA_PAD
+    # page padding: zeros in retail; a patched game version (tools/game_version.py) may keep
+    # code caves / moved strings there, described by asm/pad/<segment>_tail.s
+    def pad(name: str, start: int, size: int):
+        src = asm_dir / "pad" / f"{name}_tail.s"
+        if not src.is_file():
+            return b"\x00" * size
+        blob = assemble_file(src, start)
+        if len(blob) != size:
+            print(f"Error: {src.name} assembles to {len(blob)} bytes, expected {size}.", file=sys.stderr)
+            return None
+        print(f"  Using {src.relative_to(asm_dir).as_posix()} for the {name} page padding")
+        return blob
+
+    text_pad_bytes = pad("text", 0x0072403C, TEXT_PAD)
+    rodata_pad_bytes = pad("rodata", 0x0079AA18, RODATA_PAD)
+    data_pad_bytes = pad("data", 0x007C2D24, DATA_PAD)
+    if text_pad_bytes is None or rodata_pad_bytes is None or data_pad_bytes is None:
+        return False
 
     code_bin = (
         text_bytes
@@ -295,7 +336,15 @@ def build_pipeline(asm_dir: Path, out_dir: Path, verbose: bool = False) -> bool:
         print(f"Error: code.bin SHA-256 mismatch!\n  Expected: {EXPECTED_UNCOMPRESSED_SHA256}\n  Got:      {bin_hash}", file=sys.stderr)
         return False
 
-    print("  [PASS] Reconstructed code.bin bit-matches original uncompressed code.bin (0 differences)!")
+    print(f"  [PASS] Reconstructed code.bin bit-matches {VERSION_LABEL} uncompressed code.bin (0 differences)!")
+
+    if EXPECTED_COMPRESSED_SHA256 is None:
+        # a patched game version: its .code was compressed by the patch's own tool, so only
+        # the decompressed executable is the reference (the exporter recompresses it)
+        print("-" * 80)
+        print(f"ALL ARTIFACTS VERIFIED SUCCESSFULLY for game version {VERSION_NAME!r} (Exit Code 0)")
+        print("-" * 80)
+        return True
 
     # Step 5: Automatically run CTR-SDK BLZ compression
     out_compressed_bin = out_dir / "code.compressed.bin"
@@ -357,7 +406,7 @@ def verify_existing(out_dir: Path) -> bool:
     h2 = sha256_file(comp_bin)
 
     ok1 = (h1.lower() == EXPECTED_UNCOMPRESSED_SHA256.lower())
-    ok2 = (h2.lower() == EXPECTED_COMPRESSED_SHA256.lower())
+    ok2 = EXPECTED_COMPRESSED_SHA256 is None or (h2.lower() == EXPECTED_COMPRESSED_SHA256.lower())
 
     print(f"code.bin:            {'PASS' if ok1 else 'FAIL'} ({h1})")
     print(f"code.compressed.bin: {'PASS' if ok2 else 'FAIL'} ({h2})")
@@ -394,6 +443,7 @@ def main():
         help="Verbose assembly output",
     )
     args = parser.parse_args()
+    _use_game_version()
 
     project_root = Path(__file__).resolve().parent.parent
     asm_dir = (project_root / args.asm_dir).resolve()
